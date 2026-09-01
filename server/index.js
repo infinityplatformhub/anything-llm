@@ -48,6 +48,11 @@ const {
 } = require("./endpoints/utils/googleAgentSkillEndpoints");
 const { memoryEndpoints } = require("./endpoints/memory");
 const { httpLogger } = require("./middleware/httpLogger");
+const {
+  apiIpRateLimit,
+  apiKeyRateLimit,
+  ipAllowlist,
+} = require("./utils/middleware/requestControls");
 const app = express();
 const apiRouter = express.Router();
 const FILE_LIMIT = "3GB";
@@ -79,7 +84,8 @@ if (!!process.env.ENABLE_HTTPS) {
   require("@mintplex-labs/express-ws").default(app); // load WebSockets in non-SSL mode.
 }
 
-app.use("/api", apiRouter);
+app.use("/api", ipAllowlist, apiRouter);
+apiRouter.use("/v1", apiIpRateLimit, apiKeyRateLimit);
 systemEndpoints(apiRouter);
 extensionEndpoints(apiRouter);
 workspaceEndpoints(apiRouter);

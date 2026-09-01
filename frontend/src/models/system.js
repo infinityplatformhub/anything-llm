@@ -139,9 +139,15 @@ const System = {
       method: "POST",
       body: JSON.stringify({ ...body }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error("Could not validate login.");
-        return res.json();
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok && !body?.message && !body?.error)
+          throw new Error("Could not validate login.");
+        return {
+          ...body,
+          valid: body?.valid ?? false,
+          message: body?.message || body?.error,
+        };
       })
       .then((res) => res)
       .catch((e) => {

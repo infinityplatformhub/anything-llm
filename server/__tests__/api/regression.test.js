@@ -247,6 +247,27 @@ describe("login and JWT", () => {
     expect(res.body.valid).toBe(false);
   });
 
+  test("does not reveal suspended account existence", async () => {
+    await prisma.users.update({
+      where: { id: member.id },
+      data: { suspended: 1 },
+    });
+    const suspended = await request(app)
+      .post("/api/request-token")
+      .send({ username: member.username, password });
+    const missing = await request(app)
+      .post("/api/request-token")
+      .send({ username: "missing-suspended-check", password });
+    expect({ status: suspended.status, body: suspended.body }).toEqual({
+      status: missing.status,
+      body: missing.body,
+    });
+    await prisma.users.update({
+      where: { id: member.id },
+      data: { suspended: 0 },
+    });
+  });
+
   test("does not expose password in login response", async () => {
     const res = await request(app)
       .post("/api/request-token")
@@ -289,15 +310,15 @@ describe("login and JWT", () => {
     expect(res.status).toBe(401);
   });
 
-  test("has no lockout before P0-4 hardening", async () => {
-    for (let attempt = 0; attempt < 4; attempt++)
+  test("locks repeated login attempts before valid credentials", async () => {
+    for (let attempt = 0; attempt < 5; attempt++)
       await request(app)
         .post("/api/request-token")
-        .send({ username: member.username, password: "wrong" });
+        .send({ username: "lock-target", password: "wrong" });
     const res = await request(app)
       .post("/api/request-token")
-      .send({ username: member.username, password });
-    expect(res.body.valid).toBe(true);
+      .send({ username: "LOCK-TARGET", password });
+    expect(res.status).toBe(429);
   });
 });
 
