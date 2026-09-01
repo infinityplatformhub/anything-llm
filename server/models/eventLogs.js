@@ -1,26 +1,7 @@
 const prisma = require("../utils/prisma");
 
 const EventLogs = {
-  logEvent: async function (event, metadata = {}, userId = null) {
-    try {
-      const eventLog = await prisma.event_logs.create({
-        data: {
-          event,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          userId: userId ? Number(userId) : null,
-          occurredAt: new Date(),
-        },
-      });
-      console.log(`\x1b[32m[Event Logged]\x1b[0m - ${event}`);
-      return { eventLog, message: null };
-    } catch (error) {
-      console.error(
-        `\x1b[31m[Event Logging Failed]\x1b[0m - ${event}`,
-        error.message
-      );
-      return { eventLog: null, message: error.message };
-    }
-  },
+  logEvent: require("../utils/events").emitAuditEvent,
 
   getByEvent: async function (event, limit = null, orderBy = null) {
     try {

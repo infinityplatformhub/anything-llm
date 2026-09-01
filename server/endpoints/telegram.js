@@ -6,7 +6,7 @@ const { TelegramBotService } = require("../utils/telegramBot");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { isSingleUserMode } = require("../utils/middleware/multiUserProtected");
 const { reqBody } = require("../utils/http");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { Workspace } = require("../models/workspace");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { encryptToken } = require("../utils/telegramBot/utils");
@@ -143,7 +143,7 @@ function telegramEndpoints(app) {
         const service = new TelegramBotService();
         await service.start({ ...storedConfig, bot_token: String(bot_token) });
 
-        await EventLogs.logEvent("telegram_bot_connected", {
+        await emitAuditEvent("telegram_bot_connected", {
           bot_username: verification.username,
         });
         await Telemetry.sendTelemetry("telegram_bot_connected");
@@ -166,7 +166,7 @@ function telegramEndpoints(app) {
         const service = new TelegramBotService();
         await service.stop();
         await ExternalCommunicationConnector.delete("telegram");
-        await EventLogs.logEvent("telegram_bot_disconnected");
+        await emitAuditEvent("telegram_bot_disconnected");
         return response.status(200).json({ success: true });
       } catch (e) {
         console.error(e.message, e);
@@ -237,7 +237,7 @@ function telegramEndpoints(app) {
 
         const service = new TelegramBotService();
         await service.approvePendingUser(chatId);
-        await EventLogs.logEvent("telegram_user_approved", { chatId });
+        await emitAuditEvent("telegram_user_approved", { chatId });
         return response.status(200).json({ success: true });
       } catch (e) {
         console.error(e.message, e);
@@ -259,7 +259,7 @@ function telegramEndpoints(app) {
 
         const service = new TelegramBotService();
         await service.denyPendingUser(chatId);
-        await EventLogs.logEvent("telegram_user_denied", { chatId });
+        await emitAuditEvent("telegram_user_denied", { chatId });
         return response.status(200).json({ success: true });
       } catch (e) {
         console.error(e.message, e);
@@ -281,7 +281,7 @@ function telegramEndpoints(app) {
 
         const service = new TelegramBotService();
         await service.revokeExistingUser(chatId);
-        await EventLogs.logEvent("telegram_user_revoked", { chatId });
+        await emitAuditEvent("telegram_user_revoked", { chatId });
         return response.status(200).json({ success: true });
       } catch (e) {
         console.error(e.message, e);

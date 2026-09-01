@@ -1,4 +1,4 @@
-const { EventLogs } = require("../../../models/eventLogs");
+const { emitAuditEvent } = require("../../../utils/events");
 const { SystemSettings } = require("../../../models/systemSettings");
 const { purgeDocument } = require("../../../utils/files/purgeDocument");
 const { getVectorDbClass } = require("../../../utils/helpers");
@@ -203,7 +203,7 @@ function apiSystemEndpoints(app) {
           type,
           "workspace"
         );
-        await EventLogs.logEvent("exported_chats", {
+        await emitAuditEvent("exported_chats", {
           type,
         });
         response.setHeader("Content-Type", contentType);

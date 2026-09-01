@@ -1,7 +1,7 @@
 const { ApiKey } = require("../models/apiKeys");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { Document } = require("../models/documents");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { Invite } = require("../models/invite");
 const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
@@ -67,7 +67,7 @@ function adminEndpoints(app) {
 
         const { user: newUser, error } = await User.create(newUserParams);
         if (!!newUser) {
-          await EventLogs.logEvent(
+          await emitAuditEvent(
             "user_created",
             {
               userName: newUser.username,
@@ -143,7 +143,7 @@ function adminEndpoints(app) {
 
         await BrowserExtensionApiKey.deleteAllForUser(Number(id));
         await User.delete({ id: Number(id) });
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "user_deleted",
           {
             userName: user.username,
@@ -189,7 +189,7 @@ function adminEndpoints(app) {
           workspaceIds: body?.workspaceIds || [],
         });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "invite_created",
           {
             inviteCode: invite.code,
@@ -212,7 +212,7 @@ function adminEndpoints(app) {
       try {
         const { id } = request.params;
         const { success, error } = await Invite.deactivate(id);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "invite_deleted",
           { deletedBy: response.locals?.user?.username },
           response.locals?.user?.id
@@ -524,7 +524,7 @@ function adminEndpoints(app) {
         const user = await userFromSession(request, response);
         const { name = null } = reqBody(request);
         const { apiKey, error } = await ApiKey.create(user.id, name);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "api_key_created",
           { createdBy: user?.username, name: apiKey?.name },
           user?.id
@@ -549,7 +549,7 @@ function adminEndpoints(app) {
         if (!id || isNaN(Number(id))) return response.sendStatus(400).end();
         await ApiKey.delete({ id: Number(id) });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "api_key_deleted",
           { deletedBy: response.locals?.user?.username },
           response?.locals?.user?.id

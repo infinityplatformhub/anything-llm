@@ -1,3 +1,4 @@
+const { emitAuditEvent } = require("../utils/events");
 const prisma = require("../utils/prisma");
 const slugifyModule = require("slugify");
 const { Document } = require("./documents");
@@ -539,7 +540,6 @@ const Workspace = {
       await PromptHistory.handlePromptChange(prevData, user); // log the change to the prompt history
 
     const { Telemetry } = require("./telemetry");
-    const { EventLogs } = require("./eventLogs");
     if (
       !newData?.openAiPrompt || // no prompt change
       newData?.openAiPrompt === this.defaultPrompt || // new prompt is default prompt
@@ -548,7 +548,7 @@ const Workspace = {
       return;
 
     await Telemetry.sendTelemetry("workspace_prompt_changed");
-    await EventLogs.logEvent(
+    await emitAuditEvent(
       "workspace_prompt_changed",
       {
         workspaceName: prevData?.name,

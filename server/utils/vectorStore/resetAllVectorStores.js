@@ -12,7 +12,7 @@ async function resetAllVectorStores({ vectorDbKey }) {
   const { Workspace } = require("../../models/workspace");
   const { Document } = require("../../models/documents");
   const { DocumentVectors } = require("../../models/vectors");
-  const { EventLogs } = require("../../models/eventLogs");
+const { emitAuditEvent } = require("../../utils/events");
   const { purgeEntireVectorCache } = require("../files");
   const { getVectorDbClass } = require("../helpers");
   try {
@@ -20,7 +20,7 @@ async function resetAllVectorStores({ vectorDbKey }) {
     purgeEntireVectorCache(); // Purges the entire vector-cache folder.
     await DocumentVectors.delete(); // Deletes all document vectors from the database.
     await Document.delete(); // Deletes all documents from the database.
-    await EventLogs.logEvent("workspace_vectors_reset", {
+    await emitAuditEvent("workspace_vectors_reset", {
       reason: "System vector configuration changed",
     });
 

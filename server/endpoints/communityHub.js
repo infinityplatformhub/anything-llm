@@ -6,7 +6,7 @@ const {
   communityHubDownloadsEnabled,
   communityHubItem,
 } = require("../utils/middleware/communityHubDownloadsEnabled");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { Telemetry } = require("../models/telemetry");
 const {
   flexUserRoleValid,
@@ -105,7 +105,7 @@ function communityHubEndpoints(app) {
           itemType: response.locals.bundleItem.itemType,
           visibility: response.locals.bundleItem.visibility,
         });
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "community_hub_import",
           {
             itemId: response.locals.bundleItem.id,
@@ -147,7 +147,7 @@ function communityHubEndpoints(app) {
           itemType: response.locals.bundleItem.itemType,
           visibility: response.locals.bundleItem.visibility,
         });
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "community_hub_import",
           {
             itemId: response.locals.bundleItem.id,
@@ -200,7 +200,7 @@ function communityHubEndpoints(app) {
         );
         if (!success) throw new Error(error);
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "community_hub_publish",
           { itemType: communityHubItemType },
           response.locals?.user?.id

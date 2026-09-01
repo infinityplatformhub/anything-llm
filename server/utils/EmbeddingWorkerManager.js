@@ -1,5 +1,5 @@
 const path = require("path");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 
 /** @type {Map<string, { worker: ChildProcess, jobId: string }>} */
 const runningWorkers = new Map();
@@ -38,7 +38,7 @@ function emitProgress(slug, event) {
 }
 
 function logEmbeddingEvent(msg) {
-  EventLogs.logEvent(
+  emitAuditEvent(
     "workspace_documents_added",
     {
       workspaceName: msg.workspaceSlug,

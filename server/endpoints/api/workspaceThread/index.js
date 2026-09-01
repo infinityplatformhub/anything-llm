@@ -1,3 +1,4 @@
+const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { WorkspaceThread } = require("../../../models/workspaceThread");
 const { Workspace } = require("../../../models/workspace");
@@ -5,7 +6,6 @@ const { validApiKey } = require("../../../utils/middleware/validApiKey");
 const { reqBody, multiUserMode } = require("../../../utils/http");
 const { VALID_CHAT_MODE } = require("../../../utils/chats/stream");
 const { Telemetry } = require("../../../models/telemetry");
-const { EventLogs } = require("../../../models/eventLogs");
 const {
   writeResponseChunk,
   convertToChatHistory,
@@ -97,7 +97,7 @@ function apiWorkspaceThreadEndpoints(app) {
           VectorDbSelection: process.env.VECTOR_DB || "lancedb",
           TTSSelection: process.env.TTS_PROVIDER || "native",
         });
-        await EventLogs.logEvent("api_workspace_thread_created", {
+        await emitAuditEvent("api_workspace_thread_created", {
           workspaceName: workspace?.name || "Unknown Workspace",
         });
         response.status(200).json({ thread, message });
@@ -462,7 +462,7 @@ function apiWorkspaceThreadEndpoints(app) {
           TTSSelection: process.env.TTS_PROVIDER || "native",
           LLMModel: getModelTag(),
         });
-        await EventLogs.logEvent("api_sent_chat", {
+        await emitAuditEvent("api_sent_chat", {
           workspaceName: workspace?.name,
           chatModel: workspace?.chatModel || "System Default",
           threadName: thread?.name,
@@ -642,7 +642,7 @@ function apiWorkspaceThreadEndpoints(app) {
           TTSSelection: process.env.TTS_PROVIDER || "native",
           LLMModel: getModelTag(),
         });
-        await EventLogs.logEvent("api_sent_chat", {
+        await emitAuditEvent("api_sent_chat", {
           workspaceName: workspace?.name,
           chatModel: workspace?.chatModel || "System Default",
           threadName: thread?.name,

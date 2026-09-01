@@ -1,3 +1,4 @@
+const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { Document } = require("../../../models/documents");
 const { Telemetry } = require("../../../models/telemetry");
@@ -11,7 +12,6 @@ const {
 const { multiUserMode, reqBody } = require("../../../utils/http");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
 const { VALID_CHAT_MODE } = require("../../../utils/chats/stream");
-const { EventLogs } = require("../../../models/eventLogs");
 const {
   convertToChatHistory,
   writeResponseChunk,
@@ -96,7 +96,7 @@ function apiWorkspaceEndpoints(app) {
         TTSSelection: process.env.TTS_PROVIDER || "native",
         LLMModel: getModelTag(),
       });
-      await EventLogs.logEvent("api_workspace_created", {
+      await emitAuditEvent("api_workspace_created", {
         workspaceName: workspace?.name || "Unknown Workspace",
       });
       response.status(200).json({ workspace, message });
@@ -260,7 +260,7 @@ function apiWorkspaceEndpoints(app) {
         await Document.delete({ workspaceId: workspaceId });
         await Workspace.delete({ id: workspaceId });
 
-        await EventLogs.logEvent("api_workspace_deleted", {
+        await emitAuditEvent("api_workspace_deleted", {
           workspaceName: workspace?.name || "Unknown Workspace",
         });
         try {
@@ -714,7 +714,7 @@ function apiWorkspaceEndpoints(app) {
           VectorDbSelection: process.env.VECTOR_DB || "lancedb",
           TTSSelection: process.env.TTS_PROVIDER || "native",
         });
-        await EventLogs.logEvent("api_sent_chat", {
+        await emitAuditEvent("api_sent_chat", {
           workspaceName: workspace?.name,
           chatModel: workspace?.chatModel || "System Default",
         });
@@ -875,7 +875,7 @@ function apiWorkspaceEndpoints(app) {
           VectorDbSelection: process.env.VECTOR_DB || "lancedb",
           TTSSelection: process.env.TTS_PROVIDER || "native",
         });
-        await EventLogs.logEvent("api_sent_chat", {
+        await emitAuditEvent("api_sent_chat", {
           workspaceName: workspace?.name,
           chatModel: workspace?.chatModel || "System Default",
         });

@@ -1,5 +1,5 @@
+const { emitAuditEvent } = require("../utils/events");
 const prisma = require("../utils/prisma");
-const { EventLogs } = require("./eventLogs");
 const { Document } = require("./documents");
 const { documentsPath, directUploadsPath } = require("../utils/files");
 const { safeJsonParse } = require("../utils/http");
@@ -27,7 +27,7 @@ const WorkspaceParsedFiles = {
         },
       });
 
-      await EventLogs.logEvent(
+      await emitAuditEvent(
         "workspace_file_uploaded",
         {
           filename,
