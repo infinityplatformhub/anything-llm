@@ -7,7 +7,7 @@
 - **integration branch**: `approof/main` @ `ffca31ad` (push แล้ว)
 - **baseline**: ~759 tests / 68 suites บน PostgreSQL (ยืนยันโดย QA-1)
 - **ปิดแล้ว 21 issues**: #1-#6, #8-#14, #16-#21, #23
-- **เปิดอยู่ 4**: #7 (subagent dev-7, env7 `bca9b4c8` รอ check), #15 (Dev3 6/12), #22 T-3 (Dev4, t3 core `3b80ba34` รอ check+review), #24 hotfix EventLogs import ใน system.js (subagent fix-24, worktree fix24 — E2E gate จับได้)
+- **เปิดอยู่ 4**: #7 (subagent dev-7, env7 `bca9b4c8` รอ check), #15 (Dev3 6/12), #22 T-3 (Dev4, t3 core `3b80ba34` รอ check+review), #24 hotfix EventLogs import ใน system.js (subagent fix-24, worktree fix24 — E2E gate จับได้), #25 T-4a route wiring (recon `.infi/recon/t4a-route-wiring.md`, rulings: B-1 grants(creator)∩scopes, W-5 → T-4b, no migration slot — รอ dev ใหม่)
 - **main code**: `731e4c1d` (T-2 + #23 merged)
 - **contract ใหม่** ทุก task.sh start: `yarn test 2>&1 | grep -E "Tests:" | grep -v failed; exit 0` (เทสแดง = ไม่ match)
 - **รอ dev ใหม่ 2 คน** (user จะเพิ่ม): Dev1 → PR-4b/4c (recon จาก Techlead b2), Dev2 → T-4a (recon จาก architect 6f) · ทักมาที่ PMO แล้วแจกทันที · reboot แล้ว session ชื่อใหม่: PMO=anything-llm-47, Dev3=3d, Dev4=ff, QA-1=af, QA-2=e6, Techlead=b2, security=13, architect=6f · Dev1/Dev2 ไม่กลับมา (งานย้ายเป็น subagent)
