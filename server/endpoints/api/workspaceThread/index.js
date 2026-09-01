@@ -1,3 +1,4 @@
+const { requireScope } = require("../../../utils/middleware/requireScope");
 const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { WorkspaceThread } = require("../../../models/workspaceThread");
@@ -20,7 +21,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/new",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -110,7 +111,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/update",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -195,7 +196,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.delete(
     "/v1/workspace/:slug/thread/:threadSlug",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
     #swagger.tags = ['Workspace Threads']
@@ -244,7 +245,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.get(
     "/v1/workspace/:slug/thread/:threadSlug/chats",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -328,7 +329,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/chat",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -485,7 +486,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/stream-chat",
-    [validApiKey],
+    [validApiKey, requireScope("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']

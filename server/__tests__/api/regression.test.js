@@ -8,6 +8,7 @@ const schema = `regression_${process.pid}`;
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-at-least-12-chars";
 process.env.AUTH_TOKEN = "single-user-test-password";
+process.env.API_KEY_PEPPER = "regression-test-pepper-32-bytes-long";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
 const baseDatabaseUrl = process.env.DATABASE_URL;
 if (!baseDatabaseUrl?.startsWith("postgresql://")) {
@@ -162,8 +163,9 @@ beforeAll(async () => {
   await prisma.workspace_users.create({
     data: { user_id: member.id, workspace_id: assignedWorkspace.id },
   });
-  apiKey = "test-api-key-secret";
-  await prisma.api_keys.create({ data: { name: "test", secret: apiKey } });
+  apiKey = "apw-key-test-api-key-secret";
+  const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
+  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]) } });
   await setMultiUserMode(true);
   global.fetch = jest.fn(async (url, options) => {
     if (!options) return { ok: true };
