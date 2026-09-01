@@ -115,7 +115,6 @@ class DatabaseAuthorizationEngine {
     const permission = await this.db.permissions.findUnique({ where: { action } });
     if (!permission) return asDenied("unknown_action");
 
-
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
     const grantWhere = {

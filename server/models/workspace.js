@@ -3,7 +3,7 @@ const prisma = require("../utils/prisma");
 const slugifyModule = require("slugify");
 const { Document } = require("./documents");
 const { WorkspaceUser } = require("./workspaceUsers");
-const { ROLES } = require("../utils/middleware/multiUserProtected");
+
 const { v4: uuidv4 } = require("uuid");
 const { User } = require("./user");
 const { PromptHistory } = require("./promptHistory");

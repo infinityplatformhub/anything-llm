@@ -59,3 +59,26 @@ Ruling: rewrote `removeAndUnembedHttp.test.js`'s "admin (non-member) still purge
 
 Ruling: removed the B-1 derivation from `engine.js` — `API_KEY_PRINCIPAL`, `scopeAllows`, `creatorPrincipal`, and the `evaluateGrants` split. Both T-4a and T-4b implemented `grants(creator) INTERSECT scopes(key)` with different designs and PMO chose T-4b's (the resolver attaches `grantPrincipal`; the engine only reads it). W-6's `MAX_BATCH_RESOURCES` cap stays here. If wrong, `/v1` has no api-key grant path until T-4b merges — which is exactly the window the ruling accepts, since T-4a no longer owns `/v1`.
 Ruling: the S-9-ingress and B-1 tests are preserved verbatim in `.infi/recon/t4b-b1-tests-handoff.js` and handed to Dev4 rather than deleted. They are the acceptance bar for whichever design ships, and a moved test that nobody re-arms is a deleted test. If wrong, T-4b ships the intersection with no proof that a key can neither exceed nor lose its creator's permissions.
+
+## Carries — narrowing, not holes (recorded, deliberately not fixed here)
+
+`Workspace.whereWithUser` lost its role bypass, so every caller of it now sees membership only. Two places narrow as a result:
+- `endpoints/agentFileServer.js:174` (`findInWorkspaceChats`) — a caller holding org-wide `workspace.read` but no membership passes the gate and then finds no source.
+- `utils/helpers/search.js:35` — T-5's file, untouched by ruling; same narrowing with no diff of its own.
+
+Ruling: left as-is. Both fail CLOSED (fewer results, never more), which is the correct direction to be wrong in while the grant-aware list query does not exist yet. Fixing them properly means teaching `whereWithUser` to union membership with grant-visible workspaces, which needs the engine in the model layer — the layering T-4a exists to remove. If wrong, org-wide grant holders see an incomplete file/search list until a grant-aware list lands.
+
+## Middleware deletion (W-1) — what came out of it
+
+Ruling: `multiUserProtected.js` is deleted, but three things in it were not role gates and were salvaged rather than dropped:
+- `isMultiUserSetup` / `isSingleUserMode` → `utils/middleware/deploymentMode.js`. They answer "which shape is this deployment", which some routes legitimately need. Kept apart from the engine so that question can never again be mistaken for "may this caller do this" — which is precisely how `flexUserRoleValid` grew its bypass.
+- `ROLES` values → `utils/legacyRoles.js`, consumed only by `helpers/admin/index.js` for role ASSIGNMENT validation (which legacy role string an admin may write onto another user). That is data validation, not an access decision, and R4 keeps `users.role` frozen rather than dropped. Kept in a separate module so nothing can import a role list and a bypass from the same file again.
+If wrong, `deploymentMode` becomes a second place people reach for when they mean authorization.
+
+Ruling: three model-layer bypasses became caller-supplied capabilities rather than disappearing.
+- `BrowserExtensionApiKey.whereWithUser` took `user.role === "admin"` → now takes `orgWideKeyManage`, computed by the route from a `key.manage` decision.
+- `User.canSendChat` exempted admins from the daily quota → now takes `exemptFromLimit`, computed from `system.write`. The quota is not an authorization decision, but who is exempt from it is.
+- `websocket.js` `userCanToggleTools` compared `user.role` → now asks the engine directly, because the agent runtime has no request to hang middleware on.
+In each case the behaviour is preserved and becomes revocable: revoking the grant revokes the capability, which a role string could not express. If wrong, these three need distinct action names rather than borrowing `key.manage` / `system.write`.
+
+Ruling: `img.js:55` (`user.role === "admin"`) is the ONE live role literal left in the tree. It is T-5's file by PMO ruling and is deliberately untouched. If wrong, a role-string check outlives the middleware deletion until T-5 lands.

@@ -1,7 +1,7 @@
 const { reqBody } = require("../../utils/http");
 const {
   isSingleUserMode,
-} = require("../../utils/middleware/multiUserProtected");
+} = require("../../utils/middleware/deploymentMode");
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 
 /**

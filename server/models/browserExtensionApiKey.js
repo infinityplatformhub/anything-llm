@@ -1,5 +1,4 @@
 const prisma = require("../utils/prisma");
-const { ROLES } = require("../utils/middleware/multiUserProtected");
 const { digestSecret, keyPrefix, matchesDigest } = require("../utils/apiKeySecurity");
 
 const BrowserExtensionApiKey = {
@@ -46,8 +45,12 @@ const BrowserExtensionApiKey = {
   where: (clause = {}, limit = null, orderBy = null) => prisma.browser_extension_api_keys.findMany({
     where: clause, ...(limit !== null ? { take: limit } : {}), ...(orderBy ? { orderBy } : {}), include: { user: true },
   }).then((rows) => rows.map(({ secretDigest, ...row }) => row)).catch(() => []),
-  whereWithUser: async function (user, clause = {}, limit = null, orderBy = null) {
-    if (user.role === ROLES.admin) return this.where(clause, limit, orderBy);
+  // T-4a (#25): the `user.role === "admin"` branch is gone — the same model-layer
+  // bypass as Workspace.getWithUser. Ownership is a data filter; whether someone
+  // may see every key is `key.manage`, decided by the engine at the route, which
+  // then passes the answer in.
+  whereWithUser: async function (user, clause = {}, limit = null, orderBy = null, { orgWideKeyManage = false } = {}) {
+    if (orgWideKeyManage) return this.where(clause, limit, orderBy);
     return this.where({ ...clause, user_id: user.id }, limit, orderBy);
   },
   migrateApiKeysToMultiUser: async (userId) => prisma.browser_extension_api_keys.updateMany({ where: { user_id: null }, data: { user_id: userId } }),

@@ -5,7 +5,13 @@ const { Telemetry } = require("../models/telemetry");
 const { streamChatWithWorkspace } = require("../utils/chats/stream");
 const { emitAuditEvent } = require("../utils/events");
 const { requirePermission } = require("../utils/middleware/requirePermission");
-const { workspaceBySlug } = require("../utils/middleware/resourceResolvers");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
+const {
+  workspaceBySlug,
+  orgResource,
+} = require("../utils/middleware/resourceResolvers");
 const {
   validWorkspaceAndThreadSlug,
   validWorkspaceSlug,
@@ -14,6 +20,8 @@ const { writeResponseChunk } = require("../utils/helpers/chat/responses");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { User } = require("../models/user");
 const { getModelTag } = require("./utils");
+
+const authorizationEngine = new DatabaseAuthorizationEngine();
 
 function chatEndpoints(app) {
   if (!app) return;
@@ -49,7 +57,21 @@ function chatEndpoints(app) {
         response.setHeader("Connection", "keep-alive");
         response.flushHeaders();
 
-        if (multiUserMode(response) && !(await User.canSendChat(user))) {
+        if (
+          multiUserMode(response) &&
+          !(await User.canSendChat(user, {
+            // The daily quota is not an authorization decision, but who is
+            // exempt from it is. `system.write` stands in for the admin role
+            // string this used to read off the user row.
+            exemptFromLimit: (
+              await authorizationEngine.authorize({
+                actor: response.locals.actor,
+                action: "system.write",
+                resource: await orgResource(),
+              })
+            ).allowed,
+          }))
+        ) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "abort",
@@ -136,7 +158,21 @@ function chatEndpoints(app) {
         response.setHeader("Connection", "keep-alive");
         response.flushHeaders();
 
-        if (multiUserMode(response) && !(await User.canSendChat(user))) {
+        if (
+          multiUserMode(response) &&
+          !(await User.canSendChat(user, {
+            // The daily quota is not an authorization decision, but who is
+            // exempt from it is. `system.write` stands in for the admin role
+            // string this used to read off the user row.
+            exemptFromLimit: (
+              await authorizationEngine.authorize({
+                actor: response.locals.actor,
+                action: "system.write",
+                resource: await orgResource(),
+              })
+            ).allowed,
+          }))
+        ) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "abort",

@@ -19,6 +19,23 @@ const orgResource = async () => ({
 });
 
 /** Workspace addressed by :slug. */
+/** Workspace addressed by workspaceSlug in the request body. */
+const workspaceByBodySlug = async (request) => {
+  const slug = String(request.body?.workspaceSlug ?? "");
+  if (!slug) return null;
+  const workspace = await prisma.workspaces.findFirst({
+    where: { slug },
+    select: { id: true },
+  });
+  if (!workspace) return null;
+  return {
+    type: "workspace",
+    id: String(workspace.id),
+    orgId: ORG_ID,
+    workspaceId: workspace.id,
+  };
+};
+
 const workspaceBySlug = async (request) => {
   const slug = String(request.params?.slug ?? "");
   if (!slug) return null;
@@ -159,6 +176,7 @@ const watchedDocumentInWorkspaceBySlug = async (request) => {
 module.exports = {
   orgResource,
   workspaceBySlug,
+  workspaceByBodySlug,
   workspaceByIdParam,
   chatByIdParam,
   documentInWorkspaceBySlug,

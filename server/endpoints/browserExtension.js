@@ -8,11 +8,14 @@ const {
 const { CollectorApi } = require("../utils/collectorApi");
 const { reqBody, multiUserMode, userFromSession } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
 const { Telemetry } = require("../models/telemetry");
+
+const authorizationEngine = new DatabaseAuthorizationEngine();
 
 function browserExtensionEndpoints(app) {
   if (!app) return;
@@ -155,12 +158,25 @@ function browserExtensionEndpoints(app) {
   // Internal endpoints for managing API keys
   app.get(
     "/browser-extension/api-keys",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("browser-extension.read", orgResource),
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
         const apiKeys = multiUserMode(response)
-          ? await BrowserExtensionApiKey.whereWithUser(user)
+          ? await BrowserExtensionApiKey.whereWithUser(user, {}, null, null, {
+              // Seeing every key, not just your own, is `key.manage` — the
+              // capability the admin role string used to stand for.
+              orgWideKeyManage: (
+                await authorizationEngine.authorize({
+                  actor: response.locals.actor,
+                  action: "key.manage",
+                  resource: await orgResource(),
+                })
+              ).allowed,
+            })
           : await BrowserExtensionApiKey.where();
 
         response.status(200).json({ success: true, apiKeys });
@@ -175,7 +191,10 @@ function browserExtensionEndpoints(app) {
 
   app.post(
     "/browser-extension/api-keys/new",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("browser-extension.write", orgResource),
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -195,13 +214,21 @@ function browserExtensionEndpoints(app) {
 
   app.delete(
     "/browser-extension/api-keys/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("browser-extension.write", orgResource),
+    ],
     async (request, response) => {
       try {
         const { id } = request.params;
         const user = await userFromSession(request, response);
 
-        if (multiUserMode(response) && user.role !== ROLES.admin) {
+        const orgWide = await authorizationEngine.authorize({
+          actor: response.locals.actor,
+          action: "key.manage",
+          resource: await orgResource(),
+        });
+        if (!orgWide.allowed) {
           const apiKey = await BrowserExtensionApiKey.get({
             id: parseInt(id),
             user_id: user?.id,

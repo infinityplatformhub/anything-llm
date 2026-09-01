@@ -31,15 +31,6 @@ jest.mock("../../../utils/middleware/validatedRequest", () => ({
     next();
   },
 }));
-jest.mock("../../../utils/middleware/multiUserProtected", () => {
-  const actual = jest.requireActual(
-    "../../../utils/middleware/multiUserProtected"
-  );
-  return {
-    ...actual,
-    flexUserRoleValid: () => (_request, _response, next) => next(),
-  };
-});
 jest.mock("../../../models/telemetry", () => ({
   Telemetry: { sendTelemetry: jest.fn() },
 }));

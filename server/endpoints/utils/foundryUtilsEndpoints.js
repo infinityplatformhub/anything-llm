@@ -1,8 +1,8 @@
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../../utils/middleware/multiUserProtected");
+  requirePermission,
+} = require("../../utils/middleware/requirePermission");
+const { orgResource } = require("../../utils/middleware/resourceResolvers");
 const { reqBody } = require("../../utils/http");
 const FoundryModels = require("../../utils/AiProviders/foundry/models");
 
@@ -11,7 +11,7 @@ function foundryUtilsEndpoints(app) {
 
   app.post(
     "/utils/foundry/capabilities",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const { basePath = null } = reqBody(request);

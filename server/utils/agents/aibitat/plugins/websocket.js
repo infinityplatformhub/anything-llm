@@ -3,12 +3,12 @@ const { Telemetry } = require("../../../../models/telemetry");
 const { v4: uuidv4 } = require("uuid");
 const { safeJsonParse } = require("../../../http");
 const { skillIsAutoApproved } = require("../../../helpers/agents");
-const { ROLES } = require("../../../middleware/multiUserProtected");
 
 /**
- * Toggling an agent's tools mid-session is an admin-only action, mirroring the
- * Agent Skills settings which only admins can manage. In multi-user mode the
- * requesting user must be an admin; single-user mode (no userId) is allowed.
+ * Toggling an agent's tools mid-session mirrors the Agent Skills settings.
+ * T-4a (#25): this asks the engine instead of comparing `user.role` — the agent
+ * runtime has no request to hang middleware on, so the check is made here with
+ * an explicit actor rather than a role string.
  * @param {number|null} userId - User id from the agent invocation.
  * @returns {Promise<boolean>}
  */
@@ -17,9 +17,15 @@ async function userCanToggleTools(userId = null) {
   if (!(await SystemSettings.isMultiUserMode())) return true;
   if (!userId) return false;
 
-  const { User } = require("../../../../models/user");
-  const user = await User.get({ id: Number(userId) });
-  return user?.role === ROLES.admin;
+  const {
+    DatabaseAuthorizationEngine,
+  } = require("../../../authorization/engine");
+  const decision = await new DatabaseAuthorizationEngine().authorize({
+    actor: { type: "user", id: String(userId), orgId: 1 },
+    action: "system.write",
+    resource: { type: "org", id: "1", orgId: 1, workspaceId: null },
+  });
+  return decision.allowed;
 }
 
 const SOCKET_TIMEOUT_MS = 300 * 1_000; // 5 mins

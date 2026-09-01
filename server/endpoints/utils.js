@@ -1,9 +1,10 @@
 const { SystemSettings } = require("../models/systemSettings");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const {
+  orgResource,
+  workspaceByBodySlug,
+} = require("../utils/middleware/resourceResolvers");
 const {
   validExportTypes,
   sendChatHistoryFile,
@@ -34,7 +35,10 @@ function utilEndpoints(app) {
 
   app.post(
     "/export-chat/:type",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [
+      validatedRequest,
+      requirePermission("document.export", workspaceByBodySlug),
+    ],
     async (request, response) => {
       try {
         const { type } = request.params;

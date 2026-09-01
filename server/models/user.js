@@ -361,10 +361,11 @@ const User = {
    * @param {User} user The user object record.
    * @returns {Promise<boolean>} True if the user can send a chat, false otherwise.
    */
-  canSendChat: async function (user) {
-    const { ROLES } = require("../utils/middleware/multiUserProtected");
-    if (!user || user.dailyMessageLimit === null || user.role === ROLES.admin)
-      return true;
+  canSendChat: async function (user, { exemptFromLimit = false } = {}) {
+    // T-4a (#25): the admin exemption was a role string read in the model. The
+    // quota itself is not an authorization decision, so the exemption is passed
+    // in by the caller that knows the actor rather than re-derived here.
+    if (!user || user.dailyMessageLimit === null || exemptFromLimit) return true;
 
     const { WorkspaceChats } = require("./workspaceChats");
     const currentChatCount = await WorkspaceChats.count({

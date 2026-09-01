@@ -27,15 +27,6 @@ jest.mock("../../utils/middleware/validatedRequest", () => ({
     next();
   },
 }));
-jest.mock("../../utils/middleware/multiUserProtected", () => {
-  const actual = jest.requireActual(
-    "../../utils/middleware/multiUserProtected"
-  );
-  return {
-    ...actual,
-    flexUserRoleValid: () => (_request, _response, next) => next(),
-  };
-});
 // T-4a: this suite mocks prisma, so the real engine behind requirePermission has
 // no policy tables and correctly reports the store as unavailable (503). The
 // suite exercises the purge GUARD, not the authorization GATE — the gate is
