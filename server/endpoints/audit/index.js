@@ -53,9 +53,21 @@ function redactRow(row) {
   return { ...row, metadata };
 }
 
+// CSV formula injection. Excel, Sheets and LibreOffice evaluate a cell whose text
+// begins with = + - or @, so an event type of `=cmd()|...!A1` becomes code the
+// moment an operator opens the export. Every column here is caller-influenced —
+// the event TYPE is a data column and comes straight from the emitter — so the
+// guard is applied to every cell rather than to the ones that look risky.
+//
+// Leading whitespace and control characters are skipped before the test, because a
+// spreadsheet ignores them when deciding whether a cell is a formula. The
+// apostrophe prefix is what tells it to treat the rest as literal text.
+const FORMULA_LEAD = new RegExp("^[\\s\\u0000-\\u001f]*[=+\\-@]");
+
 function csvCell(value) {
   if (value === null || value === undefined) return "";
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  if (FORMULA_LEAD.test(text)) text = "'" + text;
   return `"${text.replace(/"/g, '""')}"`;
 }
 

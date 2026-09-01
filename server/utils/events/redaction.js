@@ -130,7 +130,12 @@ function redactEventData(data) {
     }
     out[key] = key === "changes" ? scrubChanges(value, hits, 0) : scrubValue(value, hits, 0);
   }
-  if (dropped.length) out._droppedKeys = dropped.slice().sort();
+  // The COUNT of dropped keys, never their names. A key name is caller-controlled
+  // and is itself free text — `{"victim.person@example.com": 1}` puts the PII in
+  // the key rather than the value, and echoing names back would walk it straight
+  // past both guards. The count keeps the signal that something was dropped
+  // without reproducing any of it.
+  if (dropped.length) out._droppedKeyCount = dropped.length;
   return { data: out, redactions: [...hits].sort(), dropped };
 }
 

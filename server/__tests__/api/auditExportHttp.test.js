@@ -162,6 +162,31 @@ describe("audit export is guarded and redacted", () => {
     expect(response.text).not.toContain(SENTINEL_EMAIL);
   });
 
+  test("csv escapes cells a spreadsheet would run as a formula", async () => {
+    // The event type is caller-controlled and lands in a CSV column, so a crafted
+    // type is code the moment an operator opens the file.
+    await prisma.event_logs.create({
+      data: {
+        eventId: `audit-export-formula-${process.pid}`,
+        event: "=cmd()|'/c calc'!A1",
+        metadata: JSON.stringify({ name: "+SUM(1,2)" }),
+        userId: null,
+        occurredAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .get("/api/audit/export?format=csv")
+      .set("Authorization", adminAuth);
+
+    expect(response.status).toBe(200);
+    const dangerous = response.text
+      .split("\n")
+      .filter((line) => /(^|,)\s*["']?[=+\-@]/.test(line));
+    expect(dangerous).toEqual([]);
+    expect(response.text).toContain("\"'=cmd()");
+  });
+
   test("an ordinary member is refused", async () => {
     const response = await request(app)
       .get("/api/audit/export?format=json")

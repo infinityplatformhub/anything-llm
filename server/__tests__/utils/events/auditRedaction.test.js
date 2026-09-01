@@ -142,6 +142,23 @@ describe("audit sink redacts PDPA data before the row exists", () => {
     expect(row.occurredAt.toISOString()).toBe(event.occurredAt.toISOString());
   });
 
+  test("a dropped key name is not echoed back into the row", async () => {
+    // A key name is caller-controlled free text, so a payload can carry its PII in
+    // the key rather than the value. Recording the names of dropped keys would
+    // walk it straight past both guards.
+    const row = await storedFor(
+      auditEvent({
+        username: "plain-user",
+        [SENTINEL.email]: "value-under-a-pii-key",
+        some_unknown_field: "UNKNOWN-SENTINEL-VALUE",
+      })
+    );
+
+    expect(row.metadata).not.toContain(SENTINEL.email);
+    expect(row.metadata).not.toContain("UNKNOWN-SENTINEL-VALUE");
+    expect(JSON.parse(row.metadata)._droppedKeyCount).toBe(2);
+  });
+
   test("nested string values are scanned at depth", async () => {
     const row = await storedFor(
       auditEvent({
