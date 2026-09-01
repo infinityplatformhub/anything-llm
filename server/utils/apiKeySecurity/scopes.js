@@ -2,7 +2,7 @@ const API_KEY_SCOPES = Object.freeze({
   TEMPORARY_ALL: "*",
 });
 
-const PR4A_ROUTE_SCOPES = Object.freeze({
+const ROUTE_SCOPES = Object.freeze({
   "GET /v1/admin/is-multi-user-mode": "system.read",
   "GET /v1/admin/users": "user.read",
   "POST /v1/admin/users/new": "user.write",
@@ -21,6 +21,6 @@ const PR4A_ROUTE_SCOPES = Object.freeze({
   "GET /v1/auth": "system.read",
 });
 
-const scopeFor = (method, path) => PR4A_ROUTE_SCOPES[`${method} ${path}`];
+const scopeFor = (method, path) => ROUTE_SCOPES[`${method} ${path}`];
 
-module.exports = { API_KEY_SCOPES, PR4A_ROUTE_SCOPES, scopeFor };
+module.exports = { API_KEY_SCOPES, ROUTE_SCOPES, scopeFor };

@@ -1,5 +1,5 @@
 const { ALL_ACTIONS } = require("../../../prisma/seeds/permissions");
-const { PR4A_ROUTE_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { ROUTE_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
 const { workspaceBindingMatches } = require("../../../utils/middleware/validApiKey");
 
 const EXPECTED = {
@@ -21,9 +21,9 @@ const EXPECTED = {
   "GET /v1/auth": "system.read",
 };
 
-test("PR-4a route table is complete and verbatim vocabulary", () => {
-  expect(PR4A_ROUTE_SCOPES).toEqual(EXPECTED);
-  expect(Object.values(PR4A_ROUTE_SCOPES).every((action) => ALL_ACTIONS.includes(action))).toBe(true);
+test("route scope table is complete and verbatim vocabulary", () => {
+  expect(ROUTE_SCOPES).toEqual(EXPECTED);
+  expect(Object.values(ROUTE_SCOPES).every((action) => ALL_ACTIONS.includes(action))).toBe(true);
 });
 
 test("workspace binding denies mismatched direct workspace id", async () => {
