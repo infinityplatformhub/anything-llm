@@ -30,3 +30,14 @@ image: ghcr.io/<owner>/<repository>:1.2.3
 ```
 
 Use `:stable` or `:beta` only for environments that intentionally follow a channel. For strongest reproducibility, replace tag with image digest emitted by release workflow.
+
+## Required Node version
+
+Development, regression tests, and release CI use Node.js 22, pinned by `.nvmrc` and workflow configuration. Verify locally with:
+
+```bash
+nvm use
+cd server
+yarn install --frozen-lockfile
+yarn test
+```
