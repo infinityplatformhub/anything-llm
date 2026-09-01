@@ -10,7 +10,7 @@ Provide the only authorization decision point for routes, services, jobs, channe
 /** @typedef {{type:"user"|"service"|"embed", id:string, orgId:string, workspaceIds:string[], groupIds:string[], scopedKeyId?:string, onBehalfOf?:{type:"user", id:string}, impersonatedBy?:{type:"user", id:string}}} Actor */
 /** @typedef {{type:string, id:string|null, orgId:string, workspaceId:string|null, ownerId?:string, attributes?:Object}} Resource */
 /** @typedef {{allowed:boolean, reason:string, matchedPolicyIds:string[]}} AuthorizationDecision */
-/** @typedef {{orgId:string, principalType:"user"|"service"|"embed", actorId:string, groupIds:string[], workspaceIds:string[], allowedDocumentIds?:string[], deniedDocumentIds:string[], attributes:Object, matchNone:boolean, policyVersion:string}} DocumentAclFilter */
+/** @typedef {{orgId:string, principalType:"user"|"service"|"embed", actorId:string, workspaceIds:string[], deniedDocumentIds:string[], attributes:Object, allowedDocumentIds?:string[], matchNone:boolean, policyVersion:string}} DocumentAclFilter */
 /** @typedef {{resource:Resource, principals:Array<{type:"user"|"service"|"embed"|"group"|"workspace", id:string, actions:string[]}>, matchedPolicies:Array<{policyId:string, effect:"allow"|"deny", reason:string}>, policyVersion:string}} AccessExplanation */
 /** @interface AuthorizationEngineDriver */
 class AuthorizationEngineDriver {

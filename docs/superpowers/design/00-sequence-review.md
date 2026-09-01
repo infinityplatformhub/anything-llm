@@ -100,6 +100,8 @@ sequenceDiagram
   Lark->>Pipeline: run(CanonicalChatRequest)
   Pipeline->>License: checkFeature(lark_bot)
   License-->>Pipeline: Entitled
+  Pipeline->>License: checkBudget(actor, workspace, estimate)
+  License-->>Pipeline: Allowed + reservationId
   Pipeline->>Authz: authorize(chat.create, workspace)
   Authz-->>Pipeline: Allowed
   Pipeline->>Events: publish(chat.completed)

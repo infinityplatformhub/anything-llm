@@ -18,8 +18,8 @@ class ChatMiddleware {
   static stageId() {}
   /** @param {ChatContext} context @returns {Promise<ChatStageResult>} */
   async handle(context) {}
-  /** Called for every model chunk before delivery; may transform or stop stream. @param {ChatContext} context @param {string} chunk @returns {Promise<ChatChunkResult>} */
-  async handleChunk(context, chunk) {}
+  /** Called for every model chunk before delivery; may transform or stop stream. Stages with no chunk policy return `{status:"continue", chunk}`. @param {ChatContext} context @param {string} chunk @returns {Promise<ChatChunkResult>} */
+  async handleChunk(context, chunk) { return { status: "continue", chunk }; }
   /** Best-effort compensation only; never replaces durable accounting. @returns {Promise<void>} */
   async onError(_context, _error) {}
 }

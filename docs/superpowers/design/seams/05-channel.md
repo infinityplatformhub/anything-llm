@@ -8,7 +8,7 @@ Adapt an ingress/egress surface to canonical chat requests and responses while f
 
 ```js
 /** @typedef {{deliveryId:string, externalActorId:string, externalConversationId:string, workspaceHint:string|null, text:string, attachments:Object[], replyToken?:string, metadata:Object}} ChannelInbound */
-/** @typedef {{type:"user"|"service"|"embed", id:string, orgId:string, workspaceIds:string[], groupIds:string[], scopedKeyId?:string, onBehalfOf?:{type:"user", id:string}, impersonatedBy?:{type:"user", id:string}} Actor */
+/** @typedef {{type:"user"|"service"|"embed", id:string, orgId:string, workspaceIds:string[], groupIds:string[], scopedKeyId?:string, onBehalfOf?:{type:"user", id:string}, impersonatedBy?:{type:"user", id:string}}} Actor */
 /** @typedef {{requestId:string, actor:Actor, workspaceId:string, channel:string, prompt:string, attachments:Object[], mode:"persistent"|"temporary", metadata:Object}} CanonicalChatRequest */
 /** @interface ChannelDriver */
 class ChannelDriver {
