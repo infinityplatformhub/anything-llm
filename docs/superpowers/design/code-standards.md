@@ -542,6 +542,64 @@ Postgres and hid a broken statement; here, a real Postgres stood in for a
 migrated one and hid missing data. Both pass every check that does not look at
 what the application actually reads.
 
+### 7.5 Rewriting a middleware means testing the routes under it
+
+A middleware and the routes beneath it share an undeclared contract: what the
+middleware puts on `response.locals`, and what each route reads back. Nothing
+checks it. Express throws at the *read*, not at the wiring, so a route whose key
+stopped being written 500s in production while every existing test stays green.
+
+Issue #34. PR-3 (`fcf09619`) rewrote `validBrowserExtensionApiKey` to write
+`locals.apiKeyContext`. Two routes still read `locals.apiKey.id`:
+
+```js
+// validBrowserExtensionApiKey.js:26
+response.locals.apiKeyContext = context;
+
+// browserExtension.js:30 and :50 — unchanged
+const apiKeyId = response.locals.apiKey.id;   // TypeError, 500
+```
+
+`/browser-extension/check` and `/browser-extension/disconnect` were dead from
+that commit onward. An 895-test green run said nothing, because no test touched
+either route. A user found it.
+
+Two rules follow:
+
+**1. Rewriting a middleware means the PR carries an HTTP test for every route
+under it.** Not a unit test of the middleware — a request through the stack that
+asserts the status the route is supposed to return. Write it against the
+pre-change code first and watch it fail; a test written after the fix proves the
+fix, not the contract.
+
+**2. Every `response.locals` key a route reads must be written somewhere.** This
+half is mechanical:
+
+```bash
+./scripts/check-locals-contract.sh
+```
+
+It compares the keys read under `server/endpoints/` against the keys assigned
+anywhere under `server/`, and names any read with no writer. Run via
+`./scripts/check-local.sh`.
+
+`locals.apiKey` sits in the script's PENDING list while #34 is in flight: reported
+every run, not failing the gate, so this landed before the fix. Delete the entry
+when #34 merges. A PENDING entry with no open issue is a bug, not a waiver.
+
+The gate finds a live bug the day it is added, which is the point — it was found
+by running it, not written from a description of the bug. It cannot see a key
+whose *shape* changed (`locals.user` going from a row to an id), so rule 1 is not
+optional because rule 2 exists.
+
+**Not proposed: a route-coverage gate.** Diffing middleware files, resolving
+which routes mount them, and grepping tests for those paths is three inferences
+deep — Express mounts middleware in arrays, at routers, and conditionally, so the
+route list is not reliably greppable. A gate that is wrong in either direction is
+worse than a review item: false negatives teach people it is covered, false
+positives teach people to bypass it. Rule 1 stays a review item; rule 2 is
+mechanical because it needs no inference at all.
+
 ### 7.2 Definition of done for background services
 
 A scheduler, worker, or pump is not done because its tests pass. Before handing
