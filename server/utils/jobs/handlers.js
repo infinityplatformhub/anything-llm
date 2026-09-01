@@ -1,13 +1,20 @@
 const { Telemetry } = require("../../models/telemetry");
+const { purge } = require("../retention/purge");
 
 const handlers = {
   "telemetry.flush@1": async () => {
     await Telemetry.flush();
     return { flushed: true };
   },
+  // T-6 Phase B (#28): the schedule already exists (retention-purge-daily,
+  // 0 2 * * * UTC) — this fills the body it calls. The purge fails closed: an
+  // unusable retention window returns skipped:true and deletes nothing.
   "retention.purge@1": async ({ traceId }) => {
-    console.log(`[Retention purge scheduled] traceId=${traceId}`);
-    return { purged: 0 };
+    const result = await purge();
+    console.log(
+      `[Retention purge] traceId=${traceId} purged=${result.purged} skipped=${result.skipped} retentionDays=${result.retentionDays}`
+    );
+    return result;
   },
 };
 

@@ -356,7 +356,7 @@ class Chroma extends VectorDatabase {
       name: this.normalize(namespace),
     });
 
-    const knownDocuments = await DocumentVectors.where({ docId });
+    const knownDocuments = await DocumentVectors.forDocument(docId);
     if (knownDocuments.length === 0) return;
 
     const vectorIds = knownDocuments.map((doc) => doc.vectorId);

@@ -300,7 +300,7 @@ class LanceDb extends VectorDatabase {
 
     const { DocumentVectors } = require("../../../models/vectors");
     const table = await client.openTable(namespace);
-    const vectorIds = (await DocumentVectors.where({ docId })).map(
+    const vectorIds = (await DocumentVectors.forDocument(docId)).map(
       (record) => record.vectorId
     );
 

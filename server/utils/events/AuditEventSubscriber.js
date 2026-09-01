@@ -26,8 +26,14 @@ class AuditEventSubscriber {
   }
 }
 
+/**
+ * The ONLY sanctioned delete path for event_logs (enforced by
+ * __tests__/utils/coreServices/eventBoundary.test.js). Returns the number of rows
+ * removed, which the T-6 retention purge needs to batch and to report what it did.
+ */
 async function deleteAuditEvents(clause, db = prisma) {
-  await db.event_logs.deleteMany({ where: clause });
+  const { count } = await db.event_logs.deleteMany({ where: clause });
+  return count;
 }
 
 module.exports = { AuditEventSubscriber, deleteAuditEvents };

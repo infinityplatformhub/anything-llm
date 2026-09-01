@@ -25,11 +25,31 @@ const BATCH = 1000;
 // which is what makes them correct during the batched run as well as after it.
 class CanonicalizeNotEnabledError extends Error {}
 
+// C-1 CLOSED by T-6 Phase B (#28): the seven non-Lance providers now resolve
+// vectors through DocumentVectors.forDocument, which matches the legacy uuid AND
+// the canonical id, so a delete is correct before, during and after the batched
+// run. That was the precondition this flag existed to hold, so the default is now
+// ON.
+//
+// It stays overridable, and the override is the OFF direction:
+// ENABLE_DOC_VECTORS_CANONICALIZE=0/false/off refuses to run. An operator who
+// finds a call site we missed needs a way to stop the job without a deploy, and
+// the value is read rather than merely tested for presence — the old
+// `"KEY" in process.env` form made `ENABLE_...=0` mean ENABLED, which is the
+// wrong answer to give someone trying to turn it off in a hurry.
+const OFF_VALUES = new Set(["0", "false", "off", "no"]);
+
+function canonicalizeEnabled(env = process.env) {
+  const raw = env.ENABLE_DOC_VECTORS_CANONICALIZE;
+  if (raw === undefined || raw === null || String(raw).trim() === "") return true;
+  return !OFF_VALUES.has(String(raw).trim().toLowerCase());
+}
+
 async function run({ db = prisma, emit = () => {}, batch = BATCH, enable } = {}) {
-  const enabled = enable ?? ("ENABLE_DOC_VECTORS_CANONICALIZE" in process.env);
+  const enabled = enable ?? canonicalizeEnabled();
   if (!enabled) {
     throw new CanonicalizeNotEnabledError(
-      "doc-vectors-canonicalize refused: runtime call sites still read legacy uuid docIds — enable only when T-4b/T-5 have migrated them"
+      "doc-vectors-canonicalize refused: ENABLE_DOC_VECTORS_CANONICALIZE is set to an off value"
     );
   }
 
@@ -82,4 +102,4 @@ async function run({ db = prisma, emit = () => {}, batch = BATCH, enable } = {})
   return { done, total, orphanVectors: Number(orphans.n) };
 }
 
-module.exports = { run, BATCH, CanonicalizeNotEnabledError };
+module.exports = { run, BATCH, CanonicalizeNotEnabledError, canonicalizeEnabled };

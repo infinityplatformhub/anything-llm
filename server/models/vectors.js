@@ -25,6 +25,48 @@ const DocumentVectors = {
     }
   },
 
+  /**
+   * T-6 C-1 (#28): every id a document's vectors may be stored under.
+   *
+   * doc-vectors-canonicalize rewrites document_vectors.docId from the legacy
+   * workspace_documents uuid to the canonical documents.id, in batches — so
+   * mid-run one document's vectors are canonical while another's are still
+   * legacy. A caller that reads only one shape silently matches zero rows, and
+   * for a DELETE that leaves the vectors of a deleted document in the store with
+   * nothing left to find them by.
+   *
+   * Resolving both is correct before, during and after the run. The lookup is by
+   * the legacy uuid because that is what every caller still holds; the canonical
+   * id comes off the stored row, never off the caller.
+   *
+   * @param {string} docId the legacy uuid a caller passes around
+   * @returns {Promise<string[]>} distinct ids to match document_vectors.docId on
+   */
+  docIdVariants: async function (docId) {
+    if (docId === null || docId === undefined) return [];
+    const ids = new Set([String(docId)]);
+    try {
+      const document = await prisma.workspace_documents.findFirst({
+        where: { docId: String(docId) },
+        select: { documentId: true },
+      });
+      if (document?.documentId !== null && document?.documentId !== undefined)
+        ids.add(String(document.documentId));
+    } catch (error) {
+      // A lookup failure must not turn a delete into a silent no-op: fall back to
+      // the id the caller gave us rather than returning nothing.
+      console.error("docIdVariants lookup failed", error.message);
+    }
+    return [...ids];
+  },
+
+  /** Vectors for a document under either id. See docIdVariants. */
+  forDocument: async function (docId) {
+    const ids = await this.docIdVariants(docId);
+    if (ids.length === 0) return [];
+    return this.where({ docId: { in: ids } });
+  },
+
   where: async function (clause = {}, limit) {
     try {
       const results = await prisma.document_vectors.findMany({
