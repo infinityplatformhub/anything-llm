@@ -92,6 +92,52 @@ async function resolveActor(request, response, { db = prisma } = {}) {
   return null;
 }
 
+/**
+ * T-4b (#29) W-5: the job-runtime half of the same resolver. `utils/jobs/ActorIdentityStore`
+ * used to build Actors independently — it spread the whole `users` row into the object the
+ * engine reads, hardcoded `workspaceIds: []` (wrong since T-3 taught the HTTP path to derive
+ * membership, so one user read documents over HTTP and nothing in a job), and never stamped
+ * `impersonatedBy`, leaving CoreJobWorker's denyImpersonatedMutation with nothing to check.
+ *
+ * @param {{type: string, id: string|number, orgId?: number, impersonatedBy?: string|number}|null} actorRef
+ *   the persisted actor reference on the job row
+ * @returns {Promise<Object|null>} Actor, or null when the referenced principal cannot act.
+ */
+async function resolveActorRef(actorRef, { db = prisma } = {}) {
+  if (!actorRef || !actorRef.type || actorRef.id === undefined || actorRef.id === null) {
+    return null;
+  }
+
+  // Non-user principals (service/embed) carry their whole identity in the ref; there is
+  // no row to look up and no membership to derive.
+  if (actorRef.type !== "user") {
+    return {
+      type: actorRef.type,
+      id: String(actorRef.id),
+      orgId: actorRef.orgId ?? 1,
+      ...(actorRef.workspaceIds ? { workspaceIds: actorRef.workspaceIds.map(String) } : {}),
+    };
+  }
+
+  // The row is read to prove the user still exists and may act — never to copy columns
+  // into the Actor. Only the seam-02 shape crosses the boundary.
+  const user = await db.users.findUnique({
+    where: { id: Number(actorRef.id) },
+    select: { id: true, suspended: true },
+  });
+  if (!user || user.suspended) return null;
+
+  return {
+    type: "user",
+    id: String(user.id),
+    orgId: actorRef.orgId ?? 1,
+    workspaceIds: await workspaceIdsForUser(user.id, db),
+    impersonatedBy: actorRef.impersonatedBy
+      ? { type: "user", id: String(actorRef.impersonatedBy) }
+      : undefined,
+  };
+}
+
 /** Workspace ids the user belongs to — the scope every document filter is built on. */
 async function workspaceIdsForUser(userId, db = prisma) {
   try {
@@ -117,4 +163,9 @@ async function isMultiUserModeSafe() {
   }
 }
 
-module.exports = { resolveActor, SINGLE_USER_ACTOR, SERVICE_PRINCIPALS };
+module.exports = {
+  resolveActor,
+  resolveActorRef,
+  SINGLE_USER_ACTOR,
+  SERVICE_PRINCIPALS,
+};

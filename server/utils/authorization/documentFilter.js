@@ -20,9 +20,6 @@ const ALLOWED_DOCUMENT_ID_CAP = 500;
 // org with thousands of hidden documents would otherwise build an unbounded predicate.
 // Past the bound the filter fails closed rather than dropping exclusions (B3, QA-1).
 const DENIED_DOCUMENT_ID_CAP = 1000;
-// Marker for "every workspace in the org" — a service principal holding an org-wide
-// grant has no membership rows to enumerate.
-const ORG_WIDE_SCOPE = "*";
 const FILTERABLE_ACTIONS = new Set(["document.read", "document.search"]);
 
 const matchNoneFilter = ({ actor, policyVersion }) => ({
@@ -30,6 +27,7 @@ const matchNoneFilter = ({ actor, policyVersion }) => ({
   principalType: actor?.type ?? null,
   actorId: actor ? String(actor.id) : null,
   workspaceIds: [],
+  orgWide: false,
   deniedDocumentIds: [],
   attributes: {},
   matchNone: true,
@@ -82,7 +80,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
           ).map((row) => String(row.group_id))
         : [];
 
-    const workspaceIds = await readableWorkspaceIds(tx, actor, action);
+    const { workspaceIds, orgWide } = await readableScope(tx, actor, action);
 
     // explicit deny rows for any principal this actor evaluates as
     const principalPairs = [
@@ -114,7 +112,11 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       boundedAllowList = allowedDocumentIds.map(String);
     }
 
-    const hasScope = workspaceIds.length > 0 || (boundedAllowList?.length ?? 0) > 0;
+    // orgWide counts as scope on its own: a service principal holding an org-wide grant
+    // has no membership rows to enumerate, so an empty workspaceIds is not an empty scope
+    // for it. Omitting it here re-opens B1 in a new shape (single-user reads nothing).
+    const hasScope =
+      orgWide || workspaceIds.length > 0 || (boundedAllowList?.length ?? 0) > 0;
     if (!hasScope) return matchNoneFilter({ actor, policyVersion });
 
     // Fail closed rather than ship a filter that silently omits exclusions (B3).
@@ -130,6 +132,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       principalType: actor.type,
       actorId: String(actor.id),
       workspaceIds,
+      orgWide,
       deniedDocumentIds: [...deniedDocumentIds],
       attributes: { groupIds },
       ...(boundedAllowList ? { allowedDocumentIds: boundedAllowList } : {}),
@@ -139,10 +142,16 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
   });
 }
 
-/** Workspaces where the actor holds the read/search action, via role grants. */
-async function readableWorkspaceIds(tx, actor, action) {
+/**
+ * Scope where the actor holds the read/search action, via role grants.
+ * @returns {Promise<{workspaceIds: string[], orgWide: boolean}>} `orgWide` is a separate
+ *   field rather than a sentinel inside `workspaceIds`: seam 07 pushes that array into
+ *   the provider query, where a `"*"` entry would be looked up as a namespace name.
+ */
+async function readableScope(tx, actor, action) {
+  const empty = { workspaceIds: [], orgWide: false };
   const permission = await tx.permissions.findUnique({ where: { action } });
-  if (!permission) return [];
+  if (!permission) return empty;
 
   const grants = await tx.principal_role_grants.findMany({
     where: {
@@ -153,7 +162,7 @@ async function readableWorkspaceIds(tx, actor, action) {
     },
     select: { role_id: true, workspace_id: true },
   });
-  if (grants.length === 0) return [];
+  if (grants.length === 0) return empty;
 
   const rows = await tx.role_permissions.findMany({
     where: {
@@ -183,12 +192,18 @@ async function readableWorkspaceIds(tx, actor, action) {
     // actor.workspaceIds is deliberately NOT folded in: scope must come from grants and
     // membership rows, never from the Actor object, or a caller that can shape an Actor
     // widens its own reach without a grant check (QA-1 item 4).
-    // An org-wide grant is org-wide: a service principal that holds one is not limited
-    // to an enumerated list, so it reads as a whole-org scope rather than an empty one.
-    if (actor.type !== "user" && ids.size === 0) ids.add(ORG_WIDE_SCOPE);
-    return [...ids];
+    //
+    // A user's org-wide grant still resolves to that user's enumerated memberships — the
+    // grant says "in any workspace you are in", not "in every workspace". Only a service
+    // or embed principal, which has no membership rows at all, reads as whole-org.
+    return { workspaceIds: [...ids], orgWide: actor.type !== "user" };
   }
-  return [...new Set(scoped.filter((g) => g.workspace_id !== null).map((g) => String(g.workspace_id)))];
+  return {
+    workspaceIds: [
+      ...new Set(scoped.filter((g) => g.workspace_id !== null).map((g) => String(g.workspace_id))),
+    ],
+    orgWide: false,
+  };
 }
 
 module.exports = { buildDocumentFilter, ALLOWED_DOCUMENT_ID_CAP };

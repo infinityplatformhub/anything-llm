@@ -9,7 +9,8 @@ Store, query, and delete vectors while enforcing authorization-produced document
 This extends existing `VectorDatabase` subclasses and preserves CommonJS driver shape.
 
 ```js
-/** @typedef {{orgId:string, principalType:"user"|"service"|"embed", actorId:string, workspaceIds:string[], deniedDocumentIds:string[], attributes:Object, allowedDocumentIds?:string[], matchNone:boolean, policyVersion:string}} DocumentAclFilter */
+/** `workspaceIds` holds real workspace ids only; whole-org scope is the separate `orgWide` flag, never a sentinel entry. When `orgWide` is true the driver skips workspace narrowing but still applies every other predicate.
+ * @typedef {{orgId:string, principalType:"user"|"service"|"embed", actorId:string, workspaceIds:string[], orgWide:boolean, deniedDocumentIds:string[], attributes:Object, allowedDocumentIds?:string[], matchNone:boolean, policyVersion:string}} DocumentAclFilter */
 /** @typedef {{text:string, score:number, metadata:{documentId:string, chunkId:string, workspaceId:string, hidden:boolean, [key:string]:any}}} VectorHit */
 class VectorDatabase {
   /** @returns {string} */

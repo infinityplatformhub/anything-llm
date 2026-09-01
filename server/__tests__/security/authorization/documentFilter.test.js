@@ -220,7 +220,9 @@ describe("T-3 non-user principals (B1)", () => {
     });
     const filter = await buildDocumentFilter({ actor: SYS, action: READER, db: prisma });
     expect(filter.matchNone).toBe(false);
-    expect(filter.workspaceIds.length).toBeGreaterThan(0);
+    // T-4b moved "whole org" out of workspaceIds and into its own field; the property
+    // this test guards is that the filter is usable at all, which is now orgWide.
+    expect(filter.orgWide).toBe(true);
     expect(filter.principalType).toBe("service");
   });
 
@@ -263,6 +265,53 @@ describe("T-3 end-to-end: resolver-built actor, not a fixture", () => {
 
     const filter = await buildDocumentFilter({ actor, action: READER, db: prisma });
     expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds).toContain(String(W1.id));
+  });
+});
+
+// T-4b (#29): `workspaceIds` carries only real workspace ids. T-3 shipped an org-wide
+// service scope as the sentinel string "*" inside that array, which contradicts seam 07
+// (`workspaceIds:string[]` is pushed into the provider query — a driver would look for a
+// namespace literally named "*"). PMO ruling: a separate `orgWide` boolean.
+describe("T-4b org-wide scope is a field, not a sentinel in workspaceIds", () => {
+  test("a service principal with an org-wide grant sets orgWide and leaves workspaceIds clean", async () => {
+    const svc = { type: "service", id: `orgwide-${dbSuffix}`, orgId: 1 };
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: svc.id,
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const filter = await buildDocumentFilter({ actor: svc, action: READER, db: prisma });
+    expect(filter.orgWide).toBe(true);
+    // The sentinel would reach a provider as a namespace name (seam 07).
+    expect(filter.workspaceIds).not.toContain("*");
+    for (const id of filter.workspaceIds) expect(id).toMatch(/^\d+$/);
+  });
+
+  test("orgWide alone satisfies scope — an org-wide service principal is never match-none", async () => {
+    // The trap in this change: hasScope counted workspaceIds.length, and the sentinel was
+    // the only thing making it non-empty. Dropping the sentinel without teaching hasScope
+    // about orgWide re-opens B1 in a new shape — single-user deployments read nothing.
+    const svc = { type: "service", id: `orgwide-scope-${dbSuffix}`, orgId: 1 };
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: svc.id,
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const filter = await buildDocumentFilter({ actor: svc, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(false);
+  });
+
+  test("every filter carries orgWide as a boolean, including match-none", async () => {
+    const stranger = { type: "user", id: "8200", orgId: 1, workspaceIds: [] };
+    const denied = await buildDocumentFilter({ actor: stranger, action: READER, db: prisma });
+    expect(denied.orgWide).toBe(false);
+    const nullActor = await buildDocumentFilter({ actor: null, action: READER, db: prisma });
+    expect(nullActor.orgWide).toBe(false);
+  });
+
+  test("a workspace-scoped user never gets orgWide, whatever its grants list", async () => {
+    const actor = await userActor(8201, roles.viewer.id);
+    const filter = await buildDocumentFilter({ actor, action: READER, db: prisma });
+    expect(filter.orgWide).toBe(false);
     expect(filter.workspaceIds).toContain(String(W1.id));
   });
 });
@@ -361,6 +410,27 @@ describe("T-3 filter cache", () => {
     });
     await cache.get({ actor, action: READER, db: prisma }, build);
     expect(builds).toBe(2); // version moved, so the stale entry is rebuilt anyway
+  });
+
+  test("cache entries key on orgWide, not on a sentinel inside workspaceIds", async () => {
+    // scopesFor() derives its keys from workspaceIds. With the sentinel gone, an
+    // org-wide actor has an empty list, so an org-scope key must still be produced or
+    // policy.changed can never evict it (T-5 wires the subscriber).
+    const svc = { type: "service", id: `orgwide-cache-${dbSuffix}`, orgId: 1 };
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: svc.id,
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const cache = new FilterCache();
+    let builds = 0;
+    const build = async () => {
+      builds += 1;
+      return buildDocumentFilter({ actor: svc, action: READER, db: prisma });
+    };
+    await cache.get({ actor: svc, action: READER, db: prisma }, build);
+    cache.invalidateScopes(["org:1"]);
+    await cache.get({ actor: svc, action: READER, db: prisma }, build);
+    expect(builds).toBe(2);
   });
 
   test("a disabled cache always rebuilds — stale is never served", async () => {
