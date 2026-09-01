@@ -1,3 +1,8 @@
+const { forPrismaTest } = require("../../../utils/test/postgresUrl");
+
+if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
+  process.env.DATABASE_URL = forPrismaTest(process.env.DATABASE_URL);
+}
 const prisma = require("../../../utils/prisma");
 const { PostgresJobScheduler } = require("../../../utils/jobs/PostgresJobScheduler");
 
@@ -6,12 +11,12 @@ const run = process.env.DATABASE_URL?.startsWith("postgresql://") ? describe : d
 run("PostgresJobScheduler PostgreSQL integration", () => {
   beforeEach(async () => {
     await prisma.job_schedules.updateMany({ data: { enabled: false } });
-  });
+  }, 30_000);
   afterAll(async () => {
     await prisma.jobs.deleteMany({ where: { type: { in: ["integration.scheduler", "integration.concurrent", "integration.catchup"] } } });
     await prisma.job_schedules.deleteMany({ where: { id: { in: ["integration-bangkok", "integration-concurrent", "integration-catchup"] } } });
     await prisma.$disconnect();
-  });
+  }, 30_000);
 
   test("takes advisory lock, materializes once, advances timezone schedule, and ticks cleanly", async () => {
     const now = new Date("2026-09-02T00:00:00.000Z");
