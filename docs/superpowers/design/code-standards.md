@@ -60,11 +60,22 @@ opens.
 |---|---|
 | P0-2 Postgres baseline | `20260902000000` |
 | P0-6 core services | `20260902010000` |
-| P0-5 authorization | `20260902020000` |
+| P0-5 authorization (T-1…) | `20260902020000` |
+| P0-4 key hardening (PR-3…) | `20260902030000` |
 | next track | `+010000` |
 
-Before opening a migration, run `ls server/prisma/migrations/` and take the next
-free hour. Never reuse a slot another branch holds, even if that branch is unmerged.
+**The slot is claimed when the branch opens, not when the first migration is
+written.** State it in the issue. A track that waits until it needs a migration
+finds the free-looking hour already spoken for by an unmerged branch — which is
+exactly how PR-3 ended up inside P0-5's slot, one lexical coin-flip away from
+running `key_hardening` and `t1_authz_schema` in the wrong order.
+
+Before opening a migration, run `ls server/prisma/migrations/` **and check the
+open branches** — an unmerged branch's slot is taken. Renaming after a merge is
+not an option: `_prisma_migrations` stores the folder name, so every environment
+that already applied it sees a rename as a brand-new migration.
+
+Within a track, later migrations step by `+001000` (`…030000`, `…031000`).
 
 ### 1.3 One dialect
 
@@ -324,6 +335,39 @@ trip it: `#` for issue references, `//` for any URL in a title (`http://…`).
 
 Everything else about the title is unconstrained; only these two tokens matter,
 and only on a line ending in `{`.
+
+### 7.4 Do not write `postgresql://` as a literal in test setup
+
+The same gate as §7.3, different token. A line containing `//` that ends in `{`
+is read as a block-opening comment:
+
+```js
+if (!baseDatabaseUrl?.startsWith("postgresql://")) {   // blocked
+```
+
+Fix by keeping the scheme out of the string, or the `{` off the line:
+
+```js
+const PG_SCHEME = "postgresql:";                            // ok
+if (!baseDatabaseUrl?.startsWith(PG_SCHEME)) {
+
+if (new URL(baseDatabaseUrl ?? "").protocol !== "postgresql:") {   // ok, and validates
+```
+
+Three files carry the blocked form today —
+`server/__tests__/envDumpGuardHttp.test.js:19`,
+`ssoIssuanceLockHttp.test.js:20`, `api/regression.test.js:13` — and are exempted
+in `.infi/checkignore` to unblock them.
+
+**That exemption also disables `gate_markers` on those three files**, because
+`.infi/checkignore` is per-file, not per-gate: it silences the marker gate, the
+commented-code gate, and the URL gate together (`gate_secrets` and
+`gate_skipped_tests` keep running). A `TODO` or `FIXME` left in those three
+security suites will not be caught by tooling. Until the literal is removed and
+the exemption dropped, a reviewer has to check them by eye.
+
+The next person to touch any of those files should apply the fix above and
+delete its `.infi/checkignore` line in the same commit.
 
 ### 7.1 A fake database cannot validate SQL
 
