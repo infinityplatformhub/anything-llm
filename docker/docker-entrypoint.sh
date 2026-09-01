@@ -17,10 +17,14 @@ fi
 
 {
   cd /app/server/ &&
+    until node -e 'const {Client}=require("pg"); const client=new Client({connectionString:process.env.DATABASE_URL}); client.connect().then(()=>client.end()).then(()=>process.exit(0)).catch(()=>process.exit(1))'; do
+      echo "Waiting for PostgreSQL..."
+      sleep 2
+    done &&
     # Disable Prisma CLI telemetry (https://www.prisma.io/docs/orm/tools/prisma-cli#how-to-opt-out-of-data-collection)
     export CHECKPOINT_DISABLE=1 &&
-    npx prisma generate --schema=./prisma/schema.prisma &&
-    npx prisma migrate deploy --schema=./prisma/schema.prisma &&
+    npx prisma generate --schema=/app/server/prisma/schema.prisma &&
+    npx prisma migrate deploy --schema=/app/server/prisma/schema.prisma &&
     node /app/server/index.js
 } &
 { node /app/collector/index.js; } &

@@ -150,9 +150,8 @@ container rebuilds or pulls from Docker Hub.
 ## Build locally from source _not recommended for casual use_
 
 - `git clone` this repo and `cd anything-llm` to get to the root directory.
-- `touch server/storage/approofworkspace.db` to create empty SQLite DB file.
 - `cd docker/`
-- `cp .env.example .env` **you must do this before building**
+- `cp .env.example .env` **you must do this before building; Compose bind-mounts `docker/.env` and fails when the file is missing**
 - `docker-compose up -d --build` to build the image - this will take a few moments.
 
 Your docker host will show the image as online once the build process is completed. This will build the app to `http://localhost:3001`.
