@@ -324,17 +324,22 @@ suites at `require` time, before a single test runs. That is fail-closed by
 design — a server that would hash API keys with an absent pepper must not
 start — not a bug to work around. CI sets it at `.github/workflows/ci.yml:30`.
 
-**Re-run `prisma generate` after every rebase, and after every branch switch
-that touches `schema.prisma`.** The generated client lives in `node_modules`,
-which git does not track, so it keeps whatever schema it was last built from.
-A client built before a schema change does not know the new columns and reports
-them as unknown fields — this produced **57 false failures** in one session,
-none of them about the code under test. If a large number of unrelated suites
-fail right after a rebase, regenerate before reading a single stack trace.
+**The generated Prisma client must match the schema you are on.** It lives in
+`node_modules`, which git does not track, so it keeps whatever schema it was
+last built from. A client built before a schema change does not know the new
+columns and reports them as unknown fields — this produced **57 false failures**
+in one session, none about the code under test. If many unrelated suites fail
+right after a rebase, regenerate before reading a single stack trace.
 
-The same trap hits worktrees that share a `node_modules` with the main
-checkout: whichever tree ran `prisma generate` last wins, and the other one
-fails. Regenerate when you switch between them.
+`yarn test` already runs `prisma generate` first (see `server/package.json`), so
+it is safe by default. The trap is running `npx jest` directly — faster, and the
+way you end up invoking a single suite — which does not. Regenerate by hand
+whenever you bypass `yarn test`.
+
+The same trap hits worktrees that share a `node_modules` with the main checkout:
+whichever tree generated last wins and the other one fails, even under
+`yarn test`, because both write to the same client. Regenerate when you switch
+between them.
 
 - Location mirrors source: `server/utils/jobs/X.js` →
   `server/__tests__/utils/jobs/X.test.js`.
