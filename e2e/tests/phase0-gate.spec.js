@@ -151,16 +151,19 @@ test("02 embedder switched to the mock provider; instance is multi-user", async 
   // OpenAI — only then do its fields render.
   await page
     .locator("button")
-    .filter({ hasText: /Embedder|Search all embedding providers/i })
+    .filter({ hasText: /Embedder|Zero setup/i })
     .first()
     .click({ force: true });
-  await page.waitForTimeout(1_000);
   await page
-    .locator("button")
-    .filter({ hasText: "Generic OpenAI" })
+    .locator('input[placeholder="Search all embedding providers"]')
+    .fill("Generic OpenAI");
+  await page.waitForTimeout(1_000);
+  // Provider entries render as label/checkbox rows inside the search menu.
+  await page
+    .getByText("Generic OpenAI", { exact: false })
     .first()
     .click({ force: true });
-  await page.waitForTimeout(1_000);
+  await page.waitForTimeout(1_500);
 
   await page
     .locator('input[name="EmbeddingBasePath"]')
@@ -229,14 +232,9 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
 
   // The modal's dropzone input — NOT the chat attachment input, which also
   // matches input[type=file] on the page behind the modal.
-  const dropzoneInput = page
-    .locator('input[type="file"]')
-    .filter({ has: page.locator("xpath=ancestor::*[contains(@class,'border-dashed')]") })
-    .first();
-  const fileInput = (await dropzoneInput.count())
-    ? dropzoneInput
-    : page.locator('input[type="file"]').first();
-  await fileInput.setInputFiles({
+  // The modal dropzone is the first file input; the second is the chat
+  // attachment zone on the page behind the modal.
+  await page.locator('input[type="file"]').first().setInputFiles({
     name: DOC_NAME,
     mimeType: "text/plain",
     buffer: Buffer.from(
@@ -253,6 +251,8 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   const move = page.locator('button:has-text("Move to Workspace")');
   await move.first().waitFor({ state: "visible", timeout: 30_000 });
   await move.first().click();
+  // Embedding runs on move; the modal shows progress before the doc lands.
+  await page.waitForTimeout(5_000);
 
   // Embedding finished when the workspace reports the document.
   await expect
