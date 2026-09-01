@@ -121,3 +121,14 @@ test("unknown event version quarantines and publishes guarded operational failur
   expect(state.deliveries.get("v1:v2").state).toBe("quarantined");
   expect([...state.outbox.values()].filter((row) => row.type === "event.delivery_failed")).toHaveLength(1);
 });
+
+
+test("impersonated actor cannot enqueue mutating work and stale job fails again at run", async () => {
+  const { db } = jobDb(); const queue = new PostgresJobQueue({ db });
+  const impersonated = { ...actor, impersonatedBy: { type: "user", id: "admin" } };
+  await expect(queue.enqueue({ type: "mutate", payload: { version: 1 }, actor: impersonated, idempotencyKey: "x", traceId: "t" })).rejects.toThrow("Impersonated actor");
+  const runtimeQueue = { heartbeat: jest.fn(), complete: jest.fn(), fail: jest.fn() };
+  const worker = new CoreJobWorker({ queue: runtimeQueue, identityStore: {}, handlers: { "mutate@1": jest.fn() } });
+  await expect(worker.run({ jobId: "stale", type: "mutate", payload: { version: 1 }, actor: impersonated }, "w")).rejects.toThrow("Impersonated actor");
+  expect(runtimeQueue.fail).toHaveBeenCalled();
+});

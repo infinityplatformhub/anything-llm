@@ -1,3 +1,5 @@
+const { denyImpersonatedMutation } = require("./PostgresJobQueue");
+
 class CoreJobWorker {
   constructor({ queue, identityStore, handlers }) {
     this.queue = queue;
@@ -31,6 +33,7 @@ class CoreJobWorker {
     }, Math.max(1, Math.floor(leaseMs / 2)));
     heartbeat.unref?.();
     try {
+      denyImpersonatedMutation(job.actor, job.payload.mutating !== false);
       const result = await handler(job);
       await this.queue.complete({ jobId: job.jobId, workerId, result });
       return result;

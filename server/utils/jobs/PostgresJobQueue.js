@@ -16,6 +16,12 @@ const asJob = (row) => ({
 });
 
 class LeaseLostError extends Error {}
+class ImpersonatedMutationError extends Error {}
+
+const isMutatingJob = (input) => input.mutating !== false;
+const denyImpersonatedMutation = (actor, mutating) => {
+  if (actor?.impersonatedBy && mutating) throw new ImpersonatedMutationError("Impersonated actor cannot enqueue or run mutating job");
+};
 
 class PostgresJobQueue {
   constructor({ db = prisma, now = () => new Date(), random = Math.random, publishOperationalEvent } = {}) {
@@ -26,6 +32,7 @@ class PostgresJobQueue {
   }
 
   async enqueue(input) {
+    denyImpersonatedMutation(input.actor, isMutatingJob(input));
     const existing = await this.db.jobs.findUnique({
       where: { type_idempotencyKey: { type: input.type, idempotencyKey: input.idempotencyKey } },
     });
@@ -110,9 +117,11 @@ class PostgresJobQueue {
   }
 
   async complete({ jobId, workerId, result }) {
+    const current = await this.db.jobs.findUnique({ where: { id: jobId } });
+    const state = current?.state === "cancelling" ? "cancelled" : "completed";
     const updated = await this.db.jobs.updateMany({
-      where: { id: jobId, workerId, state: "running", leaseUntil: { gt: this.now() } },
-      data: { state: "completed", result: serialize(result), workerId: null, leaseUntil: null },
+      where: { id: jobId, workerId, state: { in: ["running", "cancelling"] }, leaseUntil: { gt: this.now() } },
+      data: { state, result: serialize(result), workerId: null, leaseUntil: null },
     });
     if (!updated.count) throw new LeaseLostError("Job lease lost");
   }
@@ -170,11 +179,11 @@ class PostgresJobQueue {
 
   async heartbeat({ jobId, workerId, leaseMs }) {
     const updated = await this.db.jobs.updateMany({
-      where: { id: jobId, workerId, state: "running", leaseUntil: { gt: this.now() } },
+      where: { id: jobId, workerId, state: { in: ["running", "cancelling"] }, leaseUntil: { gt: this.now() } },
       data: { leaseUntil: new Date(this.now().getTime() + leaseMs) },
     });
     if (!updated.count) throw new LeaseLostError("Job lease lost");
   }
 }
 
-module.exports = { PostgresJobQueue, LeaseLostError };
+module.exports = { PostgresJobQueue, LeaseLostError, ImpersonatedMutationError, denyImpersonatedMutation };
