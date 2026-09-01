@@ -53,7 +53,7 @@ const {
 } = require("../utils/middleware/multiUserProtected");
 const { fetchPfp, determinePfpFilepath } = require("../utils/files/pfp");
 const { exportChatsAsType } = require("../utils/helpers/chat/convertTo");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { CollectorApi } = require("../utils/collectorApi");
 const {
   recoverAccount,
@@ -215,7 +215,7 @@ function systemEndpoints(app) {
         const existingUser = await User._get({ username: String(username) });
 
         if (!existingUser) {
-          await EventLogs.logEvent(
+          await emitAuditEvent(
             "failed_login_invalid_username",
             {
               ip: request.ip || "Unknown IP",
@@ -233,7 +233,7 @@ function systemEndpoints(app) {
         }
 
         if (!bcrypt.compareSync(String(password), existingUser.password)) {
-          await EventLogs.logEvent(
+          await emitAuditEvent(
             "failed_login_invalid_password",
             {
               ip: request.ip || "Unknown IP",
@@ -251,7 +251,7 @@ function systemEndpoints(app) {
         }
 
         if (existingUser.suspended) {
-          await EventLogs.logEvent(
+          await emitAuditEvent(
             "failed_login_account_suspended",
             {
               ip: request.ip || "Unknown IP",
@@ -274,7 +274,7 @@ function systemEndpoints(app) {
           existingUser?.id
         );
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "login_event",
           {
             ip: request.ip || "Unknown IP",
@@ -316,7 +316,7 @@ function systemEndpoints(app) {
             bcrypt.hashSync(process.env.AUTH_TOKEN, 10)
           )
         ) {
-          await EventLogs.logEvent("failed_login_invalid_password", {
+          await emitAuditEvent("failed_login_invalid_password", {
             ip: request.ip || "Unknown IP",
             multiUserMode: false,
           });
@@ -329,7 +329,7 @@ function systemEndpoints(app) {
         }
 
         await Telemetry.sendTelemetry("login_event", { multiUserMode: false });
-        await EventLogs.logEvent("login_event", {
+        await emitAuditEvent("login_event", {
           ip: request.ip || "Unknown IP",
           multiUserMode: false,
         });
@@ -357,7 +357,7 @@ function systemEndpoints(app) {
         await TemporaryAuthToken.validate(tempAuthToken);
 
       if (error) {
-        await EventLogs.logEvent("failed_login_invalid_temporary_auth_token", {
+        await emitAuditEvent("failed_login_invalid_temporary_auth_token", {
           ip: request.ip || "Unknown IP",
           multiUserMode: true,
         });
@@ -373,7 +373,7 @@ function systemEndpoints(app) {
         { multiUserMode: true },
         token.user.id
       );
-      await EventLogs.logEvent(
+      await emitAuditEvent(
         "login_event",
         {
           ip: request.ip || "Unknown IP",
@@ -700,7 +700,7 @@ function systemEndpoints(app) {
         await Telemetry.sendTelemetry("enabled_multi_user_mode", {
           multiUserMode: true,
         });
-        await EventLogs.logEvent("multi_user_mode_enabled", {}, user?.id);
+        await emitAuditEvent("multi_user_mode_enabled", {}, user?.id);
         response.status(200).json({ success: !!user, error });
       } catch (e) {
         await User.delete({});
@@ -1062,7 +1062,7 @@ function systemEndpoints(app) {
 
         const { name = null } = reqBody(request);
         const { apiKey, error } = await ApiKey.create(null, name);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "api_key_created",
           { name: apiKey?.name },
           response?.locals?.user?.id
@@ -1094,7 +1094,7 @@ function systemEndpoints(app) {
         if (!id || isNaN(Number(id))) return response.sendStatus(400).end();
 
         await ApiKey.delete({ id: Number(id) });
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "api_key_deleted",
           { deletedBy: response.locals?.user?.username },
           response?.locals?.user?.id
@@ -1161,7 +1161,7 @@ function systemEndpoints(app) {
     async (_, response) => {
       try {
         await EventLogs.delete();
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "event_logs_cleared",
           {},
           response?.locals?.user?.id
@@ -1229,7 +1229,7 @@ function systemEndpoints(app) {
       try {
         const { type = "jsonl", chatType = "workspace" } = request.query;
         const { contentType, data } = await exportChatsAsType(type, chatType);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "exported_chats",
           {
             type,

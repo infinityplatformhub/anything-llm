@@ -261,6 +261,7 @@ model embed_chats {
 
 model event_logs {
   id         Int      @id @default(autoincrement())
+  eventId    String?  @unique
   event      String
   metadata   String?
   userId     Int?
@@ -478,3 +479,95 @@ model model_router_rules {
   @@index([router_id])
   @@index([router_id, enabled, priority])
 }
+
+// BEGIN P0-6 CORE SERVICES — keep block at end for Postgres migration rebase.
+model jobs {
+  id             String    @id
+  type           String
+  payload        String
+  actor          String
+  state          String    @default("pending")
+  runAt          DateTime  @default(now()) @db.Timestamptz(3)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  idempotencyKey String
+  traceId        String
+  workerId       String?
+  leaseUntil     DateTime? @db.Timestamptz(3)
+  result         String?
+  lastError      String?
+  cancelReason   String?
+  cancelledBy    String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([type, idempotencyKey])
+  @@index([state, runAt])
+  @@index([workerId, leaseUntil])
+}
+
+model job_schedules {
+  id        String    @id
+  type      String
+  cron      String
+  timezone  String
+  payload   String
+  actor     String
+  enabled   Boolean   @default(true)
+  nextRunAt DateTime? @db.Timestamptz(3)
+  claimedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+}
+
+model job_dead_letters {
+  id             Int      @id @default(autoincrement())
+  jobId          String   @unique
+  type           String
+  payload        String
+  actor          String
+  attempts       Int
+  error          String
+  traceId        String
+  deadLetteredAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model event_outbox {
+  id          String             @id
+  type        String
+  version     Int
+  occurredAt  DateTime           @db.Timestamptz(3)
+  actor       String
+  resource    String
+  traceId     String
+  data        String
+  sensitivity String
+  payloadHash String
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  deliveries  event_deliveries[]
+
+  @@index([occurredAt])
+  @@index([type, occurredAt])
+}
+
+model event_deliveries {
+  id             Int          @id @default(autoincrement())
+  subscriberId   String
+  eventId        String
+  state          String       @default("pending")
+  attempts       Int          @default(0)
+  lastError      String?
+  acknowledgedAt DateTime?    @db.Timestamptz(3)
+  nextAttemptAt  DateTime?    @db.Timestamptz(3)
+  claimedUntil   DateTime?    @db.Timestamptz(3)
+  claimedBy      String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+  event          event_outbox @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, eventId])
+  @@index([state])
+  @@index([subscriberId, state])
+}
+
+// END P0-6 CORE SERVICES.

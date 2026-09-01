@@ -1,3 +1,4 @@
+const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { Document } = require("../../../models/documents");
 const { Telemetry } = require("../../../models/telemetry");
@@ -5,7 +6,6 @@ const { Workspace } = require("../../../models/workspace");
 const { getEmbeddingEngineSelection } = require("../../../utils/helpers");
 const { reqBody } = require("../../../utils/http");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
-const { EventLogs } = require("../../../models/eventLogs");
 const {
   OpenAICompatibleChat,
 } = require("../../../utils/chats/openaiCompatible");
@@ -149,7 +149,7 @@ function apiOpenAICompatibleEndpoints(app) {
             VectorDbSelection: process.env.VECTOR_DB || "lancedb",
             TTSSelection: process.env.TTS_PROVIDER || "native",
           });
-          await EventLogs.logEvent("api_sent_chat", {
+          await emitAuditEvent("api_sent_chat", {
             workspaceName: workspace?.name,
             chatModel: workspace?.chatModel || "System Default",
           });
@@ -178,7 +178,7 @@ function apiOpenAICompatibleEndpoints(app) {
           TTSSelection: process.env.TTS_PROVIDER || "native",
           LLMModel: getModelTag(),
         });
-        await EventLogs.logEvent("api_sent_chat", {
+        await emitAuditEvent("api_sent_chat", {
           workspaceName: workspace?.name,
           chatModel: workspace?.chatModel || "System Default",
         });

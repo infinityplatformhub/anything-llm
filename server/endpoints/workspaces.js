@@ -17,7 +17,7 @@ const {
   flexUserRoleValid,
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const {
   WorkspaceSuggestedMessages,
 } = require("../models/workspacesSuggestedMessages");
@@ -62,7 +62,7 @@ function workspaceEndpoints(app) {
           user?.id
         );
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "workspace_created",
           {
             workspaceName: workspace?.name || "Unknown Workspace",
@@ -160,7 +160,7 @@ function workspaceEndpoints(app) {
           `Document ${originalname} uploaded processed and successfully. It is now available in documents.`
         );
         await Telemetry.sendTelemetry("document_uploaded");
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "document_uploaded",
           {
             documentName: originalname,
@@ -206,7 +206,7 @@ function workspaceEndpoints(app) {
           `Link ${link} uploaded processed and successfully. It is now available in documents.`
         );
         await Telemetry.sendTelemetry("link_uploaded");
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "link_uploaded",
           { link },
           response.locals?.user?.id
@@ -311,7 +311,7 @@ function workspaceEndpoints(app) {
         await Document.delete({ workspaceId: Number(workspace.id) });
         await Workspace.delete({ id: Number(workspace.id) });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "workspace_deleted",
           {
             workspaceName: workspace?.name || "Unknown Workspace",
@@ -352,7 +352,7 @@ function workspaceEndpoints(app) {
         await DocumentVectors.deleteForWorkspace(workspace.id);
         await Document.delete({ workspaceId: Number(workspace.id) });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "workspace_vectors_reset",
           {
             workspaceName: workspace?.name || "Unknown Workspace",
@@ -738,7 +738,7 @@ function workspaceEndpoints(app) {
             : "Forked Thread",
         });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "thread_forked",
           {
             workspaceName: workspace?.name || "Unknown Workspace",
@@ -826,7 +826,7 @@ function workspaceEndpoints(app) {
           `Document ${originalname} uploaded processed and successfully. It is now available in documents.`
         );
         await Telemetry.sendTelemetry("document_uploaded");
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "document_uploaded",
           {
             documentName: originalname,

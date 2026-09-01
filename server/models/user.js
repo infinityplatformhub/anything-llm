@@ -1,6 +1,6 @@
+const { emitAuditEvent } = require("../utils/events");
 const { Prisma } = require("@prisma/client");
 const prisma = require("../utils/prisma");
-const { EventLogs } = require("./eventLogs");
 
 /**
  * @typedef {Object} User
@@ -203,7 +203,7 @@ const User = {
         data: updates,
       });
 
-      await EventLogs.logEvent(
+      await emitAuditEvent(
         "user_updated",
         {
           username: user.username,

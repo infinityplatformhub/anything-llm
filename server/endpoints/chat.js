@@ -7,7 +7,7 @@ const {
   ROLES,
   flexUserRoleValid,
 } = require("../utils/middleware/multiUserProtected");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const {
   validWorkspaceAndThreadSlug,
   validWorkspaceSlug,
@@ -78,7 +78,7 @@ function chatEndpoints(app) {
           LLMModel: getModelTag(),
         });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "sent_chat",
           {
             workspaceName: workspace?.name,
@@ -183,7 +183,7 @@ function chatEndpoints(app) {
           LLMModel: getModelTag(),
         });
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "sent_chat",
           {
             workspaceName: workspace.name,

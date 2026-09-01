@@ -1,8 +1,8 @@
+const { emitAuditEvent } = require("../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { getVectorDbClass } = require("../utils/helpers");
 const prisma = require("../utils/prisma");
 const { Telemetry } = require("./telemetry");
-const { EventLogs } = require("./eventLogs");
 const { safeJsonParse } = require("../utils/http");
 const { getModelTag } = require("../endpoints/utils");
 
@@ -190,7 +190,7 @@ const Document = {
       TTSSelection: process.env.TTS_PROVIDER || "native",
       LLMModel: getModelTag(),
     });
-    await EventLogs.logEvent(
+    await emitAuditEvent(
       "workspace_documents_added",
       {
         workspaceName: workspace?.name || "Unknown Workspace",
@@ -228,7 +228,7 @@ const Document = {
       }
     }
 
-    await EventLogs.logEvent(
+    await emitAuditEvent(
       "workspace_documents_removed",
       {
         workspaceName: workspace?.name || "Unknown Workspace",

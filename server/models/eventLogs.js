@@ -2,24 +2,9 @@ const prisma = require("../utils/prisma");
 
 const EventLogs = {
   logEvent: async function (event, metadata = {}, userId = null) {
-    try {
-      const eventLog = await prisma.event_logs.create({
-        data: {
-          event,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          userId: userId ? Number(userId) : null,
-          occurredAt: new Date(),
-        },
-      });
-      console.log(`\x1b[32m[Event Logged]\x1b[0m - ${event}`);
-      return { eventLog, message: null };
-    } catch (error) {
-      console.error(
-        `\x1b[31m[Event Logging Failed]\x1b[0m - ${event}`,
-        error.message
-      );
-      return { eventLog: null, message: error.message };
-    }
+    const { event: domainEvent, message } = await require("../utils/events").emitAuditEvent(event, metadata, userId);
+    const eventLog = await prisma.event_logs.findUnique({ where: { eventId: domainEvent.eventId } });
+    return { eventLog, message };
   },
 
   getByEvent: async function (event, limit = null, orderBy = null) {
@@ -115,9 +100,7 @@ const EventLogs = {
 
   delete: async function (clause = {}) {
     try {
-      await prisma.event_logs.deleteMany({
-        where: clause,
-      });
+      await require("../utils/events/AuditEventSubscriber").deleteAuditEvents(clause);
       return true;
     } catch (error) {
       console.error(error.message);

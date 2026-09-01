@@ -10,7 +10,7 @@ const {
   flexUserRoleValid,
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const {
   validWorkspaceSlug,
@@ -47,7 +47,7 @@ function workspaceThreadEndpoints(app) {
           user?.id
         );
 
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "workspace_thread_created",
           {
             workspaceName: workspace?.name || "Unknown Workspace",

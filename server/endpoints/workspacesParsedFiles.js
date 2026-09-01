@@ -6,7 +6,7 @@ const {
   flexUserRoleValid,
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { validWorkspaceSlug } = require("../utils/middleware/validWorkspace");
 const { CollectorApi } = require("../utils/collectorApi");
 const { WorkspaceThread } = require("../models/workspaceThread");
@@ -97,7 +97,7 @@ function workspaceParsedFilesEndpoints(app) {
         }
 
         await Telemetry.sendTelemetry("document_embedded");
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "document_embedded",
           {
             documentName: document?.name || "unknown",
@@ -180,7 +180,7 @@ function workspaceParsedFilesEndpoints(app) {
         );
 
         Collector.log(`Document ${originalname} parsed successfully.`);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "document_uploaded_to_chat",
           {
             documentName: originalname,

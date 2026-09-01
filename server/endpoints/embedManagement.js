@@ -1,6 +1,6 @@
 const { EmbedChats } = require("../models/embedChats");
 const { EmbedConfig } = require("../models/embedConfig");
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { reqBody, userFromSession } = require("../utils/http");
 const { validEmbedConfigId } = require("../utils/middleware/embedMiddleware");
 const {
@@ -39,7 +39,7 @@ function embedManagementEndpoints(app) {
         const user = await userFromSession(request, response);
         const data = reqBody(request);
         const { embed, message: error } = await EmbedConfig.new(data, user?.id);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "embed_created",
           { embedId: embed.id },
           user?.id
@@ -61,7 +61,7 @@ function embedManagementEndpoints(app) {
         const { embedId } = request.params;
         const updates = reqBody(request);
         const { success, error } = await EmbedConfig.update(embedId, updates);
-        await EventLogs.logEvent("embed_updated", { embedId }, user?.id);
+        await emitAuditEvent("embed_updated", { embedId }, user?.id);
         response.status(200).json({ success, error });
       } catch (e) {
         console.error(e);
@@ -77,7 +77,7 @@ function embedManagementEndpoints(app) {
       try {
         const { embedId } = request.params;
         await EmbedConfig.delete({ id: Number(embedId) });
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "embed_deleted",
           { embedId },
           response?.locals?.user?.id

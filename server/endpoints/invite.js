@@ -1,4 +1,4 @@
-const { EventLogs } = require("../models/eventLogs");
+const { emitAuditEvent } = require("../utils/events");
 const { Invite } = require("../models/invite");
 const { User } = require("../models/user");
 const { reqBody } = require("../utils/http");
@@ -61,7 +61,7 @@ function inviteEndpoints(app) {
         }
 
         await Invite.markClaimed(invite.id, user);
-        await EventLogs.logEvent(
+        await emitAuditEvent(
           "invite_accepted",
           {
             username: user.username,

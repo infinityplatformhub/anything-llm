@@ -1,6 +1,6 @@
 const { DocumentSyncQueue } = require("../../models/documentSyncQueue");
 const { Document } = require("../../models/documents");
-const { EventLogs } = require("../../models/eventLogs");
+const { emitAuditEvent } = require("../../utils/events");
 const { SystemSettings } = require("../../models/systemSettings");
 const { Telemetry } = require("../../models/telemetry");
 const { reqBody } = require("../../utils/http");
@@ -41,7 +41,7 @@ function liveSyncEndpoints(app) {
           await Telemetry.sendTelemetry("experimental_feature_enabled", {
             feature: "live_file_sync",
           });
-          await EventLogs.logEvent("experimental_feature_enabled", {
+          await emitAuditEvent("experimental_feature_enabled", {
             feature: "live_file_sync",
           });
           DocumentSyncQueue.bootWorkers();
