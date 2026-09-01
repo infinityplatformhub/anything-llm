@@ -20,9 +20,6 @@ const ALLOWED_DOCUMENT_ID_CAP = 500;
 // org with thousands of hidden documents would otherwise build an unbounded predicate.
 // Past the bound the filter fails closed rather than dropping exclusions (B3, QA-1).
 const DENIED_DOCUMENT_ID_CAP = 1000;
-// Marker for "every workspace in the org" — a service principal holding an org-wide
-// grant has no membership rows to enumerate.
-const ORG_WIDE_SCOPE = "*";
 const FILTERABLE_ACTIONS = new Set(["document.read", "document.search"]);
 
 const matchNoneFilter = ({ actor, policyVersion }) => ({
@@ -30,6 +27,7 @@ const matchNoneFilter = ({ actor, policyVersion }) => ({
   principalType: actor?.type ?? null,
   actorId: actor ? String(actor.id) : null,
   workspaceIds: [],
+  orgWide: false,
   deniedDocumentIds: [],
   attributes: {},
   matchNone: true,
@@ -82,7 +80,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
           ).map((row) => String(row.group_id))
         : [];
 
-    const workspaceIds = await readableWorkspaceIds(tx, actor, action);
+    const { workspaceIds, orgWide } = await readableScope(tx, actor, action);
 
     // explicit deny rows for any principal this actor evaluates as
     const principalPairs = [
@@ -114,7 +112,11 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       boundedAllowList = allowedDocumentIds.map(String);
     }
 
-    const hasScope = workspaceIds.length > 0 || (boundedAllowList?.length ?? 0) > 0;
+    // orgWide counts as scope on its own: a service principal holding an org-wide grant
+    // has no membership rows to enumerate, so an empty workspaceIds is not an empty scope
+    // for it. Omitting it here re-opens B1 in a new shape (single-user reads nothing).
+    const hasScope =
+      orgWide || workspaceIds.length > 0 || (boundedAllowList?.length ?? 0) > 0;
     if (!hasScope) return matchNoneFilter({ actor, policyVersion });
 
     // Fail closed rather than ship a filter that silently omits exclusions (B3).
@@ -130,6 +132,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       principalType: actor.type,
       actorId: String(actor.id),
       workspaceIds,
+      orgWide,
       deniedDocumentIds: [...deniedDocumentIds],
       attributes: { groupIds },
       ...(boundedAllowList ? { allowedDocumentIds: boundedAllowList } : {}),
@@ -139,21 +142,34 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
   });
 }
 
-/** Workspaces where the actor holds the read/search action, via role grants. */
-async function readableWorkspaceIds(tx, actor, action) {
+/**
+ * Scope where the actor holds the read/search action, via role grants.
+ * @returns {Promise<{workspaceIds: string[], orgWide: boolean}>} `orgWide` is a separate
+ *   field rather than a sentinel inside `workspaceIds`: seam 07 pushes that array into
+ *   the provider query, where a `"*"` entry would be looked up as a namespace name.
+ */
+async function readableScope(tx, actor, action) {
+  const empty = { workspaceIds: [], orgWide: false };
   const permission = await tx.permissions.findUnique({ where: { action } });
-  if (!permission) return [];
+  if (!permission) return empty;
+
+  // T-4b (#29) B-1: an API-key Actor holds no grants under `api-key:<id>`; it reads as its
+  // creator. The engine applies the same rule, so a key that may call a route also sees the
+  // documents that route returns instead of an empty filter.
+  const grantPrincipal =
+    "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+  if (!grantPrincipal) return empty;
 
   const grants = await tx.principal_role_grants.findMany({
     where: {
       orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
+      principal_type: grantPrincipal.type,
+      principal_id: String(grantPrincipal.id),
       OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
     },
     select: { role_id: true, workspace_id: true },
   });
-  if (grants.length === 0) return [];
+  if (grants.length === 0) return empty;
 
   const rows = await tx.role_permissions.findMany({
     where: {
@@ -171,10 +187,12 @@ async function readableWorkspaceIds(tx, actor, action) {
     const ids = new Set();
     // Membership only exists for real user rows. A service/embed principal has a
     // non-numeric id (`single-user`, `api-key:7`), so coercing it would hand Prisma a
-    // NaN and take down single-user deployments entirely (B1, QA-1).
-    if (actor.type === "user") {
+    // NaN and take down single-user deployments entirely (B1, QA-1). The check is on the
+    // GRANT principal, not the Actor: a key acting for a user must enumerate that user's
+    // memberships rather than fall through to a whole-org read (T-4b B-1).
+    if (grantPrincipal.type === "user") {
       const memberships = await tx.workspace_users.findMany({
-        where: { user_id: Number(actor.id) },
+        where: { user_id: Number(grantPrincipal.id) },
         select: { workspace_id: true },
       });
       for (const m of memberships) ids.add(String(m.workspace_id));
@@ -183,12 +201,40 @@ async function readableWorkspaceIds(tx, actor, action) {
     // actor.workspaceIds is deliberately NOT folded in: scope must come from grants and
     // membership rows, never from the Actor object, or a caller that can shape an Actor
     // widens its own reach without a grant check (QA-1 item 4).
-    // An org-wide grant is org-wide: a service principal that holds one is not limited
-    // to an enumerated list, so it reads as a whole-org scope rather than an empty one.
-    if (actor.type !== "user" && ids.size === 0) ids.add(ORG_WIDE_SCOPE);
-    return [...ids];
+    //
+    // A user's org-wide grant still resolves to that user's enumerated memberships — the
+    // grant says "in any workspace you are in", not "in every workspace". Only a service
+    // or embed principal, which has no membership rows at all, reads as whole-org.
+    return narrowToKeyBinding(actor, {
+      workspaceIds: [...ids],
+      orgWide: grantPrincipal.type !== "user",
+    });
   }
-  return [...new Set(scoped.filter((g) => g.workspace_id !== null).map((g) => String(g.workspace_id)))];
+  return narrowToKeyBinding(actor, {
+    workspaceIds: [
+      ...new Set(scoped.filter((g) => g.workspace_id !== null).map((g) => String(g.workspace_id))),
+    ],
+    orgWide: false,
+  });
+}
+
+/**
+ * A workspace-bound API key may only ever NARROW its creator's reach. The binding comes
+ * from the key row (`api_keys.workspaceId`), not from anything a caller can shape, so
+ * intersecting with it cannot widen scope — the worst a forged binding achieves is a
+ * smaller result set. Unbound keys and every other actor pass through untouched.
+ */
+function narrowToKeyBinding(actor, scope) {
+  const binding = actor.keyWorkspaceBinding;
+  if (!Array.isArray(binding) || binding.length === 0) return scope;
+  const allowed = new Set(binding.map(String));
+  return {
+    // An org-wide grant narrowed by a binding is exactly the bound workspaces.
+    workspaceIds: scope.orgWide
+      ? [...allowed]
+      : scope.workspaceIds.filter((id) => allowed.has(id)),
+    orgWide: false,
+  };
 }
 
 module.exports = { buildDocumentFilter, ALLOWED_DOCUMENT_ID_CAP };

@@ -3,6 +3,9 @@ const { SystemSettings } = require("../models/systemSettings.js");
 const { Memory } = require("../models/memory.js");
 const { WorkspaceChats } = require("../models/workspaceChats.js");
 const { Workspace } = require("../models/workspace.js");
+// T-4b (#29) W-11: this job reads one user's chats at a time, so it runs as that user —
+// not as a service principal, which would summarize chats the user can no longer read.
+const { jobActor } = require("../utils/authorization/actorResolver.js");
 const truncate = require("truncate");
 const {
   groupByUserWorkspace,
@@ -80,6 +83,19 @@ async function processGroup(groupChats) {
 
   const unprocessedIds = groupChats.map((c) => c.id);
   try {
+    // W-11: a named principal, resolved before any chat content is read. A suspended or
+    // deleted user yields null and the group is dropped (the finally below marks it
+    // processed) rather than summarized under no identity at all.
+    const actor = await jobActor({ userId });
+    if (!actor) {
+      log(`${tag} has no resolvable actor (suspended or deleted). Skipping.`);
+      return;
+    }
+    if (!actor.workspaceIds?.includes(String(workspaceId))) {
+      log(`${tag} is no longer a member of workspace ${workspaceId}. Skipping.`);
+      return;
+    }
+
     const workspace = await Workspace.get({ id: workspaceId });
     if (!workspace) {
       log(`Workspace ${workspaceId} not found. Marking processed.`);

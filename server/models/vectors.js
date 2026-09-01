@@ -40,7 +40,18 @@ const DocumentVectors = {
 
   deleteForWorkspace: async function (workspaceId) {
     const documents = await Document.forWorkspace(workspaceId);
-    const docIds = [...new Set(documents.map((doc) => doc.docId))];
+    // T-4b (#29) W-12: doc-vectors-canonicalize rewrites document_vectors.docId from the
+    // legacy uuid to the canonical documents.id in batches, so both shapes coexist during
+    // the run. Deleting by only one leaves a workspace's vectors behind after the
+    // workspace is gone, with nothing left to find them by.
+    const docIds = [
+      ...new Set(
+        documents
+          .flatMap((doc) => [doc.docId, doc.documentId])
+          .filter((id) => id !== null && id !== undefined)
+          .map(String)
+      ),
+    ];
 
     try {
       await prisma.document_vectors.deleteMany({

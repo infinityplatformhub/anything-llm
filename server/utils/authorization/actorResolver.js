@@ -32,17 +32,45 @@ async function resolveActor(request, response, { db = prisma } = {}) {
   const locals = response?.locals ?? {};
 
   // Row 3 (P0-4 PR-3): scoped API key — RAW context only; this is where it becomes an Actor.
-  if (locals.apiKeyContext) {
+  //
+  // T-4b (#29): a browser-extension key writes apiKeyContext too, but its keyId comes from
+  // `browser_extension_api_keys` — a separate table with its own id sequence. Resolving it
+  // against `api_keys` would hand extension key 7 the grants of API key 7's creator, an
+  // unrelated user. The extension already resolves its own user onto locals.user, so it
+  // falls through to the user branch below, which is where its grants belong.
+  if (locals.apiKeyContext && locals.apiKeyContext.keyKind !== "browser-extension") {
     const ctx = locals.apiKeyContext;
     // Key lifecycle is checked in full here, not half of it: an expired key must yield
     // no actor even if the ingress middleware ever stops checking (F-20d, QA-2 round 2).
     const expired = ctx.expiresAt && new Date(ctx.expiresAt) <= new Date();
     if (ctx.revokedAt || expired) return null;
+
+    // T-4b (#29) B-1: no grant row ever names `api-key:<id>`, so evaluating the key as its
+    // own principal answers `no_grants` for every route. A key is not an identity that can
+    // hold policy — it is a bearer credential for its creator, narrowed by its own scopes.
+    // Effective permission is grants(createdBy) ∩ scopes(key): the engine resolves grants
+    // against `grantPrincipal`, the ingress middleware enforces the scope half, and the
+    // `api-key:` id stays as audit provenance.
+    const creatorId = await apiKeyCreatorId(ctx.keyId, db);
+    const grantPrincipal = await keyGrantPrincipal(creatorId, db);
+
+    // An unbound key inherits its creator's reach; a workspace-bound key keeps its
+    // binding and never widens to everything the creator can see.
+    const workspaceIds = ctx.workspaceId
+      ? [String(ctx.workspaceId)]
+      : grantPrincipal
+        ? await workspaceIdsForUser(creatorId, db)
+        : [];
+
     return {
       type: "service",
       id: `api-key:${ctx.keyId}`,
       orgId: 1,
-      workspaceIds: ctx.workspaceId ? [ctx.workspaceId] : [],
+      workspaceIds,
+      grantPrincipal,
+      // A bound key may only narrow its creator's reach; documentFilter intersects with
+      // this rather than trusting workspaceIds, which a caller could shape.
+      keyWorkspaceBinding: ctx.workspaceId ? [String(ctx.workspaceId)] : [],
       scopedKeyId: String(ctx.keyId),
       attributes: { scopes: ctx.scopes ?? [] },
     };
@@ -83,13 +111,120 @@ async function resolveActor(request, response, { db = prisma } = {}) {
 
   // Row 2 (R5): single-user deployments have no user rows — explicit service principal
   // evaluated by the engine like any principal. No branch anywhere may mean "allow".
-  if (!(await isMultiUserModeSafe())) {
+  if (await isConfirmedSingleUser(db)) {
     return { ...SINGLE_USER_ACTOR };
   }
 
   // Rows 8-11: agent runtime with null user_id, background jobs, telegram channel state,
   // and unauthenticated routes yield NULL — the engine denies (missing_actor / S-4).
   return null;
+}
+
+/**
+ * T-4b (#29) W-5: the job-runtime half of the same resolver. `utils/jobs/ActorIdentityStore`
+ * used to build Actors independently — it spread the whole `users` row into the object the
+ * engine reads, hardcoded `workspaceIds: []` (wrong since T-3 taught the HTTP path to derive
+ * membership, so one user read documents over HTTP and nothing in a job), and never stamped
+ * `impersonatedBy`, leaving CoreJobWorker's denyImpersonatedMutation with nothing to check.
+ *
+ * @param {{type: string, id: string|number, orgId?: number, impersonatedBy?: string|number}|null} actorRef
+ *   the persisted actor reference on the job row
+ * @returns {Promise<Object|null>} Actor, or null when the referenced principal cannot act.
+ */
+async function resolveActorRef(actorRef, { db = prisma } = {}) {
+  if (!actorRef || !actorRef.type || actorRef.id === undefined || actorRef.id === null) {
+    return null;
+  }
+
+  // Non-user principals (service/embed) carry their whole identity in the ref; there is
+  // no row to look up and no membership to derive.
+  if (actorRef.type !== "user") {
+    return {
+      type: actorRef.type,
+      id: String(actorRef.id),
+      // Same rule as the user branch: the tenant is derived, never taken from the row.
+      orgId: 1,
+      ...(actorRef.workspaceIds ? { workspaceIds: actorRef.workspaceIds.map(String) } : {}),
+    };
+  }
+
+  // The row is read to prove the user still exists and may act — never to copy columns
+  // into the Actor. Only the seam-02 shape crosses the boundary.
+  const user = await db.users.findUnique({
+    where: { id: Number(actorRef.id) },
+    select: { id: true, suspended: true },
+  });
+  if (!user || user.suspended) return null;
+
+  return {
+    type: "user",
+    id: String(user.id),
+    // Derived, never read from the job row: orgId decides which org's policy rows are
+    // read, so taking it from persisted job data would let a written row pick its own
+    // tenant (QA-1). Single-org today; this is the one place that changes when it is not.
+    orgId: 1,
+    workspaceIds: await workspaceIdsForUser(user.id, db),
+    impersonatedBy: actorRef.impersonatedBy
+      ? { type: "user", id: String(actorRef.impersonatedBy) }
+      : undefined,
+  };
+}
+
+/**
+ * T-4b (#29) W-11: the principal a background job or channel runs as. `jobs/*.js` are
+ * standalone scripts that resolved workspaces, chats and documents with no actor at all;
+ * a null actor is not a safe default, because the engine denies it and the job breaks
+ * silently rather than loudly. Each site chooses: the originating user for per-user work,
+ * `core-jobs` for system work.
+ *
+ * A failed user lookup returns null — it never falls back to the service principal, which
+ * would silently escalate a suspended user's queued work to system privileges.
+ *
+ * @param {{userId?: number|string|null, db?: Object}} input
+ * @returns {Promise<Object|null>}
+ */
+async function jobActor({ userId = null, db = prisma } = {}) {
+  if (userId === null || userId === undefined) return { ...SERVICE_PRINCIPALS.coreJobs };
+  return resolveActorRef({ type: "user", id: userId }, { db });
+}
+
+/**
+ * The principal a key's grants resolve against, given its creator id.
+ *
+ * A null `createdBy` is not always an error. `endpoints/system.js:1073` mints keys with
+ * `ApiKey.create(null, name)` and refuses to run in multi-user mode — in a single-user
+ * deployment there are no user rows to attribute a key to, and every key ever issued there
+ * has a null creator. Denying those would take the whole `/v1` surface offline on upgrade,
+ * for the deployments least able to diagnose it.
+ *
+ * So a creatorless key falls back to the `single-user` service principal, which holds the
+ * seeded grants — and ONLY in single-user mode. In multi-user mode a null creator is a real
+ * orphan (creator deleted, or a key written outside the model), and it denies.
+ */
+async function keyGrantPrincipal(creatorId, db = prisma) {
+  if (creatorId !== null) return { type: "user", id: String(creatorId) };
+  // Gated by the same evidence as the anonymous branch (QA-2 FINDING-1): without it, a key
+  // with no creator borrows super_admin the moment the settings read misbehaves.
+  if (!(await isConfirmedSingleUser(db))) return null;
+  return { type: SINGLE_USER_ACTOR.type, id: SINGLE_USER_ACTOR.id };
+}
+
+/**
+ * The user a key acts for. `createdBy` is nullable (schema.prisma:20) and the row may be
+ * gone, so this returns null rather than a guess — a key with no creator has no grants to
+ * intersect and can only deny. An unreadable table denies too: failing toward "some
+ * principal" would hand a request whatever that principal holds.
+ */
+async function apiKeyCreatorId(keyId, db = prisma) {
+  try {
+    const row = await db.api_keys.findUnique({
+      where: { id: Number(keyId) },
+      select: { createdBy: true },
+    });
+    return row?.createdBy ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Workspace ids the user belongs to — the scope every document filter is built on. */
@@ -107,14 +242,45 @@ async function workspaceIdsForUser(userId, db = prisma) {
   }
 }
 
-async function isMultiUserModeSafe() {
+/**
+ * Is this deployment REALLY single-user?
+ *
+ * QA-2 FINDING-1: the setting alone is not evidence. `SystemSettings.isMultiUserMode()`
+ * catches its own errors and returns `false` (systemSettings.js:747), so "the database is
+ * unreachable" and "the multi_user_mode row is missing" both reach this code as a
+ * confident "single-user" — and the catch below used to claim it failed toward the
+ * restrictive mode while never actually running. An anonymous request with no credential
+ * then resolved to SINGLE_USER_ACTOR, which holds the seeded super_admin grant: delete any
+ * workspace, read anything. The missing-row case needs no outage at all — a partial
+ * restore, or a migration that drops the row, is enough.
+ *
+ * So single-user must be CONFIRMED, not merely reported: a deployment with user rows is
+ * multi-user whatever the setting says. `isMultiUserMode` itself is left alone — 24
+ * callers expect a boolean, and `false` is correct for a genuine single-user install.
+ *
+ * Both reads fail closed: an unreadable users table denies too, because absence of
+ * evidence is not evidence of absence. Returning 0 on that error would simply move
+ * FINDING-1 from the settings read to this one.
+ *
+ * ORDERING NOTE for endpoints/system.js onboarding: the first `User.create` happens BEFORE
+ * `multi_user_mode` is written to true. During that window the setting still says
+ * single-user while a user row exists, so this returns false and an anonymous request is
+ * denied — fail-closed, and deliberate. Do NOT "fix" it by flipping the setting first:
+ * that would leave a window where the deployment claims multi-user with no admin in it.
+ */
+async function isConfirmedSingleUser(db = prisma) {
   try {
-    return await SystemSettings.isMultiUserMode();
+    if (await SystemSettings.isMultiUserMode()) return false;
+    return (await db.users.count()) === 0;
   } catch {
-    // Fall back to true (multi-user = deny anonymous) — fail toward the more
-    // restrictive mode, never toward allow.
-    return true;
+    return false;
   }
 }
 
-module.exports = { resolveActor, SINGLE_USER_ACTOR, SERVICE_PRINCIPALS };
+module.exports = {
+  resolveActor,
+  resolveActorRef,
+  jobActor,
+  SINGLE_USER_ACTOR,
+  SERVICE_PRINCIPALS,
+};

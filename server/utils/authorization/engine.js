@@ -70,6 +70,18 @@ class DatabaseAuthorizationEngine {
       return asDenied("impersonated_mutation_denied");
     }
 
+    // T-4b (#29) B-1: a workspace-bound API key reaches only the workspace it was issued
+    // for, whatever its creator's grants say. The binding is a property of the credential,
+    // not of the policy store, so it gates like impersonation — blanket, before any lookup.
+    // A resource with no workspaceId cannot be attributed to the binding, and
+    // unattributable is not the same as in-scope, so it is denied too.
+    if (Array.isArray(actor.keyWorkspaceBinding) && actor.keyWorkspaceBinding.length > 0) {
+      const bound = new Set(actor.keyWorkspaceBinding.map(String));
+      if (resource.workspaceId == null || !bound.has(String(resource.workspaceId))) {
+        return asDenied("outside_key_binding");
+      }
+    }
+
     try {
       return await this.evaluate(actor, action, resource);
     } catch (error) {
@@ -109,18 +121,33 @@ class DatabaseAuthorizationEngine {
     return new Map(decisions.map((decision, i) => [i, decision]));
   }
 
+  /**
+   * The principal grants are read for. T-4b (#29) B-1: a scoped API key holds no grants
+   * under `api-key:<id>` — it is a bearer credential for its creator, so grants resolve
+   * against `grantPrincipal` while the `api-key:` id stays as audit provenance. The key's
+   * own scope list is the other half of the intersection and is enforced at ingress.
+   * A key whose creator is unknown (createdBy null, deleted row, unreadable table) carries
+   * `grantPrincipal: null` and can only deny.
+   */
+  static grantPrincipalOf(actor) {
+    return "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+  }
+
   async evaluate(actor, action, resource) {
     // Unknown action = deny (vocabulary is the seeded permissions table; T-1 diff test
     // keeps P0-4 scopes in the same namespace).
     const permission = await this.db.permissions.findUnique({ where: { action } });
     if (!permission) return asDenied("unknown_action");
 
+    const grantPrincipal = DatabaseAuthorizationEngine.grantPrincipalOf(actor);
+    if (!grantPrincipal) return asDenied("no_grant_principal");
+
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
     const grantWhere = {
       orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
+      principal_type: grantPrincipal.type,
+      principal_id: String(grantPrincipal.id),
       OR: [
         { expires_at: null },
         { expires_at: { gt: new Date() } },

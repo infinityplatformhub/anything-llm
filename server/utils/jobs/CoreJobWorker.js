@@ -20,7 +20,11 @@ class CoreJobWorker {
         });
         continue;
       }
-      runnable.push({ ...job, actor: { ...actor, ...job.actor } });
+      // The stored row names WHO the job runs as; what that principal may do is resolved
+      // fresh on every claim. Spreading job.actor over the resolution let a row choose its
+      // own workspaceIds/orgId/impersonatedBy — a row written before a revoke, or by any
+      // compromised enqueue path, would keep the scope it was written with (T-4b W-5).
+      runnable.push({ ...job, actor });
     }
     return runnable;
   }

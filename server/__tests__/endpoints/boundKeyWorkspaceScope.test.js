@@ -15,8 +15,9 @@ jest.mock("../../models/systemSettings", () => ({
 }));
 jest.mock("../../models/apiKeys", () => ({ ApiKey: { resolve: jest.fn(), touch: jest.fn() } }));
 jest.mock("../../utils/events", () => ({ emitAuditEvent: jest.fn().mockResolvedValue({}) }));
+// T-4b: /v1 now checks the grant half too — see __testHelpers__/grantStore.js.
 jest.mock("../../utils/prisma", () => ({
-  $transaction: async (fn) => fn({ api_keys: { update: jest.fn() } }),
+  ...require("../../__testHelpers__/grantStore").grantingPrismaMock(),
   workspaces: { findUnique: jest.fn(), findMany: jest.fn() },
 }));
 jest.mock("../../models/workspace", () => ({

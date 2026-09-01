@@ -37,7 +37,9 @@ describe("actorResolver — the only Actor construction point", () => {
       type: "service",
       id: "api-key:7",
       orgId: 1,
-      workspaceIds: [3],
+      // T-4b: stringified like every other resolver path — a bound key's workspace id
+      // ends up in a filter's workspaceIds, which seam 07 types as string[].
+      workspaceIds: ["3"],
       scopedKeyId: "7",
     });
     expect(actor.attributes.scopes).toEqual(["workspace.read"]);
