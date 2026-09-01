@@ -32,13 +32,13 @@ const BrowserExtensionApiKey = {
   },
   validate: async function (secret) {
     if (typeof secret !== "string" || !secret.startsWith("apw-brx-")) return false;
-    const record = await prisma.browser_extension_api_keys.findFirst({ where: { keyPrefix: keyPrefix(secret) }, include: { user: true } });
+    const record = await prisma.browser_extension_api_keys.findUnique({ where: { secretDigest: digestSecret(secret) }, include: { user: true } });
     if (!record || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) return false;
     try { if (!matchesDigest(secret, record.secretDigest)) return false; } catch { return false; }
     return { ...record, scopes: parseScopes(record.scopes) };
   },
   touch: (id) => prisma.browser_extension_api_keys.update({ where: { id }, data: { lastUsedAt: new Date() } }),
-  get: (clause = {}) => prisma.browser_extension_api_keys.findFirst({ where: clause }).catch(() => null),
+  get: (clause = {}) => prisma.browser_extension_api_keys.findFirst({ where: clause }).then((row) => { if (!row) return null; const { secretDigest, ...safe } = row; return safe; }).catch(() => null),
   delete: async (id) => prisma.browser_extension_api_keys.delete({ where: { id: Number(id) } }).then(() => ({ success: true, error: null })).catch((error) => ({ success: false, error: error.message })),
   deleteAllForUser: async function (userId) {
     if (!userId) return { success: false, error: "User ID is required" };

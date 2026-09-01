@@ -16,7 +16,7 @@ async function validBrowserExtensionApiKey(request, response, next) {
   response.locals.user = user;
   response.locals.actor = {
     type: "service", id: `browser-key:${apiKey.id}`, orgId: "default",
-    workspaceIds: apiKey.workspaceId ? [String(apiKey.workspaceId)] : [], groupIds: [], scopes: apiKey.scopes,
+    workspaceIds: apiKey.workspaceId ? [String(apiKey.workspaceId)] : [], groupIds: [],
     scopedKeyId: String(apiKey.id), onBehalfOf: user ? { type: "user", id: String(user.id) } : undefined,
   };
   response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };

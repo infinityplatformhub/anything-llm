@@ -12,7 +12,7 @@ async function validApiKey(request, response, next) {
   const workspaceIds = apiKey.workspaceId ? [String(apiKey.workspaceId)] : [];
   response.locals.actor = {
     type: "service", id: `api-key:${apiKey.id}`, orgId: "default", workspaceIds, groupIds: [],
-    scopes: apiKey.scopes, scopedKeyId: String(apiKey.id),
+    scopedKeyId: String(apiKey.id),
   };
   response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };
   await ApiKey.touch(apiKey.id);

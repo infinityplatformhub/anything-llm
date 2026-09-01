@@ -30,10 +30,10 @@ test("requireScope defaults deny and accepts exact or wildcard scope", () => {
   const response = { locals: {}, status: jest.fn().mockReturnThis(), json: jest.fn() };
   requireScope("workspace.write")({}, response, next);
   expect(response.status).toHaveBeenCalledWith(403);
-  response.locals.actor = { scopes: ["document.read"] };
+  response.locals.apiKey = { scopes: ["document.read"] };
   requireScope("workspace.write")({}, response, next);
   expect(next).not.toHaveBeenCalled();
-  response.locals.actor.scopes = ["*"];
+  response.locals.apiKey.scopes = ["*"];
   requireScope("workspace.write")({}, response, next);
   expect(next).toHaveBeenCalledTimes(1);
 });

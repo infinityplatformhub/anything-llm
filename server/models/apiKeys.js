@@ -38,7 +38,7 @@ const ApiKey = {
 
   resolve: async function (secret) {
     if (typeof secret !== "string" || !secret.startsWith("apw-key-")) return null;
-    const record = await prisma.api_keys.findFirst({ where: { keyPrefix: keyPrefix(secret) } });
+    const record = await prisma.api_keys.findUnique({ where: { secretDigest: digestSecret(secret) } });
     if (!record || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) return null;
     try {
       if (!matchesDigest(secret, record.secretDigest)) return null;
@@ -49,7 +49,7 @@ const ApiKey = {
   },
 
   touch: (id) => prisma.api_keys.update({ where: { id }, data: { lastUsedAt: new Date() } }),
-  get: (clause = {}) => prisma.api_keys.findFirst({ where: clause }).catch(() => null),
+  get: (clause = {}) => prisma.api_keys.findFirst({ where: clause }).then((row) => { if (!row) return null; const { secretDigest, ...safe } = row; return safe; }).catch(() => null),
   count: (clause = {}) => prisma.api_keys.count({ where: clause }).catch(() => 0),
   delete: async (clause = {}) => prisma.api_keys.deleteMany({ where: clause }).then(() => true).catch(() => false),
   where: (clause = {}, limit) => prisma.api_keys.findMany({ where: clause, take: limit }).then((rows) => rows.map(({ secretDigest, ...row }) => row)).catch(() => []),
