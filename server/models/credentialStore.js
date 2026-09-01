@@ -27,6 +27,26 @@ const KEY_VERSION = 1;
  * @throws when SIG_KEY is absent — a credential store with no key must not start,
  *   the way an absent API_KEY_PEPPER fails closed rather than self-assigning.
  */
+/**
+ * What each row's ciphertext is bound to, so a blob only decrypts under the identity it
+ * was sealed with.
+ *
+ * GCM's tag proves the ciphertext was not edited; it says nothing about which row it
+ * belongs to. Without this, copying KEY_A's ciphertext/iv/authTag over KEY_B's row makes
+ * `get("KEY_B")` return A's value — an attacker with table write access redirects a
+ * provider endpoint without ever knowing SIG_KEY (QA-2, #33 part 2).
+ *
+ * The version is included so a future re-key cannot be undone by replaying a row
+ * encrypted under an older derivation.
+ *
+ * @param {string} envKey
+ * @param {number} keyVersion
+ * @returns {Buffer}
+ */
+function credentialAAD(envKey, keyVersion) {
+  return Buffer.from(`${envKey}:v${keyVersion}`, "utf8");
+}
+
 function encryptionKey() {
   const material = process.env.SIG_KEY;
   if (!material || material.trim().length < 32)
@@ -54,6 +74,7 @@ const CredentialStore = {
 
       const iv = crypto.randomBytes(IV_BYTES);
       const cipher = crypto.createCipheriv(ALGORITHM, encryptionKey(), iv);
+      cipher.setAAD(credentialAAD(envKey, KEY_VERSION));
       const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
       const authTag = cipher.getAuthTag();
 
@@ -80,6 +101,9 @@ const CredentialStore = {
     if (!row) return null;
     try {
       const decipher = crypto.createDecipheriv(ALGORITHM, encryptionKey(), row.iv);
+      // Bound to the row's own identity: a blob moved from another key, or written under
+      // a different keyVersion, fails the tag rather than decrypting.
+      decipher.setAAD(credentialAAD(envKey, row.keyVersion));
       decipher.setAuthTag(row.authTag);
       return decipher.update(row.ciphertext, undefined, "utf8") + decipher.final("utf8");
     } catch (error) {
