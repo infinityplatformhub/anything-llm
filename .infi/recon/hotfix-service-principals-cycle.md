@@ -52,3 +52,25 @@ no `require(` at all, so it cannot be dragged back into a cycle later.
 
 5 files: 1 new module, 1 new test, 3 one-line import changes. No behaviour change beyond
 the constants being reliably defined.
+
+## Rebase onto t4b (2026-09-02)
+
+Two conflicts, both resolved as merge-both rather than pick-a-side:
+
+**`JobRuntime.js`** — t4b imports `resolveActorRef` from `actorResolver`; #39 moves
+`SERVICE_PRINCIPALS` to the leaf. Result is two import lines. Taking #39's line whole
+would leave `resolveActorRef` undefined, so every job resolves to no actor and the engine
+denies it — and **the suite stays green**, because a denied job is what default-deny looks
+like. Two tests now pin the import shape and assert a job's `actorRef` resolves to the
+user.
+
+**`legacyRoleGrants.js`** — git auto-merged this one *wrongly*: it kept t4b's
+`membershipRoleId` lookup but silently reverted #39's `throw` back to `return`, restoring
+the exact swallow QA-2 found. Resolved by hand to carry both: the §7.7 role lookup AND the
+throw.
+
+**`actorResolver.test.js` R5** — failing on `main` before this branch existed (verified in
+a clean worktree at `169e2689`). t4b tightened `isConfirmedSingleUser` to require zero user
+rows as well as single-user mode; the test mocks only `isMultiUserMode`, leaving
+`users.count` undefined. Fixed test-side by injecting `db` — the resolver is correct, the
+test lagged behind it. PMO ruling: fix here rather than hand back to Dev4.

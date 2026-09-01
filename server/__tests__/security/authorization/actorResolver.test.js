@@ -68,7 +68,13 @@ describe("actorResolver — the only Actor construction point", () => {
 
   test("row 2 / R5: single-user mode yields the explicit service principal — no skip path", async () => {
     SystemSettings.isMultiUserMode.mockResolvedValue(false);
-    const actor = await resolveActor({}, res({}));
+    // T-4b tightened this: single-user now also requires that no user rows
+    // exist, so an instance mid-migration to multi-user cannot resolve to the
+    // super_admin service principal. The test predates that and mocked only
+    // isMultiUserMode, leaving users.count undefined.
+    const actor = await resolveActor({}, res({}), {
+      db: { users: { count: async () => 0 } },
+    });
     expect(actor).toEqual({ type: "service", id: "single-user", orgId: 1 });
   });
 
