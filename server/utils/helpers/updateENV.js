@@ -5,45 +5,55 @@ const { emitAuditEvent } = require("../events");
 const KEY_MAPPING = {
   LLMProvider: {
     envKey: "LLM_PROVIDER",
+    secret: false,
     checks: [isNotEmpty, supportedLLM],
   },
   // Model Router Settings
   ModelRouterId: {
     envKey: "MODEL_ROUTER_ID",
+    secret: false,
     checks: [],
   },
   // OpenAI Settings
   OpenAiKey: {
     envKey: "OPEN_AI_KEY",
+    secret: true,
     checks: [isNotEmpty, validOpenAIKey],
   },
   OpenAiModelPref: {
     envKey: "OPEN_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   // Azure OpenAI Settings
   AzureOpenAiEndpoint: {
     envKey: "AZURE_OPENAI_ENDPOINT",
+    secret: "url",
     checks: [isNotEmpty],
   },
   AzureOpenAiTokenLimit: {
     envKey: "AZURE_OPENAI_TOKEN_LIMIT",
+    secret: true,
     checks: [validOpenAiTokenLimit],
   },
   AzureOpenAiKey: {
     envKey: "AZURE_OPENAI_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   AzureOpenAiModelPref: {
     envKey: "AZURE_OPENAI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   AzureOpenAiEmbeddingModelPref: {
     envKey: "EMBEDDING_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   AzureOpenAiModelType: {
     envKey: "AZURE_OPENAI_MODEL_TYPE",
+    secret: false,
     checks: [
       (input) =>
         ["default", "reasoning"].includes(input)
@@ -55,14 +65,17 @@ const KEY_MAPPING = {
   // Anthropic Settings
   AnthropicApiKey: {
     envKey: "ANTHROPIC_API_KEY",
+    secret: true,
     checks: [isNotEmpty, validAnthropicApiKey],
   },
   AnthropicModelPref: {
     envKey: "ANTHROPIC_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   AnthropicCacheControl: {
     envKey: "ANTHROPIC_CACHE_CONTROL",
+    secret: false,
     checks: [
       (input) =>
         ["none", "5m", "1h"].includes(input)
@@ -73,278 +86,340 @@ const KEY_MAPPING = {
 
   GeminiLLMApiKey: {
     envKey: "GEMINI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   GeminiLLMModelPref: {
     envKey: "GEMINI_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   GeminiSafetySetting: {
     envKey: "GEMINI_SAFETY_SETTING",
+    secret: false,
     checks: [validGeminiSafetySetting],
   },
 
   // LMStudio Settings
   LMStudioBasePath: {
     envKey: "LMSTUDIO_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validLLMExternalBasePath, validDockerizedUrl],
   },
   LMStudioModelPref: {
     envKey: "LMSTUDIO_MODEL_PREF",
+    secret: false,
     checks: [],
   },
   LMStudioTokenLimit: {
     envKey: "LMSTUDIO_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
   LMStudioAuthToken: {
     envKey: "LMSTUDIO_AUTH_TOKEN",
+    secret: true,
     checks: [],
   },
 
   // LocalAI Settings
   LocalAiBasePath: {
     envKey: "LOCAL_AI_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validLLMExternalBasePath, validDockerizedUrl],
   },
   LocalAiModelPref: {
     envKey: "LOCAL_AI_MODEL_PREF",
+    secret: false,
     checks: [],
   },
   LocalAiTokenLimit: {
     envKey: "LOCAL_AI_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
   LocalAiApiKey: {
     envKey: "LOCAL_AI_API_KEY",
+    secret: true,
     checks: [],
   },
 
   OllamaLLMBasePath: {
     envKey: "OLLAMA_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validOllamaLLMBasePath, validDockerizedUrl],
   },
   OllamaLLMModelPref: {
     envKey: "OLLAMA_MODEL_PREF",
+    secret: false,
     checks: [],
   },
   OllamaLLMTokenLimit: {
     envKey: "OLLAMA_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
   OllamaLLMKeepAliveSeconds: {
     envKey: "OLLAMA_KEEP_ALIVE_TIMEOUT",
+    secret: false,
     checks: [isInteger],
   },
   OllamaLLMAuthToken: {
     envKey: "OLLAMA_AUTH_TOKEN",
+    secret: true,
     checks: [],
   },
 
   // Mistral AI API Settings
   MistralApiKey: {
     envKey: "MISTRAL_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   MistralModelPref: {
     envKey: "MISTRAL_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // KoboldCPP Settings
   KoboldCPPBasePath: {
     envKey: "KOBOLD_CPP_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, isValidURL],
   },
   KoboldCPPModelPref: {
     envKey: "KOBOLD_CPP_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   KoboldCPPTokenLimit: {
     envKey: "KOBOLD_CPP_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
   KoboldCPPMaxTokens: {
     envKey: "KOBOLD_CPP_MAX_TOKENS",
+    secret: true,
     checks: [nonZero],
   },
 
   // Text Generation Web UI Settings
   TextGenWebUIBasePath: {
     envKey: "TEXT_GEN_WEB_UI_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   TextGenWebUITokenLimit: {
     envKey: "TEXT_GEN_WEB_UI_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
   TextGenWebUIAPIKey: {
     envKey: "TEXT_GEN_WEB_UI_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // LiteLLM Settings
   LiteLLMModelPref: {
     envKey: "LITE_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   LiteLLMTokenLimit: {
     envKey: "LITE_LLM_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
   LiteLLMBasePath: {
     envKey: "LITE_LLM_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   LiteLLMApiKey: {
     envKey: "LITE_LLM_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // Generic OpenAI InferenceSettings
   GenericOpenAiBasePath: {
     envKey: "GENERIC_OPEN_AI_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   GenericOpenAiModelPref: {
     envKey: "GENERIC_OPEN_AI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   GenericOpenAiTokenLimit: {
     envKey: "GENERIC_OPEN_AI_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
   GenericOpenAiKey: {
     envKey: "GENERIC_OPEN_AI_API_KEY",
+    secret: true,
     checks: [],
   },
   GenericOpenAiMaxTokens: {
     envKey: "GENERIC_OPEN_AI_MAX_TOKENS",
+    secret: true,
     checks: [nonZero],
   },
 
   // AWS Bedrock LLM Settings
   AwsBedrockLLMApiKey: {
     envKey: "AWS_BEDROCK_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   AwsBedrockLLMRegion: {
     envKey: "AWS_BEDROCK_LLM_REGION",
+    secret: false,
     checks: [isNotEmpty],
   },
   AwsBedrockLLMModel: {
     envKey: "AWS_BEDROCK_LLM_MODEL_PREFERENCE",
+    secret: false,
     checks: [isNotEmpty],
   },
   AwsBedrockLLMTokenLimit: {
     envKey: "AWS_BEDROCK_LLM_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
   AwsBedrockLLMMaxTokens: {
     envKey: "AWS_BEDROCK_LLM_MAX_TOKENS",
+    secret: true,
     checks: [],
   },
 
   EmbeddingEngine: {
     envKey: "EMBEDDING_ENGINE",
+    secret: false,
     checks: [supportedEmbeddingModel],
     postUpdate: [handleVectorStoreReset],
   },
   EmbeddingBasePath: {
     envKey: "EMBEDDING_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validDockerizedUrl],
   },
   EmbeddingModelPref: {
     envKey: "EMBEDDING_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
     postUpdate: [handleVectorStoreReset, downloadEmbeddingModelIfRequired],
   },
   EmbeddingModelMaxChunkLength: {
     envKey: "EMBEDDING_MODEL_MAX_CHUNK_LENGTH",
+    secret: false,
     checks: [nonZero],
   },
   EmbeddingOutputDimensions: {
     envKey: "EMBEDDING_OUTPUT_DIMENSIONS",
+    secret: false,
     checks: [],
   },
   OllamaEmbeddingBatchSize: {
     envKey: "OLLAMA_EMBEDDING_BATCH_SIZE",
+    secret: false,
     checks: [nonZero],
   },
 
   // Gemini Embedding Settings
   GeminiEmbeddingApiKey: {
     envKey: "GEMINI_EMBEDDING_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
 
   // Generic OpenAI Embedding Settings
   GenericOpenAiEmbeddingApiKey: {
     envKey: "GENERIC_OPEN_AI_EMBEDDING_API_KEY",
+    secret: true,
     checks: [],
   },
   GenericOpenAiEmbeddingMaxConcurrentChunks: {
     envKey: "GENERIC_OPEN_AI_EMBEDDING_MAX_CONCURRENT_CHUNKS",
+    secret: false,
     checks: [nonZero],
   },
   GenericOpenAiEmbeddingPassagePrefix: {
     envKey: "GENERIC_OPEN_AI_EMBEDDING_PASSAGE_PREFIX",
+    secret: false,
     checks: [],
   },
   GenericOpenAiEmbeddingQueryPrefix: {
     envKey: "GENERIC_OPEN_AI_EMBEDDING_QUERY_PREFIX",
+    secret: false,
     checks: [],
   },
 
   // Image Generation Settings
   ImageGenerationProvider: {
     envKey: "IMAGE_GEN_PROVIDER",
+    secret: false,
     checks: [isNotEmpty, supportedImageGenerationProvider],
   },
   ImageGenerationModelPref: {
     envKey: "IMAGE_GEN_MODEL_PREF",
+    secret: false,
     checks: [],
   },
   ImageGenerationDimensions: {
     envKey: "IMAGE_GEN_SIZE_PREF",
+    secret: false,
     checks: [],
   },
   ImageGenerationOpenAiKey: {
     envKey: "IMAGE_GEN_OPENAI_KEY",
+    secret: true,
     checks: [isNotEmpty, validOpenAIKey],
   },
   ImageGenerationOpenRouterApiKey: {
     envKey: "IMAGE_GEN_OPENROUTER_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   ImageGenerationOllamaBasePath: {
     envKey: "IMAGE_GEN_OLLAMA_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validOllamaLLMBasePath, validDockerizedUrl],
   },
   ImageGenerationOllamaAuthToken: {
     envKey: "IMAGE_GEN_OLLAMA_AUTH_TOKEN",
+    secret: true,
     checks: [],
   },
   ImageGenerationLemonadeBasePath: {
     envKey: "IMAGE_GEN_LEMONADE_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   ImageGenerationLemonadeApiKey: {
     envKey: "IMAGE_GEN_LEMONADE_API_KEY",
+    secret: true,
     checks: [],
   },
   ImageGenerationLocalAiBasePath: {
     envKey: "IMAGE_GEN_LOCALAI_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, validLLMExternalBasePath, validDockerizedUrl],
   },
   ImageGenerationLocalAiApiKey: {
     envKey: "IMAGE_GEN_LOCALAI_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // Vector Database Selection Settings
   VectorDB: {
     envKey: "VECTOR_DB",
+    secret: false,
     checks: [isNotEmpty, supportedVectorDB],
     postUpdate: [handleVectorStoreReset],
   },
@@ -352,90 +427,109 @@ const KEY_MAPPING = {
   // Chroma Options
   ChromaEndpoint: {
     envKey: "CHROMA_ENDPOINT",
+    secret: "url",
     checks: [isValidURL, validChromaURL, validDockerizedUrl],
   },
   ChromaApiHeader: {
     envKey: "CHROMA_API_HEADER",
+    secret: false,
     checks: [],
   },
   ChromaApiKey: {
     envKey: "CHROMA_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // ChromaCloud Options
   ChromaCloudApiKey: {
     envKey: "CHROMACLOUD_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   ChromaCloudTenant: {
     envKey: "CHROMACLOUD_TENANT",
+    secret: false,
     checks: [isNotEmpty],
   },
   ChromaCloudDatabase: {
     envKey: "CHROMACLOUD_DATABASE",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Weaviate Options
   WeaviateEndpoint: {
     envKey: "WEAVIATE_ENDPOINT",
+    secret: "url",
     checks: [isValidURL, validDockerizedUrl],
   },
   WeaviateApiKey: {
     envKey: "WEAVIATE_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // QDrant Options
   QdrantEndpoint: {
     envKey: "QDRANT_ENDPOINT",
+    secret: "url",
     checks: [isValidURL, validDockerizedUrl],
   },
   QdrantApiKey: {
     envKey: "QDRANT_API_KEY",
+    secret: true,
     checks: [],
   },
   PineConeKey: {
     envKey: "PINECONE_API_KEY",
+    secret: true,
     checks: [],
   },
   PineConeIndex: {
     envKey: "PINECONE_INDEX",
+    secret: false,
     checks: [],
   },
 
   // Milvus Options
   MilvusAddress: {
     envKey: "MILVUS_ADDRESS",
+    secret: false,
     checks: [isValidURL, validDockerizedUrl],
   },
   MilvusUsername: {
     envKey: "MILVUS_USERNAME",
+    secret: false,
     checks: [isNotEmpty],
   },
   MilvusPassword: {
     envKey: "MILVUS_PASSWORD",
+    secret: true,
     checks: [isNotEmpty],
   },
 
   // Zilliz Cloud Options
   ZillizEndpoint: {
     envKey: "ZILLIZ_ENDPOINT",
+    secret: "url",
     checks: [isValidURL],
   },
   ZillizApiToken: {
     envKey: "ZILLIZ_API_TOKEN",
+    secret: true,
     checks: [isNotEmpty],
   },
 
   // Astra DB Options
   AstraDBApplicationToken: {
     envKey: "ASTRA_DB_APPLICATION_TOKEN",
+    secret: true,
     checks: [isNotEmpty],
   },
   AstraDBEndpoint: {
     envKey: "ASTRA_DB_ENDPOINT",
+    secret: "url",
     checks: [isNotEmpty],
   },
 
@@ -447,11 +541,13 @@ const KEY_MAPPING = {
   */
   PGVectorConnectionString: {
     envKey: "PGVECTOR_CONNECTION_STRING",
+    secret: true,
     checks: [isNotEmpty, looksLikePostgresConnectionString],
     preUpdate: [validatePGVectorConnectionString],
   },
   PGVectorTableName: {
     envKey: "PGVECTOR_TABLE_NAME",
+    secret: false,
     checks: [isNotEmpty],
     preUpdate: [validatePGVectorTableName],
   },
@@ -459,110 +555,132 @@ const KEY_MAPPING = {
   // Together Ai Options
   TogetherAiApiKey: {
     envKey: "TOGETHER_AI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   TogetherAiModelPref: {
     envKey: "TOGETHER_AI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Fireworks AI Options
   FireworksAiLLMApiKey: {
     envKey: "FIREWORKS_AI_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   FireworksAiLLMModelPref: {
     envKey: "FIREWORKS_AI_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Perplexity Options
   PerplexityApiKey: {
     envKey: "PERPLEXITY_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   PerplexityModelPref: {
     envKey: "PERPLEXITY_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // OpenRouter Options
   OpenRouterApiKey: {
     envKey: "OPENROUTER_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   OpenRouterModelPref: {
     envKey: "OPENROUTER_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   OpenRouterTimeout: {
     envKey: "OPENROUTER_TIMEOUT_MS",
+    secret: false,
     checks: [],
   },
 
   // Novita Options
   NovitaLLMApiKey: {
     envKey: "NOVITA_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   NovitaLLMModelPref: {
     envKey: "NOVITA_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   NovitaLLMTimeout: {
     envKey: "NOVITA_LLM_TIMEOUT_MS",
+    secret: false,
     checks: [],
   },
 
   // Groq Options
   GroqApiKey: {
     envKey: "GROQ_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   GroqModelPref: {
     envKey: "GROQ_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Cohere Options
   CohereApiKey: {
     envKey: "COHERE_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   CohereModelPref: {
     envKey: "COHERE_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // VoyageAi Options
   VoyageAiApiKey: {
     envKey: "VOYAGEAI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
 
   // Whisper (transcription) providers
   WhisperProvider: {
     envKey: "WHISPER_PROVIDER",
+    secret: false,
     checks: [isNotEmpty, supportedTranscriptionProvider],
     postUpdate: [],
   },
   WhisperModelPref: {
     envKey: "WHISPER_MODEL_PREF",
+    secret: false,
     checks: [validLocalWhisper],
     postUpdate: [],
   },
   WhisperGenericOpenAiBaseUrl: {
     envKey: "WHISPER_GENERIC_OPEN_AI_BASE_URL",
+    secret: "url",
     checks: [isValidURL],
     postUpdate: [],
   },
   WhisperGenericOpenAiApiKey: {
     envKey: "WHISPER_GENERIC_OPEN_AI_API_KEY",
+    secret: true,
     checks: [],
     postUpdate: [],
   },
   WhisperGenericOpenAiModel: {
     envKey: "WHISPER_GENERIC_OPEN_AI_MODEL",
+    secret: false,
     checks: [isNotEmpty],
     postUpdate: [],
   },
@@ -570,14 +688,17 @@ const KEY_MAPPING = {
   // System Settings
   AuthToken: {
     envKey: "AUTH_TOKEN",
+    secret: true,
     checks: [requiresForceMode, noRestrictedChars],
   },
   JWTSecret: {
     envKey: "JWT_SECRET",
+    secret: true,
     checks: [requiresForceMode],
   },
   DisableTelemetry: {
     envKey: "DISABLE_TELEMETRY",
+    secret: false,
     checks: [],
     preUpdate: [
       (_, __, nextValue) => {
@@ -589,264 +710,320 @@ const KEY_MAPPING = {
   // Agent Integration ENVs
   AgentSerpApiKey: {
     envKey: "AGENT_SERPAPI_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentSerpApiEngine: {
     envKey: "AGENT_SERPAPI_ENGINE",
+    secret: false,
     checks: [],
   },
   AgentSearchApiKey: {
     envKey: "AGENT_SEARCHAPI_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentSearchApiEngine: {
     envKey: "AGENT_SEARCHAPI_ENGINE",
+    secret: false,
     checks: [],
   },
   AgentSerperApiKey: {
     envKey: "AGENT_SERPER_DEV_KEY",
+    secret: true,
     checks: [],
   },
   AgentBingSearchApiKey: {
     envKey: "AGENT_BING_SEARCH_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentBaiduSearchApiKey: {
     envKey: "AGENT_BAIDU_SEARCH_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentSerplyApiKey: {
     envKey: "AGENT_SERPLY_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentSearXNGApiUrl: {
     envKey: "AGENT_SEARXNG_API_URL",
+    secret: "url",
     checks: [],
   },
   AgentTavilyApiKey: {
     envKey: "AGENT_TAVILY_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentExaApiKey: {
     envKey: "AGENT_EXA_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentPerplexityApiKey: {
     envKey: "AGENT_PERPLEXITY_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentBraveApiKey: {
     envKey: "AGENT_BRAVE_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentCrwApiKey: {
     envKey: "AGENT_CRW_API_KEY",
+    secret: true,
     checks: [],
   },
   AgentCrwApiUrl: {
     envKey: "AGENT_CRW_API_URL",
+    secret: "url",
     checks: [],
   },
   AgentYouApiKey: {
     envKey: "AGENT_YOU_API_KEY",
+    secret: true,
     checks: [],
   },
 
   // TTS/STT Integration ENVS
   TextToSpeechProvider: {
     envKey: "TTS_PROVIDER",
+    secret: false,
     checks: [supportedTTSProvider],
   },
 
   // TTS OpenAI
   TTSOpenAIKey: {
     envKey: "TTS_OPEN_AI_KEY",
+    secret: true,
     checks: [validOpenAIKey],
   },
   TTSOpenAIVoiceModel: {
     envKey: "TTS_OPEN_AI_VOICE_MODEL",
+    secret: false,
     checks: [],
   },
 
   // TTS ElevenLabs
   TTSElevenLabsKey: {
     envKey: "TTS_ELEVEN_LABS_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   TTSElevenLabsVoiceModel: {
     envKey: "TTS_ELEVEN_LABS_VOICE_MODEL",
+    secret: false,
     checks: [],
   },
 
   // PiperTTS Local
   TTSPiperTTSVoiceModel: {
     envKey: "TTS_PIPER_VOICE_MODEL",
+    secret: false,
     checks: [],
   },
 
   // OpenAI Generic TTS
   TTSOpenAICompatibleKey: {
     envKey: "TTS_OPEN_AI_COMPATIBLE_KEY",
+    secret: true,
     checks: [],
   },
   TTSOpenAICompatibleModel: {
     envKey: "TTS_OPEN_AI_COMPATIBLE_MODEL",
+    secret: false,
     checks: [],
   },
   TTSOpenAICompatibleVoiceModel: {
     envKey: "TTS_OPEN_AI_COMPATIBLE_VOICE_MODEL",
+    secret: false,
     checks: [isNotEmpty],
   },
   TTSOpenAICompatibleEndpoint: {
     envKey: "TTS_OPEN_AI_COMPATIBLE_ENDPOINT",
+    secret: "url",
     checks: [isValidURL],
   },
 
   // Kokoro TTS (self-hosted kokoro-fastapi)
   TTSKokoroEndpoint: {
     envKey: "TTS_KOKORO_ENDPOINT",
+    secret: "url",
     checks: [isValidURL],
   },
   TTSKokoroKey: {
     envKey: "TTS_KOKORO_KEY",
+    secret: true,
     checks: [],
   },
   TTSKokoroVoiceModel: {
     envKey: "TTS_KOKORO_VOICE_MODEL",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // STT Selection
   SpeechToTextProvider: {
     envKey: "STT_PROVIDER",
+    secret: false,
     checks: [supportedSTTProvider],
   },
 
   // STT OpenAI
   STTOpenAIModel: {
     envKey: "STT_OPEN_AI_MODEL",
+    secret: false,
     checks: [],
   },
 
   // STT Lemonade
   STTLemonadeBasePath: {
     envKey: "STT_LEMONADE_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   STTLemonadeModelPref: {
     envKey: "STT_LEMONADE_MODEL_PREF",
+    secret: false,
     checks: [],
   },
 
   // STT Deepgram
   STTDeepgramApiKey: {
     envKey: "STT_DEEPGRAM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   STTDeepgramModel: {
     envKey: "STT_DEEPGRAM_MODEL",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // STT OpenAI Generic
   STTOpenAICompatibleKey: {
     envKey: "STT_OPEN_AI_COMPATIBLE_KEY",
+    secret: true,
     checks: [],
   },
   STTOpenAICompatibleModel: {
     envKey: "STT_OPEN_AI_COMPATIBLE_MODEL",
+    secret: false,
     checks: [],
   },
   STTOpenAICompatibleEndpoint: {
     envKey: "STT_OPEN_AI_COMPATIBLE_ENDPOINT",
+    secret: "url",
     checks: [isValidURL],
   },
 
   // STT Groq
   STTGroqApiKey: {
     envKey: "STT_GROQ_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   STTGroqModel: {
     envKey: "STT_GROQ_MODEL",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // DeepSeek Options
   DeepSeekApiKey: {
     envKey: "DEEPSEEK_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   DeepSeekModelPref: {
     envKey: "DEEPSEEK_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Minimax Options
   MinimaxApiKey: {
     envKey: "MINIMAX_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   MinimaxModelPref: {
     envKey: "MINIMAX_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Cerebras Options
   CerebrasApiKey: {
     envKey: "CEREBRAS_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   CerebrasModelPref: {
     envKey: "CEREBRAS_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Google Vertex AI Options
   VertexAiLLMApiKey: {
     envKey: "VERTEX_AI_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   VertexAiLLMProjectId: {
     envKey: "VERTEX_AI_LLM_PROJECT_ID",
+    secret: false,
     checks: [isNotEmpty],
   },
   VertexAiLLMRegion: {
     envKey: "VERTEX_AI_LLM_REGION",
+    secret: false,
     checks: [isNotEmpty],
   },
   VertexAiLLMModelPref: {
     envKey: "VERTEX_AI_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   VertexAiLLMTokenLimit: {
     envKey: "VERTEX_AI_LLM_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
 
   // APIPie Options
   ApipieLLMApiKey: {
     envKey: "APIPIE_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   ApipieLLMModelPref: {
     envKey: "APIPIE_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // xAI Options
   XAIApiKey: {
     envKey: "XAI_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   XAIModelPref: {
     envKey: "XAI_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Nvidia NIM Options
   NvidiaNimLLMBasePath: {
     envKey: "NVIDIA_NIM_LLM_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
     postUpdate: [
       (_, __, nextValue) => {
@@ -858,6 +1035,7 @@ const KEY_MAPPING = {
   },
   NvidiaNimLLMModelPref: {
     envKey: "NVIDIA_NIM_LLM_MODEL_PREF",
+    secret: false,
     checks: [],
     postUpdate: [
       async (_, __, nextValue) => {
@@ -870,30 +1048,36 @@ const KEY_MAPPING = {
   // PPIO Options
   PPIOApiKey: {
     envKey: "PPIO_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   PPIOModelPref: {
     envKey: "PPIO_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Moonshot AI Options
   MoonshotAiApiKey: {
     envKey: "MOONSHOT_AI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   MoonshotAiModelPref: {
     envKey: "MOONSHOT_AI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Foundry Options
   FoundryBasePath: {
     envKey: "FOUNDRY_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty],
   },
   FoundryModelPref: {
     envKey: "FOUNDRY_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
     postUpdate: [
       // On new model selection, re-cache the context windows
@@ -906,136 +1090,165 @@ const KEY_MAPPING = {
   },
   FoundryModelTokenLimit: {
     envKey: "FOUNDRY_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
 
   // CometAPI Options
   CometApiLLMApiKey: {
     envKey: "COMETAPI_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   CometApiLLMModelPref: {
     envKey: "COMETAPI_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   CometApiLLMTimeout: {
     envKey: "COMETAPI_LLM_TIMEOUT_MS",
+    secret: false,
     checks: [],
   },
 
   // Z.AI Options
   ZAiApiKey: {
     envKey: "ZAI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   ZAiModelPref: {
     envKey: "ZAI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // GiteeAI Options
   GiteeAIApiKey: {
     envKey: "GITEE_AI_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   GiteeAIModelPref: {
     envKey: "GITEE_AI_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   GiteeAITokenLimit: {
     envKey: "GITEE_AI_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
 
   // llmman Options
   LlmmanBasePath: {
     envKey: "LLMMAN_BASE_PATH",
+    secret: "url",
     checks: [isNotEmpty, isValidURL, validDockerizedUrl],
   },
   LlmmanModelPref: {
     envKey: "LLMMAN_MODEL_PREF",
+    secret: false,
     checks: [],
   },
   LlmmanTokenLimit: {
     envKey: "LLMMAN_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
   LlmmanKeepAliveSeconds: {
     envKey: "LLMMAN_KEEP_ALIVE_TIMEOUT",
+    secret: false,
     checks: [isInteger],
   },
   LlmmanAuthToken: {
     envKey: "LLMMAN_AUTH_TOKEN",
+    secret: true,
     checks: [],
   },
 
   // Privatemode Options
   PrivateModeBasePath: {
     envKey: "PRIVATEMODE_LLM_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   PrivateModeModelPref: {
     envKey: "PRIVATEMODE_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // SambaNova Options
   SambaNovaLLMApiKey: {
     envKey: "SAMBANOVA_LLM_API_KEY",
+    secret: true,
     checks: [isNotEmpty],
   },
   SambaNovaLLMModelPref: {
     envKey: "SAMBANOVA_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
 
   // Lemonade Options
   LemonadeLLMBasePath: {
     envKey: "LEMONADE_LLM_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   LemonadeLLMApiKey: {
     envKey: "LEMONADE_LLM_API_KEY",
+    secret: true,
     checks: [],
   },
   LemonadeLLMModelPref: {
     envKey: "LEMONADE_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   LemonadeLLMModelTokenLimit: {
     envKey: "LEMONADE_LLM_MODEL_TOKEN_LIMIT",
+    secret: true,
     checks: [nonZero],
   },
 
   // OMLX Options
   OMLXLLMBasePath: {
     envKey: "OMLX_LLM_BASE_PATH",
+    secret: "url",
     checks: [isValidURL],
   },
   OMLXLLMApiKey: {
     envKey: "OMLX_LLM_API_KEY",
+    secret: true,
     checks: [],
   },
   OMLXLLMModelPref: {
     envKey: "OMLX_LLM_MODEL_PREF",
+    secret: false,
     checks: [isNotEmpty],
   },
   OMLXLLMTokenLimit: {
     envKey: "OMLX_LLM_TOKEN_LIMIT",
+    secret: true,
     checks: [],
   },
 
   // Agent Skill Settings
   AgentSkillMaxToolCalls: {
     envKey: "AGENT_MAX_TOOL_CALLS",
+    secret: false,
     checks: [nonZero],
   },
   AgentSkillRerankerEnabled: {
     envKey: "AGENT_SKILL_RERANKER_ENABLED",
+    secret: false,
     checks: [],
   },
   AgentSkillRerankerTopN: {
     envKey: "AGENT_SKILL_RERANKER_TOP_N",
+    secret: false,
     checks: [nonZero],
   },
 };
@@ -1452,36 +1665,68 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
   };
 }
 
-// Names whose value is a credential. The caller already knows the secret it
-// just submitted, so echoing it back only creates copies in response bodies,
-// proxy logs, and browser devtools.
-//
-// CONNECTION_STRING and DSN are here because a connection string carries its
-// password inline, so the whole value is a secret even though the name says
-// nothing about credentials.
-//
-// ponytail: a name heuristic, not a per-key declaration. A new secret whose
-// env name avoids all of these words would be echoed in full. Upgrade to a
-// `secret: true` flag on the KEY_MAPPING entries when provider credentials
-// move into the CredentialStore, which has to enumerate them anyway.
-const SECRET_ENV_NAME =
-  /KEY|TOKEN|SECRET|PASSWORD|PEPPER|SALT|CREDENTIAL|PWD|CONNECTION_STRING|DSN/i;
-
 /**
- * Replaces the value of every credential-shaped setting with a fixed mask, so
- * the response says which settings changed without repeating what they are.
+ * Replaces the value of every credential-carrying setting so the response says which
+ * settings changed without repeating what they are. The caller already knows the value
+ * it just submitted; echoing it only creates copies in response bodies, proxy logs and
+ * browser devtools.
+ *
+ * Two shapes, declared per entry by KEY_MAPPING's `secret` field:
+ *  - `true`  — the whole value is the credential (an API key, a connection string).
+ *  - `"url"` — an endpoint whose host and path are configuration an operator must see
+ *              to confirm the setting took, but whose userinfo carries a password.
+ *  - `false` — ordinary configuration, returned unchanged.
+ *
+ * The declaration replaces the name heuristic PR-4D(a) shipped: a credential whose env
+ * name avoided all eight matched words was echoed in full, and nothing caught it. A
+ * missing declaration is caught by the guard test rather than defaulting to visible.
  *
  * @param {Record<string, any>} values changed settings, keyed by KEY_MAPPING name
- * @returns {Record<string, any>} the same keys, secret values replaced
+ * @returns {Record<string, any>} the same keys, credential values replaced
  */
 function maskSecretValues(values = {}) {
   const masked = {};
   for (const [key, value] of Object.entries(values)) {
-    const envKey = KEY_MAPPING[key]?.envKey ?? key;
-    masked[key] =
-      SECRET_ENV_NAME.test(envKey) && value ? "**********" : value;
+    masked[key] = maskOneValue(KEY_MAPPING[key]?.secret, value);
   }
   return masked;
+}
+
+const FULL_MASK = "**********";
+
+function maskOneValue(declaration, value) {
+  // An empty value is left alone: masking it would tell an operator a secret is
+  // configured when nothing is.
+  if (!value || typeof value !== "string") return value;
+  // An undeclared key is treated as a secret. The guard test makes this unreachable
+  // for KEY_MAPPING entries, but a caller can pass a name that is not in the table and
+  // the safe reading of an unknown field is that it might hold anything.
+  if (declaration === false) return value;
+  if (declaration !== "url") return FULL_MASK;
+  return stripUrlCredentials(value);
+}
+
+/**
+ * Removes `user:pass@` from a URL, keeping everything an operator needs to recognise
+ * the endpoint they configured.
+ *
+ * @param {string} value the submitted endpoint
+ * @returns {string} the same URL without its userinfo, or a full mask when the value
+ *   does not parse — an unrecognised shape in an endpoint field might contain anything.
+ */
+function stripUrlCredentials(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return FULL_MASK;
+  }
+  if (!url.username && !url.password) return value;
+  url.username = "";
+  url.password = "";
+  // href re-serialises with a trailing slash on a bare host, which would read as a
+  // changed value; keep the original's shape by rebuilding from the parts.
+  return `${url.protocol}//${url.host}${url.pathname === "/" && !value.endsWith("/") ? "" : url.pathname}${url.search}${url.hash}`;
 }
 
 async function executeValidationChecks(checks, value, force) {
@@ -1691,6 +1936,7 @@ function writeEnvFileAtomic(envPath, contents) {
 }
 
 module.exports = {
+  KEY_MAPPING,
   dumpENV,
   updateENV,
   writeEnvFileAtomic,

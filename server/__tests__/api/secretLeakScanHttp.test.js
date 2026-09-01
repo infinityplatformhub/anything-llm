@@ -74,6 +74,12 @@ const CANARY = "sk-canary-do-not-log-8f3a91c04d7e";
 // secret even though the key name says nothing about credentials.
 const DSN_PASSWORD = "dsn-canary-pw-4b7c2e19";
 const DSN_CANARY = `postgresql:${"//"}pguser:${DSN_PASSWORD}@db.internal:5432/vectors`;
+// P0-4D(c): an endpoint setting is not credential-named, so nothing about the key says
+// it might carry a password -- but the userinfo of a URL does. The host has to survive
+// so an operator can confirm the endpoint they set is the endpoint that was stored.
+const URL_PASSWORD = "endpoint-canary-pw-9f1d3a";
+const URL_HOST = "chroma.internal:8000";
+const URL_CANARY = `https:${"//"}chromauser:${URL_PASSWORD}@${URL_HOST}`;
 let admin;
 
 beforeAll(async () => {
@@ -113,6 +119,7 @@ describe("POST /api/system/update-env does not leak the submitted secret", () =>
         LLMProvider: "openai",
         OpenAiKey: CANARY,
         PGVectorConnectionString: DSN_CANARY,
+        ChromaEndpoint: URL_CANARY,
       });
 
     sinks.forEach((sink) => sink.mockRestore());
@@ -133,9 +140,19 @@ describe("POST /api/system/update-env does not leak the submitted secret", () =>
     expect(response.text).not.toContain(DSN_CANARY);
   });
 
+  it("strips the password from an endpoint URL but keeps the host", () => {
+    const echoed = response.body.newValues.ChromaEndpoint;
+    expect(response.text).not.toContain(URL_PASSWORD);
+    expect(response.text).not.toContain(URL_CANARY);
+    // Not a blanket mask: the operator still sees which endpoint took effect.
+    expect(echoed).toContain(URL_HOST);
+    expect(echoed).not.toContain("chromauser");
+  });
+
   it("keeps the secret out of console output", () => {
     expect(consoleOutput.join("\n")).not.toContain(CANARY);
     expect(consoleOutput.join("\n")).not.toContain(DSN_PASSWORD);
+    expect(consoleOutput.join("\n")).not.toContain(URL_PASSWORD);
   });
 
   it("keeps the secret out of every audit event payload", async () => {
@@ -143,6 +160,7 @@ describe("POST /api/system/update-env does not leak the submitted secret", () =>
     expect(events.length).toBeGreaterThan(0);
     expect(JSON.stringify(events)).not.toContain(CANARY);
     expect(JSON.stringify(events)).not.toContain(DSN_PASSWORD);
+    expect(JSON.stringify(events)).not.toContain(URL_PASSWORD);
   });
 
   it("still reports which settings changed", () => {
