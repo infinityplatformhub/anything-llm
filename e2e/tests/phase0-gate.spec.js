@@ -263,6 +263,14 @@ test("04 create workspace", async ({ page }) => {
   expect(res.status()).toBe(200);
   const { workspace } = await res.json();
   WORKSPACE_SLUG = workspace.slug;
+  // Pin the workspace to query mode: with the default "automatic" chat mode
+  // the router hands questions to the agent, which bypasses RAG and returns
+  // no citations for spec 06 to assert on.
+  const modeRes = await authedFetch(page, `/api/workspace/${WORKSPACE_SLUG}/update`, {
+    method: "POST",
+    data: { chatMode: "query", similarityThreshold: 0.1, topN: 4 },
+  });
+  expect(modeRes.status()).toBe(200);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
   await expect(
     page.getByText(/how can i help|send a message/i).first()
