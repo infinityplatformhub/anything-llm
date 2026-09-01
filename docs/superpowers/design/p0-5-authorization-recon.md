@@ -267,6 +267,8 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 
 ## 4. Security attack tests — 24 cases (the acceptance bar, not extras)
 
+**This section is the canonical S-number registry.** Every other document — the harness plan, task DoDs, issue bodies — refers to these numbers and must not assign, renumber, or invent one. A new case is added here first.
+
 Test file layout: `server/__tests__/security/authorization/*.test.js`. Every test must be shown **RED before green** (a P0-3 discipline), by reverting the specific guard.
 
 ### IDOR / tenant crossing
