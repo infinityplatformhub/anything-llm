@@ -81,7 +81,10 @@ test("01 onboarding wizard completes and lands in the app", async ({ page }) => 
     .click({ force: true });
   await page.waitForURL(/llm-preference/, { timeout: 30_000 });
 
-  // LLM preference: Generic OpenAI → mock provider.
+  // LLM preference: Generic OpenAI → mock provider. This step's submit also
+  // completes onboarding and defaults EmbeddingEngine to "native" — the
+  // embedder is switched to the mock provider afterwards (test 02), via the
+  // settings page the product uses.
   await page
     .locator('[role="button"], div, label')
     .filter({ hasText: /^Generic OpenAI$/ })
@@ -89,21 +92,17 @@ test("01 onboarding wizard completes and lands in the app", async ({ page }) => 
     .click();
   await page.locator('input[name="GenericOpenAiBasePath"]').fill("http://mock-llm:8080/v1");
   await page.locator('input[name="GenericOpenAiKey"]').fill("e2e-mock-key");
-  await page.locator('input[name="GenericOpenAiModelPref"]').fill("mock-llm");
+  // Model field is a disabled <select> while custom-models loads, then a
+  // free-form <input>; wait for the input. All required fields must be set —
+  // native validation silently blocks the hidden submit otherwise.
+  const modelInput = page.locator('input[name="GenericOpenAiModelPref"]');
+  await modelInput.waitFor({ state: "visible", timeout: 30_000 });
+  await modelInput.fill("mock-llm");
+  await page.locator('input[name="GenericOpenAiTokenLimit"]').fill("4096");
+  await page.locator('input[name="GenericOpenAiMaxTokens"]').fill("1024");
+  expect(await page.evaluate(() => document.querySelector("form").checkValidity())).toBe(true);
   await forward(page);
-
-  // Embedder preference (same provider family).
-  await expect(page.locator('input[name="EmbeddingBasePath"]')).toBeVisible({
-    timeout: 30_000,
-  });
-  await page.locator('[role="button"], div, label')
-    .filter({ hasText: /^Generic OpenAI$/ })
-    .first()
-    .click({ force: true });
-  await page.locator('input[name="EmbeddingBasePath"]').fill("http://mock-llm:8080/v1");
-  await page.locator('input[name="EmbeddingModelPref"]').fill("mock-embed");
-  await page.locator('input[name="GenericOpenAiEmbeddingApiKey"]').fill("e2e-mock-key");
-  await forward(page);
+  await page.waitForURL(/user-setup/, { timeout: 30_000 });
 
   // User setup: My team → admin account.
   await expect(page.getByText(/how many users/i)).toBeVisible({
@@ -141,13 +140,32 @@ async function forward(page) {
   await page.waitForTimeout(1_500);
 }
 
-test("02 wizard left a multi-user instance with the admin", async ({
+test("02 embedder switched to mock provider; instance is multi-user", async ({
+  page,
   request,
 }) => {
+  // The wizard hardcodes the native embedder; switch to the mock provider via
+  // the real embedding-preference settings page.
+  await login(page, ADMIN);
+  await page.goto("/settings/embedding-preference");
+  await page
+    .locator('[role="button"], div, label')
+    .filter({ hasText: /^Generic OpenAI$/ })
+    .first()
+    .click({ force: true });
+  await page
+    .locator('input[name="EmbeddingBasePath"]')
+    .fill("http://mock-llm:8080/v1");
+  await page.locator('input[name="EmbeddingModelPref"]').fill("mock-embed");
+  await page
+    .locator('input[name="GenericOpenAiEmbeddingApiKey"]')
+    .fill("e2e-mock-key");
+  await page.locator('button:has-text("Save")').last().click();
+  await page.waitForTimeout(2_000);
+
   const res = await request.get("/api/setup-complete");
   expect(res.ok()).toBe(true);
-  const keys = await res.json();
-  expect(keys.MultiUserMode).toBe(true);
+  expect((await res.json()).MultiUserMode).toBe(true);
 });
 
 let WORKSPACE_SLUG = "e2e-gate-docs";
