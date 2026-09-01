@@ -23,3 +23,9 @@ Ruling: Postgres is first queue and event-bus substrate — Phase 0 already mand
 Ruling: Event delivery is durable at-least-once through transactional outbox — audit cannot disappear after business commit — cost if wrong: every subscriber must be idempotent and storage grows until retention
 
 Ruling: Storage keys are typed tenant-scoped values and no driver returns public URLs — authorization remains above storage and tenant isolation is structural — cost if wrong: direct filesystem callers require migration and downloads need an app streaming endpoint
+
+Ruling: Sequence diagrams may show thin core orchestration boxes but no provider or durable side effect may bypass a named seam — business workflows need coordination while seams own replaceable capabilities — cost if wrong: an additional application-service seam would be needed and all diagrams/contracts revised
+
+Ruling: Emergency hide changes vector visibility synchronously before success and queues physical cleanup — breach containment cannot wait for reindex — cost if wrong: vector drivers need immediate metadata/filter updates and may require a shadow deny list
+
+Ruling: Offboarding reauthorizes queued transfer at execution and releases seat only after transfer — permissions and destination ownership can change while work waits — cost if wrong: deactivated seats remain occupied during long or repeatedly failing transfers
