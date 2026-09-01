@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../../branding/constants");
 /**
  * A service that provides an AI client to create a completion.
  */
@@ -255,7 +256,7 @@ class Provider {
           configuration: {
             baseURL: "https://openrouter.ai/api/v1",
             defaultHeaders: {
-              "HTTP-Referer": "https://approofworkspace.com",
+              "HTTP-Referer": BRAND_HOMEPAGE,
               "X-Title": "ApproofWorkspace",
             },
           },

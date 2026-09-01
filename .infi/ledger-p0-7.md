@@ -28,3 +28,7 @@ Ruling: Remove survey, beta email, hosting, and remote social-preview CTAs witho
 Ruling: Replace telemetry controls with static Thai disclosure text — telemetry adapter cannot send or enable events, so controls would lie about runtime behavior — cost if wrong: locale-specific copy appears unchanged in non-Thai UI until translation keys are added.
 
 Ruling: Point embed documentation CTA at current Infinity Platform Hub repository — no dedicated embed repository exists at supplied namespace, and current repository is known-valid destination — cost if wrong: CTA lands on project root rather than embed-specific instructions.
+
+Ruling: Centralize server brand destinations in `server/utils/branding/constants.js` with `BRAND_HOMEPAGE_URL`, `BRAND_DOCS_URL`, and `BRAND_CDN_URL` overrides — task gate forbids scattered product URLs and deployments need working destinations before branded domains exist — cost if wrong: defaults route documentation/home links to repository and CDN fallback retains upstream host until operator configures replacement.
+
+Ruling: Restore vendored minified chat widget byte-for-byte and keep its legacy filename/global compatibility identity — source-less edits create unreviewable vendor drift and trigger URL gate on bundled library internals — cost if wrong: embedded API retains legacy technical identity until widget is rebuilt from maintained source.

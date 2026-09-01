@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../branding/constants");
 const { toChunks, reportEmbeddingProgress } = require("../../helpers");
 
 class OpenRouterEmbedder {
@@ -10,7 +11,7 @@ class OpenRouterEmbedder {
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: process.env.OPENROUTER_API_KEY,
       defaultHeaders: {
-        "HTTP-Referer": "https://approofworkspace.com",
+        "HTTP-Referer": BRAND_HOMEPAGE,
         "X-Title": "ApproofWorkspace",
       },
     });

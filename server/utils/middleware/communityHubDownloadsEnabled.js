@@ -1,3 +1,4 @@
+const { BRAND_DOCS_URL } = require("../branding/constants");
 const { CommunityHub } = require("../../models/communityHub");
 const { reqBody } = require("../http");
 
@@ -13,7 +14,6 @@ const { reqBody } = require("../http");
  * who self-host can still unlock this feature manually by setting the environment variable
  * which would require someone who likely has the capacity to understand the risks and the
  * implications of importing unverified items that can run code on their system, container, or instance.
- * @see {@link https://docs.approofworkspace.com/docs/community-hub/import}
  * @param {import("express").Request} request
  * @param {import("express").Response} response
  * @param {import("express").NextFunction} next
@@ -22,8 +22,7 @@ const { reqBody } = require("../http");
 function communityHubDownloadsEnabled(request, response, next) {
   if (!("COMMUNITY_HUB_BUNDLE_DOWNLOADS_ENABLED" in process.env)) {
     return response.status(422).json({
-      error:
-        "Community Hub bundle downloads are not enabled. The system administrator must enable this feature manually to allow this instance to download these types of items. See https://docs.approofworkspace.com/configuration#approofworkspace-hub-agent-skills",
+      error: `Community Hub bundle downloads are not enabled. The system administrator must enable this feature manually to allow this instance to download these types of items. See ${BRAND_DOCS_URL}/configuration#approofworkspace-hub-agent-skills`,
     });
   }
 
@@ -36,8 +35,7 @@ function communityHubDownloadsEnabled(request, response, next) {
     process.env.COMMUNITY_HUB_BUNDLE_DOWNLOADS_ENABLED !== "allow_all"
   ) {
     return response.status(422).json({
-      error:
-        "Community hub bundle downloads are limited to verified public items or private team items only. Please contact the system administrator to review or modify this setting. See https://docs.approofworkspace.com/configuration#approofworkspace-hub-agent-skills",
+      error: `Community hub bundle downloads are limited to verified public items or private team items only. Please contact the system administrator to review or modify this setting. See ${BRAND_DOCS_URL}/configuration#approofworkspace-hub-agent-skills`,
     });
   }
   next();

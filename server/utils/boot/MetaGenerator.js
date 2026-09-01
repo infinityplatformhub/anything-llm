@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../branding/constants");
 /**
  * @typedef MetaTagDefinition
  * @property {('link'|'meta')} tag - the type of meta tag element
@@ -81,7 +82,7 @@ class MetaGenerator {
       { tag: "meta", props: { property: "og:type", content: "website" } },
       {
         tag: "meta",
-        props: { property: "og:url", content: "https://approofworkspace.com" },
+        props: { property: "og:url", content: BRAND_HOMEPAGE },
       },
       {
         tag: "meta",
@@ -113,7 +114,7 @@ class MetaGenerator {
       },
       {
         tag: "meta",
-        props: { property: "twitter:url", content: "https://approofworkspace.com" },
+        props: { property: "twitter:url", content: BRAND_HOMEPAGE },
       },
       {
         tag: "meta",
