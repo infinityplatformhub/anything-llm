@@ -2,17 +2,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Uncomment the following lines and comment out the SQLite datasource block above to use PostgreSQL
-// Make sure to set the correct DATABASE_URL in your .env file
-// After swapping run `yarn prisma:setup` from the root directory to migrate the database
-//
-// datasource db {
-//   provider = "postgresql"
-//   url      = env("DATABASE_URL")
-// }
 datasource db {
-  provider = "sqlite"
-  url      = "file:../storage/anythingllm.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model api_keys {
@@ -20,8 +12,8 @@ model api_keys {
   name          String?
   secret        String?  @unique
   createdBy     Int?
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model workspace_documents {
@@ -33,8 +25,8 @@ model workspace_documents {
   metadata             String?
   pinned               Boolean?              @default(false)
   watched              Boolean?              @default(false)
-  createdAt            DateTime              @default(now())
-  lastUpdatedAt        DateTime              @default(now())
+  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt        DateTime              @default(now()) @db.Timestamptz(3)
   workspace            workspaces            @relation(fields: [workspaceId], references: [id])
   document_sync_queues document_sync_queues?
 }
@@ -45,17 +37,17 @@ model invites {
   status        String   @default("pending")
   claimedBy     Int?
   workspaceIds  String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
   createdBy     Int
-  lastUpdatedAt DateTime @default(now())
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model system_settings {
   id            Int      @id @default(autoincrement())
   label         String   @unique
   value         String?
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model users {
@@ -66,8 +58,8 @@ model users {
   role                         String                        @default("default")
   suspended                    Int                           @default(0)
   seen_recovery_codes          Boolean?                      @default(false)
-  createdAt                    DateTime                      @default(now())
-  lastUpdatedAt                DateTime                      @default(now())
+  createdAt                    DateTime                      @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt                DateTime                      @default(now()) @db.Timestamptz(3)
   dailyMessageLimit            Int?
   bio                          String?                       @default("")
   web_push_subscription_config String?
@@ -93,7 +85,7 @@ model recovery_codes {
   id        Int      @id @default(autoincrement())
   user_id   Int
   code_hash String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
@@ -104,7 +96,7 @@ model password_reset_tokens {
   user_id   Int
   token     String   @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
@@ -114,8 +106,8 @@ model document_vectors {
   id            Int      @id @default(autoincrement())
   docId         String
   vectorId      String
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model workspaces {
@@ -123,10 +115,10 @@ model workspaces {
   name                         String
   slug                         String                         @unique
   vectorTag                    String?
-  createdAt                    DateTime                       @default(now())
+  createdAt                    DateTime                       @default(now()) @db.Timestamptz(3)
   openAiTemp                   Float?
   openAiHistory                Int                            @default(20)
-  lastUpdatedAt                DateTime                       @default(now())
+  lastUpdatedAt                DateTime                       @default(now()) @db.Timestamptz(3)
   // THIS IS THE SYSTEM PROMPT FOR THE WORKSPACE
   openAiPrompt                 String?
   similarityThreshold          Float?                         @default(0.25)
@@ -157,8 +149,8 @@ model workspace_threads {
   slug                   String                   @unique
   workspace_id           Int
   user_id                Int?
-  createdAt              DateTime                 @default(now())
-  lastUpdatedAt          DateTime                 @default(now())
+  createdAt              DateTime                 @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt          DateTime                 @default(now()) @db.Timestamptz(3)
   workspace              workspaces               @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   user                   users?                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
   workspace_parsed_files workspace_parsed_files[]
@@ -172,24 +164,24 @@ model workspace_suggested_messages {
   workspaceId   Int
   heading       String
   message       String
-  createdAt     DateTime   @default(now())
-  lastUpdatedAt DateTime   @default(now())
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime   @default(now()) @db.Timestamptz(3)
   workspace     workspaces @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
 }
 
 model workspace_chats {
-  id             Int      @id @default(autoincrement())
-  workspaceId    Int
-  prompt         String
-  response       String
-  include        Boolean  @default(true)
-  user_id        Int?
-  thread_id      Int? // No relation to prevent whole table migration
-  api_session_id String? // String identifier for only the dev API to partition chats in any mode.
-  createdAt      DateTime @default(now())
-  lastUpdatedAt  DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  workspaceId     Int
+  prompt          String
+  response        String
+  include         Boolean  @default(true)
+  user_id         Int?
+  thread_id       Int? // No relation to prevent whole table migration
+  api_session_id  String? // String identifier for only the dev API to partition chats in any mode.
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt   DateTime @default(now()) @db.Timestamptz(3)
   feedbackScore   Boolean?
   memoryProcessed Boolean? @map("memory_processed")
   users           users?   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -203,8 +195,8 @@ model workspace_agent_invocations {
   user_id       Int?
   thread_id     Int? // No relation to prevent whole table migration
   workspace_id  Int
-  createdAt     DateTime   @default(now())
-  lastUpdatedAt DateTime   @default(now())
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime   @default(now()) @db.Timestamptz(3)
   user          users?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   workspace     workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -215,8 +207,8 @@ model workspace_users {
   id            Int        @id @default(autoincrement())
   user_id       Int
   workspace_id  Int
-  createdAt     DateTime   @default(now())
-  lastUpdatedAt DateTime   @default(now())
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime   @default(now()) @db.Timestamptz(3)
   workspaces    workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   users         users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
@@ -227,9 +219,9 @@ model cache_data {
   data          String
   belongsTo     String?
   byId          Int?
-  expiresAt     DateTime?
-  createdAt     DateTime  @default(now())
-  lastUpdatedAt DateTime  @default(now())
+  expiresAt     DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime  @default(now()) @db.Timestamptz(3)
 }
 
 model embed_configs {
@@ -247,7 +239,7 @@ model embed_configs {
   workspace_id               Int
   createdBy                  Int?
   usersId                    Int?
-  createdAt                  DateTime      @default(now())
+  createdAt                  DateTime      @default(now()) @db.Timestamptz(3)
   workspace                  workspaces    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   embed_chats                embed_chats[]
   users                      users?        @relation(fields: [usersId], references: [id])
@@ -262,7 +254,7 @@ model embed_chats {
   connection_information String?
   embed_id               Int
   usersId                Int?
-  createdAt              DateTime      @default(now())
+  createdAt              DateTime      @default(now()) @db.Timestamptz(3)
   embed_config           embed_configs @relation(fields: [embed_id], references: [id], onDelete: Cascade)
   users                  users?        @relation(fields: [usersId], references: [id])
 }
@@ -272,7 +264,7 @@ model event_logs {
   event      String
   metadata   String?
   userId     Int?
-  occurredAt DateTime @default(now())
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([event])
 }
@@ -284,8 +276,8 @@ model slash_command_presets {
   description   String
   uid           Int      @default(0) // 0 is null user
   userId        Int?
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
   user          users?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([uid, command])
@@ -295,8 +287,8 @@ model document_sync_queues {
   id             Int                        @id @default(autoincrement())
   staleAfterMs   Int                        @default(604800000) // 7 days
   nextSyncAt     DateTime
-  createdAt      DateTime                   @default(now())
-  lastSyncedAt   DateTime                   @default(now())
+  createdAt      DateTime                   @default(now()) @db.Timestamptz(3)
+  lastSyncedAt   DateTime                   @default(now()) @db.Timestamptz(3)
   workspaceDocId Int                        @unique
   workspaceDoc   workspace_documents?       @relation(fields: [workspaceDocId], references: [id], onDelete: Cascade)
   runs           document_sync_executions[]
@@ -307,7 +299,7 @@ model document_sync_executions {
   queueId   Int
   status    String               @default("unknown")
   result    String?
-  createdAt DateTime             @default(now())
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
   queue     document_sync_queues @relation(fields: [queueId], references: [id], onDelete: Cascade)
 }
 
@@ -315,8 +307,8 @@ model browser_extension_api_keys {
   id            Int      @id @default(autoincrement())
   key           String   @unique
   user_id       Int?
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @updatedAt @db.Timestamptz(3)
   user          users?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
@@ -327,7 +319,7 @@ model temporary_auth_tokens {
   token     String   @unique
   userId    Int
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   user      users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
@@ -341,8 +333,8 @@ model system_prompt_variables {
   description String?
   type        String   @default("system") // system, user, dynamic
   userId      Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
   user        users?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -354,7 +346,7 @@ model prompt_history {
   workspaceId Int
   prompt      String
   modifiedBy  Int?
-  modifiedAt  DateTime   @default(now())
+  modifiedAt  DateTime   @default(now()) @db.Timestamptz(3)
   user        users?     @relation(fields: [modifiedBy], references: [id])
 
   @@index([workspaceId])
@@ -368,7 +360,7 @@ model desktop_mobile_devices {
   token      String   @unique
   approved   Boolean  @default(false)
   userId     Int?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
   user       users?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -382,7 +374,7 @@ model workspace_parsed_files {
   threadId           Int?
   metadata           String?
   tokenCountEstimate Int?               @default(0)
-  createdAt          DateTime           @default(now())
+  createdAt          DateTime           @default(now()) @db.Timestamptz(3)
   workspace          workspaces         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user               users?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   thread             workspace_threads? @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -396,8 +388,8 @@ model external_communication_connectors {
   type          String   @unique
   config        String   @default("{}")
   active        Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model scheduled_jobs {
@@ -407,10 +399,10 @@ model scheduled_jobs {
   tools     String? // JSON array of tool identifiers (null = use all enabled agent skills)
   schedule  String // Cron expression
   enabled   Boolean              @default(true)
-  lastRunAt DateTime?
-  nextRunAt DateTime?
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @default(now())
+  lastRunAt DateTime?            @db.Timestamptz(3)
+  nextRunAt DateTime?            @db.Timestamptz(3)
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime             @default(now()) @db.Timestamptz(3)
   runs      scheduled_job_runs[]
 }
 
@@ -420,9 +412,9 @@ model scheduled_job_runs {
   status      String         @default("queued") // queued | running | completed | failed | timed_out — model always sets explicitly
   result      String? // JSON execution trace
   error       String?
-  startedAt   DateTime       @default(now())
-  completedAt DateTime?
-  readAt      DateTime? // null = unread
+  startedAt   DateTime       @default(now()) @db.Timestamptz(3)
+  completedAt DateTime?      @db.Timestamptz(3)
+  readAt      DateTime?      @db.Timestamptz(3) // null = unread
   job         scheduled_jobs @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId])
@@ -434,9 +426,9 @@ model memories {
   workspaceId Int?      @map("workspace_id")
   scope       String    @default("workspace")
   content     String
-  lastUsedAt  DateTime? @map("last_used_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @default(now()) @map("updated_at")
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   user      users?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace workspaces? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -453,34 +445,34 @@ model model_routers {
   fallback_model    String
   cooldown_seconds  Int                  @default(30)
   created_by        Int?
-  createdAt         DateTime             @default(now())
-  lastUpdatedAt     DateTime             @default(now())
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt     DateTime             @default(now()) @db.Timestamptz(3)
   rules             model_router_rules[]
 }
 
 model model_router_rules {
-  id               Int           @id @default(autoincrement())
-  router_id        Int
-  enabled          Boolean       @default(true)
-  priority         Int
-  type             String        @default("calculated")
-  title            String
-  description      String?
+  id              Int           @id @default(autoincrement())
+  router_id       Int
+  enabled         Boolean       @default(true)
+  priority        Int
+  type            String        @default("calculated")
+  title           String
+  description     String?
   // For `calculated` rules: the boolean operator joining `conditions` — "AND"
   // (all must match) or "OR" (any must match). Null for `llm` rules.
-  condition_logic  String?
+  condition_logic String?
   // For `calculated` rules: JSON-stringified array of condition objects, each
   // shaped as { property: string, comparator: string, value: string } where
   // `property` ∈ VALID_PROPERTIES and `comparator` ∈ VALID_COMPARATORS (see
   // server/models/modelRouterRule.js). `value` is always stored as a string;
   // numeric comparators parse it at evaluation time. Null for `llm` rules.
-  conditions       String?
-  route_provider   String
-  route_model      String
-  created_by       Int?
-  createdAt        DateTime      @default(now())
-  lastUpdatedAt    DateTime      @default(now())
-  router           model_routers @relation(fields: [router_id], references: [id], onDelete: Cascade)
+  conditions      String?
+  route_provider  String
+  route_model     String
+  created_by      Int?
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt   DateTime      @default(now()) @db.Timestamptz(3)
+  router          model_routers @relation(fields: [router_id], references: [id], onDelete: Cascade)
 
   @@unique([router_id, title])
   @@index([router_id])
