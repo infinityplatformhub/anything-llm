@@ -29,3 +29,25 @@ Ruling: Sequence diagrams may show thin core orchestration boxes but no provider
 Ruling: Emergency hide changes vector visibility synchronously before success and queues physical cleanup — breach containment cannot wait for reindex — cost if wrong: vector drivers need immediate metadata/filter updates and may require a shadow deny list
 
 Ruling: Offboarding reauthorizes queued transfer at execution and releases seat only after transfer — permissions and destination ownership can change while work waits — cost if wrong: deactivated seats remain occupied during long or repeatedly failing transfers
+
+Ruling: Directory sync is capability-flagged on identity providers, with Lark as first capable driver and OIDC login-only by default — login refresh cannot detect users who never return after departure — cost if wrong: identity seam carries optional methods not needed by basic providers
+
+Ruling: Connector ACL revision has an independent delta/checkpoint path plus mandatory full ACL resweep at least every 24 hours — source permission removal may not change content metadata — cost if wrong: non-delta connectors perform costly full permission reads and leakage window is bounded rather than zero
+
+Ruling: Embed visitors are explicit `embed` actors, consume no seat, inherit no user/group grants, and receive only verified key-scoped attribute/bounded-document ACLs — anonymous traffic is neither human seat nor privileged service identity — cost if wrong: per-seat contract may need an embed concurrency/add-on claim later
+
+Ruling: Impersonation provenance is immutable across authorization, jobs, and events; viewed identity is `onBehalfOf`, real admin is `impersonatedBy`, and sessions are read-only — view-as-user needs accurate audit without privilege-bearing mutation — cost if wrong: support workflows needing changes must exit impersonation and reproduce action separately
+
+Ruling: Authorization engine owns `explainAccess` backed by same policy evaluator and reverse index — document diagnostics require resource-to-principal answers that forward checks cannot reconstruct cheaply — cost if wrong: policy writes and migrations must maintain reverse-queryable data
+
+Ruling: Budget operations extend license gate instead of adding twelfth seam — entitlement, seats, and paid usage ceilings share enforcement ownership while preserving eleven planned contracts — cost if wrong: license driver becomes broader and budget may later split into its own service
+
+Ruling: Pipeline owns per-request abort controller and every model chunk crosses ordered middleware hooks — output guards and token ceilings must stop provider and delivery mid-stream — cost if wrong: streaming adds serial middleware/counter latency per chunk
+
+Ruling: Multi-namespace vector search globally merges normalized authorized results and returns one global topN — organization search must rank across workspaces rather than return topN from each — cost if wrong: providers need over-fetch and stable merge work
+
+Ruling: Vector ACL production filters prefer denied-only indexed attributes; allowed-document IN lists are bounded scopes only — organization-sized allow lists do not scale in Lance or remote providers — cost if wrong: vector metadata duplicates grant attributes and ACL changes require metadata updates
+
+Ruling: `setDocumentVisibility` is metadata/index-only — emergency containment must not rewrite embeddings or canonical ACL/content — cost if wrong: providers without mutable metadata need a shadow visibility deny index
+
+Ruling: Sequence review lives at `docs/superpowers/design/00-sequence-review.md` — seam directory evidence must count exactly eleven contracts — cost if wrong: references expecting review beside contracts need path updates

@@ -7,7 +7,7 @@ Publish durable, versioned domain events and deliver them to independent subscri
 ## Driver contract
 
 ```js
-/** @typedef {{eventId:string, type:string, version:number, occurredAt:Date, actor:{type:"user"|"service"|"system", id:string|null, orgId:string}, resource:{type:string, id:string|null, workspaceId?:string}, traceId:string, data:Object, sensitivity:"metadata"|"content"}} DomainEvent */
+/** @typedef {{eventId:string, type:string, version:number, occurredAt:Date, actor:{type:"user"|"service"|"embed"|"system", id:string|null, orgId:string, onBehalfOf?:{type:"user", id:string}, impersonatedBy?:{type:"user", id:string}}, resource:{type:string, id:string|null, workspaceId?:string}, traceId:string, data:Object, sensitivity:"metadata"|"content"}} DomainEvent */
 /** @interface EventBusDriver */
 class EventBusDriver {
   /** Publish durably; transaction/outbox option binds model mutation and event. @param {{event:DomainEvent, transaction?:Object}} input @returns {Promise<void>} */
@@ -22,7 +22,7 @@ class EventBusDriver {
 module.exports = { EventBusDriver };
 ```
 
-Event schemas are immutable per version. Common envelope always carries actor/resource/trace identity. Secret scrub and content classification occur before durable publication. Delivery is at least once; subscribers deduplicate by `subscriberId + eventId`.
+Event schemas are immutable per version. Common envelope always carries actor/resource/trace identity. View-as-user events record effective viewed identity in `onBehalfOf` and real administrator in `impersonatedBy`; neither may be scrubbed or replaced by the effective user. Secret scrub and content classification occur before durable publication. Delivery is at least once; subscribers deduplicate by `subscriberId + eventId`.
 
 ## First driver
 
@@ -32,6 +32,7 @@ Event schemas are immutable per version. Common envelope always carries actor/re
 
 - Bus MUST NOT implement audit retention, notification policy, webhooks, or subscriber business logic.
 - Publishers MUST NOT write audit records directly or publish credentials, tokens, raw redacted input, or connector secrets.
+- Publishers MUST preserve impersonation provenance from request/job actor. Audit subscriber indexes both effective and real actor IDs.
 - Subscriber failure MUST NOT roll back committed business mutation or block unrelated subscribers.
 - Consumers MUST NOT mutate/relabel original event; derived facts publish new linked events.
 - Content-level compliance events require explicit `sensitivity:"content"` and separate authorization/retention.

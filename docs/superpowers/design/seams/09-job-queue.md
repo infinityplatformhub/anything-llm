@@ -7,7 +7,8 @@ Durably enqueue, schedule, lease, retry, cancel, and dead-letter background work
 ## Driver contract
 
 ```js
-/** @typedef {{jobId:string, type:string, payload:Object, actor:{type:"user"|"service", id:string, orgId:string}, runAt:Date, attempts:number, maxAttempts:number, idempotencyKey:string, traceId:string}} Job */
+/** @typedef {{type:"user"|"service"|"embed", id:string, orgId:string, onBehalfOf?:{type:"user", id:string}, impersonatedBy?:{type:"user", id:string}} Actor */
+/** @typedef {{jobId:string, type:string, payload:Object, actor:Actor, runAt:Date, attempts:number, maxAttempts:number, idempotencyKey:string, traceId:string}} Job */
 /** @interface JobQueueDriver */
 class JobQueueDriver {
   /** @param {{type:string, payload:Object, actor:Object, runAt?:Date, maxAttempts?:number, idempotencyKey:string, traceId:string}} input @returns {Promise<Job>} */
@@ -37,6 +38,7 @@ Payloads are versioned, JSON-serializable identifiers/options, never secrets or 
 ## Boundaries
 
 - Queue driver MUST NOT contain business handlers, authorize jobs, inspect payload meaning, or impersonate original user.
+- Actor provenance, including `onBehalfOf`/`impersonatedBy`, is immutable across enqueue/retry/dead-letter. Impersonated sessions cannot enqueue mutating jobs; workers deny any such legacy/stale job again at execution.
 - Workers MUST reauthorize destructive/sensitive work at execution using job actor; enqueue-time approval alone is insufficient.
 - Driver MUST NOT store credentials/content in logs or error records.
 - Jobs MUST invoke storage/vector/connector/event/license seams, never provider internals.

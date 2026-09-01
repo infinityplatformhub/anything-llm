@@ -9,7 +9,7 @@ Store, query, and delete vectors while enforcing authorization-produced document
 This extends existing `VectorDatabase` subclasses and preserves CommonJS driver shape.
 
 ```js
-/** @typedef {{orgId:string, actorId:string, groupIds:string[], workspaceIds:string[], allowedDocumentIds?:string[], deniedDocumentIds:string[], policyVersion:string}} DocumentAclFilter */
+/** @typedef {{orgId:string, principalType:"user"|"service"|"embed", actorId:string, workspaceIds:string[], deniedDocumentIds:string[], attributes:Object, allowedDocumentIds?:string[], matchNone:boolean, policyVersion:string}} DocumentAclFilter */
 /** @typedef {{text:string, score:number, metadata:{documentId:string, chunkId:string, workspaceId:string, hidden:boolean, [key:string]:any}}} VectorHit */
 class VectorDatabase {
   /** @returns {string} */
@@ -28,7 +28,9 @@ class VectorDatabase {
 module.exports = { VectorDatabase };
 ```
 
-`queryAuthorized` must apply tenant/workspace scope, hidden-state exclusion, allowed/denied document ACL, and metadata filters in provider query or an equivalent over-fetch loop that never returns forbidden candidates and reaches requested authorized `topN` where possible.
+`queryAuthorized` must apply tenant/workspace scope, metadata-only `hidden=false`, denied-document exclusions, attribute predicates, optional bounded allow-list, and metadata filters in provider query. Normal production filters are denied-only plus indexed attributes (workspace, group/principal grants, document set); `allowedDocumentIds` is reserved for small explicit scopes such as embed keys and MUST NOT be generated as an organization-wide IN-list.
+
+For multiple namespaces, driver queries each namespace with the same ACL and enough candidates, normalizes scores, performs a stable global merge by score descending then `namespace + chunkId`, removes duplicates, and returns at most global `topN`—not `topN` per namespace. Provider pushdown or equivalent secure per-namespace over-fetch may be used, but forbidden candidates never cross seam.
 
 ## First driver
 
@@ -40,7 +42,7 @@ module.exports = { VectorDatabase };
 - Driver MUST NOT treat missing/invalid ACL filter as unrestricted; callers cannot opt out, including admin and jobs.
 - Driver MUST NOT return forbidden metadata/text for core post-filtering.
 - Driver stores vector/chunk data, not canonical document ownership or ACL policy.
-- Emergency hide MUST NOT wait for re-embedding or physical deletion.
+- Emergency hide MUST NOT wait for re-embedding or physical deletion. `setDocumentVisibility` updates visibility metadata/index only; it MUST NOT alter embeddings, chunks, canonical ACLs, or content.
 
 ## Failure semantics
 

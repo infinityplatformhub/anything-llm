@@ -45,6 +45,7 @@ sequenceDiagram
   participant Vector as Vector ACL seam
   participant Guard as Chat pipeline middleware (Guardrail)
   participant Meter as Chat pipeline middleware (Metering)
+  participant Budget as License gate seam (Budget counters)
   participant Events as Event bus seam
   User->>Web: Send prompt
   Web->>Pipeline: run(CanonicalChatRequest)
@@ -52,6 +53,8 @@ sequenceDiagram
   Authz-->>Pipeline: Allowed
   Pipeline->>License: checkFeature(chat)
   License-->>Pipeline: Entitled
+  Pipeline->>Budget: checkBudget(actor, workspace, estimate)
+  Budget-->>Pipeline: Allowed + reservationId
   Pipeline->>Redact: handle(prompt)
   Redact-->>Pipeline: Redacted prompt
   Pipeline->>Authz: documentFilter(document.search)
@@ -59,8 +62,16 @@ sequenceDiagram
   Pipeline->>Vector: queryAuthorized(query, aclFilter)
   Vector-->>Pipeline: Authorized chunks only
   Pipeline->>Guard: handle(prompt + chunks)
-  Guard-->>Pipeline: Guarded model request/output
-  Pipeline->>Meter: handle(usage, requestId)
+  Guard-->>Pipeline: Guarded model request
+  loop Every model chunk before channel delivery
+    Pipeline->>Guard: handleChunk(chunk, abort)
+    Guard-->>Pipeline: continue/stop
+    Pipeline->>Meter: handleChunk(known usage, abort)
+    Meter->>Budget: consumeBudget(reservationId, delta)
+    Budget-->>Meter: continue/exhausted
+  end
+  Pipeline->>Meter: handle(final usage, requestId)
+  Meter->>Budget: consumeBudget(final reconciliation)
   Meter-->>Pipeline: Durable usage recorded
   Pipeline->>Events: publish(chat.completed)
   Pipeline-->>Web: Canonical guarded response
@@ -123,7 +134,7 @@ sequenceDiagram
     Authz-->>Sync: Allowed local mapping scope
     Sync->>Storage: put(tenant-scoped document key)
     Storage-->>Sync: StoredObject checksum
-    Sync->>Vector: upsertDocument(chunks, documentId, hidden=false)
+    Sync->>Vector: upsertDocument(namespace, chunks, documentId, workspaceId, hidden=false)
     Vector-->>Sync: Vector IDs
     Sync->>Events: publish(document.synced + mapped ACL)
   end
@@ -301,6 +312,170 @@ sequenceDiagram
 
 Failure check: success is returned only after new vector queries exclude target. Cleanup/reindex is asynchronous and cannot re-enable visibility.
 
+## 11. Lark directory sync and auto-deactivation
+
+```mermaid
+sequenceDiagram
+  participant Queue as Job queue seam
+  participant Reconcile as Core directory reconciliation
+  participant IdP as Identity provider seam (Lark directory)
+  participant Authz as Authorization engine seam
+  participant License as License gate seam
+  participant Events as Event bus seam
+  Queue->>Reconcile: claim(identity.directory.sync, service actor)
+  Reconcile->>Authz: authorize(identity.directory.sync, org)
+  Authz-->>Reconcile: Allowed
+  Reconcile->>IdP: listPrincipals(cursor, delta=true)
+  IdP-->>Reconcile: Active/tombstoned principals + cursor
+  Reconcile->>IdP: listGroups(cursor, delta=true)
+  IdP-->>Reconcile: Groups and memberships
+  loop Each authoritative departure
+    Reconcile->>Authz: authorize(user.deactivate, mapped user)
+    Authz-->>Reconcile: Allowed
+    Reconcile->>License: releaseSeat(userId, idempotencyKey)
+    Reconcile->>Events: publish(identity.directory.user.deactivated)
+  end
+  Reconcile->>Queue: complete after reconciliation checkpoint commits
+```
+
+Failure check: partial enumeration never means departure. Only tombstone or completed authoritative full snapshot deactivates; OIDC-only capability flags prevent fake login-driven sync.
+
+## 12. Connector ACL revocation propagation
+
+```mermaid
+sequenceDiagram
+  participant Queue as Job queue seam
+  participant Sync as Core ACL reconciliation
+  participant Connector as Connector SDK seam
+  participant Authz as Authorization engine seam
+  participant Vector as Vector ACL seam
+  participant Events as Event bus seam
+  Queue->>Sync: claim(connector.acl.sync, service actor)
+  Sync->>Authz: authorize(connector.sync, connection)
+  Authz-->>Sync: Allowed
+  alt Driver supports ACL delta
+    Sync->>Connector: listAclChanges(aclCheckpoint)
+    Connector-->>Sync: sourceId + aclRevision changes
+  else No ACL delta capability
+    Sync->>Connector: full live-document enumeration (at least daily)
+    Connector-->>Sync: All sourceIds + aclRevision where available
+  end
+  loop Each ACL candidate, content etag may be unchanged
+    Sync->>Connector: fetchAcl(sourceId)
+    Connector-->>Sync: Current SourceAcl
+    Sync->>Authz: authorize(connector.acl.map, document)
+    Authz-->>Sync: Mapping permission
+    Sync->>Vector: setDocumentVisibility(hidden=true during ACL commit)
+    Sync->>Events: publish(document.acl.changed)
+    Sync->>Vector: setDocumentVisibility(hidden=false after safe mapping)
+  end
+  Sync->>Queue: complete after ACL checkpoint commits
+```
+
+Failure check: permission removal need not change content etag. Mapping/fetch failure leaves target hidden; stale grants never remain fallback.
+
+## 13. Embed widget query
+
+```mermaid
+sequenceDiagram
+  actor Visitor as Anonymous visitor
+  participant Embed as Channel seam (Embed widget)
+  participant Pipeline as Chat pipeline seam
+  participant Authz as Authorization engine seam
+  participant License as License gate seam
+  participant Vector as Vector ACL seam
+  participant Events as Event bus seam
+  Visitor->>Embed: Prompt + scoped embed key
+  Embed->>Embed: Verify key; normalize embed actor
+  Embed->>Pipeline: run(request with actor.type=embed)
+  Pipeline->>License: checkFeature(embed_widget)
+  License-->>Pipeline: Entitled; no seat consumed
+  Pipeline->>License: checkBudget(embed-key + workspace + global)
+  License-->>Pipeline: Allowed + reservation
+  Pipeline->>Authz: authorize(chat.create, key-scoped workspace)
+  Authz-->>Pipeline: Allowed only within key claims
+  Pipeline->>Authz: documentFilter(embed actor)
+  Authz-->>Pipeline: Attribute/bounded-key ACL filter, no groups
+  Pipeline->>Vector: queryAuthorized(namespaces, aclFilter)
+  Vector-->>Pipeline: Key-scoped authorized chunks
+  Pipeline->>Events: publish(chat.completed, embed actor + scopedKeyId)
+  Pipeline-->>Embed: Guarded metered response
+  Embed-->>Visitor: Deliver
+```
+
+Failure check: URL/body scope can only narrow signed key claims. Missing scope yields `matchNone`; anonymous actor inherits no user/group access and consumes no seat.
+
+## 14. View-as-user read and audit
+
+```mermaid
+sequenceDiagram
+  actor Admin
+  participant Web as Channel seam (Web admin)
+  participant View as Core view-as-user orchestration
+  participant Authz as Authorization engine seam
+  participant Vector as Vector ACL seam
+  participant Events as Event bus seam
+  Admin->>Web: Start view-as target user
+  Web->>View: Admin session + target
+  View->>Authz: explainAccess(admin, target resource)
+  Authz-->>View: Principals + matched policies + policyVersion
+  View->>Authz: authorize(user.impersonate.read, target)
+  Authz-->>View: Allowed
+  View-->>Web: Read-only actor(onBehalfOf target, impersonatedBy admin)
+  Admin->>Web: Search as viewed user
+  Web->>View: Canonical impersonated read
+  View->>Authz: documentFilter(impersonated actor)
+  Authz-->>View: Target read scope
+  View->>Vector: queryAuthorized(query, target ACL filter)
+  Vector-->>View: Target-visible results
+  View->>Events: publish(document.viewed, both actor identities)
+  Events-->>View: Durable audit outbox
+  View-->>Web: Target-visible results
+  Admin->>Web: Attempt mutation as viewed user
+  Web->>View: Canonical impersonated mutation
+  View->>Authz: authorize(document.update, impersonated actor)
+  Authz-->>View: Denied: impersonated sessions are read-only
+```
+
+Failure check: audit indexes effective target and real administrator. Channel, job, and event envelopes cannot strip provenance; all mutations deny.
+
+## 15. Budget exhaustion during stream
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Web as Channel seam (Web)
+  participant Pipeline as Chat pipeline seam
+  participant Guard as Chat middleware (Output guardrail)
+  participant Meter as Chat middleware (Usage metering)
+  participant Budget as License gate seam (Budget counters)
+  participant Events as Event bus seam
+  User->>Web: Long/deep-research prompt
+  Web->>Pipeline: run(request)
+  Pipeline->>Budget: checkBudget(strictest scopes, estimate)
+  Budget-->>Pipeline: Allowed + reservationId
+  loop Every model chunk
+    Pipeline->>Guard: handleChunk(chunk, abort)
+    Guard-->>Pipeline: continue
+    Pipeline->>Meter: handleChunk(usage delta, abort)
+    Meter->>Budget: consumeBudget(delta, idempotencyKey)
+    alt Budget remains
+      Budget-->>Meter: allowed=true
+      Meter-->>Pipeline: continue
+      Pipeline-->>Web: Guarded chunk
+    else Ceiling reached
+      Budget-->>Meter: allowed=false + exhausted scope
+      Meter-->>Pipeline: stop
+      Pipeline->>Pipeline: abort(reason) provider controller
+      Pipeline->>Budget: consumeBudget(final known usage)
+      Pipeline->>Events: publish(chat.aborted.budget)
+      Pipeline-->>Web: Terminal budget response; no more chunks
+    end
+  end
+```
+
+Failure check: atomic counters prevent concurrent overspend. Counter-store failure or stop verdict aborts provider and channel delivery; known usage remains charged.
+
 ## Review result
 
-All ten use cases cross named seams for provider I/O, policy decisions, chat execution, retrieval, durable asynchronous work, events, notifications, licensing, and blob access. Contracts needed three explicit composition rules found while drawing: channel delivery retries do not rerun chat; connector checkpoints wait for ACL/index durability; emergency hide is synchronous at vector query layer.
+All fifteen use cases cross named seams for provider I/O, policy decisions, chat execution, retrieval, durable asynchronous work, events, notifications, licensing/budgets, and blob access. QA-driven review added explicit directory sync, ACL-only change propagation, anonymous embed identity, immutable impersonation provenance, reverse access diagnostics, and chunk-level budget/guardrail abort behavior.
