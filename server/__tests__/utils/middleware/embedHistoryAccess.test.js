@@ -139,7 +139,7 @@ describe("route wiring (PR-0d)", () => {
       "utf8"
     );
     const matches = source.match(
-      /\[validEmbedConfig, embedHistoryAccess\]/g
+      /\[embedHistoryRateLimit, validEmbedConfig, embedHistoryAccess\]/g
     );
     expect(matches).toHaveLength(2);
   });

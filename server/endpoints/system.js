@@ -20,6 +20,10 @@ const {
   queryParams,
 } = require("../utils/http");
 const {
+  loginAccountRateLimit,
+  loginIpRateLimit,
+} = require("../utils/middleware/requestControls");
+const {
   handleAssetUpload,
   handlePfpUpload,
   handleAudioUpload,
@@ -199,7 +203,7 @@ function systemEndpoints(app) {
     }
   );
 
-  app.post("/request-token", async (request, response) => {
+  app.post("/request-token", [loginIpRateLimit, loginAccountRateLimit], async (request, response) => {
     try {
       const bcrypt = require("bcryptjs");
 
@@ -227,11 +231,11 @@ function systemEndpoints(app) {
             },
             existingUser?.id
           );
-          response.status(200).json({
+          response.status(401).json({
             user: null,
             valid: false,
             token: null,
-            message: "[001] Invalid login credentials.",
+            message: "Invalid login credentials.",
           });
           return;
         }
@@ -245,11 +249,11 @@ function systemEndpoints(app) {
             },
             existingUser?.id
           );
-          response.status(200).json({
+          response.status(401).json({
             user: null,
             valid: false,
             token: null,
-            message: "[002] Invalid login credentials.",
+            message: "Invalid login credentials.",
           });
           return;
         }
@@ -263,11 +267,11 @@ function systemEndpoints(app) {
             },
             existingUser?.id
           );
-          response.status(200).json({
+          response.status(401).json({
             user: null,
             valid: false,
             token: null,
-            message: "[004] Account suspended by admin.",
+            message: "Invalid login credentials.",
           });
           return;
         }

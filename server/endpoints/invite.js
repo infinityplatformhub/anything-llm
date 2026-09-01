@@ -5,23 +5,19 @@ const { reqBody } = require("../utils/http");
 const {
   simpleSSOLoginDisabledMiddleware,
 } = require("../utils/middleware/simpleSSOEnabled");
+const { inviteRateLimit } = require("../utils/middleware/requestControls");
 
 function inviteEndpoints(app) {
   if (!app) return;
 
-  app.get("/invite/:code", async (request, response) => {
+  app.get("/invite/:code", inviteRateLimit, async (request, response) => {
     try {
       const { code } = request.params;
       const invite = await Invite.get({ code });
-      if (!invite) {
-        response.status(200).json({ invite: null, error: "Invite not found." });
-        return;
-      }
-
-      if (invite.status !== "pending") {
+      if (!invite || invite.status !== "pending") {
         response
           .status(200)
-          .json({ invite: null, error: "Invite is no longer valid." });
+          .json({ invite: null, error: "Invite not found or is invalid." });
         return;
       }
 
@@ -36,7 +32,7 @@ function inviteEndpoints(app) {
 
   app.post(
     "/invite/:code",
-    [simpleSSOLoginDisabledMiddleware],
+    [inviteRateLimit, simpleSSOLoginDisabledMiddleware],
     async (request, response) => {
       try {
         const { code } = request.params;

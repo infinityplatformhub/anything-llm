@@ -10,6 +10,9 @@ const {
   embedHistoryAccess,
 } = require("../../utils/middleware/embedMiddleware");
 const {
+  embedHistoryRateLimit,
+} = require("../../utils/middleware/requestControls");
+const {
   convertToChatHistory,
   writeResponseChunk,
 } = require("../../utils/helpers/chat/responses");
@@ -69,7 +72,7 @@ function embeddedEndpoints(app) {
 
   app.get(
     "/embed/:embedId/:sessionId",
-    [validEmbedConfig, embedHistoryAccess],
+    [embedHistoryRateLimit, validEmbedConfig, embedHistoryAccess],
     async (request, response) => {
       try {
         const { sessionId } = request.params;
@@ -92,7 +95,7 @@ function embeddedEndpoints(app) {
 
   app.delete(
     "/embed/:embedId/:sessionId",
-    [validEmbedConfig, embedHistoryAccess],
+    [embedHistoryRateLimit, validEmbedConfig, embedHistoryAccess],
     async (request, response) => {
       try {
         const { sessionId } = request.params;
