@@ -68,7 +68,7 @@ describe("service principals survive every require order", () => {
   });
 });
 
-describe("a membership without its grant must not survive (QA-2, #39)", () => {
+describe("a membership without its grant must not survive (QA-2, issue 39)", () => {
   test("WorkspaceUser.create rolls the membership back when the grant fails", async () => {
     jest.resetModules();
     // Force the grant to fail the way the require cycle used to.
@@ -130,7 +130,7 @@ describe("a membership without its grant must not survive (QA-2, #39)", () => {
   });
 });
 
-describe("JobRuntime keeps BOTH imports after the #39/#41 merge", () => {
+describe("JobRuntime keeps BOTH imports after the issue 39 and 41 merge", () => {
   test("it takes SERVICE_PRINCIPALS from the leaf and resolveActorRef from the resolver", () => {
     // Techlead's trial-merge warning: resolving this conflict by taking either
     // side whole silently removes a working feature. Choosing #39's line drops
