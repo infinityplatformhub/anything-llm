@@ -28,7 +28,10 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
  * First login of a fresh admin shows a Recovery Codes modal (Download → Close). */
 async function login(page, { username, password }) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    await page.goto("/login");
+    // A previous spec can leave the SPA mid-render; a hard reset of the tab
+    // guarantees the login form is freshly mounted before typing into it.
+    await page.goto("about:blank");
+    await page.goto("/login", { waitUntil: "networkidle" });
     const userField = page.locator('input[name="username"]');
     const passField = page.locator('input[name="password"]');
     await userField.waitFor({ state: "visible", timeout: 30_000 });
