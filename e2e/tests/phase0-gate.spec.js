@@ -224,8 +224,9 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
 }) => {
   await login(page, ADMIN);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
-  // Sidebar upload button opens the ManageWorkspace documents modal.
-  await page.locator('[data-tooltip-id="upload-workspace"]').first().click();
+  // Use THIS workspace's own quick action — the sidebar upload buttons are
+  // per-workspace and .first() targets the default "My Workspace" instead.
+  await page.getByText("Upload a Document").first().click({ force: true });
   const modal = page.locator('div:has-text("My Documents")').last();
   await expect(modal.getByText("My Documents").first()).toBeVisible({
     timeout: 30_000,
