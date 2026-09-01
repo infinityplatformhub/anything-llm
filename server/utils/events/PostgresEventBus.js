@@ -6,8 +6,10 @@ class UnknownEventVersionError extends Error {}
 const canonical = (event) => crypto.createHash("sha256").update(JSON.stringify(event)).digest("hex");
 
 class PostgresEventBus {
-  constructor({ db = prisma } = {}) {
+  constructor({ db = prisma, now = () => new Date() } = {}) {
     this.db = db;
+    this.now = now;
+    this.workerId = `events-${process.pid}-${crypto.randomUUID()}`;
     this.subscribers = new Map();
   }
 
@@ -48,8 +50,18 @@ class PostgresEventBus {
   }
 
   async deliver(limit = 100) {
-    const events = await this.db.event_outbox.findMany({ orderBy: { occurredAt: "asc" }, take: limit });
-    for (const row of events) {
+    const now = this.now();
+    const due = await this.db.event_outbox.findMany({
+      where: {
+        OR: [
+          { deliveries: { none: {} } },
+          { deliveries: { some: { state: "retrying", nextAttemptAt: { lte: now }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] } } },
+        ],
+      },
+      orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+      take: limit,
+    });
+    for (const row of due) {
       for (const [subscriberId, subscriber] of this.subscribers) {
         if (!subscriber.eventTypes.has(row.type) && !subscriber.eventTypes.has("*")) continue;
         const delivery = await this.db.event_deliveries.findUnique({ where: { subscriberId_eventId: { subscriberId, eventId: row.id } } });
@@ -78,8 +90,8 @@ class PostgresEventBus {
     const finalState = state || (attempts >= subscriber.maxAttempts ? "dead-lettered" : "retrying");
     await this.db.event_deliveries.upsert({
       where: { subscriberId_eventId: { subscriberId, eventId: row.id } },
-      create: { subscriberId, eventId: row.id, attempts, state: finalState, lastError: error.message },
-      update: { attempts, state: finalState, lastError: error.message },
+      create: { subscriberId, eventId: row.id, attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null },
+      update: { attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null },
     });
     if ((finalState === "dead-lettered" || finalState === "quarantined") && row.type !== "event.delivery_failed") {
       const event = {

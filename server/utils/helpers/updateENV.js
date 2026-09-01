@@ -1,5 +1,6 @@
 const { Telemetry } = require("../../models/telemetry");
 const { resetAllVectorStores } = require("../vectorStore/resetAllVectorStores");
+const { emitAuditEvent } = require("../events");
 
 const KEY_MAPPING = {
   LLMProvider: {
@@ -1456,7 +1457,6 @@ async function executeValidationChecks(checks, value, force) {
 }
 
 async function logChangesToEventLog(newValues = {}, userId = null) {
-const { emitAuditEvent } = require("../../utils/events");
   const eventMapping = {
     LLMProvider: "update_llm_provider",
     EmbeddingEngine: "update_embedding_engine",

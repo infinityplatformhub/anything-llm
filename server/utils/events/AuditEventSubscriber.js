@@ -12,7 +12,7 @@ class AuditEventSubscriber {
       create: {
         eventId: event.eventId,
         event: event.type,
-        metadata: JSON.stringify(event.data || {}),
+        metadata: event.data == null ? null : JSON.stringify(event.data),
         userId,
         occurredAt: event.occurredAt,
       },
@@ -21,4 +21,8 @@ class AuditEventSubscriber {
   }
 }
 
-module.exports = { AuditEventSubscriber };
+async function deleteAuditEvents(clause, db = prisma) {
+  await db.event_logs.deleteMany({ where: clause });
+}
+
+module.exports = { AuditEventSubscriber, deleteAuditEvents };

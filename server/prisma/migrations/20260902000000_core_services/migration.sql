@@ -44,9 +44,10 @@ CREATE INDEX "event_outbox_occurredAt_idx" ON "event_outbox"("occurredAt");
 CREATE INDEX "event_outbox_type_occurredAt_idx" ON "event_outbox"("type", "occurredAt");
 CREATE TABLE "event_deliveries" (
   "id" SERIAL PRIMARY KEY, "subscriberId" TEXT NOT NULL, "eventId" TEXT NOT NULL, "state" TEXT NOT NULL DEFAULT 'pending',
-  "attempts" INTEGER NOT NULL DEFAULT 0, "lastError" TEXT, "acknowledgedAt" TIMESTAMPTZ(3),
+  "attempts" INTEGER NOT NULL DEFAULT 0, "lastError" TEXT, "acknowledgedAt" TIMESTAMPTZ(3), "nextAttemptAt" TIMESTAMPTZ(3), "claimedUntil" TIMESTAMPTZ(3), "claimedBy" TEXT,
   "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE "event_deliveries" ADD CONSTRAINT "event_deliveries_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "event_outbox"("id") ON DELETE CASCADE;
 CREATE UNIQUE INDEX "event_deliveries_subscriberId_eventId_key" ON "event_deliveries"("subscriberId", "eventId");
 CREATE INDEX "event_deliveries_state_idx" ON "event_deliveries"("state");
 CREATE INDEX "event_deliveries_subscriberId_state_idx" ON "event_deliveries"("subscriberId", "state");

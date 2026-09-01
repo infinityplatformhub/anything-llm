@@ -533,7 +533,7 @@ model job_dead_letters {
 }
 
 model event_outbox {
-  id          String   @id
+  id          String             @id
   type        String
   version     Int
   occurredAt  DateTime
@@ -543,22 +543,27 @@ model event_outbox {
   data        String
   sensitivity String
   payloadHash String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime           @default(now())
+  deliveries  event_deliveries[]
 
   @@index([occurredAt])
   @@index([type, occurredAt])
 }
 
 model event_deliveries {
-  id             Int       @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   subscriberId   String
   eventId        String
-  state          String    @default("pending")
-  attempts       Int       @default(0)
+  state          String       @default("pending")
+  attempts       Int          @default(0)
   lastError      String?
   acknowledgedAt DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  nextAttemptAt  DateTime?
+  claimedUntil   DateTime?
+  claimedBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  event          event_outbox @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([subscriberId, eventId])
   @@index([state])

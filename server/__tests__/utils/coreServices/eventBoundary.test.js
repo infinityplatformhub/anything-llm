@@ -5,8 +5,17 @@ function files(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? files(path.join(dir, entry.name)) : entry.name.endsWith(".js") ? [path.join(dir, entry.name)] : []);
 }
 
-test("only event subscriber writes event_logs", () => {
+test("only event subscriber mutates event_logs through any Prisma alias", () => {
   const server = path.resolve(__dirname, "../../..");
-  const offenders = files(server).filter((file) => !file.includes("node_modules") && !file.includes(`${path.sep}utils${path.sep}events${path.sep}`) && !file.includes(`${path.sep}__tests__${path.sep}`)).filter((file) => /prisma\.event_logs\.(create|update)/.test(fs.readFileSync(file, "utf8")));
+  const write = String.raw`(?:create|createMany|update|updateMany|upsert|delete|deleteMany)`;
+  const offenders = files(server)
+    .filter((file) => !file.includes("node_modules") && !file.includes(`${path.sep}utils${path.sep}events${path.sep}`) && !file.includes(`${path.sep}__tests__${path.sep}`))
+    .filter((file) => {
+      const source = fs.readFileSync(file, "utf8");
+      const aliases = new Set(["event_logs"]);
+      for (const match of source.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*(?:\w+\.)?event_logs\b/g)) aliases.add(match[1]);
+      for (const match of source.matchAll(/(?:const|let|var)\s*\{[^}]*event_logs\s*:\s*(\w+)[^}]*\}\s*=\s*\w+/g)) aliases.add(match[1]);
+      return [...aliases].some((alias) => new RegExp(`(?:\\.|\\b)${alias}\\s*\\.\\s*${write}\\s*\\(`).test(source));
+    });
   expect(offenders).toEqual([]);
 });
