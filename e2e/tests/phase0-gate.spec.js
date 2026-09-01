@@ -222,6 +222,7 @@ test("04 create workspace", async ({ page }) => {
 test("05 upload a small .txt document and embed it into the workspace", async ({
   page,
 }) => {
+  test.setTimeout(300_000);
   await login(page, ADMIN);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
   // Sidebar upload buttons are per-workspace: pick the one in THIS
@@ -278,7 +279,13 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   await page.waitForTimeout(1_000);
   const move = page.locator('button:has-text("Move to Workspace")');
   await move.first().waitFor({ state: "visible", timeout: 30_000 });
+  const embedCall = page.waitForResponse(
+    (r) => r.url().includes("/update-embeddings") || r.url().includes("/update-pin"),
+    { timeout: 60_000 }
+  );
   await move.first().click();
+  const embedRes = await embedCall;
+  expect(embedRes.status()).toBe(200);
   // Embedding runs on move; the modal shows progress before the doc lands.
   await page.waitForTimeout(5_000);
 
