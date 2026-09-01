@@ -159,7 +159,9 @@ const { DocumentSyncRun } = require("../models/documentSyncRun.js");
       const moreReferences = await Document.where(
         {
           id: { not: document.id },
-          filename: document.filename,
+          // PR-0e: docpath is the identity of the physical file that was just
+          // rewritten; filename is a basename and collides across tenants.
+          docpath: document.docpath,
         },
         null,
         null,
