@@ -1,3 +1,4 @@
+const { API_KEY_SCOPES } = require("../utils/apiKeySecurity/scopes");
 const { Workspace } = require("../models/workspace");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { Document } = require("../models/documents");
@@ -18,7 +19,7 @@ function browserExtensionEndpoints(app) {
 
   app.get(
     "/browser-extension/check",
-    [validBrowserExtensionApiKey("*")],
+    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -43,7 +44,7 @@ function browserExtensionEndpoints(app) {
 
   app.delete(
     "/browser-extension/disconnect",
-    [validBrowserExtensionApiKey("*")],
+    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
     async (_request, response) => {
       try {
         const apiKeyId = response.locals.apiKey.id;
@@ -62,7 +63,7 @@ function browserExtensionEndpoints(app) {
 
   app.get(
     "/browser-extension/workspaces",
-    [validBrowserExtensionApiKey("*")],
+    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -80,7 +81,7 @@ function browserExtensionEndpoints(app) {
 
   app.post(
     "/browser-extension/embed-content",
-    [validBrowserExtensionApiKey("*")],
+    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
     async (request, response) => {
       try {
         const { workspaceId, textContent, metadata } = reqBody(request);
@@ -127,7 +128,7 @@ function browserExtensionEndpoints(app) {
 
   app.post(
     "/browser-extension/upload-content",
-    [validBrowserExtensionApiKey("*")],
+    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
     async (request, response) => {
       try {
         const { textContent, metadata } = reqBody(request);
