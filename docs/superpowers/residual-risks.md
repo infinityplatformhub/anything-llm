@@ -61,3 +61,4 @@
 - [release note, #33 part 3] Secrets migrate .env → CredentialStore lazily on next save (061000 no-op). Fresh container without .env volume loses unsaved credentials. SIG_KEY/SIG_SALT stay in .env by design.
 - [runbook, reference] /v1 routes return 403 (not 503) when the policy store is down — by design (which half rejected is audit detail). Operators must read auth.key_used.denyReason, not the status code. (QA-2 W-8 under failure, 7/7 fail-closed)
 - [§7.7 extension] Tests needing a usable admin must create via User model, not raw prisma (no grant otherwise → 403 on update-env). (QA-2)
+- [→ #47 flake] modelPricing/cacheIsolation.test.js (added by #38) fails ~1/5 on clean main — unawaited constructor refresh race. Two independent reports. Blocks §2.5 three-run until fixed.
