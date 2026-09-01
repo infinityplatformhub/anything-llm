@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { EmbedConfig } = require("../../../models/embedConfig");
 const { EmbedChats } = require("../../../models/embedChats");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
@@ -8,7 +8,7 @@ const { Workspace } = require("../../../models/workspace");
 function apiEmbedEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/embed", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/embed", [validApiKey(scopeFor("GET", "/v1/embed"))], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'List all active embeds'
@@ -78,7 +78,7 @@ function apiEmbedEndpoints(app) {
 
   app.get(
     "/v1/embed/:embedUuid/chats",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/embed/:embedUuid/chats"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']
@@ -140,7 +140,7 @@ function apiEmbedEndpoints(app) {
 
   app.get(
     "/v1/embed/:embedUuid/chats/:sessionUuid",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/embed/:embedUuid/chats/:sessionUuid"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']
@@ -199,7 +199,7 @@ function apiEmbedEndpoints(app) {
     }
   );
 
-  app.post("/v1/embed/new", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.post("/v1/embed/new", [validApiKey(scopeFor("POST", "/v1/embed/new"))], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'Create a new embed configuration'
@@ -285,7 +285,7 @@ function apiEmbedEndpoints(app) {
     }
   });
 
-  app.post("/v1/embed/:embedUuid", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.post("/v1/embed/:embedUuid", [validApiKey(scopeFor("POST", "/v1/embed/:embedUuid"))], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'Update an existing embed configuration'
@@ -357,7 +357,7 @@ function apiEmbedEndpoints(app) {
 
   app.delete(
     "/v1/embed/:embedUuid",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/embed/:embedUuid"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']
