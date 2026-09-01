@@ -11,7 +11,7 @@
 7. [→ #31 T-7] explainAccess ต้องการ policy store reverse-queryable — เป็น hard requirement ของ P0-5 schema ไม่ใช่ optimization
 8. [→ backlog S10] consumeBudget ต่อ chunk ไวต่อ latency — implement จริงใช้ batched delta + bounded overspend window (มอบ S10)
 9. [→ backlog S4] Group→workspace/role onboarding mapping ของ S4 ยังไม่มี diagram ทดสอบ (listGroups รองรับแล้ว) — เพิ่ม diagram ตอน S4
-- [→ #38] server/utils/modelPricing/index.test.js "fetches the remote pricing data and writes the disk cache" — etag "" vs "abc123" once in full run, isolated 41/41 (QA-1, T-2 verify on f7038595). Likely shared temp cacheDir across suites. Not blocking; isolate cacheDir per test when it recurs.
+- [→ #38] server/utils/modelPricing/index.test.js "fetches the remote pricing data and writes the disk cache" — etag "" vs "abc123" once in full run, isolated 41/41 (QA-1, T-2 verify on f7038595). Cause traced by Dev1: lazy getter + background refresh + singleton-on-require, NOT a shared cacheDir as first guessed. Did not recur across the three §2.5 runs at 190a5b88 — which does not close it; an intermittent failure that did not happen is not a fixed one.
 - [→ #31 T-7] chat.read_others + access.diagnose stay in READ_ACTIONS (impersonated allowed). Re-decide when content_moderator role splits: admin without chat.read_others impersonating a user who has it = privilege borrowing. (QA-2, #20 round 2)
 - [→ #25 T-4a, cap landed; /v1 half → #29] authorizeMany has no batch cap (0.176ms/resource linear). Cap 500 at any HTTP endpoint that exposes it.
 ~~[fold into #22] F-20d actorResolver checks revokedAt but not expiresAt on apiKeyContext; PR-3 filters upstream today. 1-line fix assigned to Dev4 in T-3.~~ (closed: T-3 f5bf914f)

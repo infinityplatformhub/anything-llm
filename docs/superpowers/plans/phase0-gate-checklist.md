@@ -210,12 +210,23 @@ export API_KEY_PEPPER="…"              # ≥32 bytes
 cd server && yarn test
 ```
 
-**Three consecutive full runs, same pass count, zero flakes.** Three, not one — the known flakes in `docs/superpowers/residual-risks.md` are all intermittent and a single green run does not distinguish "fixed" from "lucky".
+**Three consecutive full runs, same pass count, zero flakes.** Three, not one — the known flakes are intermittent, and a single green run does not distinguish "fixed" from "lucky".
 
-One remains:
-- `modelPricing/index.test.js` etag `""` vs `"abc123"` — shared temp cacheDir across suites. Isolate the cacheDir per test when it recurs.
+**PASS at `190a5b88`: 85 suites / 940 tests, identical across three runs, 0 failures.**
 
-The DROP DATABASE race is **fixed on main**: `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` all close their `afterAll` with `}, 60_000);`. Verified at `7587e74e`. The `docs/superpowers/residual-risks.md` line calling it unowned is stale.
+Also verified in the same pass, per §2.2a:
+
+```sql
+SELECT r.name, count(*) FROM principal_role_grants g JOIN roles r ON r.id = g.role_id
+WHERE g.workspace_id IS NULL GROUP BY r.name;
+```
+→ **`super_admin` only.** T-4a's `044000` narrowed org `member` as intended; no other role holds an org-wide grant.
+
+This is a snapshot, not a standing pass. Re-run it on the merge candidate — #27, #29 and #30 all change the authorization path, and a suite that was stable before them says nothing about after.
+
+Two flakes are recorded as fixed; both were re-checked here rather than taken on report:
+- **DROP DATABASE race — fixed.** `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` each close `afterAll` with `}, 60_000);`.
+- **`modelPricing` etag** (`[→ #38]`) — did not recur across the three runs. The register's original cause note was wrong: Dev1 traced it to a lazy getter plus a background refresh plus singleton-on-require, not a shared cacheDir. **Three clean runs do not close it** — an intermittent failure that did not happen is not a fixed one, which is exactly why it has an issue rather than a strike-through.
 
 Without both env vars, six suites fail at import time and are counted as *failed*, not skipped — the `Tests:` line silently shrinks. A reviewer who forgets them reads a smaller green number as success.
 
