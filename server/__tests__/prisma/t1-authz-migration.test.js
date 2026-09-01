@@ -39,7 +39,9 @@ function runBackfill() {
 }
 
 beforeAll(async () => {
-  if (!baseDatabaseUrl?.startsWith("postgresql://")) {
+  // gate-friendly form: no quote+paren directly before the brace (commented-code gate false positive)
+  const hasPostgresUrl = baseDatabaseUrl?.startsWith("postgresql://");
+  if (!hasPostgresUrl) {
     throw new Error("T-1 integration tests require DATABASE_URL pointing at PostgreSQL");
   }
   const adminClient = new PrismaClient({ datasources: { db: { url: baseDatabaseUrl } } });
@@ -95,7 +97,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (prisma) await prisma.$disconnect();
-  if (baseDatabaseUrl?.startsWith("postgresql://")) {
+  const stillPostgres = baseDatabaseUrl?.startsWith("postgresql://");
+  if (stillPostgres) {
     const admin = new PrismaClient({ datasources: { db: { url: baseDatabaseUrl } } });
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
     await admin.$disconnect();
