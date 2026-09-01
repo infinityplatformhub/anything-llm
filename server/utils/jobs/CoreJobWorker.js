@@ -23,12 +23,23 @@ class CoreJobWorker {
     return runnable;
   }
 
-  async run(job, workerId) {
+  async run(job, workerId, { leaseMs = 30_000 } = {}) {
     const handler = this.handlers[`${job.type}@${job.payload.version}`];
     if (!handler) throw new Error(`No handler for ${job.type}@${job.payload.version}`);
-    const result = await handler(job);
-    await this.queue.complete({ jobId: job.jobId, workerId, result });
-    return result;
+    const heartbeat = setInterval(() => {
+      this.queue.heartbeat({ jobId: job.jobId, workerId, leaseMs }).catch(() => {});
+    }, Math.max(1, Math.floor(leaseMs / 2)));
+    heartbeat.unref?.();
+    try {
+      const result = await handler(job);
+      await this.queue.complete({ jobId: job.jobId, workerId, result });
+      return result;
+    } catch (error) {
+      await this.queue.fail({ jobId: job.jobId, workerId, error });
+      throw error;
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 }
 

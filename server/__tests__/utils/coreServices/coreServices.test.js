@@ -9,7 +9,7 @@ function jobDb() {
   const model = {
     findUnique: async ({ where }) => where.id ? jobs.get(where.id) : [...jobs.values()].find((j) => j.type === where.type_idempotencyKey.type && j.idempotencyKey === where.type_idempotencyKey.idempotencyKey),
     create: async ({ data }) => (jobs.set(data.id, { state: "pending", attempts: 0, ...data }), jobs.get(data.id)),
-    findMany: async ({ where, take }) => [...jobs.values()].filter((j) => where.type.in.includes(j.type) && j.runAt <= where.runAt.lte && (j.state === "pending" || (j.state === "running" && j.leaseUntil < where.OR[1].state.leaseUntil.lt))).slice(0, take),
+    findMany: async ({ where, take }) => [...jobs.values()].filter((j) => where.type.in.includes(j.type) && j.runAt <= where.runAt.lte && (j.state === "pending" || (j.state === "running" && j.leaseUntil < where.OR[1].state.leaseUntil.lt))).slice(0, take).map((j) => ({ ...j })),
     findFirst: async ({ where }) => [...jobs.values()].find((j) => j.id === where.id && j.workerId === where.workerId && j.state === where.state && j.leaseUntil > where.leaseUntil.gt),
     updateMany: async ({ where, data }) => {
       const j = jobs.get(where.id); if (!j || (where.workerId && j.workerId !== where.workerId) || (where.state && j.state !== where.state) || (where.leaseUntil?.gt && !(j.leaseUntil > where.leaseUntil.gt))) return { count: 0 };
@@ -76,4 +76,30 @@ test("audit subscriber preserves legacy event row fields", async () => {
   const state = eventDb(); const subscriber = new AuditEventSubscriber({ db: state.db }); const occurredAt = new Date();
   await subscriber.handle({ eventId: "audit-1", type: "login_event", data: { ip: "127.0.0.1" }, actor: { type: "user", id: "7" }, occurredAt });
   expect(state.logs[0]).toEqual({ eventId: "audit-1", event: "login_event", metadata: JSON.stringify({ ip: "127.0.0.1" }), userId: 7, occurredAt });
+});
+
+
+test("stale worker cannot dead-letter after lease changes during fail", async () => {
+  const lease = new Date("2026-09-02T00:01:00Z");
+  const job = { id: "race", type: "test", payload: "{}", actor: "{}", attempts: 3, maxAttempts: 3, traceId: "t", workerId: "old", state: "running", leaseUntil: lease };
+  const tx = {
+    jobs: {
+      findFirst: jest.fn().mockResolvedValue(job),
+      updateMany: jest.fn().mockImplementation(async () => { job.workerId = "new"; return { count: 0 }; }),
+    },
+    job_dead_letters: { create: jest.fn() },
+  };
+  const queue = new PostgresJobQueue({ db: { $transaction: (fn) => fn(tx) }, now: () => new Date("2026-09-02T00:00:00Z") });
+  await expect(queue.fail({ jobId: "race", workerId: "old", error: new Error("boom") })).rejects.toThrow("Job lease lost");
+  expect(tx.job_dead_letters.create).not.toHaveBeenCalled();
+});
+
+test("worker routes handler failure through queue fail and stops heartbeat", async () => {
+  jest.useFakeTimers();
+  const queue = { heartbeat: jest.fn(), complete: jest.fn(), fail: jest.fn().mockResolvedValue({ state: "retrying" }) };
+  const worker = new CoreJobWorker({ queue, identityStore: {}, handlers: { "test@1": async () => { throw new Error("boom"); } } });
+  await expect(worker.run({ jobId: "1", type: "test", payload: { version: 1 } }, "w", { leaseMs: 1000 })).rejects.toThrow("boom");
+  expect(queue.fail).toHaveBeenCalledWith(expect.objectContaining({ jobId: "1", workerId: "w" }));
+  expect(jest.getTimerCount()).toBe(0);
+  jest.useRealTimers();
 });
