@@ -37,3 +37,14 @@ test("requireScope defaults deny and accepts exact or wildcard scope", () => {
   requireScope("workspace.write")({}, response, next);
   expect(next).toHaveBeenCalledTimes(1);
 });
+
+test("server entry fails before listen when pepper is absent", () => {
+  const { spawnSync } = require("child_process");
+  const path = require("path");
+  const env = { ...process.env };
+  delete env.API_KEY_PEPPER;
+  const result = spawnSync(process.execPath, [path.resolve(__dirname, "../../../index.js")], { env, encoding: "utf8" });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("API_KEY_PEPPER is required");
+  expect(result.stdout).not.toContain("listening on port");
+});
