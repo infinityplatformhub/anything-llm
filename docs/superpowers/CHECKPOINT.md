@@ -7,7 +7,7 @@
 - **integration branch**: `approof/main` @ `ffca31ad` (push แล้ว)
 - **baseline**: ~759 tests / 68 suites บน PostgreSQL (ยืนยันโดย QA-1)
 - **ปิดแล้ว 17 issues**: #1-#6, #8-#14, #16-#18
-- **เปิดอยู่ 4**: #7, #15, #19, #20
+- **เปิดอยู่ 5**: #7, #15, #19, #20, #21
 
 ## รันเทส local (บังคับ — ไม่งั้น fail แบบหลอก)
 
@@ -23,9 +23,10 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 | worktree | branch | issue | HEAD | สถานะ |
 |---|---|---|---|---|
 | `.claude/worktrees/p0-4a` | `approof/p0-4a-ratelimit` | #6 |  merged | ✅ merged แล้ว (ffca31ad) |
-| `.claude/worktrees/pr4a` | `approof/pr4a-scope-admin` | #19 | base | scope table 16 routes อนุมัติแล้ว รอเขียนโค้ด |
-| `.claude/worktrees/t2` | `approof/t2-authz-engine` | #20 | base | เพิ่งเปิด — engine core + actor resolver |
-| `.claude/worktrees/e2e` | `approof/e2e-playwright` | #15 | `88364c8d` | 4/12 spec ผ่าน กำลังแก้ selector |
+| `.claude/worktrees/pr4a` | `approof/pr4a-scope-admin` | #19 | `0a6c0ab5` | โค้ดเสร็จ counter 68→52 · รอ verdict QA-2 (5f) + Techlead (b5) → check/close/merge |
+| `.claude/worktrees/t2` | `approof/t2-authz-engine` | #20 | `b9be0c9d` | core เสร็จ 779/779 (rebased 639a1e71) · ส่ง QA-1 (17) ตรวจแล้ว → check/close/merge |
+| `.claude/worktrees/dburl` | `approof/dburl-helper` | #21 | `65979867` | helper forPostgresClient/forPrismaTest/forPsql + t1-authz refactor เสร็จ · subagent `check-21` กำลังรัน task.sh check |
+| `.claude/worktrees/e2e` | `approof/e2e-playwright` | #15 | `092c9f8b` | 4/12 spec ผ่าน กำลังแก้ selector |
 
 ## ทีม (resume ต้องตั้งใหม่ทั้งหมด — session-scoped)
 
@@ -55,9 +56,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 
 ## งานถัดไปตามคิว
 
-1. **#6** — Dev 1 rebase บน `de95015b` → check → merge (QA PASS + Techlead ผ่านแล้ว)
-2. **#19 PR-4a** — 16 routes: admin/userManagement/auth · counter 68→52
-3. **#20 T-2** — engine + actor resolver 6 identities + A-1 fix + visibility hard override
+1. **#21** — อ่านผล check-21 (`/tmp/check-21.log`) → close (ledger sed normalize) → merge → push
+2. **#19 PR-4a** — รอ QA-2/Techlead verdict → check → close → merge
+3. **#20 T-2** — รอ QA-1 verdict → check → close → merge · ส่งต่อ T-4b: engine ยังไม่ enforce scope-vs-grant ของ apiKeyContext
 4. **#15 E2E** — gate ปิด Phase 0
 5. **#7** — .env hygiene (ยังไม่เริ่ม)
 6. ต่อ: PR-4b/4c · T-3..T-8
