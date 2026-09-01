@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { Telemetry } = require("../../../models/telemetry");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
@@ -50,7 +50,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), handleAPIFileUpload, validateWorkspaceSlugQuery],
+    [validApiKey(scopeFor("POST", "/v1/document/upload")), handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -175,7 +175,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload/:folderName",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), handleAPIFileUpload, validateWorkspaceSlugQuery],
+    [validApiKey(scopeFor("POST", "/v1/document/upload/:folderName")), handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -324,7 +324,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload-link",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), validateWorkspaceSlugQuery],
+    [validApiKey(scopeFor("POST", "/v1/document/upload-link")), validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -448,7 +448,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/raw-text",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), validateWorkspaceSlugQuery],
+    [validApiKey(scopeFor("POST", "/v1/document/raw-text")), validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
      #swagger.tags = ['Documents']
@@ -590,7 +590,7 @@ function apiDocumentEndpoints(app) {
     }
   );
 
-  app.get("/v1/documents", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/documents", [validApiKey(scopeFor("GET", "/v1/documents"))], async (request, response) => {
     /*
     #swagger.tags = ['Documents']
     #swagger.description = 'List of all locally-stored documents in instance. Optionally, pass ?folder=name to fetch the contents of a single folder, paginated with offset and limit (limit=all returns every document in that folder).'
@@ -648,7 +648,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/documents/folder/:folderName",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/documents/folder/:folderName"))],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -733,7 +733,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/accepted-file-types",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/document/accepted-file-types"))],
     async (_, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -790,7 +790,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/metadata-schema",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/document/metadata-schema"))],
     async (_, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -840,7 +840,7 @@ function apiDocumentEndpoints(app) {
 
   // Be careful and place as last route to prevent override of the other /document/ GET
   // endpoints!
-  app.get("/v1/document/:docName", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/document/:docName", [validApiKey(scopeFor("GET", "/v1/document/:docName"))], async (request, response) => {
     /*
     #swagger.tags = ['Documents']
     #swagger.description = 'Get a single document by its unique ApproofWorkspace document name'
@@ -897,7 +897,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/create-folder",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/document/create-folder"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -963,7 +963,7 @@ function apiDocumentEndpoints(app) {
 
   app.delete(
     "/v1/document/remove-folder",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/document/remove-folder"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -1022,7 +1022,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/move-files",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/document/move-files"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -1125,7 +1125,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/generated-files/:filename",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/document/generated-files/:filename"))],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']

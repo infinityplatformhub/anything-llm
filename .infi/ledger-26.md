@@ -13,3 +13,15 @@ Ruling: shipped a migration (`20260902040000_pr4b_workspace_thread_scopes`) rath
 Ruling: granted the four workspace-level new actions to `owner` and `editor` but kept `workspace.create` org-level (`super_admin` only) — a workspace role acts inside its workspace; minting new workspaces is not inside it. If wrong, a workspace owner has to ask an org admin to create a workspace, which is the intended shape.
 
 Ruling: bound all 15 slug-carrying routes with `{ workspaceSlugParam: "slug" }` and left only `POST /v1/workspace/new` and `GET /v1/workspaces` unbound — those two have no workspace in the path to bind against. `GET /v1/workspaces` therefore still lists every workspace to any key holding `workspace.read`; narrowing that listing is a handler change, not a middleware change, and belongs with T-4a route wiring. Recorded here so the reviewer does not read the missing binding as an oversight.
+
+## PR-4b(2) document (branch `approof/pr4b-document`, base `dcc945d5`)
+
+Ruling: document routes carry **no workspace binding**, as the recon directed — documents live in a global store and workspace attachment happens after upload, so there is no workspace in the path to bind against. Per-actor document scoping is T-3's `documentFilter`, which is merged. Stated in the table's comment so a reviewer does not read the absence as an oversight. If wrong, a workspace-scoped key can call document routes for documents outside its workspace until T-5 wires the filter into those handlers.
+
+Ruling: `accepted-file-types` and `metadata-schema` get **`system.read`**, not a document scope — both return static capability metadata with no tenant data in them. A read-only monitoring key should be able to ask what the server accepts without thereby being able to read documents. If wrong, an integration that only touches documents needs `system.read` granted alongside.
+
+Ruling: added **`document.folder.manage`** rather than reusing `document.write` for create-folder / remove-folder / move-files — a folder operation rearranges what other keys can reach by path; `document.write` covers a document's contents and `document.delete` covers one document, neither covers the container. Granted to `owner`/`editor` at workspace scope (they already create and delete documents there) and to `super_admin`; `viewer` stays read-only. If wrong, the scope list is one entry longer than it had to be.
+
+Ruling: `generated-files/:filename` gets **`document.read`**, not `document.export` — the route serves a single file the agent produced by its parsed name, which is an ordinary read. `document.export`/`document.bulk_export` are the exfiltration paths T-2's review separated, and folding a per-file fetch into them would make the export scope required for normal use, which defeats the separation. If wrong, a per-file download is grantable without the export scope.
+
+Ruling: migration slot **041000** per PMO's slot ruling (040000 taken by 4b-1, 4b-3/4 take 042000/043000, PR-4c moves to 045000).
