@@ -265,7 +265,7 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 
 ---
 
-## 4. Security attack tests — 24 cases (the acceptance bar, not extras)
+## 4. Security attack tests — 26 cases (the acceptance bar, not extras)
 
 **This section is the canonical S-number registry.** Every other document — the harness plan, task DoDs, issue bodies — refers to these numbers and must not assign, renumber, or invent one. A new case is added here first.
 
@@ -299,6 +299,10 @@ Test file layout: `server/__tests__/security/authorization/*.test.js`. Every tes
 - **S-22** Ask a question, get a citation, revoke the document, ask a follow-up in the same thread → the revoked citation must not be rehydrated from history. *Targets G1 `fillSourceWindow`.*
 - **S-23** `DELETE /workspace/:slug/remove-and-unembed` with a `documentLocation` belonging to another workspace → denied, document still present. *Targets G11.*
 - **S-24** `GET`/`DELETE /embed/:embedId/:sessionId` with another visitor's session id → denied. *Targets G12.*
+
+### Vector ACL enforcement invariants (registry additions, 2026-09-02 — requested by `anything-llm-cc`)
+- **S-25** Vector count and namespace-stat endpoints (`api/system/index.js:97-98`, `endpoints/system.js:449-452`, `api/workspace/index.js:970-972`) must not report cardinality beyond the actor's authorized scope. *Targets G2; already in T-5's DoD but had no S-number.* Blocked by T-5.
+- **S-26** A vector row lacking ACL metadata is denied, never passed through — assert against a namespace deliberately left half-backfilled, and assert `queryAuthorized` refuses to go live while the backfill job is incomplete. *Targets G4's fail-closed gate; already in T-5's DoD but had no S-number.* Blocked by T-5.
 
 ### Diagnostics / privacy posture
 - **S-18** `explainAccess` denied without `access.diagnose`; the denial does not reveal whether the document exists.
