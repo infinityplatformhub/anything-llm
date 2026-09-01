@@ -1,7 +1,5 @@
 const crypto = require("crypto");
 
-const API_KEY_PREFIX = "apw-key-";
-const BROWSER_KEY_PREFIX = "apw-brx-";
 const DISPLAY_PREFIX_LENGTH = 16;
 const MIN_PEPPER_BYTES = 32;
 
@@ -13,10 +11,6 @@ function pepper() {
 }
 
 function assertApiKeyPepper() { pepper(); }
-
-function makeSecret(prefix) {
-  return `${prefix}${crypto.randomBytes(32).toString("base64url")}`;
-}
 
 function digestSecret(secret) {
   return crypto.createHmac("sha256", pepper()).update(secret).digest();
@@ -44,10 +38,7 @@ function parseScopes(scopes) {
 assertApiKeyPepper();
 
 module.exports = {
-  API_KEY_PREFIX,
-  BROWSER_KEY_PREFIX,
   assertApiKeyPepper,
-  makeSecret,
   digestSecret,
   keyPrefix,
   matchesDigest,
