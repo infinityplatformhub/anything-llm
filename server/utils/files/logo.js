@@ -4,8 +4,8 @@ const { getType } = require("mime");
 const { v4 } = require("uuid");
 const { SystemSettings } = require("../../models/systemSettings");
 const { normalizePath, isWithin } = require(".");
-const LOGO_FILENAME = "anything-llm.png";
-const LOGO_FILENAME_DARK = "anything-llm-invert.png";
+const LOGO_FILENAME = "approofworkspace.png";
+const LOGO_FILENAME_DARK = "approofworkspace-invert.png";
 
 /**
  * Checks if the filename is the default logo filename for dark or light mode.

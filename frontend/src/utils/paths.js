@@ -1,3 +1,8 @@
+import {
+  BRAND_COMMUNITY_HUB_URL,
+  BRAND_DOCS_URL,
+  BRAND_REPOSITORY_URL,
+} from "./branding";
 import { API_BASE } from "./constants";
 
 /**
@@ -55,22 +60,19 @@ export default {
     },
   },
   github: () => {
-    return "https://github.com/Mintplex-Labs/anything-llm";
+    return BRAND_REPOSITORY_URL;
   },
   discord: () => {
     return "https://discord.com/invite/6UyHPeGZAC";
   },
   docs: (path = "") => {
-    return `https://docs.anythingllm.com${path}`;
+    return `${BRAND_DOCS_URL}${path}`;
   },
   chatModes: () => {
-    return "https://docs.anythingllm.com/features/chat-modes";
+    return `${BRAND_DOCS_URL}/features/chat-modes`;
   },
-  mailToMintplex: () => {
-    return "mailto:team@mintplexlabs.com";
-  },
-  hosting: () => {
-    return "https://my.mintplexlabs.com/aio-checkout?product=anythingllm";
+  support: () => {
+    return `${BRAND_REPOSITORY_URL}/issues`;
   },
   workspace: {
     chat: (slug, options = {}) => {
@@ -212,7 +214,7 @@ export default {
     website: () => {
       return import.meta.env.DEV
         ? `http://localhost:5173`
-        : `https://hub.anythingllm.com`;
+        : BRAND_COMMUNITY_HUB_URL;
     },
     /**
      * View more items of a given type on the community hub.
@@ -239,17 +241,17 @@ export default {
       return `${this.website()}/me`;
     },
     noPrivateItems: () => {
-      return "https://docs.anythingllm.com/community-hub/faq#no-private-items";
+      return `${BRAND_DOCS_URL}/community-hub/faq#no-private-items`;
     },
   },
 
-  // TODO: Migrate all docs.anythingllm.com links to the new docs.
+  // Legacy documentation routes remain until replacement content exists.
   documentation: {
     mobileIntroduction: () => {
-      return "https://docs.anythingllm.com/mobile/overview";
+      return `${BRAND_DOCS_URL}/mobile/overview`;
     },
     contextWindows: () => {
-      return "https://docs.anythingllm.com/chatting-with-documents/introduction#you-exceed-the-context-window---what-now";
+      return `${BRAND_DOCS_URL}/chatting-with-documents/introduction#you-exceed-the-context-window---what-now`;
     },
   },
 

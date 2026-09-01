@@ -1,5 +1,5 @@
 {
-  "name": "anything-llm-server",
+  "name": "approofworkspace-server",
   "version": "1.16.1",
   "description": "Server endpoints to process or create content for chatting",
   "main": "index.js",
@@ -86,7 +86,6 @@
     "pg": "^8.11.5",
     "pinecone-client": "^1.1.0",
     "pluralize": "^8.0.0",
-    "posthog-node": "^3.1.1",
     "pptxgenjs": "4.0.1",
     "prisma": "5.3.1",
     "slugify": "^1.6.6",

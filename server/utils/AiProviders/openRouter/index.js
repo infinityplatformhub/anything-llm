@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../branding/constants");
 const { NativeEmbedder } = require("../../EmbeddingEngines/native");
 const { v4: uuidv4 } = require("uuid");
 const {
@@ -39,8 +40,8 @@ class OpenRouterLLM {
       baseURL: this.basePath,
       apiKey: process.env.OPENROUTER_API_KEY ?? null,
       defaultHeaders: {
-        "HTTP-Referer": "https://anythingllm.com",
-        "X-Title": "AnythingLLM",
+        "HTTP-Referer": BRAND_HOMEPAGE,
+        "X-Title": "ApproofWorkspace",
       },
     });
     this.model =

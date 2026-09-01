@@ -6,7 +6,7 @@ ARG ARG_UID=1000
 ARG ARG_GID=1000
 
 FROM base AS build-arm64
-RUN echo "Preparing build of AnythingLLM image for arm64 architecture"
+RUN echo "Preparing build of ApproofWorkspace image for arm64 architecture"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -41,20 +41,20 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 # First, remove any existing user/group with the target UID/GID to avoid conflicts
 RUN (getent passwd "$ARG_UID" && userdel -f "$(getent passwd "$ARG_UID" | cut -d: -f1)") || true && \
     (getent group "$ARG_GID" && groupdel "$(getent group "$ARG_GID" | cut -d: -f1)") || true && \
-    groupadd -g "$ARG_GID" anythingllm && \
-    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
-    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
+    groupadd -g "$ARG_GID" approofworkspace && \
+    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g approofworkspace approofworkspace && \
+    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R approofworkspace:approofworkspace /app
 
 # Copy docker helper scripts
 COPY ./docker/docker-entrypoint.sh /usr/local/bin/
 COPY ./docker/docker-healthcheck.sh /usr/local/bin/
-COPY --chown=anythingllm:anythingllm ./docker/.env.example /app/server/.env
+COPY --chown=approofworkspace:approofworkspace ./docker/.env.example /app/server/.env
 
 # Ensure the scripts are executable
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-healthcheck.sh
 
-USER anythingllm
+USER approofworkspace
 WORKDIR /app
 
 # Puppeteer does not ship with an ARM86 compatible build for Chromium
@@ -75,7 +75,7 @@ RUN echo "Done running arm64 specific installation steps"
 
 # amd64-specific stage
 FROM base AS build-amd64
-RUN echo "Preparing build of AnythingLLM image for non-ARM architecture"
+RUN echo "Preparing build of ApproofWorkspace image for non-ARM architecture"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -110,14 +110,14 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 # First, remove any existing user/group with the target UID/GID to avoid conflicts
 RUN (getent passwd "$ARG_UID" && userdel -f "$(getent passwd "$ARG_UID" | cut -d: -f1)") || true && \
     (getent group "$ARG_GID" && groupdel "$(getent group "$ARG_GID" | cut -d: -f1)") || true && \
-    groupadd -g "$ARG_GID" anythingllm && \
-    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
-    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
+    groupadd -g "$ARG_GID" approofworkspace && \
+    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g approofworkspace approofworkspace && \
+    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R approofworkspace:approofworkspace /app
 
 # Copy docker helper scripts
 COPY ./docker/docker-entrypoint.sh /usr/local/bin/
 COPY ./docker/docker-healthcheck.sh /usr/local/bin/
-COPY --chown=anythingllm:anythingllm ./docker/.env.example /app/server/.env
+COPY --chown=approofworkspace:approofworkspace ./docker/.env.example /app/server/.env
 
 # Ensure the scripts are executable
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
@@ -129,9 +129,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
 
 # hadolint ignore=DL3006
 FROM build-${TARGETARCH} AS build
-RUN echo "Running common build flow of AnythingLLM image for all architectures"
+RUN echo "Running common build flow of ApproofWorkspace image for all architectures"
 
-USER anythingllm
+USER approofworkspace
 WORKDIR /app
 
 # Install & Build frontend layer
@@ -149,24 +149,24 @@ WORKDIR /app
 # Install server layer
 # Also pull and build collector deps (chromium issues prevent bad bindings)
 FROM build AS backend-build
-COPY --chown=anythingllm:anythingllm ./server /app/server/
+COPY --chown=approofworkspace:approofworkspace ./server /app/server/
 WORKDIR /app/server
 RUN yarn install --production --network-timeout 100000 && yarn cache clean
 WORKDIR /app
 
 # Install collector dependencies
-COPY --chown=anythingllm:anythingllm ./collector/ ./collector/
+COPY --chown=approofworkspace:approofworkspace ./collector/ ./collector/
 WORKDIR /app/collector
 ENV PUPPETEER_DOWNLOAD_BASE_URL=https://storage.googleapis.com/chrome-for-testing-public
 RUN yarn install --production --network-timeout 100000 && yarn cache clean
 
 WORKDIR /app
-USER anythingllm
+USER approofworkspace
 
 # Since we are building from backend-build we just need to move built frontend into server/public
 FROM backend-build AS production-build
 WORKDIR /app
-COPY --chown=anythingllm:anythingllm --from=frontend-build /app/frontend/dist /app/server/public
+COPY --chown=approofworkspace:approofworkspace --from=frontend-build /app/frontend/dist /app/server/public
 
 # Setup the environment
 ENV NODE_ENV=production

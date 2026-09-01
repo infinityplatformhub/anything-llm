@@ -1,5 +1,5 @@
 {
-  "name": "anything-llm-document-collector",
+  "name": "approofworkspace-document-collector",
   "version": "1.16.1",
   "description": "Document collector server endpoints",
   "main": "index.js",

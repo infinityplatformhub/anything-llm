@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../branding/constants");
 const { NativeEmbedder } = require("../../EmbeddingEngines/native");
 const { v4: uuidv4 } = require("uuid");
 const {
@@ -31,8 +32,8 @@ class CometApiLLM {
       baseURL: this.basePath,
       apiKey: process.env.COMETAPI_LLM_API_KEY ?? null,
       defaultHeaders: {
-        "HTTP-Referer": "https://anythingllm.com",
-        "X-CometAPI-Source": "anythingllm",
+        "HTTP-Referer": BRAND_HOMEPAGE,
+        "X-CometAPI-Source": "approofworkspace",
       },
     });
     this.model =

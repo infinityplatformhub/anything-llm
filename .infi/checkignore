@@ -1,3 +1,12 @@
 server/yarn.lock
 frontend/yarn.lock
 collector/yarn.lock
+# XML namespace identifiers in generated placeholder logos; not network destinations.
+frontend/src/media/illustrations/login-logo.svg
+frontend/src/media/illustrations/login-logo-light.svg
+# Localized user-facing product names intentionally include ApproofWorkspace.
+frontend/src/locales/es/common.js
+frontend/src/pages/OnboardingFlow/Steps/Home/wordmark.svg
+frontend/src/pages/OnboardingFlow/Steps/Home/wordmark-light.svg
+frontend/src/utils/branding.js
+server/utils/branding/constants.js

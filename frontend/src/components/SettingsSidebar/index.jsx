@@ -1,3 +1,4 @@
+import { brandReleaseUrl } from "@/utils/branding";
 import React, { useEffect, useRef, useState } from "react";
 import paths from "@/utils/paths";
 import useLogo from "@/hooks/useLogo";
@@ -187,7 +188,7 @@ export default function SettingsSidebar() {
 }
 
 function SupportEmail() {
-  const [supportEmail, setSupportEmail] = useState(paths.mailToMintplex());
+  const [supportEmail, setSupportEmail] = useState(paths.support());
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -196,7 +197,7 @@ function SupportEmail() {
       setSupportEmail(
         supportEmail?.email
           ? `mailto:${supportEmail.email}`
-          : paths.mailToMintplex()
+          : paths.support()
       );
     };
     fetchSupportEmail();
@@ -467,7 +468,7 @@ function HoldToReveal({ children, holdForMs = 3_000 }) {
   let timeout = null;
   const [showing, setShowing] = useState(
     window.localStorage.getItem(
-      "anythingllm_experimental_feature_preview_unlocked"
+      "approofworkspace_experimental_feature_preview_unlocked"
     )
   );
 
@@ -479,7 +480,7 @@ function HoldToReveal({ children, holdForMs = 3_000 }) {
         // Setting toastId prevents hook spam from holding control too many times or the event not detaching
         showToast("Experimental feature previews unlocked!");
         window.localStorage.setItem(
-          "anythingllm_experimental_feature_preview_unlocked",
+          "approofworkspace_experimental_feature_preview_unlocked",
           "enabled"
         );
         window.removeEventListener("keypress", onPress);
@@ -517,7 +518,7 @@ function AppVersion() {
   if (isLoading) return null;
   return (
     <Link
-      to={`https://github.com/Mintplex-Labs/anything-llm/releases/tag/v${version}`}
+      to={brandReleaseUrl(version)}
       target="_blank"
       rel="noreferrer"
       className="text-theme-text-secondary light:opacity-80 opacity-50 text-xs mx-3"

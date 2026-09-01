@@ -311,8 +311,8 @@ export default function AdminAgents() {
           ...server,
           config: {
             ...server.config,
-            anythingllm: {
-              ...server.config?.anythingllm,
+            approofworkspace: {
+              ...server.config?.approofworkspace,
               suppressedTools,
             },
           },
@@ -326,8 +326,8 @@ export default function AdminAgents() {
         ...prev,
         config: {
           ...prev.config,
-          anythingllm: {
-            ...prev.config?.anythingllm,
+          approofworkspace: {
+            ...prev.config?.approofworkspace,
             suppressedTools,
           },
         },

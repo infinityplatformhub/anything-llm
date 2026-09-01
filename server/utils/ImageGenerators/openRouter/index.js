@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../branding/constants");
 const { BaseImageGenerator } = require("../base");
 
 class OpenRouterImageGenerator extends BaseImageGenerator {
@@ -17,8 +18,8 @@ class OpenRouterImageGenerator extends BaseImageGenerator {
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: process.env.IMAGE_GEN_OPENROUTER_API_KEY,
         defaultHeaders: {
-          "HTTP-Referer": "https://anythingllm.com",
-          "X-Title": "AnythingLLM",
+          "HTTP-Referer": BRAND_HOMEPAGE,
+          "X-Title": "ApproofWorkspace",
         },
       }),
       model: process.env.IMAGE_GEN_MODEL_PREF,

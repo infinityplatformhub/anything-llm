@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../../branding/constants");
 const { CollectorApi } = require("../../../collectorApi");
 const Provider = require("../providers/ai-provider");
 const { summarizeContent } = require("../utils/summarize");
@@ -22,8 +23,8 @@ const webScraping = {
               call: JSON.stringify({ url: "https://example.com" }),
             },
             {
-              prompt: "What is anythingllm.com about?",
-              call: JSON.stringify({ url: "https://anythingllm.com" }),
+              prompt: "What is the project homepage about?",
+              call: JSON.stringify({ url: BRAND_HOMEPAGE }),
             },
             {
               prompt: "Scrape https://example.com",

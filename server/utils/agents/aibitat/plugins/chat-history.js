@@ -2,7 +2,7 @@ const { WorkspaceChats } = require("../../../../models/workspaceChats");
 const { WorkspaceThread } = require("../../../../models/workspaceThread");
 
 /**
- * Plugin to save chat history to AnythingLLM DB.
+ * Plugin to save chat history to ApproofWorkspace DB.
  */
 const chatHistory = {
   name: "chat-history",

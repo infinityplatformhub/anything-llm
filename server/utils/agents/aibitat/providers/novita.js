@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../../branding/constants");
 const OpenAI = require("openai");
 const Provider = require("./ai-provider.js");
 const InheritMultiple = require("./helpers/classes.js");
@@ -22,8 +23,8 @@ class NovitaProvider extends InheritMultiple([Provider, UnTooled]) {
       baseURL: "https://api.novita.ai/v3/openai",
       apiKey: process.env.NOVITA_LLM_API_KEY,
       defaultHeaders: {
-        "HTTP-Referer": "https://anythingllm.com",
-        "X-Novita-Source": "anythingllm",
+        "HTTP-Referer": BRAND_HOMEPAGE,
+        "X-Novita-Source": "approofworkspace",
       },
     });
 

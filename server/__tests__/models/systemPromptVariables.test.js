@@ -17,7 +17,7 @@ const mockSystemPromptVariables = [
   {
     id: 1,
     key: "mystaticvariable",
-    value: "AnythingLLM testing runtime",
+    value: "ApproofWorkspace testing runtime",
     description: "A test variable",
     type: "static",
     userId: null,

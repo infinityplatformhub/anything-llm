@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../branding/constants");
 /**
  * @typedef MetaTagDefinition
  * @property {('link'|'meta')} tag - the type of meta tag element
@@ -27,8 +28,8 @@ class MetaGenerator {
   #customConfig = null;
 
   #defaultManifest = {
-    name: "AnythingLLM",
-    short_name: "AnythingLLM",
+    name: "ApproofWorkspace",
+    short_name: "ApproofWorkspace",
     display: "standalone",
     orientation: "portrait",
     start_url: "/",
@@ -59,21 +60,21 @@ class MetaGenerator {
       {
         tag: "title",
         props: null,
-        content: "AnythingLLM | Your personal LLM trained on anything",
+        content: "ApproofWorkspace | Your personal LLM trained on anything",
       },
 
       {
         tag: "meta",
         props: {
           name: "title",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
       {
         tag: "meta",
         props: {
           description: "title",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
 
@@ -81,20 +82,20 @@ class MetaGenerator {
       { tag: "meta", props: { property: "og:type", content: "website" } },
       {
         tag: "meta",
-        props: { property: "og:url", content: "https://anythingllm.com" },
+        props: { property: "og:url", content: BRAND_HOMEPAGE },
       },
       {
         tag: "meta",
         props: {
           property: "og:title",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
       {
         tag: "meta",
         props: {
           property: "og:description",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
       {
@@ -113,20 +114,20 @@ class MetaGenerator {
       },
       {
         tag: "meta",
-        props: { property: "twitter:url", content: "https://anythingllm.com" },
+        props: { property: "twitter:url", content: BRAND_HOMEPAGE },
       },
       {
         tag: "meta",
         props: {
           property: "twitter:title",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
       {
         tag: "meta",
         props: {
           property: "twitter:description",
-          content: "AnythingLLM | Your personal LLM trained on anything",
+          content: "ApproofWorkspace | Your personal LLM trained on anything",
         },
       },
       {
@@ -229,7 +230,7 @@ class MetaGenerator {
             props: null,
             content:
               customTitle ??
-              "AnythingLLM | Your personal LLM trained on anything",
+              "ApproofWorkspace | Your personal LLM trained on anything",
           };
         }
         // Override meta title
@@ -240,7 +241,7 @@ class MetaGenerator {
               name: "title",
               content:
                 customTitle ??
-                "AnythingLLM | Your personal LLM trained on anything",
+                "ApproofWorkspace | Your personal LLM trained on anything",
             },
           };
         }
@@ -252,7 +253,7 @@ class MetaGenerator {
               property: "og:title",
               content:
                 customTitle ??
-                "AnythingLLM | Your personal LLM trained on anything",
+                "ApproofWorkspace | Your personal LLM trained on anything",
             },
           };
         }
@@ -264,7 +265,7 @@ class MetaGenerator {
               property: "twitter:title",
               content:
                 customTitle ??
-                "AnythingLLM | Your personal LLM trained on anything",
+                "ApproofWorkspace | Your personal LLM trained on anything",
             },
           };
         }
@@ -330,7 +331,7 @@ class MetaGenerator {
       const { SystemSettings } = require("../../models/systemSettings");
       const manifestName = await SystemSettings.getValueOrFallback(
         { label: "meta_page_title" },
-        "AnythingLLM"
+        "ApproofWorkspace"
       );
       const faviconURL = await SystemSettings.getValueOrFallback(
         { label: "meta_page_favicon" },

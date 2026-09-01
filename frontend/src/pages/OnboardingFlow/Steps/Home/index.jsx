@@ -33,12 +33,12 @@ export default function OnboardingHome() {
       <div className="relative z-10 flex justify-center pt-[58px]">
         <img
           src={Wordmark}
-          alt="AnythingLLM"
+          alt="ApproofWorkspace"
           className="h-[28px] w-auto light:hidden"
         />
         <img
           src={WordmarkLight}
-          alt="AnythingLLM"
+          alt="ApproofWorkspace"
           className="hidden h-[28px] w-auto light:block"
         />
       </div>

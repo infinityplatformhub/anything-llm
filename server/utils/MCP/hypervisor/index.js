@@ -26,10 +26,10 @@ const { patchShellEnvironmentPath } = require("../../helpers/shell");
  *
  * @notice This class is a singleton.
  * @notice Each MCP tool has dependencies specific to it and this call WILL NOT check for them.
- * For example, if the tools requires `npx` then the context in which AnythingLLM mains process is running will need to access npx.
+ * For example, if the tools requires `npx` then the context in which ApproofWorkspace mains process is running will need to access npx.
  * This is typically not common in our pre-built image so may not function. But this is the case anywhere MCP is used.
  *
- * AnythingLLM will take care of porting MCP servers to agent-callable functions via @agent directive.
+ * ApproofWorkspace will take care of porting MCP servers to agent-callable functions via @agent directive.
  * @see MCPCompatibilityLayer.convertServerToolsToPlugins
  */
 class MCPHypervisor {
@@ -152,11 +152,11 @@ class MCPHypervisor {
     }
 
     const server = servers.mcpServers[serverName];
-    if (!server.anythingllm) server.anythingllm = {};
-    if (!Array.isArray(server.anythingllm.suppressedTools))
-      server.anythingllm.suppressedTools = [];
+    if (!server.approofworkspace) server.approofworkspace = {};
+    if (!Array.isArray(server.approofworkspace.suppressedTools))
+      server.approofworkspace.suppressedTools = [];
 
-    const suppressedTools = server.anythingllm.suppressedTools;
+    const suppressedTools = server.approofworkspace.suppressedTools;
 
     if (enabled) {
       const index = suppressedTools.indexOf(toolName);
@@ -165,7 +165,7 @@ class MCPHypervisor {
       if (!suppressedTools.includes(toolName)) suppressedTools.push(toolName);
     }
 
-    server.anythingllm.suppressedTools = suppressedTools;
+    server.approofworkspace.suppressedTools = suppressedTools;
     servers.mcpServers[serverName] = server;
 
     fs.writeFileSync(
@@ -187,7 +187,7 @@ class MCPHypervisor {
    */
   getSuppressedTools(serverName) {
     const config = this.mcpServerConfigs.find((s) => s.name === serverName);
-    return config?.server?.anythingllm?.suppressedTools || [];
+    return config?.server?.approofworkspace?.suppressedTools || [];
   }
 
   /**
@@ -499,15 +499,15 @@ class MCPHypervisor {
     const serverDefinitions = this.mcpServerConfigs;
     for (const { name, server } of serverDefinitions) {
       if (
-        server.anythingllm?.hasOwnProperty("autoStart") &&
-        server.anythingllm.autoStart === false
+        server.approofworkspace?.hasOwnProperty("autoStart") &&
+        server.approofworkspace.autoStart === false
       ) {
         this.log(
-          `MCP server ${name} has anythingllm.autoStart property set to false, skipping boot!`
+          `MCP server ${name} has approofworkspace.autoStart property set to false, skipping boot!`
         );
         this.mcpLoadingResults[name] = {
           status: "failed",
-          message: `MCP server ${name} has anythingllm.autoStart property set to false, boot skipped!`,
+          message: `MCP server ${name} has approofworkspace.autoStart property set to false, boot skipped!`,
         };
         continue;
       }

@@ -55,7 +55,7 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   const [config, setConfig] = useState({ settings: {}, provider: null });
   const [refreshKey, setRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(
-    () => window.localStorage.getItem("anythingllm_sidebar_toggle") !== "closed"
+    () => window.localStorage.getItem("approofworkspace_sidebar_toggle") !== "closed"
   );
 
   useEffect(() => {

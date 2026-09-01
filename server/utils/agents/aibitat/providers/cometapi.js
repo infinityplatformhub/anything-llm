@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../../branding/constants");
 const OpenAI = require("openai");
 const Provider = require("./ai-provider.js");
 const InheritMultiple = require("./helpers/classes.js");
@@ -19,8 +20,8 @@ class CometApiProvider extends InheritMultiple([Provider, UnTooled]) {
       baseURL: "https://api.cometapi.com/v1",
       apiKey: process.env.COMETAPI_LLM_API_KEY,
       defaultHeaders: {
-        "HTTP-Referer": "https://anythingllm.com",
-        "X-CometAPI-Source": "anythingllm",
+        "HTTP-Referer": BRAND_HOMEPAGE,
+        "X-CometAPI-Source": "approofworkspace",
       },
     });
 

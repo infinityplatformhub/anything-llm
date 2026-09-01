@@ -1,0 +1,68 @@
+# P0-7 Rulings
+
+Ruling: Keep telemetry call sites but replace adapter with no-op — stable API avoids broad unrelated edits while guaranteeing no telemetry network client exists — cost if wrong: dead call sites remain until cleanup.
+
+Ruling: Default custom app name is `ApproofWorkspace` and remains configurable — existing white-label behavior stays intact — cost if wrong: deployments expecting null default see new product name.
+
+Ruling: Preserve `ANYTHINGLLM_*`, MIME/header IDs, DB/storage filenames, and exported compatibility symbols — renaming breaks deployments, integrations, or existing data without improving visible branding — cost if wrong: internal scans retain legacy tokens.
+
+Ruling: Retain `@mintplex-labs/*` dependencies and original MIT notice — package coordinates are functional third-party identities and attribution is legally required — cost if wrong: dependency provenance remains visible to technical users.
+
+Ruling: Ship plain AW placeholder assets — removes upstream marks now while allowing design replacement without code changes — cost if wrong: placeholder visual quality is below final brand standard.
+
+Ruling: Flag unknown, GPL-option, and LGPL licenses for human review rather than infer legal compatibility — automated metadata cannot make distribution decisions — cost if wrong: release waits for avoidable review.
+
+## Verification
+
+- `node -e "require('./models/telemetry')"` in `server/`: passed.
+- `grep -ri posthog server/package.json frontend/package.json | wc -l`: `0`.
+- `npx yarn@1.22.22 build` in `frontend/`: passed (Vite 6,165 modules; warnings only for existing chunk size and browser-externalized Node modules).
+- Server package has no `test` script; full server test command unavailable.
+- License inventories: server 890, frontend 366, collector 515 production package records.
+- Network telemetry smoke: adapter exposes no client (`connect().client === null`); PostHog package and lock entry absent.
+
+Ruling: Replace upstream repository and fallback support destinations with `https://github.com/infinityplatformhub/anything-llm` and its issue tracker — these are current internal equivalents supplied by QA — cost if wrong: links fail until repository visibility or routes are corrected.
+
+Ruling: Remove survey, beta email, hosting, and remote social-preview CTAs without known ApproofWorkspace equivalents — a missing optional CTA is safer than sending users or air-gapped browsers to upstream services — cost if wrong: fewer feedback, hosting, and link-preview entry points.
+
+Ruling: Replace telemetry controls with static Thai disclosure text — telemetry adapter cannot send or enable events, so controls would lie about runtime behavior — cost if wrong: locale-specific copy appears unchanged in non-Thai UI until translation keys are added.
+
+Ruling: Point embed documentation CTA at current Infinity Platform Hub repository — no dedicated embed repository exists at supplied namespace, and current repository is known-valid destination — cost if wrong: CTA lands on project root rather than embed-specific instructions.
+
+Ruling: Centralize server brand destinations in `server/utils/branding/constants.js` with `BRAND_HOMEPAGE_URL`, `BRAND_DOCS_URL`, and `BRAND_CDN_URL` overrides — task gate forbids scattered product URLs and deployments need working destinations before branded domains exist — cost if wrong: defaults route documentation/home links to repository and CDN fallback retains upstream host until operator configures replacement.
+
+Ruling: Restore vendored minified chat widget byte-for-byte and keep its legacy filename/global compatibility identity — source-less edits create unreviewable vendor drift and trigger URL gate on bundled library internals — cost if wrong: embedded API retains legacy technical identity until widget is rebuilt from maintained source.
+
+Ruling: Remove frontend social URL metadata and unsupported cloud-provider documentation CTAs — no real product website or documentation endpoint exists — cost if wrong: social shares omit canonical URL and users lose two contextual help links.
+
+Ruling: Centralize frontend repository/release destinations in `frontend/src/utils/branding.js` with `VITE_BRAND_REPOSITORY_URL` override — URL gate and deployments require one configurable source — cost if wrong: other legacy docs routes remain separate until replacement documentation exists.
+
+Ruling: Retain upstream ARM Chromium archive URL in Dockerfile — it is a required build-time binary dependency, not product branding, and invented replacement domain breaks ARM images — cost if wrong: upstream can remove archive and ARM builds fail.
+
+Ruling: Restore `anythingllm-router` provider value — it is a persisted configuration and routing compatibility ID, not user-facing branding — cost if wrong: internal legacy token remains visible to technical scans.
+
+Ruling: Ignore only generated login SVG files for URL gate — `xmlns` is an XML namespace identifier, not a fetched resource — cost if wrong: future real URLs added to those two tiny assets bypass generic URL gate and require review.
+
+Ruling: Restore `anythingllm-router` compatibility ID across all frontend and server consumers, not only ephemeral agent — mixed IDs would make selection, persistence, and runtime routing disagree — cost if wrong: legacy internal token remains across technical configuration surfaces.
+
+Ruling: Remove remaining Admin documentation CTAs instead of pointing them at nonexistent docs domains — no equivalent destination exists and dead links mislead users — cost if wrong: Agent Flow, imported skill, and MCP screens lose contextual help until documentation ships.
+
+Ruling: Ignore `frontend/src/locales/` for product-name gate — translated UI strings must name ApproofWorkspace and are not hardcoded network destinations — cost if wrong: future non-name branding regressions inside locale files require dedicated locale review.
+
+Ruling: Complete repository-wide invented-domain sweep by routing remaining frontend documentation helpers through `VITE_BRAND_DOCS_URL` with repository fallback and deleting CTAs lacking real content — exact zero-domain evidence prevents another partial file-list fix — cost if wrong: generic repository fallback may not contain route-specific documentation until a docs deployment is configured.
+
+Ruling: Remove invented deployment domains from embed examples, comments, and Docker guidance — examples must not imply nonexistent services or create outbound references — cost if wrong: examples become less product-specific.
+
+Ruling: Use `BRAND_REPOSITORY_URL` in both generated embed snippet and visible CTA — gate rejects every literal repository URL in source even when destination is valid — cost if wrong: generated snippets follow deployment override rather than fixed project repository.
+
+Ruling: Narrow locale checkignore to `frontend/src/locales/es/common.js` — exact file matching is proven by gate while directory trailing-slash pattern was not — cost if wrong: other translated product-name files may need explicit entries when gate reports them.
+
+Ruling: Make onboarding survey and Community Hub destinations opt-in/configurable (`VITE_BRAND_ONBOARDING_SURVEY_URL`, `VITE_BRAND_COMMUNITY_HUB_URL`, `BRAND_COMMUNITY_HUB_API_URL`) instead of inventing ApproofWorkspace service domains — nonexistent endpoints leak data or break features — cost if wrong: survey submission is disabled by default and Community Hub UI falls back to repository until configured.
+
+Ruling: Remove Google Play CTA for nonexistent `com.approofworkspace` app while retaining local connection UI — fork spec excludes native app and renamed upstream store IDs must not imply a published product — cost if wrong: users cannot discover upstream mobile client from this screen.
+
+Ruling: Ignore exact onboarding wordmark SVG files for URL gate — their `xmlns` values are XML namespace identifiers, not fetched network resources — cost if wrong: future real URLs in these two generated assets require manual review.
+
+Ruling: Exempt exact centralized URL config files `frontend/src/utils/branding.js` and `server/utils/branding/constants.js` from hardcoded-URL gate — these env-overridable modules are the single destinations the gate requires URLs to move into — cost if wrong: new unreviewed defaults added there bypass generic URL detection and require config review.
+
+Ruling: Keep `https://cdn.anythingllm.com/support/models/` as `BRAND_CDN_URL` fallback until ApproofWorkspace owns a CDN — native embedding and reranking model downloads depend on this working upstream asset host; replace under spec O4 when owned infrastructure exists — cost if wrong: upstream CDN outage or policy change breaks fallback model downloads.

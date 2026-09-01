@@ -1,3 +1,4 @@
+const { BRAND_HOMEPAGE } = require("../../branding/constants");
 const { NativeEmbedder } = require("../../EmbeddingEngines/native");
 const {
   handleDefaultStreamResponseV2,
@@ -25,8 +26,8 @@ class PPIOLLM {
       baseURL: this.basePath,
       apiKey: process.env.PPIO_API_KEY ?? null,
       defaultHeaders: {
-        "HTTP-Referer": "https://anythingllm.com",
-        "X-API-Source": "anythingllm",
+        "HTTP-Referer": BRAND_HOMEPAGE,
+        "X-API-Source": "approofworkspace",
       },
     });
     this.model =

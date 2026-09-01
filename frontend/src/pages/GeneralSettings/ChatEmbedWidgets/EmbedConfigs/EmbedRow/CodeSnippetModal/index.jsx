@@ -1,3 +1,4 @@
+import { BRAND_REPOSITORY_URL } from "@/utils/branding";
 import React, { useState } from "react";
 import { CheckCircle, CopySimple } from "@phosphor-icons/react";
 import showToast from "@/utils/toast";
@@ -33,14 +34,14 @@ function createScriptTagSnippet(embed, scriptHost, serverHost) {
   return `<!--
 Paste this script at the bottom of your HTML before the </body> tag.
 See more style and config options on our docs
-https://github.com/Mintplex-Labs/anythingllm-embed/blob/main/README.md
+${BRAND_REPOSITORY_URL}
 -->
 <script
   data-embed-id="${embed.uuid}"
   data-base-api-url="${serverHost}/api/embed"
-  src="${scriptHost}/embed/anythingllm-chat-widget.min.js">
+  src="${scriptHost}/embed/approofworkspace-chat-widget.min.js">
 </script>
-<!-- AnythingLLM (https://anythingllm.com) -->
+<!-- ApproofWorkspace -->
 `;
 }
 
@@ -74,7 +75,7 @@ const ScriptTag = ({ embed }) => {
           in the corner of your website.
         </ModalHint>
         <a
-          href="https://github.com/Mintplex-Labs/anythingllm-embed/blob/main/README.md"
+          href={BRAND_REPOSITORY_URL}
           target="_blank"
           rel="noreferrer"
           className="text-blue-300 light:text-blue-500 hover:underline"
