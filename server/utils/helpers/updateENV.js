@@ -1614,20 +1614,41 @@ function dumpENV() {
  * renamed over the destination. Rename within a directory is atomic, so a
  * reader sees either the whole old file or the whole new one.
  *
- * Refuses to write when the existing file belongs to another account - that is
- * either a misconfigured deployment or a planted file, and overwriting it would
- * hand our secrets to whoever owns it.
+ * Refuses to write when the destination is a symlink, or when the existing file
+ * belongs to another account. A symlink at this path means anyone who could
+ * place it decides which file the process fills with secrets, and a file owned
+ * by another account is either a misconfigured deployment or a planted file.
+ * Both checks use lstat and run before anything is opened or chmod'd, so a
+ * refused write leaves the link and its target exactly as they were.
  *
  * @param {string} envPath absolute path of the .env file to replace
  * @param {string} contents the full file body to write
  * @returns {boolean} true when written, false when refused
  */
 function writeEnvFileAtomic(envPath, contents) {
+  const crypto = require("crypto");
   const fs = require("fs");
   const path = require("path");
 
-  if (fs.existsSync(envPath)) {
-    const stats = fs.statSync(envPath);
+  // lstat, not stat: stat resolves a symlink and would report the target's
+  // owner and mode, so the checks below would pass while the write lands
+  // somewhere else entirely.
+  // lstatSync directly rather than an existsSync guard: existsSync follows the
+  // link, so a symlink pointing at a path that does not exist reports "absent"
+  // and the write would create the target through the link.
+  let stats = null;
+  try {
+    stats = fs.lstatSync(envPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (stats !== null) {
+    if (stats.isSymbolicLink()) {
+      console.error(
+        `Refusing to write ${envPath}: the path is a symlink, and following it would write secrets to a file chosen by whoever created the link.`
+      );
+      return false;
+    }
     if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
       console.error(
         `Refusing to write ${envPath}: file is owned by uid ${stats.uid}, not by the uid this process runs as.`
@@ -1637,9 +1658,12 @@ function writeEnvFileAtomic(envPath, contents) {
     if ((stats.mode & 0o777) !== 0o600) fs.chmodSync(envPath, 0o600);
   }
 
+  // The random suffix, not the pid, is what makes the name unique: two dumps in
+  // the same process and millisecond would otherwise pick the same temp path
+  // and one would fail the exclusive open.
   const tempPath = path.join(
     path.dirname(envPath),
-    `.${path.basename(envPath)}.${process.pid}.${Date.now()}.tmp`
+    `.${path.basename(envPath)}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`
   );
   let handle = null;
   try {
