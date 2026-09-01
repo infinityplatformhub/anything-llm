@@ -1863,7 +1863,6 @@ function dumpENV({ envPath: overridePath = null } = {}) {
     "HTTPS_CERT_PATH",
     "HTTPS_KEY_PATH",
     // Other Configuration Keys
-    "DISABLE_VIEW_CHAT_HISTORY",
     "DISABLE_SWAGGER_DOCS",
     // Simple SSO
     "SIMPLE_SSO_ENABLED",

@@ -611,9 +611,11 @@ const SystemSettings = {
       // --------------------------------------------------------
       // Compliance Settings
       // --------------------------------------------------------
-      // Disable View Chat History for the whole instance.
-      DisableViewChatHistory:
-        "DISABLE_VIEW_CHAT_HISTORY" in process.env || false,
+      // T-7 (#31): DisableViewChatHistory is gone — it mirrored an instance-wide
+      // env kill switch to the UI. Reading other people's chats is now the
+      // per-principal `chat.read_others` permission, so the UI must ask what THIS
+      // user may do rather than what the instance forbids everyone. The frontend
+      // reads that from /system/my-capabilities.
       WorkspaceDeletionProtection:
         "WORKSPACE_DELETION_PROTECTION" in process.env || false,
 

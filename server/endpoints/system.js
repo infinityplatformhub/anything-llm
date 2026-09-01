@@ -33,6 +33,10 @@ const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { requirePermission } = require("../utils/middleware/requirePermission");
+const { resolveActor } = require("../utils/authorization/actorResolver");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
 const { orgResource } = require("../utils/middleware/resourceResolvers");
 const fs = require("fs");
 const path = require("path");
@@ -1238,6 +1242,40 @@ function systemEndpoints(app) {
       } catch (e) {
         console.error(e);
         response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // T-7 (#31, D-1): what may THIS caller do. Replaces the instance-wide
+  // DisableViewChatHistory flag the UI used to read — a flag says what the
+  // instance forbids everyone, which cannot answer a per-principal question.
+  // Any authenticated principal may ask about themselves; asking about someone
+  // else is `access.diagnose`, which is the diagnostics feature, not this.
+  app.get(
+    "/system/my-capabilities",
+    [validatedRequest],
+    async (request, response) => {
+      try {
+        const actor = await resolveActor(request, response);
+        if (!actor) return response.status(200).json({ capabilities: {} });
+
+        const engine = new DatabaseAuthorizationEngine();
+        const org = { type: "org", id: "1", orgId: 1, workspaceId: null };
+        const decisions = await engine.authorizeMany({
+          actor,
+          action: "chat.read_others",
+          resources: [org],
+        });
+
+        response.status(200).json({
+          capabilities: {
+            "chat.read_others": decisions.get(0)?.allowed === true,
+          },
+        });
+      } catch (e) {
+        console.error(e.message, e);
+        // Fail closed: a capability the UI cannot confirm is one it must not show.
+        response.status(200).json({ capabilities: {} });
       }
     }
   );

@@ -10,7 +10,6 @@ const System = {
     footerIcons: "approofworkspace_footer_links",
     supportEmail: "approofworkspace_support_email",
     customAppName: "approofworkspace_custom_app_name",
-    canViewChatHistory: "approofworkspace_can_view_chat_history",
     deploymentVersion: "approofworkspace_deployment_version",
   },
   ping: async function () {
@@ -780,32 +779,29 @@ const System = {
   },
 
   /**
-   * Fetches the can view chat history state from local storage or the system settings.
-   * Notice: This is an instance setting that cannot be changed via the UI and it is cached
-   * in local storage for 24 hours.
+   * Whether THIS user may read other people's chats.
+   *
+   * T-7 (#31): was an instance-wide env flag (DisableViewChatHistory), now the
+   * per-principal `chat.read_others` permission. The 24-hour localStorage cache
+   * went with it: a flag that only moved when an operator edited the
+   * environment could be cached for a day, but a grant an admin can revoke at
+   * any moment cannot — the UI would keep offering a feature the server has
+   * already started refusing. Cached for the session only.
+   *
+   * This gates a UI affordance, never access itself: the server refuses on its
+   * own regardless of what the menu shows.
    * @returns {Promise<{viewable: boolean, error: string | null}>}
    */
   fetchCanViewChatHistory: async function () {
-    const cache = window.localStorage.getItem(
-      this.cacheKeys.canViewChatHistory
-    );
-    const { viewable, lastFetched } = cache
-      ? safeJsonParse(cache, { viewable: false, lastFetched: 0 })
-      : { viewable: false, lastFetched: 0 };
+    const res = await fetch(`${API_BASE}/system/my-capabilities`, {
+      method: "GET",
+      headers: baseHeaders(),
+    })
+      .then((r) => r.json())
+      .catch(() => ({ capabilities: {} }));
 
-    // Since this is an instance setting that cannot be changed via the UI,
-    // we can cache it in local storage for a day and if the admin changes it,
-    // they should instruct the users to clear local storage.
-    if (typeof viewable === "boolean" && Date.now() - lastFetched < 8.64e7)
-      return { viewable, error: null };
-
-    const res = await System.keys();
-    const isViewable = res?.DisableViewChatHistory === false;
-
-    window.localStorage.setItem(
-      this.cacheKeys.canViewChatHistory,
-      JSON.stringify({ viewable: isViewable, lastFetched: Date.now() })
-    );
+    // Fail closed: a capability we could not confirm is one we do not show.
+    const isViewable = res?.capabilities?.["chat.read_others"] === true;
     return { viewable: isViewable, error: null };
   },
 
