@@ -49,7 +49,7 @@ afterAll(async () => {
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
     await admin.$disconnect();
   }
-});
+}, 60_000);
 
 const { DatabaseAuthorizationEngine } = require("../../../utils/authorization/engine");
 const {

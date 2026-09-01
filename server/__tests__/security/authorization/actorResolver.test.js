@@ -45,6 +45,20 @@ describe("actorResolver — the only Actor construction point", () => {
     expect(revoked).toBeNull();
   });
 
+  test("F-20d: an expired key yields no actor — lifecycle is checked in full, not half", async () => {
+    const base = { keyId: 8, keyPrefix: "apw-key-y", scopes: ["workspace.read"], workspaceId: 3 };
+    const expired = await resolveActor(
+      {},
+      res({ apiKeyContext: { ...base, expiresAt: new Date(Date.now() - 60_000) } })
+    );
+    expect(expired).toBeNull();
+    const live = await resolveActor(
+      {},
+      res({ apiKeyContext: { ...base, expiresAt: new Date(Date.now() + 60_000) } })
+    );
+    expect(live).toMatchObject({ type: "service", id: "api-key:8" });
+  });
+
   test("row 6: embed config is a REAL actor — anonymous but never null", async () => {
     const actor = await resolveActor({}, res({ embedConfig: { uuid: "emb-1", workspace: { id: 4 } } }));
     expect(actor).toMatchObject({ type: "embed", id: "emb-1", workspaceIds: ["4"] });
