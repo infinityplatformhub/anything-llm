@@ -50,3 +50,5 @@
 - [→ #40 frontend-authz] UI reads users.role (lossy projection of grants): default user with workspace editor grants gets sidebar hidden today; T-7 permissions have no role-string equivalent. Fix = capabilities endpoint + can(). (Techlead recon)
 - [reference, not a risk] Ruling: DDL migrations need not be replay-safe (Prisma _prisma_migrations tracks); data migrations (04x000/045000) must be idempotent. (QA-1 #33p2)
 - [closed: #39 d4fbe651] routeWiring.test.js depended on developer server/.env (STORAGE_DIR) — red on fresh worktree/CI; suite now mints its own temp dir like its siblings. (Dev1 found, Dev2 fixed)
+- [BLOCKER on #29, fixing] isMultiUserMode swallows DB errors → returns false → resolver treats as single-user → anonymous = super_admin when DB unreadable or multi_user_mode row missing. Fix: single-user only if users.count()===0; unreadable → multi-user/deny. (QA-2 T-4b)
+- [→ #41] 7 /v1/document routes give bound keys cross-tenant disk storage access; carve-out comment overclaims. (QA-1 T-4b)
