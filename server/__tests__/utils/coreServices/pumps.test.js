@@ -23,3 +23,9 @@ test("outbox pump recovers existing durable events immediately on start and stop
   pump.start(); await Promise.resolve(); expect(bus.deliver).toHaveBeenCalledTimes(1);
   await pump.stop(); expect(jest.getTimerCount()).toBe(0); jest.useRealTimers();
 });
+
+
+test("scheduler honors schedule timezone when calculating next occurrence", () => {
+  const scheduler = new PostgresJobScheduler({ db: {} });
+  expect(scheduler.nextRun("0 9 * * *", new Date("2026-09-02T00:00:00Z"), "Asia/Bangkok").toISOString()).toBe("2026-09-02T02:00:00.000Z");
+});

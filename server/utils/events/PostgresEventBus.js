@@ -57,7 +57,8 @@ class PostgresEventBus {
       where: {
         OR: subscriberIds.flatMap((subscriberId) => [
           { deliveries: { none: { subscriberId } } },
-          { deliveries: { some: { subscriberId, state: { in: ["retrying", "delivering"] }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] } } },
+          { deliveries: { some: { subscriberId, state: "retrying", nextAttemptAt: { lte: now }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] } } },
+          { deliveries: { some: { subscriberId, state: "delivering", claimedUntil: { lt: now } } } },
         ]),
       },
       orderBy: [{ occurredAt: "asc" }, { id: "asc" }],

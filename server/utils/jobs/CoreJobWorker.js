@@ -29,7 +29,9 @@ class CoreJobWorker {
     const handler = this.handlers[`${job.type}@${job.payload.version}`];
     if (!handler) throw new Error(`No handler for ${job.type}@${job.payload.version}`);
     const heartbeat = setInterval(() => {
-      this.queue.heartbeat({ jobId: job.jobId, workerId, leaseMs }).catch(() => {});
+      this.queue.heartbeat({ jobId: job.jobId, workerId, leaseMs }).catch((error) => {
+        console.error(`[Job heartbeat failed] jobId=${job.jobId} workerId=${workerId}: ${error.message}`);
+      });
     }, Math.max(1, Math.floor(leaseMs / 2)));
     heartbeat.unref?.();
     try {

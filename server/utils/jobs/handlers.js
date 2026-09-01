@@ -1,5 +1,10 @@
+const { Telemetry } = require("../../models/telemetry");
+
 const handlers = {
-  "telemetry.flush@1": async () => ({ flushed: 0 }),
+  "telemetry.flush@1": async () => {
+    await Telemetry.flush();
+    return { flushed: true };
+  },
   "retention.purge@1": async ({ traceId }) => {
     console.log(`[Retention purge scheduled] traceId=${traceId}`);
     return { purged: 0 };

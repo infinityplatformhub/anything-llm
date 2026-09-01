@@ -38,8 +38,6 @@ function bootSSL(app, port = 3001) {
         new CommunicationKey(true);
         new EncryptionManager();
         new BackgroundService().boot();
-      await startEventServices();
-      await jobRuntime.start();
         await startEventServices();
         await jobRuntime.start();
         await eagerLoadContextWindows();
@@ -75,6 +73,8 @@ function bootHTTP(app, port = 3001) {
       new CommunicationKey(true);
       new EncryptionManager();
       new BackgroundService().boot();
+      await startEventServices();
+      await jobRuntime.start();
       await eagerLoadContextWindows();
       await PushNotifications.setupPushNotificationService();
       await TelegramBotService.bootIfActive();

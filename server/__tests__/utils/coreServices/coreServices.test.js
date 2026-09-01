@@ -134,3 +134,13 @@ test("impersonated actor cannot enqueue mutating work and stale job fails again 
   await expect(worker.run({ jobId: "stale", type: "mutate", payload: { version: 1 }, actor: impersonated }, "w")).rejects.toThrow("Impersonated actor");
   expect(runtimeQueue.fail).toHaveBeenCalled();
 });
+
+
+test("telemetry queued handler calls Telemetry flush adapter", async () => {
+  const { Telemetry } = require("../../../models/telemetry");
+  const flush = jest.spyOn(Telemetry, "flush").mockResolvedValue();
+  const { handlers } = require("../../../utils/jobs/handlers");
+  await expect(handlers["telemetry.flush@1"]()).resolves.toEqual({ flushed: true });
+  expect(flush).toHaveBeenCalledTimes(1);
+  flush.mockRestore();
+});
