@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { PG_SCHEME } = require("../../utils/test/postgresUrl");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "approof-api-"));
 const schema = `regression_${process.pid}`;
@@ -11,7 +12,7 @@ process.env.AUTH_TOKEN = "single-user-test-password";
 process.env.API_KEY_PEPPER = "regression-test-pepper-32-bytes-long";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
 const baseDatabaseUrl = process.env.DATABASE_URL;
-if (!baseDatabaseUrl?.startsWith("postgresql://")) {
+if (!baseDatabaseUrl?.startsWith(PG_SCHEME)) {
   throw new Error("DATABASE_URL must point to PostgreSQL for regression tests");
 }
 const databaseUrl = new URL(baseDatabaseUrl);

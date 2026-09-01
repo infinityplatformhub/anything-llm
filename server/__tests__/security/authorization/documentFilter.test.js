@@ -7,6 +7,7 @@ const { execSync } = require("child_process");
 const path = require("path");
 const crypto = require("crypto");
 const { PrismaClient } = require("@prisma/client");
+const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const SERVER_DIR = path.join(__dirname, "../../..");
@@ -19,7 +20,7 @@ const testUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 let prisma;
 
 beforeAll(async () => {
-  const hasPostgresUrl = baseDatabaseUrl?.startsWith("postgresql://");
+  const hasPostgresUrl = baseDatabaseUrl?.startsWith(PG_SCHEME);
   if (!hasPostgresUrl) {
     throw new Error("T-3 integration tests require DATABASE_URL pointing at PostgreSQL");
   }
@@ -42,7 +43,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (prisma) await prisma.$disconnect();
-  const stillPostgres = baseDatabaseUrl?.startsWith("postgresql://");
+  const stillPostgres = baseDatabaseUrl?.startsWith(PG_SCHEME);
   if (stillPostgres) {
     const admin = new PrismaClient({ datasources: { db: { url: baseDatabaseUrl } } });
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);

@@ -1,0 +1,3 @@
+Ruling: Replaced every current test-setup `startsWith("postgresql://")` hit with `PG_SCHEME`, including two hits absent from recon — task scope explicitly requires every grep hit and both are setup guards — risk if wrong is broader test-only diff without runtime logic change.
+Ruling: Left `server/__tests__/ssoIssuanceLockHttp.test.js` unchanged — PR-4c owns that file per task instruction — risk if wrong is one intentional literal remains until concurrent work lands.
+Ruling: Left PostgreSQL literals in connection parser and environment masking fixture data unchanged — fixtures test literal input values rather than setup scheme detection — risk if wrong is no production impact, only cleanup incompleteness.

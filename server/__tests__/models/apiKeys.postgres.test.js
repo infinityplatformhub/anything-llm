@@ -1,8 +1,9 @@
 const prisma = require("../../utils/prisma");
+const { PG_SCHEME } = require("../../utils/test/postgresUrl");
 const { ApiKey } = require("../../models/apiKeys");
 const { BrowserExtensionApiKey } = require("../../models/browserExtensionApiKey");
 
-const run = process.env.DATABASE_URL?.startsWith("postgresql://") ? describe : describe.skip;
+const run = process.env.DATABASE_URL?.startsWith(PG_SCHEME) ? describe : describe.skip;
 
 run("HMAC API key PostgreSQL integration", () => {
   beforeAll(() => { process.env.API_KEY_PEPPER = "postgres-integration-pepper-32-bytes"; });
