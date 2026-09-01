@@ -67,6 +67,23 @@ Fixes:
   ≥1-route + count 62≠63) — proves the silent-module guard.
 - Final: full suite **622/622** (617 baseline + 3 + 2 new).
 
+## QA-2 round 3 — HTTP-level proof (added)
+
+`envDumpGuardHttp.test.js` (QA-2 pattern-10): full app via `require("../index")`
+— QA confirmed the whole index loads under the standard mocks, so the earlier
+"system.js can't load standalone" constraint is retired — pushed temp SQLite
+schema, six personas in multi-user mode (unauth / manager / default / API key /
+forged JWT / admin positive control) plus single-user mode where
+`flexUserRoleValid` bypasses entirely. `supertest` added as devDependency.
+
+**Commitment for P0-5 T-4 (QA finding):** this route survives single-user mode
+only by middleware accident — with AUTH_TOKEN/JWT_SECRET unset,
+`validatedRequest` passes through and `flexUserRoleValid` gates nothing outside
+multi-user mode. The order of those two middlewares is doing load-bearing work
+that P0-5's engine must make explicit.
+
+Mutations: guard stripped → 7 fail; manager added to gate → 1 fail.
+
 ## Files
 
 - `server/endpoints/api/system/index.js` (1-line: add `[validApiKey]`)
