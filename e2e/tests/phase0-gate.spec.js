@@ -288,11 +288,18 @@ test("09 audit log shows the flow's events", async ({ page }) => {
 });
 
 test("10 member cannot see admin UI or hit admin routes", async ({ page }) => {
-  await login(page, MEMBER);
-  // No admin/settings entry in the sidebar for a default user.
+  await page.goto("/login");
+  await page.locator('input[name="username"]').fill(MEMBER.username);
+  await page.locator('input[name="password"]').fill(MEMBER.password);
+  await page.locator('button:has-text("Login")').click();
+  // A fresh member has no workspaces, so assert the app shell, not the chat UI.
+  await expect(page.locator('button:has-text("Login")')).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  // No admin settings entry in the sidebar for a default user.
   await expect(page.getByRole("link", { name: /settings/i })).toHaveCount(0);
   // Admin route denied through the same browser session.
-  const res = await page.request.get("/api/system/env-dump");
+  const res = await authedFetch(page, "/api/system/env-dump");
   expect(res.status()).toBe(401);
 });
 
