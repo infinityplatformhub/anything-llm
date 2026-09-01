@@ -93,10 +93,18 @@ const API_ACTIONS = [
   "model-router.write",
 ];
 
+// T-6 (#28). Reading the audit log is not a system read: `system.read` is held by
+// keys that report status, and the audit trail is the record of what every actor
+// did, including the administrators. It is granted to super_admin alone
+// (migration 20260902050000) — export is bulk egress of the highest-value data on
+// the instance, which is the same reason T-2 flagged chat export.
+const AUDIT_ACTIONS = ["audit.read"];
+
 const ALL_ACTIONS = [
   ...new Set([
     ...ENGINE_ACTIONS,
     ...API_ACTIONS,
+    ...AUDIT_ACTIONS,
     "workspace.read",
     "workspace.write",
     "workspace.delete",
@@ -173,4 +181,4 @@ const SINGLE_USER_PRINCIPAL = {
   role: "super_admin",
 };
 
-module.exports = { DOCUMENT_ACTIONS, ALL_ACTIONS, SYSTEM_ROLES, SINGLE_USER_PRINCIPAL };
+module.exports = { DOCUMENT_ACTIONS, AUDIT_ACTIONS, ALL_ACTIONS, SYSTEM_ROLES, SINGLE_USER_PRINCIPAL };

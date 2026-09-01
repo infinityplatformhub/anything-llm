@@ -47,6 +47,7 @@ const {
   googleAgentSkillEndpoints,
 } = require("./endpoints/utils/googleAgentSkillEndpoints");
 const { memoryEndpoints } = require("./endpoints/memory");
+const { auditEndpoints } = require("./endpoints/audit");
 const { httpLogger } = require("./middleware/httpLogger");
 const {
   apiIpRateLimit,
@@ -112,6 +113,7 @@ scheduledJobEndpoints(apiRouter);
 outlookAgentEndpoints(apiRouter);
 googleAgentSkillEndpoints(apiRouter);
 memoryEndpoints(apiRouter);
+auditEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 
