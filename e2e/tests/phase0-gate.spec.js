@@ -27,28 +27,46 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
 /** Login page has no <label> wiring — inputs are selected by name.
  * First login of a fresh admin shows a Recovery Codes modal (Download → Close). */
 async function login(page, { username, password }) {
-  await page.goto("/login");
-  await page.locator('input[name="username"]').fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button:has-text("Login")').click();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto("/login");
+    await page.locator('input[name="username"]').fill(username);
+    await page.locator('input[name="password"]').fill(password);
+    await Promise.all([
+      page
+        .waitForResponse(
+          (r) => r.url().includes("/api/request-token"),
+          { timeout: 30_000 }
+        )
+        .catch(() => null),
+      page.locator('button:has-text("Login")').click(),
+    ]);
+    await page.waitForTimeout(2_000);
 
-  const recovery = page.getByRole("heading", { name: "Recovery Codes" });
-  if (await recovery.isVisible({ timeout: 15_000 }).catch(() => false)) {
-    const dl = page.waitForEvent("download").catch(() => null);
-    await page.getByRole("button", { name: /download/i }).click({ force: true });
-    (await dl)?.cancel?.();
-    // The button relabels to Close only after the download handler ran.
-    await page
-      .getByRole("button", { name: "Close" })
-      .click({ timeout: 15_000 });
+    // First login of a fresh account shows the Recovery Codes modal.
+    const recovery = page.getByRole("heading", { name: "Recovery Codes" });
+    if (await recovery.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      const dl = page.waitForEvent("download").catch(() => null);
+      await page
+        .getByRole("button", { name: /download/i })
+        .click({ force: true });
+      (await dl)?.cancel?.();
+      await page
+        .getByRole("button", { name: "Close" })
+        .click({ timeout: 15_000 })
+        .catch(() => {});
+      await page.waitForTimeout(1_500);
+    }
+
+    // Session established once the login form is gone.
+    if (
+      await page
+        .locator('button:has-text("Login")')
+        .isHidden()
+        .catch(() => false)
+    )
+      return;
   }
-
-  // Landing view differs by state (chat pane, or a workspace-less home), so
-  // assert the session instead: the login form is gone.
-  await expect(page.locator('button:has-text("Login")')).toHaveCount(0, {
-    timeout: 30_000,
-  });
-  await page.waitForTimeout(1_000);
+  throw new Error("login did not establish a session after 3 attempts");
 }
 
 /** The SPA keeps its JWT in localStorage — page.request only carries cookies,
