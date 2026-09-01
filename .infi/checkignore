@@ -4,3 +4,5 @@ collector/yarn.lock
 docker/docker-entrypoint.sh
 server/__tests__/api/regression.test.js
 server/__tests__/sqlite-to-pg-import.test.js
+server/__tests__/envDumpGuardHttp.test.js
+server/__tests__/ssoIssuanceLockHttp.test.js

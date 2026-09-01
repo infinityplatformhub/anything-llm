@@ -10,23 +10,21 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "envdump-http-"));
+const schema = `envdump_http_${process.pid}`;
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-at-least-12-chars";
 process.env.AUTH_TOKEN = "single-user-test-password";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
-process.env.DATABASE_URL = `file:${path.join(tempDir, "test.db")}`;
+const baseDatabaseUrl = process.env.DATABASE_URL;
+if (!baseDatabaseUrl?.startsWith("postgresql://")) {
+  throw new Error("DATABASE_URL must point to PostgreSQL for HTTP tests");
+}
+const databaseUrl = new URL(baseDatabaseUrl);
+databaseUrl.searchParams.set("schema", schema);
+process.env.DATABASE_URL = databaseUrl.toString();
 fs.mkdirSync(process.env.STORAGE_DIR, { recursive: true });
 
-const testSchema = path.join(tempDir, "schema.prisma");
-fs.writeFileSync(
-  testSchema,
-  fs
-    .readFileSync(path.resolve(__dirname, "../prisma/schema.prisma"), "utf8")
-    .replace(
-      'url      = "file:../storage/anythingllm.db"',
-      'url      = env("DATABASE_URL")'
-    )
-);
+const testSchema = path.resolve(__dirname, "../prisma/schema.prisma");
 execFileSync(
   path.resolve(__dirname, "../node_modules/.bin/prisma"),
   ["db", "push", "--skip-generate", "--schema", testSchema],
