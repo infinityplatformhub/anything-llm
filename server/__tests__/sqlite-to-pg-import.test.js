@@ -12,7 +12,7 @@ let client;
 let fixture;
 
 beforeAll(async () => {
-  if (!databaseUrl?.startsWith("postgresql://")) {
+  if (!databaseUrl?.startsWith("postgresql:")) {
     throw new Error("DATABASE_URL must point to PostgreSQL for import tests");
   }
   fixture = path.join(

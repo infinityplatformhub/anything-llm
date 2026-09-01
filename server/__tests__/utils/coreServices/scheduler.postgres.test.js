@@ -1,12 +1,12 @@
 const { forPrismaTest } = require("../../../utils/test/postgresUrl");
 
-if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
+if (process.env.DATABASE_URL?.startsWith("postgresql:")) {
   process.env.DATABASE_URL = forPrismaTest(process.env.DATABASE_URL);
 }
 const prisma = require("../../../utils/prisma");
 const { PostgresJobScheduler } = require("../../../utils/jobs/PostgresJobScheduler");
 
-const run = process.env.DATABASE_URL?.startsWith("postgresql://") ? describe : describe.skip;
+const run = process.env.DATABASE_URL?.startsWith("postgresql:") ? describe : describe.skip;
 
 run("PostgresJobScheduler PostgreSQL integration", () => {
   beforeEach(async () => {

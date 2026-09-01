@@ -1,5 +1,7 @@
+const PG_SCHEME = "postgresql:";
+
 function postgresUrl(value = process.env.DATABASE_URL) {
-  if (!value?.startsWith("postgresql://")) {
+  if (!value?.startsWith(PG_SCHEME)) {
     throw new Error("DATABASE_URL must point to PostgreSQL");
   }
   return new URL(value);
@@ -27,4 +29,4 @@ function forPsql(value) {
   return url.toString();
 }
 
-module.exports = { forPostgresClient, forPrismaTest, forPsql };
+module.exports = { PG_SCHEME, forPostgresClient, forPrismaTest, forPsql };
