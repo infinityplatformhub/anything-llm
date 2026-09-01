@@ -1,7 +1,11 @@
+const express = require("express");
+const supertest = require("supertest");
 const {
   BoundedMemoryStore,
   bearerKey,
   canonicalIp,
+  loginAccountRateLimit,
+  resetRequestControls,
 } = require("../../../utils/middleware/requestControls");
 
 function request(address, authorization = "") {
@@ -36,4 +40,30 @@ test("bounds attacker-controlled limiter keys", async () => {
     )
   );
   expect(store.hits.size).toBeLessThanOrEqual(11);
+});
+
+test("clears request control limits between HTTP suites", async () => {
+  const app = express();
+  app.use(express.json());
+  app.post(
+    "/api/request-token",
+    loginAccountRateLimit,
+    (_request, response) => response.sendStatus(401)
+  );
+
+  let response;
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    response = await supertest(app)
+      .post("/api/request-token")
+      .send({ username: "reset-test" });
+    if (response.status === 429) break;
+  }
+  expect(response.status).toBe(429);
+
+  await resetRequestControls();
+
+  await supertest(app)
+    .post("/api/request-token")
+    .send({ username: "reset-test" })
+    .expect(401);
 });

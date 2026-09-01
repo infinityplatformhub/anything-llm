@@ -114,6 +114,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const prisma = require("../../utils/prisma");
 const { app } = require("../../index");
+const { resetRequestControls } = require("../../utils/middleware/requestControls");
 const { makeJWT } = require("../../utils/http");
 const { bootHTTP } = require("../../utils/boot");
 
@@ -137,6 +138,7 @@ async function setMultiUserMode(enabled) {
 }
 
 beforeAll(async () => {
+  await resetRequestControls();
   const hash = bcrypt.hashSync(password, 4);
   admin = await prisma.users.create({
     data: {
