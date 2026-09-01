@@ -11,6 +11,14 @@ const { AuthorizationContractError } = require("./errors");
 
 const SCOPE_KEY = (orgId) => `org:${orgId}`;
 
+// Only these two named built-in principals skip the escalation guard: the single-user
+// deployment principal and the P0-6 job runtime, both seeded by migrations. Exempting
+// every `type:"service"` actor would let a scoped API key (also a service actor) grant
+// itself super_admin — the S-9 hole (security review, issue #20).
+const EXEMPT_PRINCIPAL_IDS = new Set(["single-user", "core-jobs"]);
+const isExemptPrincipal = (actor) =>
+  actor.type === "service" && EXEMPT_PRINCIPAL_IDS.has(String(actor.id));
+
 async function bumpVersion(tx, changeType, scopeKey, actorId) {
   const row = await tx.policy_versions.create({
     data: { change_type: changeType, scope_key: scopeKey, actor_id: actorId ?? null },
@@ -27,13 +35,29 @@ async function permissionIdsForRole(tx, roleId) {
   return new Set(rows.map((r) => r.permission_id));
 }
 
-async function heldPermissionIds(tx, actor) {
+/**
+ * Permissions the actor holds *within the scope a grant is being written to*.
+ * Scope rule (security review, issue #20): an org-wide grant (workspace_id null) may
+ * only be written by someone holding the permission org-wide; a workspace-scoped grant
+ * may be written by someone holding it org-wide OR in that same workspace. Counting
+ * every grant regardless of scope would let a workspace-A admin mint org-wide roles.
+ */
+async function heldPermissionIds(tx, actor, targetWorkspaceId) {
+  const scope =
+    targetWorkspaceId == null
+      ? { workspace_id: null } // org-wide target: only org-wide grants count
+      : { OR: [{ workspace_id: null }, { workspace_id: targetWorkspaceId }] };
   const grants = await tx.principal_role_grants.findMany({
     where: {
-      orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
-      OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+      AND: [
+        {
+          orgId: actor.orgId ?? 1,
+          principal_type: actor.type,
+          principal_id: String(actor.id),
+          OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+        },
+        scope,
+      ],
     },
     select: { role_id: true },
   });
@@ -52,14 +76,21 @@ async function heldPermissionIds(tx, actor) {
  * the same rule for scoped API keys, which resolve to service actors).
  */
 async function grantRole({ actor, principalType, principalId, roleId, workspaceId = null, expiresAt = null, db = prisma }) {
+  // A missing actor must never be a free pass: seeds and migrations pass an explicit
+  // built-in principal (security review, issue #20).
+  if (!actor) {
+    throw new AuthorizationContractError(
+      "grantRole requires an explicit actor — pass SERVICE_PRINCIPALS.singleUser/coreJobs for seed and migration writes"
+    );
+  }
   return db.$transaction(async (tx) => {
-    if (actor && actor.type !== "service") {
+    if (!isExemptPrincipal(actor)) {
       const rolePerms = await permissionIdsForRole(tx, roleId);
-      const held = await heldPermissionIds(tx, actor);
+      const held = await heldPermissionIds(tx, actor, workspaceId);
       const missing = [...rolePerms].filter((p) => !held.has(p));
       if (missing.length > 0) {
         throw new AuthorizationContractError(
-          "grant refused: role carries permissions the granter does not hold"
+          "grant refused: role carries permissions the granter does not hold in this scope"
         );
       }
     }

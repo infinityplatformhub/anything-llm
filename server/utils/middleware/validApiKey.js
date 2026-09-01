@@ -20,7 +20,7 @@ function validApiKey(action) {
     await prisma.$transaction(async (transaction) => {
       await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
       await emitAuditEvent("auth.key_used", {
-        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: "default",
+        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: 1,
       }, null, { resource: { type: "api_key", id: context.keyId }, transaction });
     });
     if (!allowed) return response.status(403).json({ error: "Insufficient scope." });

@@ -16,10 +16,11 @@ const {
 // Impersonated sessions (view-as-user) keep the viewed user's READ scope; every mutation
 // is denied regardless of that scope. The only read-shaped actions an impersonated admin
 // may need are diagnostics — access.diagnose included until T-7 rules otherwise.
+// document.export is deliberately NOT here: exporting is data exfiltration, not reading
+// (QA-1 finding, seam 02 contract).
 const READ_ACTIONS = new Set([
   "document.read",
   "document.search",
-  "document.export",
   "workspace.read",
   "user.read",
   "system.read",
@@ -81,22 +82,20 @@ class DatabaseAuthorizationEngine {
   }
 
   /**
-   * Batch decisions — one result per resource or the whole call fails closed (seam 02).
+   * Batch decisions — ONE result per requested resource, in request order, or the whole
+   * call fails closed (seam 02). Keyed by index: two resources can share type+id (or
+   * carry no id at all) and a content-derived key would silently drop a decision.
    * @param {{actor: Object|null, action: string, resources: Array<Object>}} input
+   * @returns {Promise<Map<number, {allowed: boolean, reason: string, matchedPolicyIds: string[]}>>}
    */
   async authorizeMany({ actor, action, resources }) {
     if (!Array.isArray(resources) || resources.length === 0) {
       throw new AuthorizationContractError("resources must be a non-empty array");
     }
-    const results = new Map();
     const decisions = await Promise.all(
       resources.map((resource) => this.authorize({ actor, action, resource }))
     );
-    resources.forEach((resource, i) => {
-      const key = `${resource.type}:${resource.id ?? `ws:${resource.workspaceId ?? "*"}`}`;
-      results.set(key, decisions[i]);
-    });
-    return results;
+    return new Map(decisions.map((decision, i) => [i, decision]));
   }
 
   async evaluate(actor, action, resource) {

@@ -57,6 +57,9 @@ const {
   AuthorizationUnavailableError,
 } = require("../../../utils/authorization/errors");
 const repository = require("../../../utils/authorization/policyRepository");
+const { SERVICE_PRINCIPALS } = require("../../../utils/authorization/actorResolver");
+// seed-equivalent writes use the built-in principal, exactly as migrations/seeds do
+const SYS = SERVICE_PRINCIPALS.singleUser;
 
 let engine;
 const roles = {};
@@ -76,7 +79,7 @@ async function principal({ type = "user", id, grants = [] }) {
   const actor = { type, id: String(id), orgId: 1 };
   for (const g of grants) {
     const workspaceId = g.workspaceId === "W1" ? W1.id : (g.workspaceId ?? null);
-    await repository.grantRole({ actor: null, principalType: type, principalId: String(id), roleId: g.roleId, workspaceId, expiresAt: g.expiresAt ?? null, db: prisma });
+    await repository.grantRole({ actor: SYS, principalType: type, principalId: String(id), roleId: g.roleId, workspaceId, expiresAt: g.expiresAt ?? null, db: prisma });
   }
   return actor;
 }
@@ -118,7 +121,7 @@ describe("T-2 engine core", () => {
 
   test("deny-wins: a deny row on ANY granted role beats allows on others", async () => {
     const id = 904;
-    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: roles.member.id, db: prisma });
+    await repository.grantRole({ actor: SYS, principalType: "user", principalId: String(id), roleId: roles.member.id, db: prisma });
     // craft a custom role with an explicit deny on chat.send
     const [denyRole] = await prisma.$transaction(async (tx) => {
       const r = await tx.roles.create({ data: { name: `deny-chat-${dbSuffix}`, scope: "org", orgId: 1 } });
@@ -126,7 +129,7 @@ describe("T-2 engine core", () => {
       await tx.role_permissions.create({ data: { role_id: r.id, permission_id: perm.id, effect: "deny" } });
       return [r];
     });
-    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: denyRole.id, db: prisma });
+    await repository.grantRole({ actor: SYS, principalType: "user", principalId: String(id), roleId: denyRole.id, db: prisma });
     const d = await engine.authorize({ actor: { type: "user", id: String(id), orgId: 1 }, action: "chat.send", resource: wsResource() });
     expect(d).toMatchObject({ allowed: false, reason: "denied_by_role" });
   });
@@ -144,7 +147,7 @@ describe("T-2 engine core", () => {
     const base = await principal({ id: 906, grants: [{ roleId: roles.super_admin.id }] });
     const impersonated = { ...base, impersonatedBy: { type: "user", id: "1" } };
     expect(await engine.authorize({ actor: impersonated, action: "document.read", resource: docResource() })).toMatchObject({ allowed: true });
-    for (const action of ["workspace.write", "document.delete", "role.grant", "settings.write", "key.manage", "user.manage"]) {
+    for (const action of ["workspace.write", "document.delete", "document.export", "role.grant", "settings.write", "key.manage", "user.manage"]) {
       const d = await engine.authorize({ actor: impersonated, action, resource: wsResource() });
       expect(d).toMatchObject({ allowed: false, reason: "impersonated_mutation_denied" });
     }
@@ -163,10 +166,40 @@ describe("T-2 engine core", () => {
     expect(res.policyVersion).toBeGreaterThan(0n);
   });
 
+  test("S-5 scope: a workspace-scoped owner cannot mint the same role org-wide", async () => {
+    // owner of W1 holds workspace.members.manage etc. IN W1 only — an org-wide grant of
+    // the same role would hand those permissions across every workspace.
+    const wsAdmin = await principal({ id: 914, grants: [{ roleId: roles.owner.id, workspaceId: "W1" }] });
+    await expect(
+      repository.grantRole({ actor: wsAdmin, principalType: "user", principalId: "915", roleId: roles.owner.id, workspaceId: null, db: prisma })
+    ).rejects.toThrow(/does not hold/);
+    // the same grant scoped back to W1 is legitimate
+    const ok = await repository.grantRole({ actor: wsAdmin, principalType: "user", principalId: "915", roleId: roles.owner.id, workspaceId: W1.id, db: prisma });
+    expect(ok.policyVersion).toBeGreaterThan(0n);
+  });
+
+  test("S-9: a scoped API-key service actor gets no exemption from the escalation guard", async () => {
+    const keyActor = { type: "service", id: "api-key:42", orgId: 1 };
+    await expect(
+      repository.grantRole({ actor: keyActor, principalType: "user", principalId: "916", roleId: roles.super_admin.id, db: prisma })
+    ).rejects.toThrow(/does not hold/);
+  });
+
+  test("setDocumentVisibility bumps the policy clock like every other gateway write", async () => {
+    const doc = await prisma.documents.create({
+      data: { orgId: 1, filename: "v.txt", dedupe_key: `/vis/${dbSuffix}.txt` },
+    });
+    const before = await repository.currentPolicyVersion(prisma);
+    const res = await repository.setDocumentVisibility({ actor: SYS, documentId: doc.id, hidden: true, db: prisma });
+    expect(res.hidden).toBe(true);
+    expect(await repository.currentPolicyVersion(prisma)).toBeGreaterThan(before);
+    expect(res.policyVersion).toBeGreaterThan(before);
+  });
+
   test("policy clock: every repository write bumps the monotonic version", async () => {
     const before = await repository.currentPolicyVersion(prisma);
-    await repository.grantRole({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
-    await repository.revokeGrant({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
+    await repository.grantRole({ actor: SYS, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
+    await repository.revokeGrant({ actor: SYS, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
     const after = await repository.currentPolicyVersion(prisma);
     expect(after).toBeGreaterThan(before);
   });
@@ -200,5 +233,15 @@ describe("T-2 engine core", () => {
     expect(map.size).toBe(2);
     for (const d of map.values()) expect(d.allowed).toBe(true);
     await expect(engine.authorizeMany({ actor, action: "chat.send", resources: [] })).rejects.toThrow();
+
+    // F-20c: identical resources must still yield one decision each — a content-derived
+    // key would collapse them and silently drop decisions the caller asked for.
+    const dupes = await engine.authorizeMany({
+      actor,
+      action: "chat.send",
+      resources: [wsResource(), wsResource(), wsResource()],
+    });
+    expect(dupes.size).toBe(3);
+    expect([...dupes.keys()]).toEqual([0, 1, 2]);
   });
 });
