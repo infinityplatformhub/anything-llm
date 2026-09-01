@@ -23,7 +23,6 @@ declare -a BUILTIN=()
 # gate can land before the fix. DELETE the entry when #34 merges; an entry here
 # without an open issue is a bug, not a waiver.
 declare -a PENDING=(
-  "locals.apiKey"   # issue #34, branch approof/hotfix-extension-locals-apikey
 )
 
 writes=$(git grep -ohE 'locals\.[a-zA-Z_][a-zA-Z0-9_]* *=' -- 'server' \
