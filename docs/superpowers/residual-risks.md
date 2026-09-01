@@ -62,3 +62,4 @@
 - [reference, not a risk — runbook] /v1 routes return 403 (not 503) when the policy store is down — by design (which half rejected is audit detail). Operators must read auth.key_used.denyReason, not the status code. (QA-2 W-8 under failure, 7/7 fail-closed)
 - [closed: code-standards §7.7] Tests needing a usable admin must create via User model, not raw prisma (no grant otherwise → 403 on update-env). (QA-2)
 - [→ #47 flake] modelPricing/cacheIsolation.test.js (added by #38) fails ~1/5 on clean main — unawaited constructor refresh race. Two independent reports. Blocks §2.5 three-run until fixed.
+- [→ #48] Stored credential cannot be cleared via updateENV: value validators reject "" before the delete branch runs; row stays decryptable. Needs explicit clear endpoint. (QA-1 #33p3 post-merge)
