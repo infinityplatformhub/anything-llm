@@ -6,3 +6,4 @@
 - `Ruling:` seed.js ใช้ find-then-create แทน compound-unique upsert สำหรับ grant ที่ workspace_id NULL — เพราะ Prisma 5 ห้าม null ใน unique where input — ถ้าผิด: ช้าลงไม่มี (seed รันครั้งเดียวต่อ env)
 - `Ruling:` integration test รัน backfill ผ่าน psql ไม่ใช่ prisma db execute — เพราะ db execute ตัด statement กลาง DO $$ block (พิสูจน์แล้ว 2 error) — ถ้าผิด: CI ต้องมี psql (ubuntu-latest มี; ถ้า CI เปลี่ยน runner ต้องกลับมาแก้)
 - `Ruling:` workspace role เดิมของ default member = editor ไม่ใช่ viewer — พฤติกรรม legacy (upload/update/delete ได้) — ตัดสินร่วมกับ 8b แล้ว
+- `Ruling:` "migration re-runnable" ตีความเป็น seed/backfill block เท่านั้น ไม่ใส่ IF NOT EXISTS ใน DDL — เพราะ Prisma ไม่ re-run applied migration เด็ดขาด และ IF NOT EXISTS บนทุก statement บังอาจ runtime error จริง (statement พังจากสาเหตุอื่น) — ถ้าผิด: manual psql re-run ของ DDL ตาย (ยอมรับ — run ผ่าน Prisma เท่านั้น) — QA-1 minor (a)
