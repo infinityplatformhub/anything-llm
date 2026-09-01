@@ -3,8 +3,10 @@ const { PostgresJobScheduler } = require("./PostgresJobScheduler");
 const { CoreJobWorker } = require("./CoreJobWorker");
 const { ActorIdentityStore } = require("./ActorIdentityStore");
 const { handlers, registerCoreSchedules } = require("./handlers");
+// T-2 (#20): service Actor literals live only in utils/authorization/actorResolver.js
+const { SERVICE_PRINCIPALS } = require("../authorization/actorResolver");
 
-const systemActor = { type: "service", id: "core-jobs", orgId: "default" };
+const systemActor = SERVICE_PRINCIPALS.coreJobs;
 
 class JobRuntime {
   constructor({ queue = new PostgresJobQueue(), scheduler = new PostgresJobScheduler(), identityStore = new ActorIdentityStore(), intervalMs = 1000 } = {}) {

@@ -59,6 +59,7 @@ const repository = require("../../../utils/authorization/policyRepository");
 
 let engine;
 const roles = {};
+let W1; // real workspace ids — grants carry FK workspace_id (e5)
 
 beforeAll(async () => {
   engine = new DatabaseAuthorizationEngine({ db: prisma });
@@ -67,54 +68,56 @@ beforeAll(async () => {
       where: { name, scope: name === "owner" || name === "editor" || name === "viewer" ? "workspace" : "org" },
     });
   }
+  W1 = await prisma.workspaces.create({ data: { name: "w1", slug: `t2-w1-${dbSuffix}` } });
 });
 
 async function principal({ type = "user", id, grants = [] }) {
   const actor = { type, id: String(id), orgId: 1 };
   for (const g of grants) {
-    await repository.grantRole({ actor: null, principalType: type, principalId: String(id), roleId: g.roleId, workspaceId: g.workspaceId ?? null, expiresAt: g.expiresAt ?? null });
+    const workspaceId = g.workspaceId === "W1" ? W1.id : (g.workspaceId ?? null);
+    await repository.grantRole({ actor: null, principalType: type, principalId: String(id), roleId: g.roleId, workspaceId, expiresAt: g.expiresAt ?? null, db: prisma });
   }
   return actor;
 }
 
-const wsResource = { type: "workspace", id: null, orgId: 1, workspaceId: 1 };
-const docResource = { type: "document", id: "7", orgId: 1, workspaceId: 1 };
+const wsResource = () => ({ type: "workspace", id: null, orgId: 1, workspaceId: W1.id });
+const docResource = () => ({ type: "document", id: "7", orgId: 1, workspaceId: W1.id });
 
 describe("T-2 engine core", () => {
   test("S-4 base: null actor is denied missing_actor — engine is the default-deny point", async () => {
-    const d = await engine.authorize({ actor: null, action: "workspace.read", resource: wsResource });
+    const d = await engine.authorize({ actor: null, action: "workspace.read", resource: wsResource() });
     expect(d.allowed).toBe(false);
     expect(d.reason).toBe("missing_actor");
   });
 
   test("unknown action is denied even for super_admin", async () => {
     const actor = await principal({ id: 900, grants: [{ roleId: roles.super_admin.id }] });
-    const d = await engine.authorize({ actor, action: "does.not_exist", resource: wsResource });
+    const d = await engine.authorize({ actor, action: "does.not_exist", resource: wsResource() });
     expect(d).toMatchObject({ allowed: false, reason: "unknown_action" });
   });
 
   test("matrix: seeded roles evaluate allow/deny per the seed table", async () => {
     // viewer may read documents, may not write workspaces
-    const viewer = await principal({ id: 901, grants: [{ roleId: roles.viewer.id, workspaceId: 1 }] });
-    expect(await engine.authorize({ actor: viewer, action: "document.read", resource: docResource })).toMatchObject({ allowed: true });
-    expect(await engine.authorize({ actor: viewer, action: "workspace.write", resource: wsResource })).toMatchObject({ allowed: false, reason: "no_permission_in_roles" });
+    const viewer = await principal({ id: 901, grants: [{ roleId: roles.viewer.id, workspaceId: "W1" }] });
+    expect(await engine.authorize({ actor: viewer, action: "document.read", resource: docResource() })).toMatchObject({ allowed: true });
+    expect(await engine.authorize({ actor: viewer, action: "workspace.write", resource: wsResource() })).toMatchObject({ allowed: false, reason: "no_permission_in_roles" });
 
     // member (org) may chat.send
     const member = await principal({ id: 902, grants: [{ roleId: roles.member.id }] });
-    expect(await engine.authorize({ actor: member, action: "chat.send", resource: wsResource })).toMatchObject({ allowed: true });
+    expect(await engine.authorize({ actor: member, action: "chat.send", resource: wsResource() })).toMatchObject({ allowed: true });
 
     // super_admin holds every seeded action (generated over the full 50-word vocabulary)
     const superAdmin = await principal({ id: 903, grants: [{ roleId: roles.super_admin.id }] });
     const allActions = (await prisma.permissions.findMany({ select: { action: true } })).map((p) => p.action);
     const decisions = await Promise.all(
-      allActions.map((action) => engine.authorize({ actor: superAdmin, action, resource: wsResource }))
+      allActions.map((action) => engine.authorize({ actor: superAdmin, action, resource: wsResource() }))
     );
     expect(decisions.every((d) => d.allowed)).toBe(true);
   });
 
   test("deny-wins: a deny row on ANY granted role beats allows on others", async () => {
     const id = 904;
-    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: roles.member.id });
+    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: roles.member.id, db: prisma });
     // craft a custom role with an explicit deny on chat.send
     const [denyRole] = await prisma.$transaction(async (tx) => {
       const r = await tx.roles.create({ data: { name: `deny-chat-${dbSuffix}`, scope: "org", orgId: 1 } });
@@ -122,8 +125,8 @@ describe("T-2 engine core", () => {
       await tx.role_permissions.create({ data: { role_id: r.id, permission_id: perm.id, effect: "deny" } });
       return [r];
     });
-    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: denyRole.id });
-    const d = await engine.authorize({ actor: { type: "user", id: String(id), orgId: 1 }, action: "chat.send", resource: wsResource });
+    await repository.grantRole({ actor: null, principalType: "user", principalId: String(id), roleId: denyRole.id, db: prisma });
+    const d = await engine.authorize({ actor: { type: "user", id: String(id), orgId: 1 }, action: "chat.send", resource: wsResource() });
     expect(d).toMatchObject({ allowed: false, reason: "denied_by_role" });
   });
 
@@ -132,45 +135,45 @@ describe("T-2 engine core", () => {
       id: 905,
       grants: [{ roleId: roles.member.id, expiresAt: new Date(Date.now() - 1000) }],
     });
-    const d = await engine.authorize({ actor, action: "chat.send", resource: wsResource });
+    const d = await engine.authorize({ actor, action: "chat.send", resource: wsResource() });
     expect(d).toMatchObject({ allowed: false, reason: "no_grants" });
   });
 
   test("S-7: impersonated actor — reads allowed, every mutation denied before policy lookup", async () => {
     const base = await principal({ id: 906, grants: [{ roleId: roles.super_admin.id }] });
     const impersonated = { ...base, impersonatedBy: { type: "user", id: "1" } };
-    expect(await engine.authorize({ actor: impersonated, action: "document.read", resource: docResource })).toMatchObject({ allowed: true });
+    expect(await engine.authorize({ actor: impersonated, action: "document.read", resource: docResource() })).toMatchObject({ allowed: true });
     for (const action of ["workspace.write", "document.delete", "role.grant", "settings.write", "key.manage", "user.manage"]) {
-      const d = await engine.authorize({ actor: impersonated, action, resource: wsResource });
+      const d = await engine.authorize({ actor: impersonated, action, resource: wsResource() });
       expect(d).toMatchObject({ allowed: false, reason: "impersonated_mutation_denied" });
     }
   });
 
   test("S-5: repository refuses a grant carrying permissions the granter lacks", async () => {
-    const granter = await principal({ id: 907, grants: [{ roleId: roles.viewer.id, workspaceId: 1 }] });
+    const granter = await principal({ id: 907, grants: [{ roleId: roles.viewer.id, workspaceId: "W1" }] });
     await expect(
-      repository.grantRole({ actor: granter, principalType: "user", principalId: "908", roleId: roles.super_admin.id })
+      repository.grantRole({ actor: granter, principalType: "user", principalId: "908", roleId: roles.super_admin.id, db: prisma })
     ).rejects.toThrow(/granter does not hold/);
   });
 
   test("S-6 companion: a super_admin granter can grant roles it holds", async () => {
     const granter = await principal({ id: 909, grants: [{ roleId: roles.super_admin.id }] });
-    const res = await repository.grantRole({ actor: granter, principalType: "user", principalId: "910", roleId: roles.member.id });
+    const res = await repository.grantRole({ actor: granter, principalType: "user", principalId: "910", roleId: roles.member.id, db: prisma });
     expect(res.policyVersion).toBeGreaterThan(0n);
   });
 
   test("policy clock: every repository write bumps the monotonic version", async () => {
     const before = await repository.currentPolicyVersion(prisma);
-    await repository.grantRole({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id });
-    await repository.revokeGrant({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id });
+    await repository.grantRole({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
+    await repository.revokeGrant({ actor: null, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });
     const after = await repository.currentPolicyVersion(prisma);
     expect(after).toBeGreaterThan(before);
   });
 
   test("assertAuthorized maps denials to AuthorizationDeniedError without leaking existence", async () => {
-    const actor = await principal({ id: 912, grants: [{ roleId: roles.viewer.id, workspaceId: 1 }] });
+    const actor = await principal({ id: 912, grants: [{ roleId: roles.viewer.id, workspaceId: "W1" }] });
     await expect(
-      engine.assertAuthorized({ actor, action: "workspace.delete", resource: wsResource })
+      engine.assertAuthorized({ actor, action: "workspace.delete", resource: wsResource() })
     ).rejects.toBeInstanceOf(AuthorizationDeniedError);
   });
 
@@ -182,7 +185,7 @@ describe("T-2 engine core", () => {
     };
     const broken = new DatabaseAuthorizationEngine({ db: boom });
     await expect(
-      broken.authorize({ actor: { type: "user", id: "1", orgId: 1 }, action: "workspace.read", resource: wsResource })
+      broken.authorize({ actor: { type: "user", id: "1", orgId: 1 }, action: "workspace.read", resource: wsResource() })
     ).rejects.toBeInstanceOf(AuthorizationUnavailableError);
   });
 
@@ -191,7 +194,7 @@ describe("T-2 engine core", () => {
     const map = await engine.authorizeMany({
       actor,
       action: "chat.send",
-      resources: [wsResource, { type: "workspace", id: null, orgId: 1, workspaceId: 2 }],
+      resources: [wsResource(), { type: "workspace", id: null, orgId: 1, workspaceId: W1.id + 1 }],
     });
     expect(map.size).toBe(2);
     for (const d of map.values()) expect(d.allowed).toBe(true);

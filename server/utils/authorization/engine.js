@@ -93,7 +93,7 @@ class DatabaseAuthorizationEngine {
       resources.map((resource) => this.authorize({ actor, action, resource }))
     );
     resources.forEach((resource, i) => {
-      const key = `${resource.type}:${resource.id ?? "*"}`;
+      const key = `${resource.type}:${resource.id ?? `ws:${resource.workspaceId ?? "*"}`}`;
       results.set(key, decisions[i]);
     });
     return results;
@@ -107,20 +107,22 @@ class DatabaseAuthorizationEngine {
 
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
-    const workspaceIds = [null];
-    if (resource.workspaceId != null) workspaceIds.push(resource.workspaceId);
+    const grantWhere = {
+      orgId: actor.orgId ?? 1,
+      principal_type: actor.type,
+      principal_id: String(actor.id),
+      OR: [
+        { expires_at: null },
+        { expires_at: { gt: new Date() } },
+      ],
+    };
+    const workspaceScope =
+      resource.workspaceId != null
+        ? { OR: [{ workspace_id: null }, { workspace_id: resource.workspaceId }] }
+        : { workspace_id: null };
     const grants = await this.db.principal_role_grants.findMany({
-      where: {
-        orgId: actor.orgId ?? 1,
-        principal_type: actor.type,
-        principal_id: String(actor.id),
-        OR: [
-          { expires_at: null },
-          { expires_at: { gt: new Date() } },
-        ],
-        workspace_id: { in: workspaceIds },
-      },
-      select: { role_id: true, effect: true },
+      where: { AND: [grantWhere, workspaceScope] },
+      select: { role_id: true },
     });
     if (grants.length === 0) return asDenied("no_grants");
 

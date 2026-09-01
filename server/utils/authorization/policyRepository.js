@@ -51,8 +51,8 @@ async function heldPermissionIds(tx, actor) {
  * principal, whose grant comes from migrations and out ranks everything (S-9 enforces
  * the same rule for scoped API keys, which resolve to service actors).
  */
-async function grantRole({ actor, principalType, principalId, roleId, workspaceId = null, expiresAt = null }) {
-  return prisma.$transaction(async (tx) => {
+async function grantRole({ actor, principalType, principalId, roleId, workspaceId = null, expiresAt = null, db = prisma }) {
+  return db.$transaction(async (tx) => {
     if (actor && actor.type !== "service") {
       const rolePerms = await permissionIdsForRole(tx, roleId);
       const held = await heldPermissionIds(tx, actor);
@@ -94,8 +94,8 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
 }
 
 /** Revoke a grant — same gateway, same transactional version bump. */
-async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null }) {
-  return prisma.$transaction(async (tx) => {
+async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null, db = prisma }) {
+  return db.$transaction(async (tx) => {
     const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actor ? Number(actor.id) || null : null);
     const res = await tx.principal_role_grants.deleteMany({
       where: {
@@ -108,8 +108,8 @@ async function revokeGrant({ actor, principalType, principalId, roleId, workspac
 }
 
 /** Set document visibility — T-3's documentFilter reads this as a hard override. */
-async function setDocumentVisibility({ actor, documentId, hidden, reason = null }) {
-  return prisma.$transaction(async (tx) => {
+async function setDocumentVisibility({ actor, documentId, hidden, reason = null, db = prisma }) {
+  return db.$transaction(async (tx) => {
     const version = await bumpVersion(tx, "visibility", `document:${documentId}`, actor ? Number(actor.id) || null : null);
     const row = await tx.document_visibility.upsert({
       where: { document_id: documentId },
