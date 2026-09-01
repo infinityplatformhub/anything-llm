@@ -2,6 +2,7 @@ const { execSync } = require("child_process");
 const crypto = require("crypto");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
+const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const SERVER_DIR = path.join(__dirname, "../../..");
@@ -42,7 +43,7 @@ jest.mock("../../../utils/files/multer", () => ({
 }));
 
 beforeAll(async () => {
-  if (!baseDatabaseUrl?.startsWith("postgresql://")) {
+  if (!baseDatabaseUrl?.startsWith(PG_SCHEME)) {
     throw new Error(
       "T-4a integration tests require DATABASE_URL pointing at PostgreSQL"
     );
@@ -153,7 +154,7 @@ afterAll(async () => {
   }
   if (prisma) await prisma.$disconnect();
   process.env.DATABASE_URL = baseDatabaseUrl;
-  if (baseDatabaseUrl?.startsWith("postgresql://")) {
+  if (baseDatabaseUrl?.startsWith(PG_SCHEME)) {
     const admin = new PrismaClient({
       datasources: { db: { url: baseDatabaseUrl } },
     });

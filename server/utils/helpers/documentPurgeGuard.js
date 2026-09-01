@@ -34,11 +34,11 @@ async function canPurgeDocumentFromWorkspace({
       reason: "Document is not embedded in this workspace.",
     };
 
-  // T-4a (#25): the legacy `user.role === "admin"` shortcut is replaced by an
-  // explicit capability the caller passes in. Whether someone may purge across
-  // workspaces is an org-wide grant the engine evaluates at the route — not a
-  // string on the user row, which is what made this a bypass. `!user`
-  // (single-user mode) still passes: one principal, no other workspace to protect.
+  // T-4a (#25): the legacy admin-role shortcut is replaced by an explicit
+  // capability the caller passes in. Whether someone may purge across workspaces
+  // is an org-wide grant the engine evaluates at the route — not a string on the
+  // user row, which is what made this a bypass. `!user` (single-user mode) still
+  // passes: one principal, no other workspace to protect.
   if (!user || orgWideDocumentDelete) return { allowed: true, reason: null };
 
   // Membership check (QA-2 A1): non-members may only purge from workspaces they

@@ -155,8 +155,51 @@ async function revokeWorkspaceMembershipGrants({
   }
 }
 
+/**
+ * Report users who can log in but can do nothing: no workspace membership and no
+ * org role that grants anything without one.
+ *
+ * Migration 20260902044000 prints this once as a NOTICE, which nobody reads
+ * again. The condition is not a one-off: it recurs whenever the last membership
+ * is removed from a user, so it is checked at every boot. Logged, never thrown —
+ * an instance with stranded users still has to start so an operator can fix it.
+ */
+async function reportUsersWithoutAccess(db = prisma) {
+  try {
+    const stranded = await db.$queryRaw`
+      SELECT u."id", u."username"
+      FROM "users" u
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "workspace_users" wu WHERE wu."user_id" = u."id"
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "principal_role_grants" g
+        JOIN "roles" r ON r."id" = g."role_id"
+        WHERE g."principal_type" = 'user'
+          AND g."principal_id" = u."id"::text
+          AND r."name" IN ('super_admin', 'setup_admin', 'content_moderator')
+      )
+      ORDER BY u."id"
+      LIMIT 50
+    `;
+    if (stranded.length === 0) return [];
+    console.warn(
+      `[authorization] ${stranded.length} user(s) belong to no workspace and hold no org-level role — they can sign in but cannot reach anything: ` +
+        stranded.map((u) => `${u.username} (#${u.id})`).join(", ")
+    );
+    return stranded;
+  } catch (error) {
+    console.error(
+      "[authorization] could not check for users without access:",
+      error.message
+    );
+    return [];
+  }
+}
+
 module.exports = {
   syncLegacyRoleGrant,
+  reportUsersWithoutAccess,
   syncWorkspaceMembershipGrant,
   revokeWorkspaceMembershipGrants,
   ORG_ROLE_FOR_LEGACY,

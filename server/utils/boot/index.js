@@ -1,3 +1,6 @@
+const {
+  reportUsersWithoutAccess,
+} = require("../authorization/legacyRoleGrants");
 const { Telemetry } = require("../../models/telemetry");
 const { BackgroundService } = require("../BackgroundWorkers");
 const { EncryptionManager } = require("../EncryptionManager");
@@ -39,6 +42,9 @@ function bootSSL(app, port = 3001) {
         new EncryptionManager();
         new BackgroundService().boot();
         await startEventServices();
+      // T-4a (#25): surface users stranded without workspace access on every
+      // boot, not once as a migration NOTICE nobody reads twice.
+      await reportUsersWithoutAccess();
         await jobRuntime.start();
         await eagerLoadContextWindows();
         await PushNotifications.setupPushNotificationService();
@@ -74,6 +80,9 @@ function bootHTTP(app, port = 3001) {
       new EncryptionManager();
       new BackgroundService().boot();
       await startEventServices();
+      // T-4a (#25): surface users stranded without workspace access on every
+      // boot, not once as a migration NOTICE nobody reads twice.
+      await reportUsersWithoutAccess();
       await jobRuntime.start();
       await eagerLoadContextWindows();
       await PushNotifications.setupPushNotificationService();

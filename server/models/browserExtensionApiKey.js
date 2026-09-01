@@ -45,7 +45,7 @@ const BrowserExtensionApiKey = {
   where: (clause = {}, limit = null, orderBy = null) => prisma.browser_extension_api_keys.findMany({
     where: clause, ...(limit !== null ? { take: limit } : {}), ...(orderBy ? { orderBy } : {}), include: { user: true },
   }).then((rows) => rows.map(({ secretDigest, ...row }) => row)).catch(() => []),
-  // T-4a (#25): the `user.role === "admin"` branch is gone — the same model-layer
+  // T-4a (#25): the legacy admin-role branch is gone — the same model-layer
   // bypass as Workspace.getWithUser. Ownership is a data filter; whether someone
   // may see every key is `key.manage`, decided by the engine at the route, which
   // then passes the answer in.

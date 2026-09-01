@@ -922,11 +922,11 @@ function workspaceEndpoints(app) {
         // Still enforced on top of the grant: purgeDocument deletes system-wide,
         // so a caller authorized for THIS workspace must not take out copies
         // living in workspaces they hold nothing on. The guard's own legacy
-        // `user.role === "admin"` shortcut is gone — being an admin is now an
+        // legacy admin-role shortcut is gone — being an admin is now an
         // org-wide grant the engine checked above, not a string on the row.
         // The gate above said the caller may delete IN this workspace. Purging is
         // system-wide, so ask separately whether they may delete anywhere — that
-        // org-wide grant is what the legacy `role === "admin"` string stood for.
+        // org-wide grant is what the legacy admin role string stood for.
         const orgWide = await authorizationEngine.authorize({
           actor: response.locals.actor,
           action: "document.delete",

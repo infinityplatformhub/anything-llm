@@ -135,7 +135,7 @@ describe("HTTP DELETE workspace remove-and-unembed - QA-2 A1 issue 11", () => {
   });
 
   // T-4a (#25) changed this contract deliberately. The guard used to short-circuit
-  // on `user.role === "admin"`, so a legacy role string bought a system-wide purge.
+  // on the legacy admin role, so a role string bought a system-wide purge.
   // Admin-ness is now an org-wide grant that requirePermission checks BEFORE this
   // guard runs (proven end-to-end in routeWiring.test.js); the guard is left with
   // only the blast-radius question, which a non-member cannot pass here because

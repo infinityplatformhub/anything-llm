@@ -106,3 +106,5 @@ Ruling: `regression.test.js` builds membership through `WorkspaceUser.create` in
 ## Carry for T-7
 
 `legacyRoleGrants.js` keeps `users.role` and grants in step because R4 freezes the column rather than dropping it. When T-7 lands grant management over HTTP, that becomes the real path and this sync should be removed with the column.
+
+Ruling: added `reportUsersWithoutAccess`, called from both boot paths (`bootHTTP` and `bootSSL`). Migration 20260902044000 prints the stranded-user count once as a NOTICE, which nobody reads again — and the condition is not one-off: a user becomes stranded whenever their last membership is removed. Logged as a warning listing up to 50 by name, never thrown; an instance with stranded users must still start so an operator can fix it. If wrong, this belongs in an admin health endpoint (T-7) rather than the boot log.
