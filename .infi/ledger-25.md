@@ -82,3 +82,27 @@ Ruling: three model-layer bypasses became caller-supplied capabilities rather th
 In each case the behaviour is preserved and becomes revocable: revoking the grant revokes the capability, which a role string could not express. If wrong, these three need distinct action names rather than borrowing `key.manage` / `system.write`.
 
 Ruling: `img.js:55` (`user.role === "admin"`) is the ONE live role literal left in the tree. It is T-5's file by PMO ruling and is deliberately untouched. If wrong, a role-string check outlives the middleware deletion until T-5 lands.
+
+## The privilege escalation this task exposed (root cause: T-1 migration 20260902020000:407-410)
+
+`20260902020000` granted the org role `member` (workspace_id NULL) to every legacy `manager` and `default` user. That role carried `workspace.read` / `workspace.write` and the document actions; `engine.evaluate` reads a NULL-workspace grant as covering EVERY workspace and never consults `workspace_users` (verified: zero references). So **every ordinary user could read and write every workspace in the instance.** It was masked by `Workspace.getWithUser`'s membership filter until W-2 removed the role bypass sitting beside it. P0-3's `regression.test.js` caught it; my own S-1/S-2 did not, because their fixture builds a manager with no org grant.
+
+Ruling (PMO, option ก): fix in T-4a — a grant must state its true scope rather than have the engine infer it. `engine.js` untouched (T-4b owns it).
+- `seeds/permissions.js`: org `member` keeps only `chat.send`.
+- Migration `20260902044000`: turns `workspace_users` rows into workspace-scoped grants (defaulting to `editor` where step 6 left `role_id` NULL) and deletes the over-broad permissions from the role rather than the grants — deleting grants would strip `chat.send` from everyone. Idempotent; reports how many users end up with no workspace and no admin role.
+- Runtime: `WorkspaceUser.create` / `createMany` / `createManyUsers` grant, `delete` revokes (reading the rows before deleting, since afterwards there is nothing left to say whose grants to drop). Actor is `SERVICE_PRINCIPALS.coreJobs`, never null.
+If wrong, workspace access has two sources of truth again.
+
+Ruling: `GET /workspaces`, `POST /workspace/search`, and the two `agentFileServer` file routes are gated on `chat.send`, NOT org-wide `workspace.read`. They list or resolve what the caller can already see and filter per-user in the handler; gating them on an admin-only capability would have made the workspace list empty for every member. If wrong, these need a dedicated low-privilege action rather than borrowing `chat.send`.
+
+Ruling: `regression.test.js`'s "member cannot fetch unassigned workspace" now asserts **404 with no body** instead of 200 with `workspace: null`. The behaviour got stronger, not different — answering 200 confirms the slug exists to anyone who asks. If wrong, a client depends on that 200 shape.
+
+Ruling: `regression.test.js` builds membership through `WorkspaceUser.create` instead of a raw `prisma.workspace_users.create`. A raw insert leaves the row without its grant — the exact drift this suite should catch, not reproduce.
+
+## API contract (PMO ruling, for code-standards)
+
+**401** unauthenticated · **403** authenticated but unauthorized · **404** unauthorized AND existence is a secret (workspaces, documents — never the org itself). The old middleware answered 401 for everything, which says "who are you?" to someone it has already identified. 11 tests updated; genuine auth failures (`ssoIssuanceLockHttp`) stay 401.
+
+## Carry for T-7
+
+`legacyRoleGrants.js` keeps `users.role` and grants in step because R4 freezes the column rather than dropping it. When T-7 lands grant management over HTTP, that becomes the real path and this sync should be removed with the column.

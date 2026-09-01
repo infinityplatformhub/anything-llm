@@ -385,7 +385,11 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspaces",
-    [validatedRequest, requirePermission("workspace.read", orgResource)],
+    // T-4a (#25): NOT org-wide workspace.read — that is an admin capability and
+    // no ordinary member holds it. This lists the workspaces the caller already
+    // belongs to; membership does the filtering in the handler, so the gate only
+    // has to establish that the caller is a real principal of this org.
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1018,7 +1022,9 @@ function workspaceEndpoints(app) {
    */
   app.post(
     "/workspace/search",
-    [validatedRequest, requirePermission("workspace.read", orgResource)],
+    // Same as GET /workspaces: results are scoped to the caller inside
+    // searchWorkspaceAndThreads, not by this gate.
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const { searchTerm } = reqBody(request);

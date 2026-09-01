@@ -26,7 +26,9 @@ function agentFileServerEndpoints(app) {
    */
   app.get(
     "/agent-skills/generated-files/:filename",
-    [validatedRequest, requirePermission("workspace.read", orgResource)],
+    // The handler resolves the file through the caller's own workspaces, so this
+    // gate only establishes org principalship (T-4a).
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -92,7 +94,7 @@ function agentFileServerEndpoints(app) {
    */
   app.get(
     "/image-generation/generated-images/:filename",
-    [validatedRequest, requirePermission("workspace.read", orgResource)],
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const fs = require("fs");

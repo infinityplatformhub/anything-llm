@@ -125,11 +125,21 @@ const SYSTEM_ROLES = [
   {
     name: "member",
     scope: "org",
-    permissions: [
-      "workspace.read", "workspace.write", "chat.send",
-      "document.create", "document.read", "document.search",
-      "document.update", "document.pin", "document.watch", "document.share",
-    ],
+    // T-4a (#25): workspace and document actions REMOVED from the org-wide role.
+    //
+    // The T-1 backfill granted this role org-wide (workspace_id NULL) to every
+    // legacy `manager` and `default` user (migration 20260902020000, lines
+    // 407-410). The engine reads a NULL-workspace grant as "every workspace" and
+    // never consults workspace_users, so while this role carried workspace.read
+    // and workspace.write, every ordinary user could read and write EVERY
+    // workspace. That was masked by Workspace.getWithUser's membership filter
+    // until T-4a removed the role bypass living beside it.
+    //
+    // Being a member of the org is not being a member of a workspace. What is
+    // left here is what a person may do as themselves, anywhere; access to a
+    // particular workspace now comes from a workspace-scoped grant derived from
+    // workspace_users.role_id.
+    permissions: ["chat.send"],
   },
   {
     name: "owner",

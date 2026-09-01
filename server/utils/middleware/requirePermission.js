@@ -25,6 +25,11 @@ const NON_DISCLOSING = new Set([
   "no_permission_in_roles",
 ]);
 
+// ...but only where existence is actually a secret. The org itself is not: every
+// caller knows the instance exists, so an admin route answering 404 would hide a
+// permission problem behind a wrong status instead of protecting anything.
+const PUBLICLY_EXISTENT = new Set(["org"]);
+
 /**
  * @param {string} action seam-02 action string, e.g. "workspace.update"
  * @param {(request: import("express").Request, response: import("express").Response) => Promise<Object|null>} resolveResource
@@ -48,9 +53,12 @@ function requirePermission(action, resolveResource) {
         return next();
       }
 
-      return response
-        .status(NON_DISCLOSING.has(decision.reason) ? 404 : 403)
-        .json({ error: "Not found." });
+      const conceal =
+        NON_DISCLOSING.has(decision.reason) &&
+        !PUBLICLY_EXISTENT.has(resource.type);
+      return conceal
+        ? response.status(404).json({ error: "Not found." })
+        : response.status(403).json({ error: "Forbidden." });
     } catch (error) {
       if (error instanceof AuthorizationDeniedError) return response.sendStatus(403);
       // A policy-store outage must read as an outage, never as "no permissions" —
@@ -68,4 +76,4 @@ function requirePermission(action, resolveResource) {
   };
 }
 
-module.exports = { requirePermission, NON_DISCLOSING };
+module.exports = { requirePermission, NON_DISCLOSING, PUBLICLY_EXISTENT };

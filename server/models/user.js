@@ -1,5 +1,8 @@
 const { emitAuditEvent } = require("../utils/events");
 const { Prisma } = require("@prisma/client");
+const {
+  syncLegacyRoleGrant,
+} = require("../utils/authorization/legacyRoleGrants");
 const prisma = require("../utils/prisma");
 
 /**
@@ -133,6 +136,10 @@ const User = {
             this.validations.dailyMessageLimit(dailyMessageLimit),
         },
       });
+      // T-4a (#25): a user with no grant is denied by the engine. The migration
+      // backfilled the users that existed then; this keeps every user made
+      // afterwards in step with its legacy role.
+      await syncLegacyRoleGrant(user);
       return { user: this.filterFields(user), error: null };
     } catch (error) {
       console.error("FAILED TO CREATE USER.", error.message);
@@ -203,6 +210,11 @@ const User = {
         data: updates,
       });
 
+      // A role change must move the grant with it — a demoted admin who keeps
+      // super_admin is the failure that matters here (T-4a).
+      if (updates.hasOwnProperty("role") && updates.role !== currentUser.role)
+        await syncLegacyRoleGrant(user, { previousRole: currentUser.role });
+
       await emitAuditEvent(
         "user_updated",
         {
@@ -237,6 +249,7 @@ const User = {
         where: { id },
         data,
       });
+      if (data?.role) await syncLegacyRoleGrant(user);
       return { user, message: null };
     } catch (error) {
       console.error(error.message);

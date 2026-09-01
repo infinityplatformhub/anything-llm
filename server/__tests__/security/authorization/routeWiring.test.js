@@ -241,6 +241,85 @@ test("G11 gate: purging a document addressed in another workspace is refused ove
 // are preserved verbatim at /tmp/t4a-b1-tests.js and handed to Dev4 — they are
 // the acceptance bar for that design and must be re-armed there, not dropped.
 
+test("membership grants workspace access; org membership alone does not", async () => {
+  // ROOT CAUSE regression (T-1 migration 20260902020000:407-410): the org-wide
+  // `member` role carried workspace.read, and the engine treats a NULL-workspace
+  // grant as every workspace, so every ordinary user could read every workspace.
+  const { User } = require("../../../models/user");
+  const { WorkspaceUser } = require("../../../models/workspaceUsers");
+  const { user: outsider } = await User.create({
+    username: `outsider-${dbSuffix}`,
+    password: "Aa!123456789",
+    role: "default",
+  });
+  expect(outsider).not.toBeNull();
+
+  // A user created AFTER the migration must still get their org grant, and that
+  // grant must NOT reach into a workspace they do not belong to.
+  const denied = await engine.authorize({
+    actor: { type: "user", id: String(outsider.id), orgId: 1 },
+    action: "workspace.read",
+    resource: {
+      type: "workspace",
+      id: String(workspaceB.id),
+      orgId: 1,
+      workspaceId: workspaceB.id,
+    },
+  });
+  expect(denied.allowed).toBe(false);
+
+  // Joining the workspace grants access immediately.
+  await WorkspaceUser.create(outsider.id, workspaceB.id);
+  const allowed = await engine.authorize({
+    actor: { type: "user", id: String(outsider.id), orgId: 1 },
+    action: "workspace.read",
+    resource: {
+      type: "workspace",
+      id: String(workspaceB.id),
+      orgId: 1,
+      workspaceId: workspaceB.id,
+    },
+  });
+  expect(allowed.allowed).toBe(true);
+
+  // Leaving takes it away again, with no cache to wait on.
+  await WorkspaceUser.delete({ user_id: outsider.id, workspace_id: workspaceB.id });
+  const revoked = await engine.authorize({
+    actor: { type: "user", id: String(outsider.id), orgId: 1 },
+    action: "workspace.read",
+    resource: {
+      type: "workspace",
+      id: String(workspaceB.id),
+      orgId: 1,
+      workspaceId: workspaceB.id,
+    },
+  });
+  expect(revoked.allowed).toBe(false);
+});
+
+test("a demoted admin loses the org role the same moment", async () => {
+  const { User } = require("../../../models/user");
+  const { user: promoted } = await User.create({
+    username: `demote-${dbSuffix}`,
+    password: "Aa!123456789",
+    role: "admin",
+  });
+  const asAdmin = await engine.authorize({
+    actor: { type: "user", id: String(promoted.id), orgId: 1 },
+    action: "user.manage",
+    resource: { type: "org", id: "1", orgId: 1, workspaceId: null },
+  });
+  expect(asAdmin.allowed).toBe(true);
+
+  await User.update(promoted.id, { role: "manager" });
+  const afterDemotion = await engine.authorize({
+    actor: { type: "user", id: String(promoted.id), orgId: 1 },
+    action: "user.manage",
+    resource: { type: "org", id: "1", orgId: 1, workspaceId: null },
+  });
+  expect(afterDemotion.allowed).toBe(false);
+});
+
 test("W-6: authorizeMany accepts 500 resources and rejects 501", async () => {
   const actor = { type: "user", id: "4301", orgId: 1 };
   const resource = {
