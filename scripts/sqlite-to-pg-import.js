@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 
+/**
+ * Imports core legacy SQLite records into an initialized PostgreSQL database.
+ * Covers users, workspaces, membership, chats/threads/documents, agent history,
+ * document-sync state, slash commands, prompt history, API keys, events, and
+ * system settings. Excludes derived caches/vectors, embeds, ephemeral auth and
+ * recovery tokens, devices, schedules, connectors, routers, and post-fork
+ * memories. Run feature-specific exports first if excluded legacy data matters.
+ */
+
 import { execFileSync } from "node:child_process";
 import pg from "../server/node_modules/pg/lib/index.js";
 

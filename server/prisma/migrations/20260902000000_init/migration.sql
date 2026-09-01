@@ -84,7 +84,7 @@ CREATE TABLE "password_reset_tokens" (
     "id" SERIAL NOT NULL,
     "user_id" INTEGER NOT NULL,
     "token" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "expiresAt" TIMESTAMPTZ(3) NOT NULL,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "password_reset_tokens_pkey" PRIMARY KEY ("id")
@@ -275,7 +275,7 @@ CREATE TABLE "slash_command_presets" (
 CREATE TABLE "document_sync_queues" (
     "id" SERIAL NOT NULL,
     "staleAfterMs" INTEGER NOT NULL DEFAULT 604800000,
-    "nextSyncAt" TIMESTAMP(3) NOT NULL,
+    "nextSyncAt" TIMESTAMPTZ(3) NOT NULL,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "lastSyncedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "workspaceDocId" INTEGER NOT NULL,
@@ -310,7 +310,7 @@ CREATE TABLE "temporary_auth_tokens" (
     "id" SERIAL NOT NULL,
     "token" TEXT NOT NULL,
     "userId" INTEGER NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "expiresAt" TIMESTAMPTZ(3) NOT NULL,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "temporary_auth_tokens_pkey" PRIMARY KEY ("id")
