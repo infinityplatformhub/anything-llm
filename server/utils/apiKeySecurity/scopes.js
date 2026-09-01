@@ -58,8 +58,47 @@ const ROUTE_SCOPES = Object.freeze({
   "DELETE /v1/document/remove-folder": "document.folder.manage",
   "POST /v1/document/move-files": "document.folder.manage",
   "GET /v1/document/generated-files/:filename": "document.read",
+
+  // PR-4b(3) embed
+  "GET /v1/embed": "embed.read",
+  "GET /v1/embed/:embedUuid/chats": "embed.chat.read",
+  "GET /v1/embed/:embedUuid/chats/:sessionUuid": "embed.chat.read",
+  "POST /v1/embed/new": "embed.create",
+  "POST /v1/embed/:embedUuid": "embed.write",
+  "DELETE /v1/embed/:embedUuid": "embed.delete",
 });
 
 const scopeFor = (method, path) => ROUTE_SCOPES[`${method} ${path}`];
 
-module.exports = { API_KEY_SCOPES, ROUTE_SCOPES, scopeFor };
+// PR-4b(3) ruling (a): the browser extension is a single-purpose client authenticated
+// by a different credential type (apw-brx-, browser_extension_api_keys) than the API
+// keys ROUTE_SCOPES describes. Its grant is fixed in code rather than issued per key,
+// so its routes are deliberately NOT in ROUTE_SCOPES: one table holding scopes for two
+// credential types cannot answer "which scope applies to which kind of key" during an
+// audit. The extension holds exactly what its five routes need and nothing else --
+// notably not the wildcard it carried before.
+const EXTENSION_SCOPES = Object.freeze([
+  "browser-extension.read",
+  "browser-extension.write",
+  "workspace.read",
+  "document.write",
+]);
+
+const EXTENSION_ROUTE_SCOPES = Object.freeze({
+  "GET /browser-extension/check": "browser-extension.read",
+  "DELETE /browser-extension/disconnect": "browser-extension.write",
+  "GET /browser-extension/workspaces": "workspace.read",
+  "POST /browser-extension/embed-content": "document.write",
+  "POST /browser-extension/upload-content": "document.write",
+});
+
+const extensionScopeFor = (method, path) => EXTENSION_ROUTE_SCOPES[`${method} ${path}`];
+
+module.exports = {
+  API_KEY_SCOPES,
+  ROUTE_SCOPES,
+  scopeFor,
+  EXTENSION_SCOPES,
+  EXTENSION_ROUTE_SCOPES,
+  extensionScopeFor,
+};

@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../utils/apiKeySecurity/scopes");
+const { extensionScopeFor } = require("../utils/apiKeySecurity/scopes");
 const { Workspace } = require("../models/workspace");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { Document } = require("../models/documents");
@@ -19,7 +19,7 @@ function browserExtensionEndpoints(app) {
 
   app.get(
     "/browser-extension/check",
-    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validBrowserExtensionApiKey(extensionScopeFor("GET", "/browser-extension/check"))],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -44,7 +44,7 @@ function browserExtensionEndpoints(app) {
 
   app.delete(
     "/browser-extension/disconnect",
-    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validBrowserExtensionApiKey(extensionScopeFor("DELETE", "/browser-extension/disconnect"))],
     async (_request, response) => {
       try {
         const apiKeyId = response.locals.apiKey.id;
@@ -63,7 +63,7 @@ function browserExtensionEndpoints(app) {
 
   app.get(
     "/browser-extension/workspaces",
-    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validBrowserExtensionApiKey(extensionScopeFor("GET", "/browser-extension/workspaces"))],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -81,7 +81,7 @@ function browserExtensionEndpoints(app) {
 
   app.post(
     "/browser-extension/embed-content",
-    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validBrowserExtensionApiKey(extensionScopeFor("POST", "/browser-extension/embed-content"))],
     async (request, response) => {
       try {
         const { workspaceId, textContent, metadata } = reqBody(request);
@@ -128,7 +128,7 @@ function browserExtensionEndpoints(app) {
 
   app.post(
     "/browser-extension/upload-content",
-    [validBrowserExtensionApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validBrowserExtensionApiKey(extensionScopeFor("POST", "/browser-extension/upload-content"))],
     async (request, response) => {
       try {
         const { textContent, metadata } = reqBody(request);

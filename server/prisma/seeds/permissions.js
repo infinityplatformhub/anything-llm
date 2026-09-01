@@ -49,6 +49,11 @@ const API_ACTIONS = [
   // moving between them rearranges what other keys can reach by path, which neither
   // document.write (contents) nor document.delete (one document) covers.
   "document.folder.manage",
+  // PR-4b(3): embed chat transcripts are visitor conversations, not the operator's
+  // own chats -- a key that may read embed configs must not thereby read what the
+  // public typed into them.
+  "embed.chat.read",
+  "embed.create",
   "document.read",
   "document.write",
   "document.delete",

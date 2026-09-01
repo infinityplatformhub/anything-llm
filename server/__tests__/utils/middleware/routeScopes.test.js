@@ -1,5 +1,9 @@
 const { ALL_ACTIONS } = require("../../../prisma/seeds/permissions");
-const { ROUTE_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const {
+  ROUTE_SCOPES,
+  EXTENSION_SCOPES,
+  EXTENSION_ROUTE_SCOPES,
+} = require("../../../utils/apiKeySecurity/scopes");
 const { workspaceBindingMatches } = require("../../../utils/middleware/validApiKey");
 
 const EXPECTED = {
@@ -57,6 +61,14 @@ const EXPECTED = {
   "DELETE /v1/document/remove-folder": "document.folder.manage",
   "POST /v1/document/move-files": "document.folder.manage",
   "GET /v1/document/generated-files/:filename": "document.read",
+
+  // PR-4b(3) embed
+  "GET /v1/embed": "embed.read",
+  "GET /v1/embed/:embedUuid/chats": "embed.chat.read",
+  "GET /v1/embed/:embedUuid/chats/:sessionUuid": "embed.chat.read",
+  "POST /v1/embed/new": "embed.create",
+  "POST /v1/embed/:embedUuid": "embed.write",
+  "DELETE /v1/embed/:embedUuid": "embed.delete",
 };
 
 test("route scope table is complete and verbatim vocabulary", () => {
@@ -72,4 +84,21 @@ test("workspace binding resolves slug before comparing", async () => {
   const db = { workspaces: { findUnique: jest.fn().mockResolvedValue({ id: 7 }) } };
   await expect(workspaceBindingMatches({ workspaceId: "7" }, { params: { workspaceSlug: "alpha" } }, { workspaceSlugParam: "workspaceSlug" }, db)).resolves.toBe(true);
   expect(db.workspaces.findUnique).toHaveBeenCalledWith({ where: { slug: "alpha" }, select: { id: true } });
+});
+
+test("the browser extension holds a fixed grant, not a wildcard, and only what its routes need", () => {
+  expect(EXTENSION_SCOPES).not.toContain("*");
+  expect(EXTENSION_SCOPES.every((action) => ALL_ACTIONS.includes(action))).toBe(true);
+  // No route may need a scope the extension does not hold, and the extension may not
+  // hold a scope no route needs -- either way the grant stops describing the client.
+  expect([...new Set(Object.values(EXTENSION_ROUTE_SCOPES))].sort()).toEqual(
+    [...EXTENSION_SCOPES].sort()
+  );
+});
+
+test("extension routes stay out of the API key table so one table means one credential type", () => {
+  const extensionRoutes = Object.keys(ROUTE_SCOPES).filter((entry) =>
+    entry.includes("/browser-extension")
+  );
+  expect(extensionRoutes).toEqual([]);
 });
