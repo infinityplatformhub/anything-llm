@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { WorkspaceThread } = require("../../../models/workspaceThread");
@@ -21,7 +21,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/new",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/workspace/:slug/thread/new"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -111,7 +111,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/update",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/workspace/:slug/thread/:threadSlug/update"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -196,7 +196,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.delete(
     "/v1/workspace/:slug/thread/:threadSlug",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/workspace/:slug/thread/:threadSlug"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
     #swagger.tags = ['Workspace Threads']
@@ -245,7 +245,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.get(
     "/v1/workspace/:slug/thread/:threadSlug/chats",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/workspace/:slug/thread/:threadSlug/chats"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -329,7 +329,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/chat",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/workspace/:slug/thread/:threadSlug/chat"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
@@ -486,7 +486,7 @@ function apiWorkspaceThreadEndpoints(app) {
 
   app.post(
     "/v1/workspace/:slug/thread/:threadSlug/stream-chat",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/workspace/:slug/thread/:threadSlug/stream-chat"), { workspaceSlugParam: "slug" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Workspace Threads']
