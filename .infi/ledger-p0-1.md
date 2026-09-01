@@ -11,3 +11,15 @@ Ruling: Connector checkpoints belong to core orchestration and advance only afte
 Ruling: Channel delivery retries reuse pipeline output instead of rerunning chat — reruns duplicate cost and may produce inconsistent answers — cost if wrong: durable response storage is required until delivery completes
 
 Ruling: Notification rendering and recipient selection remain in core — transport drivers must not gain data access or policy authority — cost if wrong: provider-native templates need a core adapter
+
+Ruling: Vector ACL is a required argument with no nullable or admin bypass form — optional filters guarantee an eventual leak at an old call site — cost if wrong: every existing vector query call site needs migration
+
+Ruling: Providers lacking secure ACL filtering are rejected rather than post-filtered — forbidden candidates must never cross the seam — cost if wrong: fewer vector backends are available at ACL launch
+
+Ruling: License signature verification is fully offline and feature checks remain separate from authorization — air-gap is required and purchased entitlement is not permission — cost if wrong: callers perform two checks and need coherent error mapping
+
+Ruling: Postgres is first queue and event-bus substrate — Phase 0 already mandates Postgres and Redis would add operations cost — cost if wrong: high queue volume later requires migration
+
+Ruling: Event delivery is durable at-least-once through transactional outbox — audit cannot disappear after business commit — cost if wrong: every subscriber must be idempotent and storage grows until retention
+
+Ruling: Storage keys are typed tenant-scoped values and no driver returns public URLs — authorization remains above storage and tenant isolation is structural — cost if wrong: direct filesystem callers require migration and downloads need an app streaming endpoint
