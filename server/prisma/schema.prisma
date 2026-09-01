@@ -478,3 +478,87 @@ model model_router_rules {
   @@index([router_id])
   @@index([router_id, enabled, priority])
 }
+
+// BEGIN P0-6 CORE SERVICES — keep block at end for Postgres migration rebase.
+model jobs {
+  id             String    @id
+  type           String
+  payload        String
+  actor          String
+  state          String    @default("pending")
+  runAt          DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  idempotencyKey String
+  traceId        String
+  workerId       String?
+  leaseUntil     DateTime?
+  result         String?
+  lastError      String?
+  cancelReason   String?
+  cancelledBy    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([type, idempotencyKey])
+  @@index([state, runAt])
+  @@index([workerId, leaseUntil])
+}
+
+model job_schedules {
+  id        String   @id
+  type      String
+  cron      String
+  timezone  String
+  payload   String
+  actor     String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model job_dead_letters {
+  id             Int      @id @default(autoincrement())
+  jobId          String   @unique
+  type           String
+  payload        String
+  actor          String
+  attempts       Int
+  error          String
+  traceId        String
+  deadLetteredAt DateTime @default(now())
+}
+
+model event_outbox {
+  id          String   @id
+  type        String
+  version     Int
+  occurredAt  DateTime
+  actor       String
+  resource    String
+  traceId     String
+  data        String
+  sensitivity String
+  payloadHash String
+  createdAt   DateTime @default(now())
+
+  @@index([occurredAt])
+  @@index([type, occurredAt])
+}
+
+model event_deliveries {
+  id             Int       @id @default(autoincrement())
+  subscriberId   String
+  eventId        String
+  state          String    @default("pending")
+  attempts       Int       @default(0)
+  lastError      String?
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([subscriberId, eventId])
+  @@index([state])
+}
+
+// END P0-6 CORE SERVICES.
