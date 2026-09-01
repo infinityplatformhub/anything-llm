@@ -96,9 +96,20 @@ test("01 onboarding wizard completes and lands in the app", async ({ page }) => 
   // Model field is a disabled <select> while custom-models loads, then a
   // free-form <input>; wait for the input. All required fields must be set —
   // native validation silently blocks the hidden submit otherwise.
+  // When the provider lists models, the field renders as a <select>; when the
+  // list is empty it is a free-text input. Handle both.
+  const modelSelect = page.locator('select[name="GenericOpenAiModelPref"]:not([disabled])');
   const modelInput = page.locator('input[name="GenericOpenAiModelPref"]');
-  await modelInput.waitFor({ state: "visible", timeout: 30_000 });
-  await modelInput.fill("mock-llm");
+  await expect
+    .poll(async () => (await modelSelect.count()) + (await modelInput.count()), {
+      timeout: 60_000,
+    })
+    .toBeGreaterThan(0);
+  if (await modelSelect.count()) {
+    await modelSelect.selectOption({ index: 0 });
+  } else {
+    await modelInput.fill("mock-llm");
+  }
   await page.locator('input[name="GenericOpenAiTokenLimit"]').fill("4096");
   await page.locator('input[name="GenericOpenAiMaxTokens"]').fill("1024");
   expect(await page.evaluate(() => document.querySelector("form").checkValidity())).toBe(true);
