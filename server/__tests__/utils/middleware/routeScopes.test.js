@@ -4,7 +4,10 @@ const {
   EXTENSION_SCOPES,
   EXTENSION_ROUTE_SCOPES,
 } = require("../../../utils/apiKeySecurity/scopes");
-const { workspaceBindingMatches } = require("../../../utils/middleware/validApiKey");
+const {
+  workspaceBindingMatches,
+  addressedWorkspaceId,
+} = require("../../../utils/middleware/validApiKey");
 
 const EXPECTED = {
   "GET /v1/admin/is-multi-user-mode": "system.read",
@@ -91,14 +94,32 @@ test("route scope table is complete and verbatim vocabulary", () => {
   expect(Object.values(ROUTE_SCOPES).every((action) => ALL_ACTIONS.includes(action))).toBe(true);
 });
 
+// T-4b W-9: resolving the addressed workspace and comparing it to the key's binding are
+// now two steps — the grant check authorizes against the same resolved id, and resolving
+// twice would be two chances for the halves to disagree.
 test("workspace binding denies mismatched direct workspace id", async () => {
-  await expect(workspaceBindingMatches({ workspaceId: "7" }, { params: { workspaceId: "8" } }, { workspaceParam: "workspaceId" }, {})).resolves.toBe(false);
+  const addressed = await addressedWorkspaceId({ params: { workspaceId: "8" } }, { workspaceParam: "workspaceId" }, {});
+  expect(addressed).toBe(8);
+  expect(workspaceBindingMatches({ workspaceId: "7" }, { workspaceParam: "workspaceId" }, addressed)).toBe(false);
 });
 
 test("workspace binding resolves slug before comparing", async () => {
   const db = { workspaces: { findUnique: jest.fn().mockResolvedValue({ id: 7 }) } };
-  await expect(workspaceBindingMatches({ workspaceId: "7" }, { params: { workspaceSlug: "alpha" } }, { workspaceSlugParam: "workspaceSlug" }, db)).resolves.toBe(true);
+  const addressed = await addressedWorkspaceId({ params: { workspaceSlug: "alpha" } }, { workspaceSlugParam: "workspaceSlug" }, db);
+  expect(workspaceBindingMatches({ workspaceId: "7" }, { workspaceSlugParam: "workspaceSlug" }, addressed)).toBe(true);
   expect(db.workspaces.findUnique).toHaveBeenCalledWith({ where: { slug: "alpha" }, select: { id: true } });
+});
+
+test("a bound key is denied when the addressed workspace does not resolve", async () => {
+  const db = { workspaces: { findUnique: jest.fn().mockResolvedValue(null) } };
+  const addressed = await addressedWorkspaceId({ params: { workspaceSlug: "ghost" } }, { workspaceSlugParam: "workspaceSlug" }, db);
+  expect(addressed).toBeNull();
+  expect(workspaceBindingMatches({ workspaceId: "7" }, { workspaceSlugParam: "workspaceSlug" }, addressed)).toBe(false);
+});
+
+test("a route with no binding addresses no workspace, and an unbound key is unaffected", async () => {
+  expect(await addressedWorkspaceId({ params: { slug: "x" } }, null, {})).toBeUndefined();
+  expect(workspaceBindingMatches({ workspaceId: null }, null, undefined)).toBe(true);
 });
 
 test("the browser extension holds a fixed grant, not a wildcard, and only what its routes need", () => {

@@ -69,6 +69,27 @@ beforeEach(() => {
   prisma.workspace_users.findMany.mockResolvedValue([]);
 });
 
+test("no suite that asserts grant behaviour leans on the permissive grantStore helper", () => {
+  // grantStore.js always answers "allowed" so that scope-only suites keep testing scope.
+  // If a suite that asserts GRANT behaviour ever adopted it, that suite would pass no
+  // matter what the engine did. This asserts the separation the helper's comment promises
+  // rather than trusting it (PMO request).
+  const fs = require("fs");
+  const path = require("path");
+  const dir = path.resolve(__dirname);
+  const grantSuites = fs
+    .readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile() && /^t4b.*\.test\.js$/.test(entry.name))
+    .map((entry) => path.join(entry.parentPath ?? entry.path, entry.name));
+
+  expect(grantSuites.length).toBeGreaterThan(0);
+  for (const suite of grantSuites) {
+    // the helper being INVOKED is what would neuter the suite; naming it in prose (as this
+    // very test does) is fine.
+    expect(fs.readFileSync(suite, "utf8")).not.toMatch(/grantingPrismaMock\s*\(/);
+  }
+});
+
 describe("T-4b W-8: /v1 checks the grant half, not only the scope half", () => {
   test("a key whose creator lacks the grant is 403 even though its scope permits the action", async () => {
     engineAnswers({ allowed: false, reason: "no_permission_in_roles", matchedPolicyIds: [] });

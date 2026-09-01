@@ -3,8 +3,8 @@ process.env.API_KEY_PEPPER = process.env.API_KEY_PEPPER || "pr4a-http-api-key-pe
 jest.mock("../models/systemSettings", () => ({ SystemSettings: { isMultiUserMode: jest.fn().mockResolvedValue(true) } }));
 jest.mock("../models/apiKeys", () => ({ ApiKey: { resolve: jest.fn(), touch: jest.fn() } }));
 jest.mock("../utils/events", () => ({ emitAuditEvent: jest.fn().mockResolvedValue({}) }));
-// T-4b: /v1 now checks the grant half too — see __tests__/helpers/grantStore.js.
-jest.mock("../utils/prisma", () => require("./helpers/grantStore").grantingPrismaMock());
+// T-4b: /v1 now checks the grant half too — see __testHelpers__/grantStore.js.
+jest.mock("../utils/prisma", () => require("../__testHelpers__/grantStore").grantingPrismaMock());
 
 const express = require("express");
 const request = require("supertest");

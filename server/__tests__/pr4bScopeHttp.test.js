@@ -5,7 +5,7 @@ jest.mock("../models/apiKeys", () => ({ ApiKey: { resolve: jest.fn(), touch: jes
 jest.mock("../utils/events", () => ({ emitAuditEvent: jest.fn().mockResolvedValue({}) }));
 // T-4b: /v1 now checks the grant half too, so this scope-only suite needs a policy store
 // to answer against or every case fails for a reason it was never written to test.
-jest.mock("../utils/prisma", () => require("./helpers/grantStore").grantingPrismaMock());
+jest.mock("../utils/prisma", () => require("../__testHelpers__/grantStore").grantingPrismaMock());
 
 const express = require("express");
 const request = require("supertest");
