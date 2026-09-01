@@ -30,6 +30,9 @@ const { WorkspaceThread } = require("../models/workspaceThread");
 
 const truncate = require("truncate");
 const { purgeDocument } = require("../utils/files/purgeDocument");
+const {
+  canPurgeDocumentFromWorkspace,
+} = require("../utils/helpers/documentPurgeGuard");
 const { getModelTag } = require("./utils");
 const { searchWorkspaceAndThreads } = require("../utils/helpers/search");
 const { workspaceParsedFilesEndpoints } = require("./workspacesParsedFiles");
@@ -876,6 +879,13 @@ function workspaceEndpoints(app) {
 
         if (!currWorkspace || !body.documentLocation)
           return response.sendStatus(400).end();
+
+        const { allowed, reason } = await canPurgeDocumentFromWorkspace({
+          workspace: currWorkspace,
+          user,
+          documentLocation: body.documentLocation,
+        });
+        if (!allowed) return response.status(403).json({ error: reason });
 
         // Will delete the document from the entire system + wil unembed it.
         await purgeDocument(body.documentLocation);
