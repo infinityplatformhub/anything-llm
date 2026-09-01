@@ -507,15 +507,17 @@ model jobs {
 }
 
 model job_schedules {
-  id        String   @id
+  id        String    @id
   type      String
   cron      String
   timezone  String
   payload   String
   actor     String
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  enabled   Boolean   @default(true)
+  nextRunAt DateTime?
+  claimedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model job_dead_letters {
@@ -560,6 +562,7 @@ model event_deliveries {
 
   @@unique([subscriberId, eventId])
   @@index([state])
+  @@index([subscriberId, state])
 }
 
 // END P0-6 CORE SERVICES.

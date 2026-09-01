@@ -103,3 +103,21 @@ test("worker routes handler failure through queue fail and stops heartbeat", asy
   expect(jest.getTimerCount()).toBe(0);
   jest.useRealTimers();
 });
+
+
+test("publish resolves unique race only for identical payload", async () => {
+  const state = eventDb(); const bus = new PostgresEventBus({ db: state.db });
+  const event = { eventId: "race", type: "created", version: 1, occurredAt: new Date(), actor, resource: { type: "x", id: "1" }, traceId: "t", data: {}, sensitivity: "metadata" };
+  const originalCreate = state.db.event_outbox.create;
+  state.db.event_outbox.create = jest.fn().mockImplementationOnce(async ({ data }) => { state.outbox.set(data.id, data); throw { code: "P2002" }; }).mockImplementation(originalCreate);
+  await expect(bus.publish({ event })).resolves.toBeUndefined();
+});
+
+test("unknown event version quarantines and publishes guarded operational failure", async () => {
+  const state = eventDb(); const bus = new PostgresEventBus({ db: state.db });
+  await bus.subscribe({ subscriberId: "v1", eventTypes: ["*"], versions: [1], handler: jest.fn() });
+  await bus.publish({ event: { eventId: "v2", type: "created", version: 2, occurredAt: new Date(), actor, resource: { type: "x", id: "1" }, traceId: "t", data: {}, sensitivity: "metadata" } });
+  await bus.deliver();
+  expect(state.deliveries.get("v1:v2").state).toBe("quarantined");
+  expect([...state.outbox.values()].filter((row) => row.type === "event.delivery_failed")).toHaveLength(1);
+});

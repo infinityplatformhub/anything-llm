@@ -1,9 +1,11 @@
 const crypto = require("crypto");
 const { PostgresEventBus } = require("./PostgresEventBus");
 const { AuditEventSubscriber } = require("./AuditEventSubscriber");
+const { OutboxPump } = require("./OutboxPump");
 
 const eventBus = new PostgresEventBus();
 let auditRegistered;
+const outboxPump = new OutboxPump({ bus: eventBus });
 
 async function ensureAuditSubscriber() {
   if (!auditRegistered) {
@@ -31,4 +33,9 @@ async function emitAuditEvent(type, data = {}, userId = null, options = {}) {
   return { event, message: null };
 }
 
-module.exports = { eventBus, emitAuditEvent, ensureAuditSubscriber };
+async function startEventServices() {
+  await ensureAuditSubscriber();
+  outboxPump.start();
+}
+
+module.exports = { eventBus, emitAuditEvent, ensureAuditSubscriber, outboxPump, startEventServices };
