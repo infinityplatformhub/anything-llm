@@ -22,6 +22,9 @@ function ssoIssuanceLock(_, response, next) {
         "Temporary auth token issuance is disabled pending the API key scope rollout. See release notes.",
     });
   }
+  console.warn(
+    "[ssoIssuanceLock] SIMPLE_SSO_ISSUE_UNSAFE_ALLOW is set: any valid API key can impersonate any user via issue-auth-token. Remove this flag once scoped keys (P0-4 PR-5) ship."
+  );
   next();
 }
 

@@ -20,8 +20,21 @@ impersonation (recon F-4).
 - **Ruling:** `ssoIssuanceLock` placed FIRST in the middleware chain — the 403 fires
   before `validApiKey` touches the DB; also means the lock holds even if later
   middleware is reordered.
-- **Ruling:** Exchange endpoint `/request-token/sso/simple` (system.js:353) left open —
-  tokens are single-use, 6-minute expiry; no long-lived tokens can be outstanding.
+- **Ruling (corrected per e5 design review):** Exchange endpoint
+  `/request-token/sso/simple` (system.js:353) left open. Temp tokens are single-use
+  with 6-minute expiry, **but** a successful exchange yields a session JWT with
+  `JWT_EXPIRY` (default 30 days). So: (a) temp tokens issued before deploy remain
+  exchangeable for up to 6 minutes after deploy — operators must purge
+  `temporary_auth_tokens` post-deploy; (b) sessions already minted via this hole are
+  untouched by the hotfix — rotating `JWT_SECRET` is the only revocation. Both are in
+  the release note. Original ledger wording ("no long-lived tokens can be
+  outstanding") was wrong about what the exchange produces.
+- **Ruling (e5):** Flag-open path logs a `console.warn` naming the flag and risk on
+  every request, so an operator running with the flag sees it in logs. **PR-5 DoD
+  must include:** `grep -rn SIMPLE_SSO_ISSUE_UNSAFE_ALLOW server/` → 0 matches
+  (flag, middleware, and tests all removed).
+- **Ruling (e5):** Guard stays in middleware, not `TemporaryAuthToken.issue()` —
+  PR-5 removes it anyway. If PR-5 slips past 2 weeks, PMO will order the move.
 - **Ruling:** Plan-doc name for the flag was `SIMPLE_SSO_ISSUE_DISABLED` default-closed;
   inverted to an allow-flag because "disabled flag absent = disabled" double-negative
   is error-prone. Semantics identical (default-closed).
@@ -56,8 +69,21 @@ Initial RED before implementation: suite failed with
 
 ## Release note (for PMO to include)
 
-> Simple SSO temporary-auth-token issuance (`/v1/users/:id/issue-auth-token`) is
-> disabled in this release: any API key could previously impersonate any user,
-> including admins. It returns until the scoped-API-key release (P0-4 PR-5).
-> Operators who accept the impersonation risk in the interim can set
-> `SIMPLE_SSO_ISSUE_UNSAFE_ALLOW=1`.
+> **Simple SSO temporary-auth-token issuance is disabled in this release.**
+> `/v1/users/:id/issue-auth-token` previously let ANY valid API key impersonate any
+> user, including admins. It returns with the scoped-API-key release (P0-4 PR-5).
+>
+> **Required operator actions after deploying:**
+> 1. Purge outstanding temporary auth tokens — tokens issued before the deploy can
+>    still be exchanged for a session until they expire:
+>    `DELETE FROM temporary_auth_tokens;`
+> 2. If you suspect this endpoint was ever abused, rotate `JWT_SECRET`. Sessions
+>    minted through this hole are full session JWTs valid for `JWT_EXPIRY`
+>    (default 30 days); this release does not invalidate them — only a secret
+>    rotation does (it logs out all users).
+>
+> **Breaking:** any integration that calls `issue-auth-token` (Simple SSO login
+> flows) stops working immediately after deploy. Verify your dependencies before
+> upgrading. Operators who accept the impersonation risk in the interim can set
+> `SIMPLE_SSO_ISSUE_UNSAFE_ALLOW=1`; the server then logs a warning on every
+> issuance request.

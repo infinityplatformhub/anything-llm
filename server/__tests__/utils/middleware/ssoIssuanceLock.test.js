@@ -46,14 +46,19 @@ describe("ssoIssuanceLock middleware (P0-4 PR-0 hotfix)", () => {
     expect(response.status).toHaveBeenCalledWith(403);
   });
 
-  it("calls next only when flag is explicitly set to a truthy value", () => {
+  it("calls next only when flag is explicitly set to a truthy value, and warns loudly", () => {
     process.env[FLAG] = "1";
     const next = jest.fn();
     const response = makeResponse();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
 
     ssoIssuanceLock({}, response, next);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(response.status).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("SIMPLE_SSO_ISSUE_UNSAFE_ALLOW")
+    );
+    warn.mockRestore();
   });
 });
