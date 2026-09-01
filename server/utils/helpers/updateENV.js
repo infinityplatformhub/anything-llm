@@ -1648,7 +1648,12 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
     }
 
     newValues[key] = nextValue;
+    // process.env stays the read path for everything at runtime: hundreds of call
+    // sites read these directly, and rewriting them is not this task. What changes is
+    // where the value *persists* — a credential goes to the encrypted store, and
+    // dumpENV no longer writes it to the file.
     process.env[envKey] = nextValue;
+    if (KEY_MAPPING[key]?.secret === true) await persistCredential(envKey, nextValue);
 
     for (const postUpdateFunc of postUpdate)
       await postUpdateFunc(key, prevValue, nextValue);
@@ -1750,13 +1755,91 @@ async function logChangesToEventLog(newValues = {}, userId = null) {
   return;
 }
 
-function dumpENV() {
+/**
+ * Persists one credential to the encrypted store instead of the .env file.
+ *
+ * A failure here is logged, not thrown: the value is already live in process.env and
+ * the setting has been accepted, so throwing would 500 a request whose work is done.
+ * The cost of the failure is that the credential does not survive a restart, which the
+ * log says explicitly rather than leaving an operator to discover it later.
+ *
+ * @param {string} envKey
+ * @param {string} value
+ * @returns {Promise<void>}
+ */
+async function persistCredential(envKey, value) {
+  const { CredentialStore } = require("../../models/credentialStore");
+  // An empty value means "unset this credential", which is a delete, not a stored "".
+  if (!value) {
+    await CredentialStore.delete(envKey);
+    return;
+  }
+  const { error } = await CredentialStore.set(envKey, value);
+  if (error)
+    console.error(
+      `[credential-store] ${envKey} is live for this process but was not persisted; it will be lost on restart: ${error}`
+    );
+}
+
+/**
+ * Loads stored credentials into process.env at boot.
+ *
+ * dumpENV no longer writes credential values to the file, so without this a restart
+ * comes up with every provider secret missing. Values already present in the
+ * environment win: an operator who sets a variable directly, or a container that
+ * injects one, is making a deliberate override that a database row should not silently
+ * replace.
+ *
+ * @param {Object} store injectable for tests
+ * @returns {Promise<{loaded:string[], skipped:string[]}>}
+ */
+async function loadStoredCredentials(store = null) {
+  const { CredentialStore } = store
+    ? { CredentialStore: store }
+    : require("../../models/credentialStore");
+
+  const loaded = [];
+  const skipped = [];
+  try {
+    for (const envKey of await CredentialStore.keys()) {
+      if (process.env[envKey]) {
+        skipped.push(envKey);
+        continue;
+      }
+      const value = await CredentialStore.get(envKey);
+      // get() returns null for a row that fails its auth tag. Leaving the variable
+      // unset is right: a provider that is not configured fails loudly at first use,
+      // where a tampered value would fail silently or somewhere worse.
+      if (value === null) continue;
+      process.env[envKey] = value;
+      loaded.push(envKey);
+    }
+  } catch (error) {
+    // Boot must not depend on the store being reachable.
+    console.error("[credential-store] could not load stored credentials:", error.message);
+  }
+  return { loaded, skipped };
+}
+
+/**
+ * @param {{envPath?: string}} options `envPath` overrides the default location. Tests
+ *   pass a temp file: which settings reach the file is the property worth asserting,
+ *   and asserting it should not mean writing over the repo's own .env.
+ */
+function dumpENV({ envPath: overridePath = null } = {}) {
   const fs = require("fs");
   const path = require("path");
 
   const frozenEnvs = {};
   const protectedKeys = [
-    ...Object.values(KEY_MAPPING).map((values) => values.envKey),
+    // P0-4D(c) part 3: credential-valued settings are excluded. Their values live in
+    // the encrypted credential_store; writing them here would put the same secrets back
+    // in plaintext on disk and in every backup of the storage volume, which is the
+    // condition this task exists to end. `secret: "url"` entries stay: an endpoint is
+    // configuration, and its inline credentials are stripped before it is stored.
+    ...Object.values(KEY_MAPPING)
+      .filter((values) => values.secret !== true)
+      .map((values) => values.envKey),
     // Manually Add Keys here which are not already defined in KEY_MAPPING
     // and are either managed or manually set ENV key:values.
     "JWT_EXPIRY",
@@ -1854,7 +1937,7 @@ function dumpENV() {
     .map(([key, value]) => `${key}='${sanitizeValue(value)}'`)
     .join("\n");
 
-  const envPath = path.join(__dirname, "../../.env");
+  const envPath = overridePath ?? path.join(__dirname, "../../.env");
   return writeEnvFileAtomic(envPath, envResult);
 }
 
@@ -1937,6 +2020,7 @@ function writeEnvFileAtomic(envPath, contents) {
 
 module.exports = {
   KEY_MAPPING,
+  loadStoredCredentials,
   dumpENV,
   updateENV,
   writeEnvFileAtomic,

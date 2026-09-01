@@ -1,0 +1,25 @@
+-- P0-4D(c) part 3: the .env file stops being where provider credentials live.
+--
+-- 060000 created credential_store; this is the point at which the application starts
+-- using it. There is deliberately NO data migration here.
+--
+-- Moving the existing values would mean encrypting them in SQL, which cannot be done:
+-- the key is derived from SIG_KEY through scrypt in the application, and a migration
+-- has neither that derivation nor the process environment holding the plaintext. Any
+-- SQL that appeared to do it would be writing something other than a valid GCM row.
+--
+-- Instead the move happens on the next write of each credential, through the same
+-- CredentialStore path every new value takes. Until then the value keeps working: it
+-- is already in process.env, and dumpENV rebuilds the file from an allowlist that no
+-- longer contains it — so an existing deployment keeps running and drops each secret
+-- out of the file the first time an operator saves that setting.
+--
+-- The consequence has to be stated rather than discovered: after this ships, a
+-- credential that has never been re-saved lives ONLY in the existing .env file. A
+-- deployment that rebuilds its .env from scratch (a fresh container with no volume)
+-- loses it and must set it again. That is the same exposure the file always had, not a
+-- new one, and it ends per-credential as each is re-saved.
+
+-- Nothing to apply. This migration exists so the ordering is recorded and the
+-- explanation lives with the schema rather than only in a ledger.
+SELECT 1;
