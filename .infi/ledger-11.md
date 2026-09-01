@@ -31,9 +31,19 @@ New guard `canPurgeDocumentFromWorkspace` runs before the purge:
   system-wide document management. Managers lose only the cross-workspace reach.
 - **Ruling:** Single-user mode (`user == null`) treated as admin-equivalent —
   there is exactly one operator; blocking them would brick document deletion.
-- **Ruling:** Other `purgeDocument` call sites left alone: `/system/remove-documents`
-  and `/v1/system/remove-documents` are admin/API surfaces already scoped to
-  system-wide management (and get scopes in PR-4x); the embed IDOR is #12.
+- **Ruling (corrected per e5 review):** `purgeDocument` has **4 call sites; this
+  PR closes 1** (workspaces.js:881, remove-and-unembed). The other three, stated
+  precisely — the original "admin/API surface อยู่แล้ว" wording was wrong:
+  - `endpoints/system.js:467` and `:482` (`/system/remove-documents` etc.) are
+    guarded by `flexUserRoleValid([admin, manager])` — **managers included**, and
+    `flexUserRoleValid` **bypasses entirely outside multi-user mode**
+    (multiUserProtected.js:71-74).
+  - `endpoints/api/system/index.js:272` (`/v1/system/remove-documents`) is
+    guarded by `[validApiKey]` alone — **any valid API key can purge any document
+    system-wide** until scopes exist.
+  **Commitment:** the `/v1/system/remove-documents` site MUST receive the
+  `document.delete` scope in PR-3/PR-4x. Recorded here so closing the front door
+  doesn't leave an undocumented back door.
 
 ## Files
 
