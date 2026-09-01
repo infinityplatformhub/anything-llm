@@ -42,3 +42,5 @@ Ruling: Retain upstream ARM Chromium archive URL in Dockerfile — it is a requi
 Ruling: Restore `anythingllm-router` provider value — it is a persisted configuration and routing compatibility ID, not user-facing branding — cost if wrong: internal legacy token remains visible to technical scans.
 
 Ruling: Ignore only generated login SVG files for URL gate — `xmlns` is an XML namespace identifier, not a fetched resource — cost if wrong: future real URLs added to those two tiny assets bypass generic URL gate and require review.
+
+Ruling: Restore `anythingllm-router` compatibility ID across all frontend and server consumers, not only ephemeral agent — mixed IDs would make selection, persistence, and runtime routing disagree — cost if wrong: legacy internal token remains across technical configuration surfaces.

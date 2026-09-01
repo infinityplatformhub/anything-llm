@@ -91,7 +91,7 @@ import OMLXOptions from "@/components/LLMSelection/OMLXOptions";
 
 export const MODEL_ROUTER_PROVIDER = {
   name: "Model Router",
-  value: "approofworkspace-router",
+  value: "anythingllm-router",
   logo: ApproofWorkspaceIcon,
   options: (settings) => <ModelRouterOptions settings={settings} />,
   description:

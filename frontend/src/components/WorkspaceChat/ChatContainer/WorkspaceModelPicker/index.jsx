@@ -19,7 +19,7 @@ async function resolveModelName(workspace, systemSettings, t) {
   const effectiveProvider =
     workspace.chatProvider ?? systemSettings?.LLMProvider;
 
-  if (effectiveProvider !== "approofworkspace-router")
+  if (effectiveProvider !== "anythingllm-router")
     return workspace.chatModel ?? systemSettings?.LLMModel ?? "";
 
   const routerId = workspace.router_id || systemSettings?.ModelRouterId;

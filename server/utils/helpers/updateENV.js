@@ -1168,7 +1168,7 @@ function supportedLLM(input = "") {
     "minimax",
     "cerebras",
     "omlx",
-    "approofworkspace-router",
+    "anythingllm-router",
     "vertex",
   ].includes(input);
   return validSelection ? null : `${input} is not a valid LLM provider.`;

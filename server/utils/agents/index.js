@@ -411,8 +411,8 @@ class AgentHandler {
   #getFallbackProvider() {
     // If workspace chat uses the model router, fall back to it.
     // Model is null here since the router determines it at resolve time.
-    if (this.invocation.workspace.chatProvider === "approofworkspace-router") {
-      return { provider: "approofworkspace-router", model: null };
+    if (this.invocation.workspace.chatProvider === "anythingllm-router") {
+      return { provider: "anythingllm-router", model: null };
     }
 
     // First, fallback to the workspace chat provider and model if they exist
@@ -429,8 +429,8 @@ class AgentHandler {
     // If workspace does not have chat provider and model fallback
     // to system provider and try to load provider default model
     const systemProvider = process.env.LLM_PROVIDER;
-    if (systemProvider === "approofworkspace-router") {
-      return { provider: "approofworkspace-router", model: null };
+    if (systemProvider === "anythingllm-router") {
+      return { provider: "anythingllm-router", model: null };
     }
 
     const systemModel = this.providerDefault(systemProvider);
@@ -475,7 +475,7 @@ class AgentHandler {
     this.model = this.#fetchModel();
 
     // If provider resolved to model router, resolve the actual provider/model
-    if (this.provider === "approofworkspace-router") {
+    if (this.provider === "anythingllm-router") {
       await this.#resolveRouterProvider();
     }
 
