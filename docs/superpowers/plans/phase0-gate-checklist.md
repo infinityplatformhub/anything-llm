@@ -271,6 +271,34 @@ git grep -A2 '"engines"' -- 'package.json' '*/package.json' | grep '"node"'
 
 Every package that runs Node must pin `">=22 <23"`. At `7587e74e` all four are pinned, `frontend/` included (`3caffef6`) — one rule everywhere beat writing down an exemption.
 
+**The pin is only half of it — every runtime that executes this code must agree.**
+An `engines` field is a declaration; a base image and a CI runner are the actual
+Node that runs. E2E caught a regression the pin itself could not: the container
+was still on 18.
+
+```bash
+git grep -n 'FROM.*node:' -- docker/Dockerfile        # must be node:22-*
+git grep -n 'node-version' -- .github/workflows       # must all be 22
+```
+
+Dockerfile is `node:22-slim` since `450b19b1`. **The workflows are not.** At
+`c190bf8d`, five steps across three files still request Node 18:
+
+| Workflow | Steps |
+|---|---|
+| `lint.yaml` | 3 |
+| `check-package-versions.yaml` | 1 |
+| `check-translations.yaml` | 1 |
+
+Only `ci.yml` is on 22. `lint.yaml` runs `yarn install --frozen-lockfile` under
+Node 18 against `"engines": {"node": ">=22 <23"}` — an install whose declared
+requirement its own runtime does not meet.
+
+They are green today because none of them loads `jsonwebtoken`, which is the
+package that fails on the wrong Node. That is luck about *which* code each
+workflow touches, not a property of the pin, and it changes the first time a lint
+or version-check step imports a runtime module.
+
 The pin is not cosmetic. `jsonwebtoken@9.0.2` fails to load on Node 26 (SlowBuffer) at `utils/http/index.js:4`, so a CI image bump would break authentication and the cause would look unrelated to the change.
 
 ### 2.8 Residual risks have owners
