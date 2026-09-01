@@ -52,7 +52,7 @@ async function resolveActor(request, response, { db = prisma } = {}) {
     // against `grantPrincipal`, the ingress middleware enforces the scope half, and the
     // `api-key:` id stays as audit provenance.
     const creatorId = await apiKeyCreatorId(ctx.keyId, db);
-    const grantPrincipal = await keyGrantPrincipal(creatorId);
+    const grantPrincipal = await keyGrantPrincipal(creatorId, db);
 
     // An unbound key inherits its creator's reach; a workspace-bound key keeps its
     // binding and never widens to everything the creator can see.
@@ -111,7 +111,7 @@ async function resolveActor(request, response, { db = prisma } = {}) {
 
   // Row 2 (R5): single-user deployments have no user rows — explicit service principal
   // evaluated by the engine like any principal. No branch anywhere may mean "allow".
-  if (!(await isMultiUserModeSafe())) {
+  if (await isConfirmedSingleUser(db)) {
     return { ...SINGLE_USER_ACTOR };
   }
 
@@ -201,9 +201,11 @@ async function jobActor({ userId = null, db = prisma } = {}) {
  * seeded grants — and ONLY in single-user mode. In multi-user mode a null creator is a real
  * orphan (creator deleted, or a key written outside the model), and it denies.
  */
-async function keyGrantPrincipal(creatorId) {
+async function keyGrantPrincipal(creatorId, db = prisma) {
   if (creatorId !== null) return { type: "user", id: String(creatorId) };
-  if (await isMultiUserModeSafe()) return null;
+  // Gated by the same evidence as the anonymous branch (QA-2 FINDING-1): without it, a key
+  // with no creator borrows super_admin the moment the settings read misbehaves.
+  if (!(await isConfirmedSingleUser(db))) return null;
   return { type: SINGLE_USER_ACTOR.type, id: SINGLE_USER_ACTOR.id };
 }
 
@@ -240,13 +242,31 @@ async function workspaceIdsForUser(userId, db = prisma) {
   }
 }
 
-async function isMultiUserModeSafe() {
+/**
+ * Is this deployment REALLY single-user?
+ *
+ * QA-2 FINDING-1: the setting alone is not evidence. `SystemSettings.isMultiUserMode()`
+ * catches its own errors and returns `false` (systemSettings.js:747), so "the database is
+ * unreachable" and "the multi_user_mode row is missing" both reach this code as a
+ * confident "single-user" — and the catch below used to claim it failed toward the
+ * restrictive mode while never actually running. An anonymous request with no credential
+ * then resolved to SINGLE_USER_ACTOR, which holds the seeded super_admin grant: delete any
+ * workspace, read anything. The missing-row case needs no outage at all — a partial
+ * restore, or a migration that drops the row, is enough.
+ *
+ * So single-user must be CONFIRMED, not merely reported: a deployment with user rows is
+ * multi-user whatever the setting says. `isMultiUserMode` itself is left alone — 24
+ * callers expect a boolean, and `false` is correct for a genuine single-user install.
+ *
+ * Both reads fail closed: an unreadable users table denies too, because absence of
+ * evidence is not evidence of absence.
+ */
+async function isConfirmedSingleUser(db = prisma) {
   try {
-    return await SystemSettings.isMultiUserMode();
+    if (await SystemSettings.isMultiUserMode()) return false;
+    return (await db.users.count()) === 0;
   } catch {
-    // Fall back to true (multi-user = deny anonymous) — fail toward the more
-    // restrictive mode, never toward allow.
-    return true;
+    return false;
   }
 }
 

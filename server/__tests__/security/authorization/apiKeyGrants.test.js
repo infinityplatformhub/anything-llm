@@ -19,8 +19,12 @@ const { SystemSettings } = require("../../../models/systemSettings");
 const { resolveActor } = require("../../../utils/authorization/actorResolver");
 
 const res = (locals) => ({ locals });
-const keyDb = (apiKey, workspaceIds = []) => ({
+// QA-2 FINDING-1: single-user is confirmed against `users.count() === 0`, not taken from
+// the setting alone — so a fixture must say which deployment shape it is modelling.
+// Default: a populated (multi-user) deployment.
+const keyDb = (apiKey, workspaceIds = [], userCount = 3) => ({
   api_keys: { findUnique: async () => apiKey },
+  users: { count: async () => userCount },
   workspace_users: {
     findMany: async () => workspaceIds.map((id) => ({ workspace_id: id })),
   },
@@ -59,8 +63,10 @@ describe("T-4b B-1: a key's grants come from its creator, not from the key princ
     // run in multi-user mode: in a single-user deployment there are NO user rows, so every
     // key ever issued there has a null creator. Denying them takes the whole /v1 surface
     // offline on upgrade, for the deployments least able to diagnose it.
+    // QA-2 FINDING-1: and "single-user" means no user rows exist, not merely that the
+    // setting says so — singleUserFallback.test.js covers the populated case.
     SystemSettings.isMultiUserMode.mockResolvedValue(false);
-    const db = keyDb({ id: 7, createdBy: null });
+    const db = keyDb({ id: 7, createdBy: null }, [], 0);
     const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
     expect(actor.grantPrincipal).toEqual({ type: "service", id: "single-user" });
   });
