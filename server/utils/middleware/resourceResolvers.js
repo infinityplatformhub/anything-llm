@@ -57,21 +57,23 @@ const workspaceByIdParam = (param) => async (request) => {
  * up by (id, user_id) alone, so a user kept write access to their own chats after
  * losing access to the workspace holding them (S-3).
  */
-const chatByIdParam = (param = "id") => async (request) => {
-  const id = Number(request.params?.[param]);
-  if (!Number.isInteger(id)) return null;
-  const chat = await prisma.workspace_chats.findUnique({
-    where: { id },
-    select: { id: true, workspaceId: true },
-  });
-  if (!chat) return null;
-  return {
-    type: "chat",
-    id: String(chat.id),
-    orgId: ORG_ID,
-    workspaceId: chat.workspaceId,
+const chatByIdParam =
+  (param = "id") =>
+  async (request) => {
+    const id = Number(request.params?.[param]);
+    if (!Number.isInteger(id)) return null;
+    const chat = await prisma.workspace_chats.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true },
+    });
+    if (!chat) return null;
+    return {
+      type: "chat",
+      id: String(chat.id),
+      orgId: ORG_ID,
+      workspaceId: chat.workspaceId,
+    };
   };
-};
 
 /**
  * A document addressed by its docpath in the request body. The workspaceId comes
@@ -97,10 +99,70 @@ const documentInWorkspaceBySlug = async (request) => {
   };
 };
 
+/** Prompt-history row addressed by :id; workspace scope comes from the stored row. */
+const promptHistoryByIdParam =
+  (param = "id") =>
+  async (request) => {
+    const id = Number(request.params?.[param]);
+    if (!Number.isInteger(id)) return null;
+    const history = await prisma.prompt_history.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true },
+    });
+    if (!history) return null;
+    return {
+      type: "prompt_history",
+      id: String(history.id),
+      orgId: ORG_ID,
+      workspaceId: history.workspaceId,
+    };
+  };
+
+/** Memory addressed by :memoryId; workspace scope comes from the stored row. */
+const memoryByIdParam =
+  (param = "memoryId") =>
+  async (request) => {
+    const id = Number(request.params?.[param]);
+    if (!Number.isInteger(id)) return null;
+    const memory = await prisma.memories.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true },
+    });
+    if (!memory) return null;
+    return {
+      type: "memory",
+      id: String(memory.id),
+      orgId: ORG_ID,
+      workspaceId: memory.workspaceId,
+    };
+  };
+
+/** Document addressed by docPath in the body and constrained to the stored workspace. */
+const watchedDocumentInWorkspaceBySlug = async (request) => {
+  const workspace = await workspaceBySlug(request);
+  if (!workspace) return null;
+  const docpath = request.body?.docPath;
+  if (typeof docpath !== "string" || !docpath) return null;
+  const document = await prisma.workspace_documents.findFirst({
+    where: { docpath, workspaceId: workspace.workspaceId },
+    select: { id: true, workspaceId: true },
+  });
+  if (!document) return null;
+  return {
+    type: "document",
+    id: String(document.id),
+    orgId: ORG_ID,
+    workspaceId: document.workspaceId,
+  };
+};
+
 module.exports = {
   orgResource,
   workspaceBySlug,
   workspaceByIdParam,
   chatByIdParam,
   documentInWorkspaceBySlug,
+  promptHistoryByIdParam,
+  memoryByIdParam,
+  watchedDocumentInWorkspaceBySlug,
 };

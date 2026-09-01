@@ -1,10 +1,8 @@
 const { AgentSkillWhitelist } = require("../models/agentSkillWhitelist");
 const { reqBody, userFromSession } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 
 function agentSkillWhitelistEndpoints(app) {
   if (!app) return;
@@ -47,7 +45,7 @@ function agentSkillWhitelistEndpoints(app) {
 
   app.post(
     "/agent-skills/whitelist/add",
-    [validatedRequest, flexUserRoleValid(ROLES.all)],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { skillName } = reqBody(request);

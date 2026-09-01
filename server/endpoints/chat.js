@@ -3,11 +3,9 @@ const { reqBody, userFromSession, multiUserMode } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
 const { streamChatWithWorkspace } = require("../utils/chats/stream");
-const {
-  ROLES,
-  flexUserRoleValid,
-} = require("../utils/middleware/multiUserProtected");
 const { emitAuditEvent } = require("../utils/events");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { workspaceBySlug } = require("../utils/middleware/resourceResolvers");
 const {
   validWorkspaceAndThreadSlug,
   validWorkspaceSlug,
@@ -22,7 +20,11 @@ function chatEndpoints(app) {
 
   app.post(
     "/workspace/:slug/stream-chat",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.send", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -106,7 +108,7 @@ function chatEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/stream-chat",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.send", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {

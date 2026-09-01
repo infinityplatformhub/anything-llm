@@ -13,10 +13,6 @@ const { getVectorDbClass, stripThinkingFromText } = require("../utils/helpers");
 const { handleFileUpload } = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
 const { requirePermission } = require("../utils/middleware/requirePermission");
 const {
   DatabaseAuthorizationEngine,
@@ -25,6 +21,8 @@ const {
   workspaceBySlug,
   chatByIdParam,
   documentInWorkspaceBySlug,
+  orgResource,
+  promptHistoryByIdParam,
 } = require("../utils/middleware/resourceResolvers");
 const { emitAuditEvent } = require("../utils/events");
 const {
@@ -57,7 +55,7 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/new",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("workspace.create", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -93,15 +91,13 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/update",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("workspace.write", workspaceBySlug)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
         const { slug = null } = request.params;
         const data = reqBody(request);
-        const currWorkspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const currWorkspace = await Workspace.get({ slug });
 
         if (!currWorkspace) {
           response.sendStatus(400).end();
@@ -125,7 +121,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/upload",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("document.create", workspaceBySlug),
       handleFileUpload,
     ],
     async function (request, response) {
@@ -192,7 +188,7 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/upload-link",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.create", workspaceBySlug)],
     async (request, response) => {
       try {
         const Collector = new CollectorApi();
@@ -235,15 +231,16 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/update-embeddings",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("workspace.embeddings.manage", workspaceBySlug),
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
         const { slug = null } = request.params;
         const { adds = [], deletes = [] } = reqBody(request);
-        const currWorkspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const currWorkspace = await Workspace.get({ slug });
 
         if (!currWorkspace) {
           response.sendStatus(400).end();
@@ -303,7 +300,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.delete", workspaceBySlug),
       workspaceDeletionProtection,
     ],
     async (request, response) => {
@@ -311,9 +308,7 @@ function workspaceEndpoints(app) {
         const { slug = "" } = request.params;
         const user = await userFromSession(request, response);
         const VectorDb = getVectorDbClass();
-        const workspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const workspace = await Workspace.get({ slug });
 
         if (!workspace) {
           response.sendStatus(400).end();
@@ -348,15 +343,16 @@ function workspaceEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/reset-vector-db",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("workspace.embeddings.manage", workspaceBySlug),
+    ],
     async (request, response) => {
       try {
         const { slug = "" } = request.params;
         const user = await userFromSession(request, response);
         const VectorDb = getVectorDbClass();
-        const workspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const workspace = await Workspace.get({ slug });
 
         if (!workspace) {
           response.sendStatus(400).end();
@@ -389,7 +385,7 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspaces",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("workspace.read", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -407,10 +403,7 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug",
-    [
-      validatedRequest,
-      requirePermission("workspace.read", workspaceBySlug),
-    ],
+    [validatedRequest, requirePermission("workspace.read", workspaceBySlug)],
     async (request, response) => {
       try {
         const { slug } = request.params;
@@ -428,14 +421,12 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug/chats",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("chat.read", workspaceBySlug)],
     async (request, response) => {
       try {
         const { slug } = request.params;
         const user = await userFromSession(request, response);
-        const workspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const workspace = await Workspace.get({ slug });
 
         if (!workspace) {
           response.sendStatus(400).end();
@@ -455,7 +446,11 @@ function workspaceEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/delete-chats",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { chatIds = [] } = reqBody(request);
@@ -486,7 +481,11 @@ function workspaceEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/delete-edited-chats",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { startingId } = reqBody(request);
@@ -510,7 +509,11 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/update-chat",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { chatId, newText = null, role = "assistant" } = reqBody(request);
@@ -552,7 +555,11 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/chat-feedback/:chatId",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { chatId } = request.params;
@@ -576,7 +583,11 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug/suggested-messages",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("workspace.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async function (request, response) {
       try {
         const { slug } = request.params;
@@ -594,7 +605,7 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/suggested-messages",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("workspace.write", workspaceBySlug)],
     async (request, response) => {
       try {
         const { messages = [] } = reqBody(request);
@@ -625,7 +636,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/update-pin",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("document.pin", workspaceBySlug),
       validWorkspaceSlug,
     ],
     async (request, response) => {
@@ -650,7 +661,11 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug/tts/:chatId",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async function (request, response) {
       try {
         const { chatId } = request.params;
@@ -696,7 +711,11 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/thread/fork",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -804,16 +823,14 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/upload-and-embed",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("document.create", workspaceBySlug),
       handleFileUpload,
     ],
     async function (request, response) {
       try {
         const { slug = null } = request.params;
         const user = await userFromSession(request, response);
-        const currWorkspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const currWorkspace = await Workspace.get({ slug });
 
         if (!currWorkspace) {
           response.sendStatus(400).end();
@@ -932,7 +949,11 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug/prompt-history",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("workspace.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (_, response) => {
       try {
         response.status(200).json({
@@ -951,7 +972,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/prompt-history",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.write", workspaceBySlug),
       validWorkspaceSlug,
     ],
     async (_, response) => {
@@ -972,7 +993,7 @@ function workspaceEndpoints(app) {
     "/workspace/prompt-history/:id",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.write", promptHistoryByIdParam("id")),
       validWorkspaceSlug,
     ],
     async (request, response) => {
@@ -997,7 +1018,7 @@ function workspaceEndpoints(app) {
    */
   app.post(
     "/workspace/search",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("workspace.read", orgResource)],
     async (request, response) => {
       try {
         const { searchTerm } = reqBody(request);
@@ -1018,7 +1039,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/embed-progress",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.embeddings.manage", workspaceBySlug),
       validWorkspaceSlug,
     ],
     async (request, response) => {
@@ -1049,7 +1070,7 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/embed-queue",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.embeddings.manage", workspaceBySlug),
       validWorkspaceSlug,
     ],
     async (request, response) => {
@@ -1075,7 +1096,11 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug/is-agent-command-available",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("workspace.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (_, response) => {
       try {
         response.status(200).json({
