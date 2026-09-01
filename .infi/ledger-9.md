@@ -23,10 +23,26 @@ Replace `uuid-apikey` (Base32 of UUIDv4 — 122 bits) with
   prefix for `keyPrefix` UI display; adding it now avoids a second format change.
   Old format had no prefix so no collision. Keys still stored/compared verbatim —
   no auth behavior change until PR-3.
-- **Ruling (e5 review):** Prefix is `apw-`, not the initially chosen `sk-` — this
-  repo already validates OpenAI keys by their `sk-` prefix (updateENV.js:1066 plus
-  frontend placeholders), so reusing it for a different credential type invites
-  confusion once PR-3 shows keyPrefix in the UI. `apw-` = ApproofWorkspace.
+- **Ruling (e5 round 2, supersedes earlier prefix rulings):** Final credential
+  prefixes — `apw-key-` (API), `apw-tat-` (temp token), `apw-brx-` (browser
+  extension), `apw-inv-` (invite). Bare `apw-` was dropped: it can't be parsed
+  by type without checking every longer prefix first; PR-3 routes by prefix, so
+  the type suffix is symmetric from day one. `browserExtensionApiKey.js:41`
+  `startsWith` updated with the generator.
+- **Ruling (Techlead F1):** `models/invite.js` generator replaced in THIS PR —
+  an invite code redeems a real account, so it is a bearer credential under the
+  R6/R7 floor like everything else. `uuid-apikey` removed from package.json and
+  yarn.lock in the same commit: this PR was its last consumer, and leaving it
+  installed would make R6 look closed while the hole remained.
+
+## Release note (for PMO)
+
+> New secrets generated after this release use `apw-key-`, `apw-brx-`,
+> `apw-tat-`, and `apw-inv-` prefixes with 256-bit entropy. **Existing
+> browser-extension keys with the old `brx-` prefix stop validating
+> immediately** — operators must reissue them (the extension treats the key as
+> an opaque string; only paste needed). Pre-existing API keys and invite codes
+> keep working until the API-key migration force-rotates them (PR-3).
 - **Ruling (QA-2/PMO):** temp-token prefix `allm-tat-` → `apw-tat-` — old brand
   string survived P0-7's de-brand; caught in QA-2 pass.
 - **Scope-out (explicit, per PMO):**

@@ -9,7 +9,7 @@ const BrowserExtensionApiKey = {
    */
   makeSecret: () => {
     const crypto = require("crypto");
-    return `brx-${crypto.randomBytes(32).toString("base64url")}`;
+    return `apw-brx-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   /**
@@ -38,7 +38,7 @@ const BrowserExtensionApiKey = {
    * @returns {Promise<{apiKey: import("@prisma/client").browser_extension_api_keys|boolean}>}
    */
   validate: async function (key) {
-    if (!key.startsWith("brx-")) return false;
+    if (!key.startsWith("apw-brx-")) return false;
     const apiKey = await prisma.browser_extension_api_keys.findUnique({
       where: { key: key.toString() },
       include: { user: true },

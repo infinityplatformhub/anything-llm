@@ -9,6 +9,7 @@ const {
   BrowserExtensionApiKey,
 } = require("../../models/browserExtensionApiKey");
 const { TemporaryAuthToken } = require("../../models/temporaryAuthToken");
+const { Invite } = require("../../models/invite");
 
 // 32 random bytes base64url-encoded => 43 chars, alphabet [A-Za-z0-9_-]
 const BASE64URL_256 = /^[A-Za-z0-9_-]{43}$/;
@@ -20,17 +21,22 @@ describe("key generator entropy (P0-4 PR-1 / R7)", () => {
     {
       name: "ApiKey.makeSecret",
       make: () => ApiKey.makeSecret(),
-      prefix: "apw-",
+      prefix: "apw-key-",
     },
     {
       name: "BrowserExtensionApiKey.makeSecret",
       make: () => BrowserExtensionApiKey.makeSecret(),
-      prefix: "brx-",
+      prefix: "apw-brx-",
     },
     {
       name: "TemporaryAuthToken.makeTempToken",
       make: () => TemporaryAuthToken.makeTempToken(),
       prefix: "apw-tat-",
+    },
+    {
+      name: "Invite.makeCode",
+      make: () => Invite.makeCode(),
+      prefix: "apw-inv-",
     },
   ];
 
@@ -55,9 +61,9 @@ describe("key generator entropy (P0-4 PR-1 / R7)", () => {
     });
   }
 
-  it("BrowserExtensionApiKey.validString still accepts a freshly generated key format", () => {
-    // validString checks the brx- prefix; new format must not break it.
+  it("BrowserExtensionApiKey.validate prefix check matches the generated key format", () => {
+    // validate() rejects keys without the apw-brx- prefix; new format must pass it.
     const key = BrowserExtensionApiKey.makeSecret();
-    expect(key.startsWith("brx-")).toBe(true);
+    expect(key.startsWith("apw-brx-")).toBe(true);
   });
 });
