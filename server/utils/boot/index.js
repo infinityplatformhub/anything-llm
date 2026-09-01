@@ -12,6 +12,9 @@ const { PushNotifications } = require("../PushNotifications");
 const { TelegramBotService } = require("../telegramBot");
 const { startEventServices } = require("../events");
 const { jobRuntime } = require("../jobs/JobRuntime");
+const {
+  loadStoredCredentials,
+} = require("../helpers/updateENV");
 
 // Testing SSL? You can make a self signed certificate and point the ENVs to that location
 // make a directory in server called 'sslcert' - cd into it
@@ -36,6 +39,9 @@ function bootSSL(app, port = 3001) {
 
     server
       .listen(port, async () => {
+        // First: everything below may construct a provider client, and a credential
+        // that is still only a database row is not a configured provider yet.
+        await loadStoredCredentials();
         await markOnboarded();
         await setupTelemetry();
         new CommunicationKey(true);
@@ -74,6 +80,9 @@ function bootHTTP(app, port = 3001) {
 
   app
     .listen(port, async () => {
+      // First, for the same reason as bootSSL: a credential that is still only a
+      // database row is not a configured provider yet.
+      await loadStoredCredentials();
       await markOnboarded();
       await setupTelemetry();
       new CommunicationKey(true);
