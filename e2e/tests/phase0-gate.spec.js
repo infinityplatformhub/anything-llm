@@ -262,21 +262,14 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
     timeout: 120_000,
   });
-  // Files live inside the custom-documents folder: expand it, then tick the
-  // file row's own checkbox (clicking the row text toggles selection off).
+  // Files live inside the custom-documents folder. Rows are tr.file-row and
+  // selection is an onClick on the row itself (the checkbox is a styled div).
   await page.getByText(/custom-documents/).first().click({ force: true });
   await page.waitForTimeout(1_500);
-  const fileRow = page
-    .locator("div")
-    .filter({ hasText: new RegExp(DOC_NAME.replace(/\./g, "\\.")) })
-    .last();
-  const rowBox = fileRow.locator("input[type=checkbox]").first();
-  if (await rowBox.count()) {
-    await rowBox.check({ force: true });
-  } else {
-    await page.getByText(DOC_NAME).last().click({ force: true });
-  }
-  await page.waitForTimeout(1_000);
+  const fileRow = page.locator("tr.file-row").filter({ hasText: DOC_NAME }).first();
+  await fileRow.waitFor({ state: "visible", timeout: 30_000 });
+  await fileRow.click();
+  await expect(fileRow).toHaveClass(/selected/, { timeout: 10_000 });
   const move = page.locator('button:has-text("Move to Workspace")');
   await move.first().waitFor({ state: "visible", timeout: 30_000 });
   const embedCall = page.waitForResponse(
