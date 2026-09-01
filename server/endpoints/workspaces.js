@@ -17,6 +17,15 @@ const {
   flexUserRoleValid,
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
+const {
+  workspaceBySlug,
+  chatByIdParam,
+  documentInWorkspaceBySlug,
+} = require("../utils/middleware/resourceResolvers");
 const { emitAuditEvent } = require("../utils/events");
 const {
   WorkspaceSuggestedMessages,
@@ -39,6 +48,8 @@ const { workspaceParsedFilesEndpoints } = require("./workspacesParsedFiles");
 const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
+
+const authorizationEngine = new DatabaseAuthorizationEngine();
 
 function workspaceEndpoints(app) {
   if (!app) return;
@@ -396,14 +407,16 @@ function workspaceEndpoints(app) {
 
   app.get(
     "/workspace/:slug",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [
+      validatedRequest,
+      requirePermission("workspace.read", workspaceBySlug),
+    ],
     async (request, response) => {
       try {
         const { slug } = request.params;
-        const user = await userFromSession(request, response);
-        const workspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        // Authorized above, so the plain lookup is correct here: membership is no
+        // longer what decides access, it is only what the engine reads.
+        const workspace = await Workspace.get({ slug });
 
         response.status(200).json({ workspace });
       } catch (e) {
@@ -759,11 +772,15 @@ function workspaceEndpoints(app) {
 
   app.put(
     "/workspace/workspace-chats/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("chat.send", chatByIdParam("id"))],
     async (request, response) => {
       try {
         const { id } = request.params;
         const user = await userFromSession(request, response);
+        // Ownership still applies on top of the workspace decision: the engine
+        // says whether the caller may act in that workspace at all, this says the
+        // chat is theirs. Before T-4a only the second half existed, so owning a
+        // chat survived losing access to the workspace holding it (S-3).
         const validChat = await WorkspaceChats.get({
           id: Number(id),
           user_id: user?.id ?? null,
@@ -865,25 +882,41 @@ function workspaceEndpoints(app) {
     "/workspace/:slug/remove-and-unembed",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      // Body first: the resolver reads documentLocation, and the whole point of
+      // G11 is that the document is found in the ADDRESSED workspace rather than
+      // taken on the caller's word.
       handleFileUpload,
+      requirePermission("document.delete", documentInWorkspaceBySlug),
     ],
     async function (request, response) {
       try {
         const { slug = null } = request.params;
         const body = reqBody(request);
         const user = await userFromSession(request, response);
-        const currWorkspace = multiUserMode(response)
-          ? await Workspace.getWithUser(user, { slug })
-          : await Workspace.get({ slug });
+        const currWorkspace = await Workspace.get({ slug });
 
         if (!currWorkspace || !body.documentLocation)
           return response.sendStatus(400).end();
+
+        // Still enforced on top of the grant: purgeDocument deletes system-wide,
+        // so a caller authorized for THIS workspace must not take out copies
+        // living in workspaces they hold nothing on. The guard's own legacy
+        // `user.role === "admin"` shortcut is gone — being an admin is now an
+        // org-wide grant the engine checked above, not a string on the row.
+        // The gate above said the caller may delete IN this workspace. Purging is
+        // system-wide, so ask separately whether they may delete anywhere — that
+        // org-wide grant is what the legacy `role === "admin"` string stood for.
+        const orgWide = await authorizationEngine.authorize({
+          actor: response.locals.actor,
+          action: "document.delete",
+          resource: { type: "document", id: null, orgId: 1, workspaceId: null },
+        });
 
         const { allowed, reason } = await canPurgeDocumentFromWorkspace({
           workspace: currWorkspace,
           user,
           documentLocation: body.documentLocation,
+          orgWideDocumentDelete: orgWide.allowed,
         });
         if (!allowed) return response.status(403).json({ error: reason });
 

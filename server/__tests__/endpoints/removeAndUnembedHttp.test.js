@@ -46,6 +46,15 @@ jest.mock("../../utils/middleware/multiUserProtected", () => {
     flexUserRoleValid: jest.fn(() => (_, __, next) => next()),
   };
 });
+// T-4a: this suite mocks prisma, so the real engine behind requirePermission has
+// no policy tables and correctly reports the store as unavailable (503). The
+// suite exercises the purge GUARD, not the authorization GATE — the gate is
+// proven end-to-end against real Postgres in
+// __tests__/security/authorization/routeWiring.test.js.
+jest.mock("../../utils/middleware/requirePermission", () => ({
+  requirePermission: () => (_request, _response, next) => next(),
+  NON_DISCLOSING: new Set(),
+}));
 jest.mock("../../utils/files/multer", () => ({
   handleFileUpload: jest.fn((_, __, next) => next()),
 }));
@@ -132,13 +141,20 @@ describe("HTTP DELETE workspace remove-and-unembed - QA-2 A1 issue 11", () => {
     expect(purgeDocument).toHaveBeenCalledWith(DOC_ONLY_IN_B.docpath);
   });
 
-  it("admin (non-member) still purges — positive control", async () => {
+  // T-4a (#25) changed this contract deliberately. The guard used to short-circuit
+  // on `user.role === "admin"`, so a legacy role string bought a system-wide purge.
+  // Admin-ness is now an org-wide grant that requirePermission checks BEFORE this
+  // guard runs (proven end-to-end in routeWiring.test.js); the guard is left with
+  // only the blast-radius question, which a non-member cannot pass here because
+  // this suite bypasses the gate. Renamed rather than deleted: the case still
+  // pins real behaviour, just the opposite outcome.
+  it("legacy admin role alone no longer purges — the grant does that now", async () => {
     userFromSession.mockResolvedValue(ADMIN);
 
     const res = await deleteDoc("ws-b");
 
-    expect(res.status).toBe(200);
-    expect(purgeDocument).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(403);
+    expect(purgeDocument).not.toHaveBeenCalled();
   });
 
   it("manager member is denied when the doc is also embedded elsewhere", async () => {

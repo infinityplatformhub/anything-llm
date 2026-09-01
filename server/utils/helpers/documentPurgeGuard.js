@@ -9,17 +9,21 @@ const prisma = require("../prisma");
  *
  * Rules:
  * - The document must actually be embedded in the addressed workspace.
- * - Admins (and single-user mode, where user is null) may purge regardless of
- *   other embeddings — system-wide document management is their job.
+ * - Single-user mode (user is null) may purge regardless: one principal, no
+ *   other workspace to protect.
+ * - A caller holding `document.delete` org-wide may purge regardless — the
+ *   system-wide document management the admin role used to stand for.
  * - Anyone else may only purge a document whose embeddings are confined to the
- *   addressed workspace.
- * @param {{workspace:{id:number}, user:{role:string}|null, documentLocation:string}} input
+ *   addressed workspace. Cross-workspace purges need an org-wide grant, which
+ *   T-4a's requirePermission has already checked before this runs.
+ * @param {{workspace:{id:number}, user:{id:number}|null, documentLocation:string, orgWideDocumentDelete?:boolean}} input
  * @returns {Promise<{allowed:boolean, reason:string}>}
  */
 async function canPurgeDocumentFromWorkspace({
   workspace,
   user,
   documentLocation,
+  orgWideDocumentDelete = false,
 }) {
   const embeddedHere = await prisma.workspace_documents.findFirst({
     where: { docpath: documentLocation, workspaceId: workspace.id },
@@ -30,11 +34,15 @@ async function canPurgeDocumentFromWorkspace({
       reason: "Document is not embedded in this workspace.",
     };
 
-  if (!user || user.role === "admin") return { allowed: true, reason: null };
+  // T-4a (#25): the legacy `user.role === "admin"` shortcut is replaced by an
+  // explicit capability the caller passes in. Whether someone may purge across
+  // workspaces is an org-wide grant the engine evaluates at the route — not a
+  // string on the user row, which is what made this a bypass. `!user`
+  // (single-user mode) still passes: one principal, no other workspace to protect.
+  if (!user || orgWideDocumentDelete) return { allowed: true, reason: null };
 
-  // Membership check (QA-2 A1): Workspace.getWithUser bypasses for managers,
-  // so a manager could reach this guard for a workspace they are not a member
-  // of. Non-admins may only purge from workspaces they belong to.
+  // Membership check (QA-2 A1): non-members may only purge from workspaces they
+  // belong to.
   const membership = await prisma.workspace_users.findFirst({
     where: { user_id: user.id, workspace_id: workspace.id },
   });
