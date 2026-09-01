@@ -55,7 +55,7 @@ export default {
     },
   },
   github: () => {
-    return "https://github.com/Mintplex-Labs/anything-llm";
+    return "https://github.com/infinityplatformhub/anything-llm";
   },
   discord: () => {
     return "https://discord.com/invite/6UyHPeGZAC";
@@ -66,11 +66,8 @@ export default {
   chatModes: () => {
     return "https://docs.approofworkspace.com/features/chat-modes";
   },
-  mailToMintplex: () => {
-    return "mailto:team@mintplexlabs.com";
-  },
-  hosting: () => {
-    return "https://my.mintplexlabs.com/aio-checkout?product=approofworkspace";
+  support: () => {
+    return "https://github.com/infinityplatformhub/anything-llm/issues";
   },
   workspace: {
     chat: (slug, options = {}) => {

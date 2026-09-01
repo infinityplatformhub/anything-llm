@@ -269,13 +269,6 @@ function FeatureVerification({ children }) {
                     className="underline text-blue-500"
                   >
                     docs.approofworkspace.com
-                  </a>{" "}
-                  or email{" "}
-                  <a
-                    href="mailto:team@mintplexlabs.com"
-                    className="underline text-blue-500"
-                  >
-                    team@mintplexlabs.com
                   </a>
                 </p>
               </div>
