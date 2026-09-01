@@ -109,18 +109,33 @@ class DatabaseAuthorizationEngine {
     return new Map(decisions.map((decision, i) => [i, decision]));
   }
 
+  /**
+   * The principal grants are read for. T-4b (#29) B-1: a scoped API key holds no grants
+   * under `api-key:<id>` — it is a bearer credential for its creator, so grants resolve
+   * against `grantPrincipal` while the `api-key:` id stays as audit provenance. The key's
+   * own scope list is the other half of the intersection and is enforced at ingress.
+   * A key whose creator is unknown (createdBy null, deleted row, unreadable table) carries
+   * `grantPrincipal: null` and can only deny.
+   */
+  static grantPrincipalOf(actor) {
+    return "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+  }
+
   async evaluate(actor, action, resource) {
     // Unknown action = deny (vocabulary is the seeded permissions table; T-1 diff test
     // keeps P0-4 scopes in the same namespace).
     const permission = await this.db.permissions.findUnique({ where: { action } });
     if (!permission) return asDenied("unknown_action");
 
+    const grantPrincipal = DatabaseAuthorizationEngine.grantPrincipalOf(actor);
+    if (!grantPrincipal) return asDenied("no_grant_principal");
+
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
     const grantWhere = {
       orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
+      principal_type: grantPrincipal.type,
+      principal_id: String(grantPrincipal.id),
       OR: [
         { expires_at: null },
         { expires_at: { gt: new Date() } },

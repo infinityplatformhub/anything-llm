@@ -316,6 +316,95 @@ describe("T-4b org-wide scope is a field, not a sentinel in workspaceIds", () =>
   });
 });
 
+// T-4b (#29) B-1: the filter reads grants for the same principal the engine does, or a
+// key that may call a route gets an empty result set from it.
+describe("T-4b B-1 in the document filter", () => {
+  test("a key's filter is built from its creator's grants, not from the key principal", async () => {
+    const creator = await userActor(8300, roles.viewer.id);
+    const keyActor = {
+      type: "service",
+      id: "api-key:8300",
+      orgId: 1,
+      grantPrincipal: { type: "user", id: "8300" },
+    };
+    const filter = await buildDocumentFilter({ actor: keyActor, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds).toContain(String(W1.id));
+    // provenance stays the key — audit must not read as the creator
+    expect(filter.actorId).toBe("api-key:8300");
+    expect(filter.principalType).toBe("service");
+    expect(creator.id).toBe("8300");
+  });
+
+  test("a key with no creator gets match-none, never an org-wide service scope", async () => {
+    // Without the grantPrincipal check, the org-wide branch treats any non-user type as
+    // whole-org — so a creatorless key would read every document in the org.
+    const orphan = { type: "service", id: "api-key:8301", orgId: 1, grantPrincipal: null };
+    const filter = await buildDocumentFilter({ actor: orphan, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(true);
+    expect(filter.orgWide).toBe(false);
+  });
+
+  test("a workspace-bound key never widens to everything its creator can read", async () => {
+    // The creator is a member of two workspaces; the key is issued for one. The binding
+    // narrows, and narrowing is the only direction a key's binding may move.
+    const other = await prisma.workspaces.create({
+      data: { name: "w2", slug: `t4b-w2-${dbSuffix}` },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: "8302",
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const creatorUser = await prisma.users.create({
+      data: { username: `bound-${dbSuffix}`, password: "x", role: "default" },
+    });
+    for (const ws of [W1.id, other.id]) {
+      await prisma.workspace_users.create({
+        data: { user_id: creatorUser.id, workspace_id: ws },
+      });
+    }
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(creatorUser.id),
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+
+    const boundKey = {
+      type: "service",
+      id: `api-key:bound-${dbSuffix}`,
+      orgId: 1,
+      grantPrincipal: { type: "user", id: String(creatorUser.id) },
+      keyWorkspaceBinding: [String(W1.id)],
+    };
+    const filter = await buildDocumentFilter({ actor: boundKey, action: READER, db: prisma });
+    expect(filter.workspaceIds).toEqual([String(W1.id)]);
+    expect(filter.workspaceIds).not.toContain(String(other.id));
+  });
+
+  test("a key acting for a user is never whole-org, even on an org-wide grant", async () => {
+    // orgWide keyed off actor.type, and a key is type "service" — so a key acting for a
+    // user with an org-wide grant would read as whole-org while the user themself does not.
+    const creatorUser = await prisma.users.create({
+      data: { username: `orgw-${dbSuffix}`, password: "x", role: "default" },
+    });
+    await prisma.workspace_users.create({
+      data: { user_id: creatorUser.id, workspace_id: W1.id },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(creatorUser.id),
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const keyActor = {
+      type: "service",
+      id: `api-key:orgw-${dbSuffix}`,
+      orgId: 1,
+      grantPrincipal: { type: "user", id: String(creatorUser.id) },
+    };
+    const filter = await buildDocumentFilter({ actor: keyActor, action: READER, db: prisma });
+    expect(filter.orgWide).toBe(false);
+    expect(filter.workspaceIds).toEqual([String(W1.id)]);
+  });
+});
+
 describe("T-3 filter cache", () => {
   test("a filter is reused only while the policy version is unchanged", async () => {
     const actor = await userActor(8007, roles.viewer.id);

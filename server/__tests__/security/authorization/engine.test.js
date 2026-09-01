@@ -245,3 +245,101 @@ describe("T-2 engine core", () => {
     expect([...dupes.keys()]).toEqual([0, 1, 2]);
   });
 });
+
+// T-4b (#29) B-1: a scoped API key holds no grants of its own; it acts for its creator.
+// The engine resolves grants against `grantPrincipal` when the Actor carries one, and the
+// `api-key:` id stays as audit provenance. The scope half of the intersection is the
+// ingress middleware's job (validApiKey), so these cover the grant half only.
+describe("T-4b B-1: an API-key Actor evaluates grants as its creator", () => {
+  test("a key whose creator holds the grant is ALLOWED — /v1 is not universally denied", async () => {
+    const creator = await principal({ id: 950, grants: [{ roleId: roles.member.id }] });
+    const keyActor = {
+      type: "service",
+      id: "api-key:950",
+      orgId: 1,
+      grantPrincipal: { type: creator.type, id: creator.id },
+      attributes: { scopes: ["chat.send"] },
+    };
+    const decision = await engine.authorize({
+      actor: keyActor,
+      action: "chat.send",
+      resource: wsResource(),
+    });
+    expect(decision).toMatchObject({ allowed: true });
+  });
+
+  test("S-9 grant half: a key whose creator lacks the permission is denied", async () => {
+    // The key's own scope list says this action is fine; the creator's grants say it is
+    // not. Effective permission is the intersection, so this must deny.
+    const creator = await principal({ id: 951, grants: [{ roleId: roles.viewer.id, workspaceId: "W1" }] });
+    const keyActor = {
+      type: "service",
+      id: "api-key:951",
+      orgId: 1,
+      grantPrincipal: { type: creator.type, id: creator.id },
+      attributes: { scopes: ["workspace.delete"] },
+    };
+    const decision = await engine.authorize({
+      actor: keyActor,
+      action: "workspace.delete",
+      resource: wsResource(),
+    });
+    expect(decision.allowed).toBe(false);
+  });
+
+  test("a key with no creator (createdBy null) is denied, never treated as unscoped", async () => {
+    const keyActor = {
+      type: "service",
+      id: "api-key:952",
+      orgId: 1,
+      grantPrincipal: null,
+      attributes: { scopes: ["chat.send"] },
+    };
+    const decision = await engine.authorize({
+      actor: keyActor,
+      action: "chat.send",
+      resource: wsResource(),
+    });
+    expect(decision).toMatchObject({ allowed: false, reason: "no_grant_principal" });
+  });
+
+  test("the key principal itself is never consulted, even if a grant row names it", async () => {
+    // Defence in depth: if anything ever writes a grant for `api-key:<id>` — a migration
+    // slip, an admin UI that treats keys as principals — it must not become a second,
+    // unaudited way to hold policy.
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: "api-key:953",
+      roleId: roles.super_admin.id, db: prisma,
+    });
+    const creator = await principal({ id: 953, grants: [{ roleId: roles.viewer.id, workspaceId: "W1" }] });
+    const keyActor = {
+      type: "service",
+      id: "api-key:953",
+      orgId: 1,
+      grantPrincipal: { type: creator.type, id: creator.id },
+      attributes: { scopes: ["*"] },
+    };
+    const decision = await engine.authorize({
+      actor: keyActor,
+      action: "workspace.delete",
+      resource: wsResource(),
+    });
+    expect(decision.allowed).toBe(false);
+  });
+
+  test("a service principal without grantPrincipal still evaluates as itself (core-jobs)", async () => {
+    // Only API-key Actors carry grantPrincipal. Built-in service principals hold real
+    // grants under their own ids and must keep working unchanged.
+    const jobs = SERVICE_PRINCIPALS.coreJobs;
+    await repository.grantRole({
+      actor: SYS, principalType: jobs.type, principalId: jobs.id,
+      roleId: roles.member.id, db: prisma,
+    });
+    const decision = await engine.authorize({
+      actor: jobs,
+      action: "chat.send",
+      resource: wsResource(),
+    });
+    expect(decision).toMatchObject({ allowed: true });
+  });
+});

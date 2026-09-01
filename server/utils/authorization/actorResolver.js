@@ -38,11 +38,33 @@ async function resolveActor(request, response, { db = prisma } = {}) {
     // no actor even if the ingress middleware ever stops checking (F-20d, QA-2 round 2).
     const expired = ctx.expiresAt && new Date(ctx.expiresAt) <= new Date();
     if (ctx.revokedAt || expired) return null;
+
+    // T-4b (#29) B-1: no grant row ever names `api-key:<id>`, so evaluating the key as its
+    // own principal answers `no_grants` for every route. A key is not an identity that can
+    // hold policy — it is a bearer credential for its creator, narrowed by its own scopes.
+    // Effective permission is grants(createdBy) ∩ scopes(key): the engine resolves grants
+    // against `grantPrincipal`, the ingress middleware enforces the scope half, and the
+    // `api-key:` id stays as audit provenance.
+    const creatorId = await apiKeyCreatorId(ctx.keyId, db);
+    const grantPrincipal = creatorId === null ? null : { type: "user", id: String(creatorId) };
+
+    // An unbound key inherits its creator's reach; a workspace-bound key keeps its
+    // binding and never widens to everything the creator can see.
+    const workspaceIds = ctx.workspaceId
+      ? [String(ctx.workspaceId)]
+      : grantPrincipal
+        ? await workspaceIdsForUser(creatorId, db)
+        : [];
+
     return {
       type: "service",
       id: `api-key:${ctx.keyId}`,
       orgId: 1,
-      workspaceIds: ctx.workspaceId ? [ctx.workspaceId] : [],
+      workspaceIds,
+      grantPrincipal,
+      // A bound key may only narrow its creator's reach; documentFilter intersects with
+      // this rather than trusting workspaceIds, which a caller could shape.
+      keyWorkspaceBinding: ctx.workspaceId ? [String(ctx.workspaceId)] : [],
       scopedKeyId: String(ctx.keyId),
       attributes: { scopes: ctx.scopes ?? [] },
     };
@@ -136,6 +158,24 @@ async function resolveActorRef(actorRef, { db = prisma } = {}) {
       ? { type: "user", id: String(actorRef.impersonatedBy) }
       : undefined,
   };
+}
+
+/**
+ * The user a key acts for. `createdBy` is nullable (schema.prisma:20) and the row may be
+ * gone, so this returns null rather than a guess — a key with no creator has no grants to
+ * intersect and can only deny. An unreadable table denies too: failing toward "some
+ * principal" would hand a request whatever that principal holds.
+ */
+async function apiKeyCreatorId(keyId, db = prisma) {
+  try {
+    const row = await db.api_keys.findUnique({
+      where: { id: Number(keyId) },
+      select: { createdBy: true },
+    });
+    return row?.createdBy ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Workspace ids the user belongs to — the scope every document filter is built on. */

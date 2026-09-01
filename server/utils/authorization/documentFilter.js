@@ -153,11 +153,18 @@ async function readableScope(tx, actor, action) {
   const permission = await tx.permissions.findUnique({ where: { action } });
   if (!permission) return empty;
 
+  // T-4b (#29) B-1: an API-key Actor holds no grants under `api-key:<id>`; it reads as its
+  // creator. The engine applies the same rule, so a key that may call a route also sees the
+  // documents that route returns instead of an empty filter.
+  const grantPrincipal =
+    "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+  if (!grantPrincipal) return empty;
+
   const grants = await tx.principal_role_grants.findMany({
     where: {
       orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
+      principal_type: grantPrincipal.type,
+      principal_id: String(grantPrincipal.id),
       OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
     },
     select: { role_id: true, workspace_id: true },
@@ -180,10 +187,12 @@ async function readableScope(tx, actor, action) {
     const ids = new Set();
     // Membership only exists for real user rows. A service/embed principal has a
     // non-numeric id (`single-user`, `api-key:7`), so coercing it would hand Prisma a
-    // NaN and take down single-user deployments entirely (B1, QA-1).
-    if (actor.type === "user") {
+    // NaN and take down single-user deployments entirely (B1, QA-1). The check is on the
+    // GRANT principal, not the Actor: a key acting for a user must enumerate that user's
+    // memberships rather than fall through to a whole-org read (T-4b B-1).
+    if (grantPrincipal.type === "user") {
       const memberships = await tx.workspace_users.findMany({
-        where: { user_id: Number(actor.id) },
+        where: { user_id: Number(grantPrincipal.id) },
         select: { workspace_id: true },
       });
       for (const m of memberships) ids.add(String(m.workspace_id));
@@ -196,12 +205,34 @@ async function readableScope(tx, actor, action) {
     // A user's org-wide grant still resolves to that user's enumerated memberships — the
     // grant says "in any workspace you are in", not "in every workspace". Only a service
     // or embed principal, which has no membership rows at all, reads as whole-org.
-    return { workspaceIds: [...ids], orgWide: actor.type !== "user" };
+    return narrowToKeyBinding(actor, {
+      workspaceIds: [...ids],
+      orgWide: grantPrincipal.type !== "user",
+    });
   }
-  return {
+  return narrowToKeyBinding(actor, {
     workspaceIds: [
       ...new Set(scoped.filter((g) => g.workspace_id !== null).map((g) => String(g.workspace_id))),
     ],
+    orgWide: false,
+  });
+}
+
+/**
+ * A workspace-bound API key may only ever NARROW its creator's reach. The binding comes
+ * from the key row (`api_keys.workspaceId`), not from anything a caller can shape, so
+ * intersecting with it cannot widen scope — the worst a forged binding achieves is a
+ * smaller result set. Unbound keys and every other actor pass through untouched.
+ */
+function narrowToKeyBinding(actor, scope) {
+  const binding = actor.keyWorkspaceBinding;
+  if (!Array.isArray(binding) || binding.length === 0) return scope;
+  const allowed = new Set(binding.map(String));
+  return {
+    // An org-wide grant narrowed by a binding is exactly the bound workspaces.
+    workspaceIds: scope.orgWide
+      ? [...allowed]
+      : scope.workspaceIds.filter((id) => allowed.has(id)),
     orgWide: false,
   };
 }
