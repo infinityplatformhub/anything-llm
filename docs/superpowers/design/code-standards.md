@@ -294,6 +294,48 @@ live consumer is a breaking change requiring a `startsWith` compatibility branch
 
 Jest, `yarn test` from `server/`, `--runInBand`.
 
+### 7.0 Running the suite locally
+
+The suite needs a real Postgres, a pepper, and a Prisma client that matches the
+schema you are on. Miss any of the three and you get failures that are not about
+your code:
+
+```bash
+export PATH="/opt/homebrew/opt/node@22/bin:$PATH"        # Node 22
+export DATABASE_URL="postgresql://approof:approof@localhost:5432/approofworkspace_test"
+export API_KEY_PEPPER="local-dev-api-key-pepper-32-bytes-min"   # >= 32 bytes
+cd server
+npx prisma generate --schema prisma/schema.prisma        # after EVERY rebase
+npx prisma migrate deploy --schema prisma/schema.prisma  # fresh database only
+yarn test
+```
+
+Postgres, if you do not already have one:
+
+```bash
+docker run -d --name approof-test-pg \
+  -e POSTGRES_DB=approofworkspace_test -e POSTGRES_USER=approof \
+  -e POSTGRES_PASSWORD=approof -p 127.0.0.1:5432:5432 postgres:16
+```
+
+**`API_KEY_PEPPER` must be set and at least 32 bytes.** `utils/apiKeySecurity`
+calls `assertApiKeyPepper()` at module load, so a missing pepper fails five
+suites at `require` time, before a single test runs. That is fail-closed by
+design — a server that would hash API keys with an absent pepper must not
+start — not a bug to work around. CI sets it at `.github/workflows/ci.yml:30`.
+
+**Re-run `prisma generate` after every rebase, and after every branch switch
+that touches `schema.prisma`.** The generated client lives in `node_modules`,
+which git does not track, so it keeps whatever schema it was last built from.
+A client built before a schema change does not know the new columns and reports
+them as unknown fields — this produced **57 false failures** in one session,
+none of them about the code under test. If a large number of unrelated suites
+fail right after a rebase, regenerate before reading a single stack trace.
+
+The same trap hits worktrees that share a `node_modules` with the main
+checkout: whichever tree ran `prisma generate` last wins, and the other one
+fails. Regenerate when you switch between them.
+
 - Location mirrors source: `server/utils/jobs/X.js` →
   `server/__tests__/utils/jobs/X.test.js`.
 - Seam tests use a hand-written in-memory fake for `db`, injected via the
