@@ -188,9 +188,54 @@ async function canRespond(request, response, next) {
   }
 }
 
+/**
+ * PR-0d (issue #12, G12): access gate for the history read/invalidate routes
+ * (GET/DELETE /embed/:embedId/:sessionId). These previously ran with only
+ * validEmbedConfig — no enabled check, no origin allowlist, no sessionId format
+ * check — so anyone holding the public embedId could enumerate or invalidate
+ * session histories cross-origin. Applies the same gates canRespond enforces
+ * for chat, minus the chat-only quota/message checks.
+ * Must run after validEmbedConfig.
+ */
+async function embedHistoryAccess(request, response, next) {
+  try {
+    const embed = response.locals.embedConfig;
+    if (!embed) {
+      response.sendStatus(404).end();
+      return;
+    }
+
+    const { sessionId } = request.params;
+    if (typeof sessionId !== "string" || !validate(String(sessionId))) {
+      response.status(404).json({ error: "Invalid session ID." });
+      return;
+    }
+
+    if (!embed.enabled) {
+      response.status(503).json({
+        error:
+          "This chat has been disabled by the administrator - try again later.",
+      });
+      return;
+    }
+
+    const host = request.headers?.origin ?? "";
+    const allowedHosts = EmbedConfig.parseAllowedHosts(embed);
+    if (allowedHosts !== null && !allowedHosts.includes(host)) {
+      response.status(401).json({ error: "Invalid request." });
+      return;
+    }
+
+    next();
+  } catch {
+    response.status(500).json({ error: "Invalid request." });
+  }
+}
+
 module.exports = {
   setConnectionMeta,
   validEmbedConfig,
   validEmbedConfigId,
   canRespond,
+  embedHistoryAccess,
 };
