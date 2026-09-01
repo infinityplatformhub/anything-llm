@@ -89,6 +89,38 @@ reformatted near it. Do not reflow or realign models you are not changing —
 whitespace-only edits to shared models are the single largest source of
 schema conflicts in this fork.
 
+### 1.5 `filename` is a label, not a key
+
+`workspace_documents.filename` is a **basename** — `documents.js` stores
+`path.split(/[/\\]/).pop()` in it, while the full path goes in `docpath`. Two
+tenants who both upload `report.pdf` produce two rows with an identical
+`filename`.
+
+So: **`filename` MUST NOT appear in a `where` clause.** It is for display, logs,
+and progress events. The identity of a stored document is `docpath`
+(`docId` where you have it).
+
+Why: a lookup keyed on `filename` silently addresses another tenant's document.
+It does not error — it returns a row, the wrong one — so it surfaces as data
+corruption or a cross-tenant leak, not a stack trace. This has now been found
+three times: the `#13` sync bloom, four call sites in
+`server/models/documentSyncQueue.js`, and again in `sync-watched-documents.js`.
+The comment at `documentSyncQueue.js:96` calls it "the same unique filename";
+the schema does not declare it unique, and it is not.
+
+The one exception is `workspace_parsed_files.filename`, declared `@unique` in
+`schema.prisma`. There the column *is* the identity by design; querying it is
+correct.
+
+Definition of done for any change touching document lookup:
+
+```bash
+grep -rn "where.*filename\|filename:" server/models server/jobs
+```
+
+Every hit must be a write, a display value, or the `workspace_parsed_files`
+exception. No read filter.
+
 ---
 
 ## 2. Audit and events
@@ -224,14 +256,17 @@ Every generated bearer credential MUST carry an `apw-` prefix naming its kind:
 
 | Credential | Prefix | Generator |
 |---|---|---|
-| Developer API key | `apw-` | `server/models/apiKeys.js` |
+| Developer API key | `apw-key-` | `server/models/apiKeys.js` |
 | Temporary auth token | `apw-tat-` | `server/models/temporaryAuthToken.js` |
 | Browser extension key | `apw-brx-` | `server/models/browserExtensionApiKey.js` |
 | Invite code | `apw-inv-` | `server/models/invite.js` |
 
 Why: a prefix makes a leaked credential identifiable in a log or a paste, lets
 `startsWith` route a token to the right verifier, and keeps the fork's
-credentials distinguishable from upstream's. Adopting it late is expensive —
+credentials distinguishable from upstream's. Every kind carries its own segment —
+a bare `apw-` for API keys would not be dispatchable, since it also prefixes every
+other kind, forcing a check-the-specific-ones-then-fall-through order that breaks
+the moment a new kind is added. Adopting it late is expensive —
 every old prefix has to be accepted forever — so it is settled now, before any
 of these ship.
 
