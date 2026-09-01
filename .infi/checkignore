@@ -8,3 +8,5 @@ frontend/src/media/illustrations/login-logo-light.svg
 frontend/src/locales/es/common.js
 frontend/src/pages/OnboardingFlow/Steps/Home/wordmark.svg
 frontend/src/pages/OnboardingFlow/Steps/Home/wordmark-light.svg
+frontend/src/utils/branding.js
+server/utils/branding/constants.js

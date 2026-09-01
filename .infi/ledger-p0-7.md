@@ -62,3 +62,7 @@ Ruling: Make onboarding survey and Community Hub destinations opt-in/configurabl
 Ruling: Remove Google Play CTA for nonexistent `com.approofworkspace` app while retaining local connection UI — fork spec excludes native app and renamed upstream store IDs must not imply a published product — cost if wrong: users cannot discover upstream mobile client from this screen.
 
 Ruling: Ignore exact onboarding wordmark SVG files for URL gate — their `xmlns` values are XML namespace identifiers, not fetched network resources — cost if wrong: future real URLs in these two generated assets require manual review.
+
+Ruling: Exempt exact centralized URL config files `frontend/src/utils/branding.js` and `server/utils/branding/constants.js` from hardcoded-URL gate — these env-overridable modules are the single destinations the gate requires URLs to move into — cost if wrong: new unreviewed defaults added there bypass generic URL detection and require config review.
+
+Ruling: Keep `https://cdn.anythingllm.com/support/models/` as `BRAND_CDN_URL` fallback until ApproofWorkspace owns a CDN — native embedding and reranking model downloads depend on this working upstream asset host; replace under spec O4 when owned infrastructure exists — cost if wrong: upstream CDN outage or policy change breaks fallback model downloads.

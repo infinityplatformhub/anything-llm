@@ -274,7 +274,7 @@ export const PermittedDomains = ({ defaultValue = [] }) => {
         value={domains}
         onChange={handleChange}
         onBlur={handleBlur}
-        placeholder="https://example.com, https://sub.example.com"
+        placeholder="https://example.com, https://example.org"
         classNames={{
           tag: "!bg-zinc-700 light:!bg-slate-200 !text-zinc-100 light:!text-slate-800",
           input:
