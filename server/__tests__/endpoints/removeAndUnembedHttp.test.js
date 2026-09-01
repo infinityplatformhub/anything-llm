@@ -108,7 +108,7 @@ const deleteDoc = (slug) =>
     body: JSON.stringify({ documentLocation: DOC_ONLY_IN_B.docpath }),
   });
 
-describe("HTTP DELETE workspace remove-and-unembed - QA-2 A1 #11", () => {
+describe("HTTP DELETE workspace remove-and-unembed - QA-2 A1 issue 11", () => {
   it("manager who is NOT a member of the workspace gets 403; nothing purged", async () => {
     userFromSession.mockResolvedValue(MANAGER);
 
