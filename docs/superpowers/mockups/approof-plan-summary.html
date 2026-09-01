@@ -1,0 +1,264 @@
+<title>ApproofWorkspace Roadmap</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#ffffff; --ink:#1c2733; --muted:#5b6773;
+  --line:#e3e1da; --accent:#0e7c66; --accent-soft:#e2f0ec;
+  --sec:#8a5a12; --sec-soft:#f5ead6;
+  --danger:#a33d2e; --danger-soft:#f6e5e1;
+  --chip:#eef2f0; --code:#f0efe9;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141a20; --surface:#1c242c; --ink:#e8ecef; --muted:#93a0ab;
+    --line:#2c3640; --accent:#3fb598; --accent-soft:#1b3630;
+    --sec:#d9a656; --sec-soft:#332a1a;
+    --danger:#d97b6a; --danger-soft:#38221e;
+    --chip:#232d36; --code:#20282f;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141a20; --surface:#1c242c; --ink:#e8ecef; --muted:#93a0ab;
+  --line:#2c3640; --accent:#3fb598; --accent-soft:#1b3630;
+  --sec:#d9a656; --sec-soft:#332a1a;
+  --danger:#d97b6a; --danger-soft:#38221e;
+  --chip:#232d36; --code:#20282f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans Thai",-apple-system,"Segoe UI",sans-serif;
+  line-height:1.65;font-size:15px}
+.wrap{max-width:980px;margin:0 auto;padding:40px 24px 80px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:32px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-size:clamp(28px,4.5vw,40px);font-weight:700;margin:6px 0 8px;text-wrap:balance;line-height:1.15}
+.sub{color:var(--muted);max-width:64ch;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.meta span{background:var(--chip);border:1px solid var(--line);border-radius:4px;
+  padding:3px 10px;font-size:12.5px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+
+h2{font-size:20px;font-weight:700;margin:44px 0 6px;display:flex;align-items:baseline;gap:10px}
+h2 .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.lede{color:var(--muted);margin:0 0 16px;max-width:70ch;font-size:14px}
+
+/* decisions */
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.dcard{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.dcard .k{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.dcard .v{font-weight:600;margin-top:2px}
+.dcard .w{font-size:12.5px;color:var(--muted);margin-top:2px}
+
+/* timeline */
+.timeline{display:flex;flex-direction:column;gap:0;margin-top:8px}
+.phase{display:grid;grid-template-columns:130px 1fr;gap:0;position:relative}
+.phase .when{padding:16px 14px 16px 0;text-align:right}
+.phase .when .m{font-weight:700;font-size:14px}
+.phase .when .d{font-size:12px;color:var(--muted)}
+.phase .body{border-left:3px solid var(--line);padding:14px 0 22px 20px;position:relative}
+.phase .body::before{content:"";position:absolute;left:-7.5px;top:20px;width:12px;height:12px;
+  border-radius:50%;background:var(--accent);border:2.5px solid var(--bg)}
+.phase.p0 .body{border-left-color:var(--accent)}
+.phase h3{margin:0 0 4px;font-size:16.5px;font-weight:700}
+.phase h3 .mono{font-size:13px;color:var(--accent);font-weight:500}
+.phase .desc{color:var(--muted);font-size:13.5px;margin:0 0 10px;max-width:66ch}
+.items{display:flex;flex-wrap:wrap;gap:6px}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:4px 9px;font-size:12.5px;display:inline-flex;gap:6px;align-items:baseline}
+.item .id{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent);font-weight:500}
+.item.hot{border-color:var(--sec);background:var(--sec-soft)}
+.item.hot .id{color:var(--sec)}
+.warn{background:var(--danger-soft);border:1px solid var(--danger);border-radius:6px;
+  padding:10px 14px;font-size:13.5px;margin:10px 0 0;color:var(--ink)}
+.warn b{color:var(--danger)}
+
+/* seams */
+.seams{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.seam{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px}
+.seam .n{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-size:11px;font-weight:500}
+.seam b{display:block;font-size:13.5px}
+.seam span{color:var(--muted);font-size:12px}
+
+/* tracks two-col */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:720px){.cols{grid-template-columns:1fr}.phase{grid-template-columns:86px 1fr}.phase .when{padding-right:10px}}
+.tcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.tcard h3{margin:0 0 2px;font-size:16px}
+.tcard .goal{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+.tcard ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+.tcard li{font-size:13.5px;display:grid;grid-template-columns:38px 1fr;gap:8px}
+.tcard li .id{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--accent);font-weight:500;padding-top:2px}
+
+/* cut list + criteria */
+.cut{background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:14px 18px;font-size:13.5px;color:var(--muted)}
+.cut b{color:var(--ink)}
+.crit{counter-reset:c;display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.crit li{counter-increment:c;background:var(--surface);border:1px solid var(--line);border-radius:6px;
+  padding:10px 14px;font-size:13.5px;display:flex;gap:12px;align-items:baseline}
+.crit li::before{content:counter(c);font-family:"IBM Plex Mono",monospace;color:var(--accent);
+  font-weight:500;font-size:13px;flex:none}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Roadmap · รออนุมัติ</div>
+  <h1>ApproofWorkspace</h1>
+  <p class="sub">Local AI workspace สำหรับองค์กรไทย — fork จาก AnythingLLM เติมชั้น enterprise ให้ครบ
+  ขายได้ทั้ง SME 20–200 คน และ regulated (ธนาคาร / รพ. / ราชการ)</p>
+  <div class="meta">
+    <span>ระยะเวลา <b>~7 เดือน</b></span>
+    <span>ราคา <b>per-seat</b></span>
+    <span>DB <b>Postgres ตั้งแต่ต้น</b></span>
+    <span>LLM <b>hybrid local + cloud</b></span>
+    <span>PDPA <b>pattern-based redaction</b></span>
+    <span>งานทั้งหมด <b>41 items</b></span>
+  </div>
+</header>
+
+<h2><span class="tag">01</span> Decision ที่ล็อกแล้ว</h2>
+<p class="lede">ของแพงถ้าย้อน — ตัดสินใจจบแล้ว ทุก track สร้างบนฐานนี้</p>
+<div class="dgrid">
+  <div class="dcard"><div class="k">Fork</div><div class="v">ยาว ไม่ตาม upstream</div><div class="w">แลกกับต้องมี test suite + release pipeline เอง</div></div>
+  <div class="dcard"><div class="k">Database</div><div class="v">Postgres ตั้งแต่ commit แรก</div><div class="w">SQLite ไม่รอด 200 users + audit ทุก action</div></div>
+  <div class="dcard"><div class="k">RBAC</div><div class="v">ลึกถึง document ACL</div><div class="w">กรองถึงชั้น vector query — จุดที่คู่แข่ง OSS ไม่มี</div></div>
+  <div class="dcard"><div class="k">SSO</div><div class="v">OIDC → SAML → LDAP</div><div class="w">+ Lark sync ผู้ใช้/แผนก เข้า-ออกอัตโนมัติ</div></div>
+  <div class="dcard"><div class="k">Branding</div><div class="v">โลโก้ลูกค้า per-deployment</div><div class="w">strip แบรนด์ AnythingLLM ออกหมด (trademark)</div></div>
+  <div class="dcard"><div class="k">ทีม</div><div class="v">2 track ขนาน + Ops</div><div class="w">เดือนแรกทีมเล็กวางฐาน — ห้ามรุม</div></div>
+</div>
+
+<h2><span class="tag">02</span> Core seams — "ปลั๊ก + เต้ารับ"</h2>
+<p class="lede">กันการรื้อ: ตีเส้น interface 8 จุดก่อนสร้างฟีเจอร์ การเชื่อมต่อใหม่ในอนาคต = เขียน driver เพิ่ม ไม่ผ่า core
+เกณฑ์ปิด: ทุก use case ต้องวาด sequence diagram ผ่าน seams ได้ก่อน fan-out</p>
+<div class="seams">
+  <div class="seam"><span class="n">SEAM 1</span><b>Identity provider</b><span>OIDC / SAML / LDAP / Lark</span></div>
+  <div class="seam"><span class="n">SEAM 2</span><b>Authorization engine</b><span>เช็คสิทธิ์จุดเดียวทั้งระบบ</span></div>
+  <div class="seam"><span class="n">SEAM 3</span><b>Chat pipeline</b><span>redaction → guardrails → metering</span></div>
+  <div class="seam"><span class="n">SEAM 4</span><b>Connector SDK</b><span>Drive / Lark Docs / อนาคต</span></div>
+  <div class="seam"><span class="n">SEAM 5</span><b>Channel</b><span>web / Lark bot / embed widget</span></div>
+  <div class="seam"><span class="n">SEAM 6</span><b>Notification</b><span>email / Lark / webhook</span></div>
+  <div class="seam"><span class="n">SEAM 7</span><b>Vector DB + ACL filter</b><span>สิทธิ์กรองใน query contract</span></div>
+  <div class="seam"><span class="n">SEAM 8</span><b>License gate</b><span>per-seat enforce จุดเดียว</span></div>
+</div>
+<div class="warn" style="background:var(--accent-soft);border-color:var(--accent)"><b style="color:var(--accent)">Core services กลาง:</b> job queue + scheduler (sync, retention, backup) และ event bus (ทุก action ยิง event → audit เก็บอัตโนมัติ ครบไม่มีหลุด)</div>
+
+<h2><span class="tag">03</span> Timeline</h2>
+<div class="timeline">
+
+  <div class="phase p0">
+    <div class="when"><div class="m">เดือน 1</div><div class="d">ทีมเล็ก</div></div>
+    <div class="body">
+      <h3>Phase 0 — Foundation <span class="mono">F1–F7</span></h3>
+      <p class="desc">ฐานที่ทุกอย่างสร้างทับ — งานออกแบบผ่าน review หนัก (Opus) ห้ามรุมคน</p>
+      <div class="items">
+        <span class="item"><span class="id">F1</span>Postgres migration</span>
+        <span class="item hot"><span class="id">F2</span>Security hardening — hash/scoped API keys, rate limit, IP allowlist, encrypt secrets</span>
+        <span class="item hot"><span class="id">F3</span>Authorization ใหม่ — custom roles, document ACL, แยก admin duties</span>
+        <span class="item"><span class="id">F4</span>Test suite + release pipeline</span>
+        <span class="item"><span class="id">F5</span>De-brand</span>
+        <span class="item hot"><span class="id">F6</span>Modular architecture spec (บล็อกทุก track)</span>
+        <span class="item"><span class="id">F7</span>Job queue + event bus</span>
+      </div>
+      <div class="warn"><b>ช่องโหว่ที่ต้องอุดก่อน:</b> API key เดิมเป็น god-mode + เก็บ plaintext · ไม่มี rate limit login · audit log ลบทั้งก้อนได้ · admin เห็นทะลุทุก workspace</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="when"><div class="m">เดือน 2–6</div><div class="d">fan-out ขนาน</div></div>
+    <div class="body">
+      <h3>Track S + Track V (2 waves) + Ops</h3>
+      <p class="desc">ขยายทีมบนฐานที่นิ่งแล้ว — ต้นเดือน 2 ทำ competitor teardown ซ้ำ + dogfood ใช้เองในบริษัท · wave 2 (V12–V15) เริ่มเดือน 4–5 · ของหลุดเสียบเป็น task ใน track เดิม โครงไม่รื้อ</p>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="when"><div class="m">เดือน 6–7</div><div class="d">กันเวลาไว้จริง</div></div>
+    <div class="body">
+      <h3>Integration &amp; Hardening</h3>
+      <p class="desc">รวมทุก track · security review (Opus) · จ้าง pen-test ภายนอก (scope รวม V15 sandbox) · POC playbook + demo dataset ไทย · เอกสาร admin/user ภาษาไทย — ห้ามให้ feature กินเวลาส่วนนี้</p>
+    </div>
+  </div>
+</div>
+
+<h2><span class="tag">04</span> สองเลนขนาน</h2>
+<div class="cols">
+  <div class="tcard">
+    <h3>Track S — Security · Identity · Governance</h3>
+    <p class="goal">ผ่าน procurement + ขาย regulated ได้</p>
+    <ul>
+      <li><span class="id">S1–3</span>SSO: OIDC generic → SAML → LDAP (จำกัด domain, กัน lockout)</li>
+      <li><span class="id">S4</span>Lark org sync — ผู้ใช้/แผนก → workspace/role</li>
+      <li><span class="id">S5</span>Audit append-only + export SIEM + eDiscovery</li>
+      <li><span class="id">S6</span>Retention · PDPA redaction · consent modal · DLP scan · emergency hide · temporary chat</li>
+      <li><span class="id">S7</span>LLM policy ต่อ workspace + model catalog ต่อ group</li>
+      <li><span class="id">S8</span>Guardrails + runtime policy agent tools + web-search governance</li>
+      <li><span class="id">S9</span>Air-gap switch ตัด outbound ทั้งหมด</li>
+      <li><span class="id">S10</span>Analytics + token budget enforcement</li>
+      <li><span class="id">S11</span>SMTP/mailer</li>
+      <li><span class="id">S12</span>Offboarding + โอนข้อมูล</li>
+      <li><span class="id">S13</span>MFA · session control · backchannel logout</li>
+    </ul>
+  </div>
+  <div class="tcard">
+    <h3>Track V — Product Value</h3>
+    <p class="goal">ทำให้คนใช้จริง + demo ที่ขายได้</p>
+    <ul>
+      <li><span class="id">V1</span>ภาษาไทยครบวงจร — UI · Thai embedding · OCR สแกน</li>
+      <li><span class="id">V2</span>Lark bot ถาม AI ในแชท (= คำตอบ mobile)</li>
+      <li><span class="id">V3</span>Connectors: Google Drive + Lark Docs + health UI</li>
+      <li><span class="id">V4</span>Assistant templates + sharing + versioning + library</li>
+      <li><span class="id">V5</span>Citation · feedback · eval harness ไทย</li>
+      <li><span class="id">V6</span>แชร์บทสนทนาในทีม</li>
+      <li><span class="id">V7</span>Embed widget (harden เข้า scoped keys)</li>
+      <li><span class="id">V8</span>Responsive mobile web</li>
+      <li><span class="id">V9</span>ค้นหาประวัติแชท</li>
+      <li><span class="id">V10</span>Org-wide document search แบบ Google + filters</li>
+      <li><span class="id">V11</span>RAG tuning admin + reindex จาก UI</li>
+    </ul>
+    <p class="goal" style="margin:14px 0 8px;border-top:1px solid var(--line);padding-top:10px">Wave 2 — เริ่มเดือน 4–5</p>
+    <ul>
+      <li><span class="id">V12</span>Image generation (local/cloud ตาม S7 policy)</li>
+      <li><span class="id">V13</span>Knowledge curation — Answers · Collections · Pins</li>
+      <li><span class="id">V14</span>Deep research (เปิดได้เมื่อ S10 budget + O6 queue เสร็จ)</li>
+      <li><span class="id">V15</span>Code interpreter ใน sandbox แยกขาด — ปิด default, security-review แยก</li>
+    </ul>
+  </div>
+</div>
+
+<div class="tcard" style="margin-top:14px">
+  <h3>Ops — ขายซ้ำได้ ไม่ใช่ project ครั้งเดียว</h3>
+  <p class="goal">แทรกเดือน 3–5</p>
+  <ul>
+    <li><span class="id">O1</span>License per-seat — นับ active user, ทำงาน offline/air-gap ได้</li>
+    <li><span class="id">O2</span>Installer / setup wizard</li>
+    <li><span class="id">O3</span>Backup/restore ในตัว พิสูจน์ restore ได้จริง</li>
+    <li><span class="id">O4</span>Model lifecycle — GPU sizing, update bundle, re-embed workflow</li>
+    <li><span class="id">O5</span>Diagnostic bundle + Prometheus metrics</li>
+    <li><span class="id">O6</span>GPU queue + UI "รอคิว" (POC ช้า = ขายไม่ได้)</li>
+  </ul>
+</div>
+
+<h2><span class="tag">05</span> ตัดออกแบบตั้งใจ</h2>
+<div class="cut">
+  <b>รอบนี้ไม่ทำ (เห็นจาก teardown แล้ว เลือกตัด):</b> SCIM · NER ไทย · fleet monitoring · multi-tenant SaaS ·
+  SharePoint/Confluence · Teams bot · native mobile app · HA clustering · voice ·
+  browser extension · people search · arena eval · BYOK/KMS
+</div>
+
+<h2><span class="tag">06</span> เกณฑ์วัดว่า program สำเร็จ</h2>
+<ol class="crit">
+  <li>Demo ครบ loop: ติดตั้งผ่าน wizard → SSO login → workspace + ACL → upload เอกสารไทย → ถามผ่านเว็บ + Lark bot → export audit ครบทุก action</li>
+  <li>Pen-test ภายนอกไม่พบ critical / high ค้าง</li>
+  <li>License per-seat บังคับได้จริงใน air-gap</li>
+  <li>Retrieval ภาษาไทยผ่าน threshold ของ eval harness</li>
+</ol>
+
+<footer>
+  <span>Spec เต็ม: <span class="mono">docs/superpowers/specs/approof-workspace-enterprise.md</span></span>
+  <span>ตรวจทานกับ Onyx · OpenWebUI · ChatGPT Enterprise · Glean</span>
+</footer>
+</div>
