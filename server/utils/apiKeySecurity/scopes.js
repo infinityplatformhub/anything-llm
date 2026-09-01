@@ -1,6 +1,5 @@
-const API_KEY_SCOPES = Object.freeze({
-  TEMPORARY_ALL: "*",
-});
+// PR-4c: API_KEY_SCOPES.TEMPORARY_ALL ("*") is gone. Every route names its scope and
+// every key is minted with an explicit list, so nothing has a wildcard left to match.
 
 const ROUTE_SCOPES = Object.freeze({
   "GET /v1/admin/is-multi-user-mode": "system.read",
@@ -109,11 +108,37 @@ const EXTENSION_ROUTE_SCOPES = Object.freeze({
 
 const extensionScopeFor = (method, path) => EXTENSION_ROUTE_SCOPES[`${method} ${path}`];
 
+// PR-4c: what an admin-minted key gets when the caller names no scopes. Every scope any
+// route asks for, minus system.env.read -- reading the provider credentials is not part
+// of "an admin key", and a deployment that wants it must say so.
+//
+// ponytail: a preset, not a picker. The ceiling that should apply is the creator's own
+// grants evaluated through the T-4a/T-4b engine, which is not merged yet; until it is,
+// an admin minting a key cannot exceed what an admin already has, so the preset is not
+// an escalation. Replace with the engine check when T-4b lands (see ledger-27, PR-4d).
+const ADMIN_DEFAULT_SCOPES = Object.freeze(
+  [...new Set(Object.values(ROUTE_SCOPES))]
+    .filter((action) => action !== "system.env.read")
+    .sort()
+);
+
+// A single-user deployment has one operator who is already the administrator; the key
+// they mint for themselves is the same grant, including env access.
+const SINGLE_USER_KEY_SCOPES = Object.freeze(
+  [...new Set(Object.values(ROUTE_SCOPES))].sort()
+);
+
+const KNOWN_SCOPES = Object.freeze(
+  [...new Set([...Object.values(ROUTE_SCOPES), ...Object.values(EXTENSION_ROUTE_SCOPES)])].sort()
+);
+
 module.exports = {
-  API_KEY_SCOPES,
   ROUTE_SCOPES,
   scopeFor,
   EXTENSION_SCOPES,
   EXTENSION_ROUTE_SCOPES,
   extensionScopeFor,
+  ADMIN_DEFAULT_SCOPES,
+  SINGLE_USER_KEY_SCOPES,
+  KNOWN_SCOPES,
 };

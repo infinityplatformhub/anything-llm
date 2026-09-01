@@ -117,7 +117,7 @@ beforeAll(async () => {
     },
   });
   const { ApiKey } = require("../models/apiKeys");
-  const { apiKey } = await ApiKey.create(caller.id, "test key");
+  const { apiKey } = await ApiKey.create(caller.id, "test key", { scopes: ["sso.issue", "user.read"] });
   apiKeySecret = apiKey.secret;
 });
 afterEach(() => setFlag(undefined));

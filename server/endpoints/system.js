@@ -49,6 +49,7 @@ const {
 const { Telemetry } = require("../models/telemetry");
 const { EventLogs } = require("../models/eventLogs");
 const { ApiKey } = require("../models/apiKeys");
+const { SINGLE_USER_KEY_SCOPES } = require("../utils/apiKeySecurity/scopes");
 const { getCustomModels } = require("../utils/helpers/customModels");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { WorkspaceThread } = require("../models/workspaceThread");
@@ -1080,8 +1081,15 @@ function systemEndpoints(app) {
           return response.sendStatus(401).end();
         }
 
-        const { name = null } = reqBody(request);
-        const { apiKey, error } = await ApiKey.create(null, name);
+        const { name = null, scopes = null } = reqBody(request);
+        // Single-user mode: the operator minting this key already administers the
+        // deployment, so the preset is their own grant. Still enumerated, never "*".
+        const { apiKey, error } = await ApiKey.create(null, name, {
+          scopes:
+            Array.isArray(scopes) && scopes.length ? scopes : [...SINGLE_USER_KEY_SCOPES],
+        });
+        if (error)
+          return response.status(400).json({ apiKey: null, error });
         await emitAuditEvent(
           "api_key_created",
           { name: apiKey?.name },

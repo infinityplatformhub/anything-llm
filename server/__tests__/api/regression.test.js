@@ -116,6 +116,12 @@ const { CommunicationKey } = require("../../utils/comKey");
 new CommunicationKey(true);
 
 const request = require("supertest");
+const {
+  ROUTE_SCOPES: REGRESSION_ROUTE_SCOPES,
+} = require("../../utils/apiKeySecurity/scopes");
+// The regression suite drives most of the /v1 surface, so its fixture key holds every
+// scope a route asks for -- enumerated, which is the whole point of PR-4c, not "*".
+const REGRESSION_KEY_SCOPES = [...new Set(Object.values(REGRESSION_ROUTE_SCOPES))];
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const prisma = require("../../utils/prisma");
@@ -186,11 +192,12 @@ beforeAll(async () => {
   const { WorkspaceUser } = require("../../models/workspaceUsers");
   await WorkspaceUser.create(member.id, assignedWorkspace.id);
   apiKey = "apw-key-test-api-key-secret";
+  // PR-4c: keys no longer carry "*", so a fixture key must name what the suite exercises.
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
   // T-4b: /v1 checks the grant half too, so the key needs a creator who holds grants for
   // the routes below — `createdBy` is what the resolver reads. The grant itself comes from
   // grantLegacyRole(admin) above (T-4a); writing it again here is a duplicate key.
-  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]), createdBy: admin.id } });
+  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(REGRESSION_KEY_SCOPES), createdBy: admin.id } });
   await setMultiUserMode(true);
   global.fetch = jest.fn(async (url, options) => {
     if (!options) return { ok: true };
@@ -551,7 +558,7 @@ describe("API key lifecycle denial", () => {
     const secret = `apw-key-${field}-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
     const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
     const record = await prisma.api_keys.create({ data: {
-      secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(["*"]),
+      secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(REGRESSION_KEY_SCOPES),
       [field]: new Date(field === "expiresAt" ? Date.now() - 1000 : Date.now()),
     } });
     const response = await request(app).get("/api/v1/auth").set("Authorization", `Bearer ${secret}`);
