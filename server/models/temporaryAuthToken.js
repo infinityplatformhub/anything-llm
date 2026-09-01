@@ -13,7 +13,7 @@ const TemporaryAuthToken = {
 
   makeTempToken: () => {
     const crypto = require("crypto");
-    return `allm-tat-${crypto.randomBytes(32).toString("base64url")}`;
+    return `apw-tat-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   /**

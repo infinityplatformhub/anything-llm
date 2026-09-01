@@ -30,7 +30,7 @@ describe("key generator entropy (P0-4 PR-1 / R7)", () => {
     {
       name: "TemporaryAuthToken.makeTempToken",
       make: () => TemporaryAuthToken.makeTempToken(),
-      prefix: "allm-tat-",
+      prefix: "apw-tat-",
     },
   ];
 

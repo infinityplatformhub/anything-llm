@@ -27,9 +27,14 @@ Replace `uuid-apikey` (Base32 of UUIDv4 — 122 bits) with
   repo already validates OpenAI keys by their `sk-` prefix (updateENV.js:1066 plus
   frontend placeholders), so reusing it for a different credential type invites
   confusion once PR-3 shows keyPrefix in the UI. `apw-` = ApproofWorkspace.
-- **Ruling:** `models/invite.js:6` also uses uuid-apikey (invite codes) — **left
-  unchanged**: out of #9 scope, invite codes are short-lived single-use, not bearer
-  credentials. PMO can open a follow-up if wanted.
+- **Ruling (QA-2/PMO):** temp-token prefix `allm-tat-` → `apw-tat-` — old brand
+  string survived P0-7's de-brand; caught in QA-2 pass.
+- **Scope-out (explicit, per PMO):**
+  1. `models/invite.js:6-7` still generates invite codes via uuid-apikey
+     (122-bit) — PMO opens a separate follow-up; not bearer credentials.
+  2. **Dual-format window:** pre-existing keys (uuid-apikey format, plaintext)
+     still authenticate until the PR-A/PR-3 migration force-rotates them. This PR
+     changes only what NEW keys look like.
 - **Ruling:** `uuid-apikey` dependency NOT removed from package.json — invite.js
   still consumes it.
 
