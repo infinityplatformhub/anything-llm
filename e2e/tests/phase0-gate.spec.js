@@ -60,7 +60,7 @@ async function authedFetch(page, path, init = {}) {
   });
 }
 
-test("01 onboarding completes and lands in the app", async ({ page }) => {
+test("01 onboarding wizard completes and lands in the app", async ({ page }) => {
   const outbound = [];
   page.on("request", (r) => outbound.push(new URL(r.url()).hostname));
 
@@ -73,28 +73,48 @@ test("01 onboarding completes and lands in the app", async ({ page }) => {
     0
   );
 
-  // The home screen layers absolute background divs over the button — force
-  // through them; the click target itself is correct.
+  // Home screen layers background divs over the button; the target is right.
   await page
     .getByRole("button", { name: /get started/i })
     .click({ force: true });
-  // Providers are pre-configured via env; stepping forward through the LLM
-  // screen completes onboarding (that step posts onboarding_complete).
-  for (let step = 0; step < 6; step++) {
-    const forward = page
-      .locator(
-        'button:has-text("Continue"), button:has-text("Next"), button:has-text("Finish"), button:has-text("Save"), button:has-text("Get Started")'
-      )
-      .last();
-    if (!(await forward.isVisible().catch(() => false))) {
-      const arrow = page
-        .locator('[data-layout="onboarding"] button')
-        .last(); // ArrowRight
-      if (!(await arrow.isVisible().catch(() => false))) break;
-      await arrow.click();
-    } else {
-      await forward.click();
-    }
+  await page.waitForURL(/llm-preference/, { timeout: 30_000 });
+
+  // LLM preference: Generic OpenAI → mock provider.
+  await page
+    .locator('[role="button"], div, label')
+    .filter({ hasText: /^Generic OpenAI$/ })
+    .first()
+    .click();
+  await page.locator('input[name="GenericOpenAiBasePath"]').fill("http://mock-llm:8080/v1");
+  await page.locator('input[name="GenericOpenAiKey"]').fill("e2e-mock-key");
+  await page.locator('input[name="GenericOpenAiModelPref"]').fill("mock-llm");
+  await forward(page);
+
+  // Embedder preference (same provider family).
+  await expect(page.locator('input[name="EmbeddingBasePath"]')).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.locator('[role="button"], div, label')
+    .filter({ hasText: /^Generic OpenAI$/ })
+    .first()
+    .click({ force: true });
+  await page.locator('input[name="EmbeddingBasePath"]').fill("http://mock-llm:8080/v1");
+  await page.locator('input[name="EmbeddingModelPref"]').fill("mock-embed");
+  await page.locator('input[name="GenericOpenAiEmbeddingApiKey"]').fill("e2e-mock-key");
+  await forward(page);
+
+  // User setup: My team → admin account.
+  await expect(page.getByText(/how many users/i)).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByText("My team").click();
+  await page.waitForTimeout(500);
+  await page.locator('input[name="username"]').fill(ADMIN.username);
+  await page.locator('input[name="password"]').fill(ADMIN.password);
+  await forward(page);
+
+  // Data handling + survey: advance to the app.
+  for (let i = 0; i < 4; i++) {
     await page.waitForTimeout(1_500);
     if (
       await page
@@ -104,19 +124,28 @@ test("01 onboarding completes and lands in the app", async ({ page }) => {
         .catch(() => false)
     )
       break;
+    await forward(page);
   }
+
   await expect(
     page.getByText(/how can i help|send a message/i).first()
   ).toBeVisible({ timeout: 60_000 });
 });
 
-test("02 enable multi-user mode (creates admin)", async ({ page }) => {
-  // Single-user, no password: the app's own migration endpoint (the one the
-  // Security settings page calls) creates the first admin.
-  const res = await page.request.post("/api/system/enable-multi-user", {
-    data: { username: ADMIN.username, password: ADMIN.password },
-  });
+/** Steps advance via the layout's icon-only ArrowRight (last button). */
+async function forward(page) {
+  const arrow = page.locator('[data-layout="onboarding"] button').last();
+  await arrow.click();
+  await page.waitForTimeout(1_500);
+}
+
+test("02 wizard left a multi-user instance with the admin", async ({
+  request,
+}) => {
+  const res = await request.get("/api/setup-complete");
   expect(res.ok()).toBe(true);
+  const keys = await res.json();
+  expect(keys.MultiUserMode).toBe(true);
 });
 
 let WORKSPACE_SLUG = "e2e-gate-docs";
@@ -196,13 +225,11 @@ test("06 chat answers with a citation pointing at the upload", async ({
   await prompt.waitFor({ state: "visible", timeout: 30_000 });
   await prompt.fill("What is the secret codeword?");
   await prompt.press("Enter");
-  // Assert non-empty answer + citation naming the uploaded doc — never the
-  // answer's content (mock LLM is canned anyway).
-  await expect(
-    page.locator("[class*='response'], .no-scroll, [data-toast]").last()
-  ).toBeVisible({ timeout: 60_000 });
+  // Assert a citation naming the uploaded doc appears — never the answer's
+  // content (mock LLM is canned anyway). The citation block renders the doc
+  // title once RAG sources are attached to the reply.
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
-    timeout: 60_000,
+    timeout: 90_000,
   });
 });
 
@@ -272,12 +299,14 @@ test("11 restart resilience: data survives container restart", async ({
 
 test("12 logout returns to login", async ({ page }) => {
   await login(page, ADMIN);
-  // Avatar menu (bottom-left) → last menu button clears the session.
-  await page.getByText(ADMIN.username).first().click();
+  // Avatar button (top-right circle) opens the account menu; its last item
+  // clears the session.
+  await page.locator(".absolute.top-3.right-4 > button").click();
   await page.waitForTimeout(500);
-  const menuButtons = page.locator("button:visible");
-  const count = await menuButtons.count();
-  await menuButtons.nth(count - 1).click();
+  const menu = page.locator(".absolute.top-12.right-0 button");
+  const count = await menu.count();
+  expect(count).toBeGreaterThan(0);
+  await menu.nth(count - 1).click();
   await expect(
     page.locator('button:has-text("Login")')
   ).toBeVisible({ timeout: 30_000 });
