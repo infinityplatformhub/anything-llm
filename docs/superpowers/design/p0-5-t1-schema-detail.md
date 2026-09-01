@@ -70,7 +70,7 @@ Final list cross-checked against P0-4 Step 2 route-scope table at implementation
 6. **`workspace_users.role_id`**: `owner` where `created_by` matches; else `member`.
 7. **Seeds** from §2.
 
-All steps idempotent (re-runnable); each writes a `policy_versions` row per change_type.
+All steps idempotent (re-runnable — meaning the seed/backfill statements: ON CONFLICT inserts, COALESCE updates, and the step-6 `policy_versions` marker guard; the DDL itself is applied exactly once by Prisma); each writes a `policy_versions` row per change_type.
 
 ## 4. Post-migration backfill job (P0-6 queue, NOT inline)
 
@@ -83,7 +83,7 @@ Gate: `queryAuthorized` is not live until job 1 completes (and T-5's job 2 for e
 
 ## 5. DoD
 
-- [ ] `prisma migrate deploy` clean on empty Postgres; migration re-runnable without error.
+- [ ] `prisma migrate deploy` clean on empty Postgres; the **seed/backfill block** is re-runnable without error (all writes are ON CONFLICT/COALESCE/marker-guarded). The DDL block is NOT re-runnable at bare-psql level (`ADD COLUMN already exists`, no IF NOT EXISTS) — Prisma never re-runs an applied migration, so this is by design, not an omission (QA-1 minor a, ruled 2026-09-02).
 - [ ] Reports from steps 2/3/5 committed as migration artifacts (created_by nulls, dedupe groups, manager downgrades).
 - [ ] Every legacy user has ≥1 `principal_role_grants` row; `users.role` values byte-identical before/after (frozen).
 - [ ] Every `workspace_documents` row has `documentId` set; count of `documents` rows = distinct `docpath` count.

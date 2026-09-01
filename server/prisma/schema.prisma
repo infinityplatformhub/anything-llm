@@ -35,9 +35,13 @@ model workspace_documents {
   metadata             String?
   pinned               Boolean?              @default(false)
   watched              Boolean?              @default(false)
+  // T-1 (P0-5): canonical document reference — docId stays frozen until the
+  // doc-vectors-canonicalize job completes (document_vectors still points at it).
+  documentId           Int?
   createdAt            DateTime              @default(now()) @db.Timestamptz(3)
   lastUpdatedAt        DateTime              @default(now()) @db.Timestamptz(3)
   workspace            workspaces            @relation(fields: [workspaceId], references: [id])
+  document             documents?            @relation(fields: [documentId], references: [id], onDelete: SetNull)
   document_sync_queues document_sync_queues?
 }
 
@@ -75,6 +79,7 @@ model users {
   web_push_subscription_config String?
   workspace_chats              workspace_chats[]
   workspace_users              workspace_users[]
+  group_members                group_members[]
   embed_configs                embed_configs[]
   embed_chats                  embed_chats[]
   threads                      workspace_threads[]
@@ -152,6 +157,10 @@ model workspaces {
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
   api_keys                     api_keys[]
+  grants                       principal_role_grants[]
+  // T-1 (P0-5, R1): backfilled from the earliest workspace_users row; null where no
+  // membership row exists (reported — those get no owner).
+  created_by                   Int?
 }
 
 model workspace_threads {
@@ -218,10 +227,14 @@ model workspace_users {
   id            Int        @id @default(autoincrement())
   user_id       Int
   workspace_id  Int
+  // T-1 (P0-5): workspace-local role (owner/editor/viewer). Backfilled: owner where
+  // workspaces.created_by matches, else editor (legacy default members could upload).
+  role_id       Int?
   createdAt     DateTime   @default(now()) @db.Timestamptz(3)
   lastUpdatedAt DateTime   @default(now()) @db.Timestamptz(3)
   workspaces    workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
   users         users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  roles         roles?     @relation(fields: [role_id], references: [id], onDelete: SetNull)
 }
 
 model cache_data {
@@ -584,3 +597,152 @@ model event_deliveries {
 }
 
 // END P0-6 CORE SERVICES.
+
+// ---- T-1 (P0-5): authorization policy store + canonical documents ----
+// Signed-off design: docs/superpowers/design/p0-5-t1-schema-detail.md + migrations-draft/
+// (architect 8b, live-verified on PG17). principal_id is TEXT: the single-user principal
+// is 'single-user' (string namespace — never an integer sentinel in the user-id namespace).
+
+model permissions {
+  id               Int                @id @default(autoincrement())
+  action           String             @unique // seam-02 verbatim vocabulary (also P0-4 scope strings)
+  description      String             @default("")
+  category         String             @default("")
+  acl              document_acl[]
+  role_permissions role_permissions[]
+
+  @@index([category])
+}
+
+model roles {
+  id                Int                     @id @default(autoincrement())
+  name              String
+  scope             String // 'org' | 'workspace'
+  orgId             Int                     @default(1)
+  isSystem          Boolean                 @default(false)
+  createdAt         DateTime                @default(now()) @db.Timestamptz(3)
+  role_permissions  role_permissions[]
+  grants            principal_role_grants[]
+  workspace_members workspace_users[]
+
+  @@unique([orgId, scope, name])
+}
+
+model role_permissions {
+  role_id       Int
+  permission_id Int
+  effect        String      @default("allow") // 'allow' | 'deny'; deny wins
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, permission_id])
+  @@index([permission_id])
+}
+
+model principal_role_grants {
+  id             Int         @id @default(autoincrement())
+  orgId          Int         @default(1)
+  principal_type String // 'user' | 'group' | 'service' | 'embed' | 'system'
+  principal_id   String
+  role_id        Int
+  workspace_id   Int? // null = org-wide grant
+  granted_by     Int?
+  granted_at     DateTime    @default(now()) @db.Timestamptz(3)
+  expires_at     DateTime?   @db.Timestamptz(3)
+  policy_version BigInt      @default(0)
+  roles          roles       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  workspaces     workspaces? @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  // NOTE: the migration creates this constraint as UNIQUE NULLS NOT DISTINCT (PG15+) —
+  // org-wide grants have workspace_id NULL and plain UNIQUE lets them duplicate on re-runs.
+  // Prisma cannot express the flag; no-drift verified via migrate diff in T-1 tests.
+  @@unique([orgId, principal_type, principal_id, role_id, workspace_id])
+  @@index([principal_type, principal_id, workspace_id])
+  @@index([workspace_id, role_id])
+}
+
+model groups {
+  id         Int             @id @default(autoincrement())
+  orgId      Int             @default(1)
+  name       String
+  source     String          @default("local") // 'local' | 'lark' | 'oidc' | 'ldap'
+  externalId String?
+  members    group_members[]
+
+  @@unique([orgId, name])
+}
+
+model group_members {
+  group_id Int
+  user_id  Int
+  groups   groups @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  users    users  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([group_id, user_id])
+  @@index([user_id])
+}
+
+model documents {
+  id               Int                   @id @default(autoincrement())
+  orgId            Int                   @default(1)
+  owner_id         Int?
+  filename         String
+  dedupe_key       String                @unique // = docpath ('orphan:<docId>' for legacy empty paths); runtime resolves canonical-by-docpath on every ingest
+  metadata         String                @default("{}")
+  createdAt        DateTime              @default(now()) @db.Timestamptz(3)
+  workspaces       workspace_documents[]
+  acl              document_acl[]
+  visibility       document_visibility?
+  legacy_docid_map legacy_docid_map[]
+
+  @@index([orgId])
+}
+
+model document_acl {
+  id             Int         @id @default(autoincrement())
+  orgId          Int         @default(1)
+  document_id    Int
+  principal_type String // 'user' | 'group' | 'workspace' | 'embed'
+  principal_id   String
+  action         String
+  effect         String      @default("allow")
+  source         String      @default("manual") // 'manual' | 'connector' | 'inherited_workspace' | 'document_set'
+  granted_at     DateTime    @default(now()) @db.Timestamptz(3)
+  policy_version BigInt      @default(0)
+  documents      documents   @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  permissions    permissions @relation(fields: [action], references: [action])
+
+  @@unique([document_id, principal_type, principal_id, action])
+  @@index([principal_type, principal_id, action])
+  @@index([document_id])
+  @@index([orgId, source])
+}
+
+model document_visibility {
+  document_id Int       @id
+  hidden      Boolean   @default(false)
+  hidden_by   Int?
+  hidden_at   DateTime? @db.Timestamptz(3)
+  reason      String?
+  documents   documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+}
+
+model policy_versions {
+  version     BigInt   @id @default(autoincrement())
+  changed_at  DateTime @default(now()) @db.Timestamptz(3)
+  change_type String
+  scope_key   String // 'org:1' | 'workspace:7' | 'document:<id>'
+  actor_id    Int?
+
+  @@index([scope_key])
+}
+
+model legacy_docid_map {
+  id            Int       @id @default(autoincrement())
+  legacy_doc_id String    @unique
+  canonical_id  Int
+  mapped_at     DateTime  @default(now()) @db.Timestamptz(3)
+  documents     documents @relation(fields: [canonical_id], references: [id], onDelete: Cascade)
+}
+
+// END T-1 P0-5 AUTHORIZATION SCHEMA.
