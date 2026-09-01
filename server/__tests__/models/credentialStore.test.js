@@ -170,3 +170,53 @@ describe("reporting coverage without decrypting", () => {
     expect(await CredentialStore.get("OPEN_AI_KEY")).toBeNull();
   });
 });
+
+describe("a blob only decrypts under the row it was sealed for", () => {
+  test("relocating one key's ciphertext onto another row yields nothing", async () => {
+    // QA-2 (#33 part 2): GCM's tag proves the bytes were not edited, not which row they
+    // belong to. Without AAD, whoever can write the table swaps a provider endpoint's
+    // stored value for another key's — no knowledge of SIG_KEY required.
+    await CredentialStore.set("OPEN_AI_KEY", SECRET);
+    await CredentialStore.set("CHROMA_ENDPOINT", ENDPOINT);
+
+    const source = await prisma.credential_store.findUnique({ where: { envKey: "OPEN_AI_KEY" } });
+    await prisma.credential_store.update({
+      where: { envKey: "CHROMA_ENDPOINT" },
+      data: { ciphertext: source.ciphertext, iv: source.iv, authTag: source.authTag },
+    });
+
+    const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+    const relocated = await CredentialStore.get("CHROMA_ENDPOINT");
+    errors.mockRestore();
+
+    expect(relocated).toBeNull();
+    expect(relocated).not.toBe(SECRET);
+    // The row it was copied from is untouched and still readable.
+    expect(await CredentialStore.get("OPEN_AI_KEY")).toBe(SECRET);
+  });
+
+  test("a row rewritten under a different keyVersion does not decrypt", async () => {
+    // Replaying a row encrypted under an older derivation must not survive a re-key.
+    await CredentialStore.set("OPEN_AI_KEY", SECRET);
+    await prisma.credential_store.update({
+      where: { envKey: "OPEN_AI_KEY" },
+      data: { keyVersion: 99 },
+    });
+
+    const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+    expect(await CredentialStore.get("OPEN_AI_KEY")).toBeNull();
+    errors.mockRestore();
+  });
+
+  test("renaming a row's envKey does not carry its value across", async () => {
+    await CredentialStore.set("OPEN_AI_KEY", SECRET);
+    await prisma.credential_store.update({
+      where: { envKey: "OPEN_AI_KEY" },
+      data: { envKey: "ANTHROPIC_API_KEY" },
+    });
+
+    const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+    expect(await CredentialStore.get("ANTHROPIC_API_KEY")).toBeNull();
+    errors.mockRestore();
+  });
+});
