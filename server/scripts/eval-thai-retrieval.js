@@ -133,9 +133,13 @@ async function main() {
   return 0;
 }
 
+// Setting exitCode rather than calling exit lets stdout flush before the
+// process ends; a piped metrics table is otherwise truncated on some platforms.
 main()
-  .then((code) => process.exit(code))
+  .then((code) => {
+    process.exitCode = code;
+  })
   .catch((error) => {
     console.error(`Eval failed: ${error.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   });
