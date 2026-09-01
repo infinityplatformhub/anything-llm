@@ -59,3 +59,5 @@
 - [ops note, §7.8] after T-4b, tests touching authorization/grants (single-user R5, pr4aScopeHttp grant half, etc.) read live DB state — a reused DB with leftover rows makes them red. Gate on a fresh DB. (QA-2)
 - [→ infi-skills] task.sh gate_commented_code misreads JS private fields (`this.#x`) as comments: 59 lines / 16 files latent under server/. Fix upstream: ignore `#` preceded by `.`. (Techlead §7.3)
 - [release note, #33 part 3] Secrets migrate .env → CredentialStore lazily on next save (061000 no-op). Fresh container without .env volume loses unsaved credentials. SIG_KEY/SIG_SALT stay in .env by design.
+- [runbook, reference] /v1 routes return 403 (not 503) when the policy store is down — by design (which half rejected is audit detail). Operators must read auth.key_used.denyReason, not the status code. (QA-2 W-8 under failure, 7/7 fail-closed)
+- [§7.7 extension] Tests needing a usable admin must create via User model, not raw prisma (no grant otherwise → 403 on update-env). (QA-2)
