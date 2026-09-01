@@ -58,3 +58,4 @@
 - [→ #45 companion] job queue is a second identity surface: a job row with actorRef {service, single-user} resolves without evidence check (isConfirmedSingleUser guards ingress only). DB writer == already privileged; note, not exploit. (QA-2 T-4b)
 - [ops note, §7.8] after T-4b, ONLY single-user tests (actorResolver R5) read users.count() — a reused DB with leftover user rows makes them red. Gate on a fresh DB. (QA-2)
 - [→ infi-skills] task.sh gate_commented_code misreads JS private fields (`this.#x`) as comments: 59 lines / 16 files latent under server/. Fix upstream: ignore `#` preceded by `.`. (Techlead §7.3)
+- [release note, #33 part 3] Secrets migrate .env → CredentialStore lazily on next save (061000 no-op). Fresh container without .env volume loses unsaved credentials. SIG_KEY/SIG_SALT stay in .env by design.
