@@ -113,7 +113,7 @@ afterAll(async () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-describe("SSO issuance lock (HTTP, #8 QA-2)", () => {
+describe("SSO issuance lock over HTTP - QA-2 #8", () => {
   it("valid key + lock closed → 403 with lock's body AND zero token rows", async () => {
     setFlag(undefined);
     const before = await tokenRows();
