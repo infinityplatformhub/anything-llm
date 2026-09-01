@@ -8,6 +8,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { PG_SCHEME } = require("../utils/test/postgresUrl");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "envdump-http-"));
 const schema = `envdump_http_${process.pid}`;
@@ -16,7 +17,7 @@ process.env.JWT_SECRET = "test-jwt-secret-at-least-12-chars";
 process.env.AUTH_TOKEN = "single-user-test-password";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
 const baseDatabaseUrl = process.env.DATABASE_URL;
-if (!baseDatabaseUrl?.startsWith("postgresql://")) {
+if (!baseDatabaseUrl?.startsWith(PG_SCHEME)) {
   throw new Error("DATABASE_URL must point to PostgreSQL for HTTP tests");
 }
 const databaseUrl = new URL(baseDatabaseUrl);
