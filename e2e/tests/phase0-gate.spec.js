@@ -224,9 +224,21 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
 }) => {
   await login(page, ADMIN);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
-  // Use THIS workspace's own quick action — the sidebar upload buttons are
-  // per-workspace and .first() targets the default "My Workspace" instead.
-  await page.getByText("Upload a Document").first().click({ force: true });
+  // Sidebar upload buttons are per-workspace: pick the one in THIS
+  // workspace's row, not .first() (which is the default My Workspace).
+  const wsRow = page
+    .locator("div")
+    .filter({ hasText: new RegExp("^" + WORKSPACE_NAME + "$") })
+    .last();
+  const wsUpload = wsRow.locator('[data-tooltip-id="upload-workspace"]');
+  if (await wsUpload.count()) {
+    await wsUpload.first().click({ force: true });
+  } else {
+    await page
+      .locator('[data-tooltip-id="upload-workspace"]')
+      .last()
+      .click({ force: true });
+  }
   const modal = page.locator('div:has-text("My Documents")').last();
   await expect(modal.getByText("My Documents").first()).toBeVisible({
     timeout: 30_000,
