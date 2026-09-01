@@ -55,3 +55,6 @@
 - [→ #40 frontend-authz / UX] Login form shows nothing on 429 from /api/request-token (rate limit #6, 5/window) — user just stays on /login. Found by E2E #15. (Dev3)
 - [→ #45] apiKeyContext without keyKind defaults to api_keys branch (latent; only ingress today is tagged). Make keyKind required, resolver fails closed. (QA-2 T-4b)
 - [→ #46 hotfix] validatedRequest.js:9-24 same fail-open class as T-4b FINDING-1 (isMultiUserMode false on DB error → single-user → next() in dev/no AUTH_TOKEN). Pre-existing. Use isConfirmedSingleUser. (QA-1)
+- [→ #45 companion] job queue is a second identity surface: a job row with actorRef {service, single-user} resolves without evidence check (isConfirmedSingleUser guards ingress only). DB writer == already privileged; note, not exploit. (QA-2 T-4b)
+- [ops note, §7.x] after T-4b, single-user tests read users.count() — a reused DB with leftover user rows makes them red. Gate on a fresh DB. (QA-2)
+- [→ infi-skills] task.sh gate_commented_code misreads JS private fields (`this.#x`) as comments: 59 lines / 16 files latent under server/. Fix upstream: ignore `#` preceded by `.`. (Techlead §7.3)
