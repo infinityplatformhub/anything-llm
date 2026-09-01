@@ -7,7 +7,7 @@ const ApiKey = {
   // 256 bits from crypto.randomBytes (R6/R7 floor); uuid-apikey was 122 bits.
   makeSecret: () => {
     const crypto = require("crypto");
-    return `sk-${crypto.randomBytes(32).toString("base64url")}`;
+    return `apw-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   create: async function (createdByUserId = null, name = null) {

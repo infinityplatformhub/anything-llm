@@ -19,10 +19,14 @@ Replace `uuid-apikey` (Base32 of UUIDv4 — 122 bits) with
 - **Ruling:** `makeTempToken` included though the issue named only the two key
   models — same 122-bit weakness, same one-line fix, and these tokens mint session
   JWTs (recon F-4); leaving it weak would undercut PR-0. Flagged to PMO.
-- **Ruling:** `sk-` prefix added to ApiKey secrets (had none). PR-3 needs a stable
+- **Ruling:** Prefix added to ApiKey secrets (had none). PR-3 needs a stable
   prefix for `keyPrefix` UI display; adding it now avoids a second format change.
   Old format had no prefix so no collision. Keys still stored/compared verbatim —
   no auth behavior change until PR-3.
+- **Ruling (e5 review):** Prefix is `apw-`, not the initially chosen `sk-` — this
+  repo already validates OpenAI keys by their `sk-` prefix (updateENV.js:1066 plus
+  frontend placeholders), so reusing it for a different credential type invites
+  confusion once PR-3 shows keyPrefix in the UI. `apw-` = ApproofWorkspace.
 - **Ruling:** `models/invite.js:6` also uses uuid-apikey (invite codes) — **left
   unchanged**: out of #9 scope, invite codes are short-lived single-use, not bearer
   credentials. PMO can open a follow-up if wanted.

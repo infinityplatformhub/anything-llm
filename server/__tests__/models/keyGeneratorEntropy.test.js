@@ -20,7 +20,7 @@ describe("key generator entropy (P0-4 PR-1 / R7)", () => {
     {
       name: "ApiKey.makeSecret",
       make: () => ApiKey.makeSecret(),
-      prefix: "sk-",
+      prefix: "apw-",
     },
     {
       name: "BrowserExtensionApiKey.makeSecret",
