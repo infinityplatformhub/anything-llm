@@ -296,6 +296,35 @@ Jest, `yarn test` from `server/`, `--runInBand`.
   actors against the same row. "It compiles" is not evidence of atomicity.
 - Do not assert on log output.
 
+### 7.3 No `#` or `//` in a test title
+
+A `describe()` / `it()` title MUST NOT contain a `#` or a `//` when the line ends
+in `{`. Write the issue number as a word.
+
+```js
+describe("SSO issuance lock over HTTP - QA-2 issue 8", () => {   // ok
+describe("rejects http-colon-slash-slash evil.example callbacks", () => {  // ok
+
+describe("SSO issuance lock (HTTP, #8 QA-2)", () => {            // blocked
+describe("SSO issuance lock over HTTP - QA-2 #8", () => {        // blocked
+describe("rejects http://evil.example callbacks", () => {        // blocked
+```
+
+This is a **tooling constraint, not a style preference** — do not "fix" it back.
+
+`task.sh check` runs a commented-out-code gate over added lines. It finds a
+comment by splitting the line at the first `//` or `#`, then flags the remainder
+if it ends in `{`. A test title containing either token makes the gate read the
+rest of the line — `8", () => {` — as a comment that opens a block, and the
+issue cannot be closed. The gate is deliberately conservative about what it
+treats as human prose, and this shape falls on the wrong side of it.
+
+It has cost three issues (#8, #11, #14) roughly ten minutes each. Both tokens
+trip it: `#` for issue references, `//` for any URL in a title (`http://…`).
+
+Everything else about the title is unconstrained; only these two tokens matter,
+and only on a line ending in `{`.
+
 ### 7.1 A fake database cannot validate SQL
 
 The in-memory fake above is the right default, and it has one blind spot: it
