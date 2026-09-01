@@ -54,6 +54,13 @@ const API_ACTIONS = [
   // public typed into them.
   "embed.chat.read",
   "embed.create",
+  // PR-4b(4): env-dump is the highest-value target on the API surface. A key that may
+  // read system status must not thereby read the provider credentials in the env file.
+  "system.env.read",
+  // Image generation and embedding computation spend money per call; they are
+  // grantable apart from chat so a key can be given one without the others.
+  "image.generate",
+  "embedding.compute",
   "document.read",
   "document.write",
   "document.delete",

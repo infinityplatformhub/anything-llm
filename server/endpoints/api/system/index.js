@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { SystemSettings } = require("../../../models/systemSettings");
 const { purgeDocument } = require("../../../utils/files/purgeDocument");
@@ -14,7 +14,7 @@ const { validApiKey } = require("../../../utils/middleware/validApiKey");
 function apiSystemEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/system/env-dump", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (_, response) => {
+  app.get("/v1/system/env-dump", [validApiKey(scopeFor("GET", "/v1/system/env-dump"))], async (_, response) => {
     /*
    #swagger.tags = ['System Settings']
    #swagger.description = 'Dump all settings to file storage'
@@ -35,7 +35,7 @@ function apiSystemEndpoints(app) {
     }
   });
 
-  app.get("/v1/system", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (_, response) => {
+  app.get("/v1/system", [validApiKey(scopeFor("GET", "/v1/system"))], async (_, response) => {
     /*
     #swagger.tags = ['System Settings']
     #swagger.description = 'Get all current system settings that are defined.'
@@ -72,7 +72,7 @@ function apiSystemEndpoints(app) {
     }
   });
 
-  app.get("/v1/system/vector-count", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (_, response) => {
+  app.get("/v1/system/vector-count", [validApiKey(scopeFor("GET", "/v1/system/vector-count"))], async (_, response) => {
     /*
     #swagger.tags = ['System Settings']
     #swagger.description = 'Number of all vectors in connected vector database'
@@ -106,7 +106,7 @@ function apiSystemEndpoints(app) {
 
   app.post(
     "/v1/system/update-env",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/system/update-env"))],
     async (request, response) => {
       /*
       #swagger.tags = ['System Settings']
@@ -155,7 +155,7 @@ function apiSystemEndpoints(app) {
 
   app.get(
     "/v1/system/export-chats",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/system/export-chats"))],
     async (request, response) => {
       /*
     #swagger.tags = ['System Settings']
@@ -217,7 +217,7 @@ function apiSystemEndpoints(app) {
   );
   app.delete(
     "/v1/system/remove-documents",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/system/remove-documents"))],
     async (request, response) => {
       /*
       #swagger.tags = ['System Settings']
@@ -269,6 +269,14 @@ function apiSystemEndpoints(app) {
       }
       */
       try {
+        // This purges documents system-wide by name; there is no workspace in the
+        // path or body to bind against, so a workspace-bound key has no way to
+        // express a purge limited to its own workspace. Refuse rather than let it
+        // delete another tenant's documents.
+        if (response.locals.apiKeyContext?.workspaceId) {
+          return response.status(403).json({ error: "Insufficient scope." });
+        }
+
         const { names } = reqBody(request);
         for await (const name of names) await purgeDocument(name);
         response
