@@ -29,17 +29,9 @@ fs.mkdirSync(process.env.STORAGE_DIR, { recursive: true });
 const testSchema = path.resolve(__dirname, "../prisma/schema.prisma");
 execFileSync(
   path.resolve(__dirname, "../node_modules/.bin/prisma"),
-  ["db", "push", "--skip-generate", "--schema", testSchema],
+  ["migrate", "deploy", "--schema", testSchema],
   { cwd: path.resolve(__dirname, ".."), env: process.env, stdio: "ignore" }
 );
-// T-4b: `db push` runs no migration, so T-1's vocabulary, roles and grants are absent —
-// and /v1 now checks the grant half. The seed script is that migration's idempotent mirror.
-execFileSync(process.execPath, [path.resolve(__dirname, "../prisma/seed.js")], {
-  cwd: path.resolve(__dirname, ".."),
-  env: process.env,
-  stdio: "ignore",
-});
-
 jest.mock("../utils/logger", () => () => {});
 jest.mock("../utils/boot", () => ({ bootHTTP: jest.fn(), bootSSL: jest.fn() }));
 jest.mock("../utils/boot/patchSdkTimeouts", () => jest.fn());
@@ -112,7 +104,8 @@ beforeAll(async () => {
   const caller = await mkUser("caller-admin", "admin");
   targetAdmin = await mkUser("target-admin", "admin");
   // T-4b: the key's grants are its creator's, and T-1 backfills super_admin for every
-  // `role: "admin"` user. `db push` skips migrations, so it is written explicitly here.
+  // `role: "admin"` user — but that migration runs before this suite creates its users,
+  // so the same grant is written here.
   await prisma.principal_role_grants.create({
     data: {
       orgId: 1,

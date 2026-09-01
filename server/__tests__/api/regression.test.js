@@ -187,8 +187,8 @@ beforeAll(async () => {
   apiKey = "apw-key-test-api-key-secret";
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
   // T-4b: /v1 checks the grant half too, so the key needs a creator holding grants for the
-  // routes below. T-1's migration backfills super_admin for every `role: "admin"` user;
-  // `db push` skips migrations, so the same grant is written here explicitly.
+  // routes below. T-1's migration backfills super_admin for every `role: "admin"` user,
+  // but it runs before this suite creates its users, so the same grant is written here.
   await prisma.principal_role_grants.create({
     data: {
       orgId: 1,

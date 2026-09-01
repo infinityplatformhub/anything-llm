@@ -22,7 +22,7 @@ fs.mkdirSync(process.env.STORAGE_DIR, { recursive: true });
 const testSchema = path.resolve(__dirname, "../../prisma/schema.prisma");
 execFileSync(
   path.resolve(__dirname, "../../node_modules/.bin/prisma"),
-  ["db", "push", "--skip-generate", "--schema", testSchema],
+  ["migrate", "deploy", "--schema", testSchema],
   { cwd: path.resolve(__dirname, "../.."), env: process.env, stdio: "ignore" }
 );
 // T-4a (#25): `db push` creates tables but runs no seed, so the roles and

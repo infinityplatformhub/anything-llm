@@ -13,15 +13,7 @@
 # own rows. Every entry needs a reason — an entry without one is a bug, not a
 # waiver.
 ALLOWLIST=(
-  # TEMPORARY — these five boot the app and are the regression that prompted §7.1a.
-  # They are listed so this gate can land before the fix, not because they are correct.
-  # DELETE THESE FIVE LINES in the PR that converts them to `migrate deploy`; the
-  # PENDING count below is what keeps them visible until then.
-  "server/__tests__/api/eventLogsHttp.test.js"
-  "server/__tests__/api/regression.test.js"
-  "server/__tests__/api/secretLeakScanHttp.test.js"
-  "server/__tests__/envDumpGuardHttp.test.js"
-  "server/__tests__/ssoIssuanceLockHttp.test.js"
+  # (empty — the five db-push suites were converted in T-4b #29)
 )
 
 set -uo pipefail
