@@ -44,3 +44,7 @@ Ruling: Restore `anythingllm-router` provider value — it is a persisted config
 Ruling: Ignore only generated login SVG files for URL gate — `xmlns` is an XML namespace identifier, not a fetched resource — cost if wrong: future real URLs added to those two tiny assets bypass generic URL gate and require review.
 
 Ruling: Restore `anythingllm-router` compatibility ID across all frontend and server consumers, not only ephemeral agent — mixed IDs would make selection, persistence, and runtime routing disagree — cost if wrong: legacy internal token remains across technical configuration surfaces.
+
+Ruling: Remove remaining Admin documentation CTAs instead of pointing them at nonexistent docs domains — no equivalent destination exists and dead links mislead users — cost if wrong: Agent Flow, imported skill, and MCP screens lose contextual help until documentation ships.
+
+Ruling: Ignore `frontend/src/locales/` for product-name gate — translated UI strings must name ApproofWorkspace and are not hardcoded network destinations — cost if wrong: future non-name branding regressions inside locale files require dedicated locale review.

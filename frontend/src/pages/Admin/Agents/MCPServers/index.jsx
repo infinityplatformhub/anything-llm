@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { titleCase } from "text-case";
-import { BookOpenText, ArrowClockwise, Warning } from "@phosphor-icons/react";
+import { ArrowClockwise, Warning } from "@phosphor-icons/react";
 import { Tooltip } from "react-tooltip";
 import MCPLogo from "@/media/agents/mcp-logo.svg";
 import MCPServers from "@/models/mcpServers";
@@ -55,14 +55,6 @@ export function MCPServerHeader({
           <p className="text-lg font-medium">{t("agent.mcp.title")}</p>
         </div>
         <div className="flex items-center gap-x-3">
-          <a
-            href="https://docs.approofworkspace.com/mcp-compatibility/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="border-none text-theme-text-secondary hover:text-cta-button"
-          >
-            <BookOpenText size={16} />
-          </a>
           <button
             type="button"
             onClick={refreshMCPServers}
@@ -97,14 +89,6 @@ export function MCPServersList({
     return (
       <div className="text-theme-text-secondary text-center text-xs flex flex-col gap-y-2">
         <p>{t("agent.mcp.loading-from-config")}...</p>
-        <a
-          href="https://docs.approofworkspace.com/mcp-compatibility/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-theme-text-secondary underline hover:text-cta-button"
-        >
-          {t("agent.mcp.learn-more")}
-        </a>
       </div>
     );
   }
@@ -113,14 +97,6 @@ export function MCPServersList({
     return (
       <div className="text-theme-text-secondary text-center text-xs flex flex-col gap-y-2">
         <p>{t("agent.mcp.no-servers-found")}</p>
-        <a
-          href="https://docs.approofworkspace.com/mcp-compatibility/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-theme-text-secondary underline hover:text-cta-button"
-        >
-          {t("agent.mcp.learn-more")}
-        </a>
       </div>
     );
   }
