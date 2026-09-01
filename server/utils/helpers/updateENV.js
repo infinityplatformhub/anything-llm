@@ -1630,12 +1630,11 @@ function writeEnvFileAtomic(envPath, contents) {
   const fs = require("fs");
   const path = require("path");
 
-  // lstat, not stat: stat resolves a symlink and would report the target's
-  // owner and mode, so the checks below would pass while the write lands
-  // somewhere else entirely.
-  // lstatSync directly rather than an existsSync guard: existsSync follows the
-  // link, so a symlink pointing at a path that does not exist reports "absent"
-  // and the write would create the target through the link.
+  // lstatSync, and no existsSync guard in front of it. stat resolves a symlink
+  // and would report the target's owner and mode, so the checks below would
+  // pass while the write landed somewhere else; existsSync follows the link
+  // too, so a symlink aimed at a path that does not exist yet reports "absent"
+  // and skips the guard entirely.
   let stats = null;
   try {
     stats = fs.lstatSync(envPath);
@@ -1655,7 +1654,11 @@ function writeEnvFileAtomic(envPath, contents) {
       );
       return false;
     }
-    if ((stats.mode & 0o777) !== 0o600) fs.chmodSync(envPath, 0o600);
+    // No chmod of the destination here. The rename below replaces the inode, so
+    // the new file carries the temp file's 0600 and the old mode cannot
+    // survive. Touching the destination first would be a chmod through
+    // whatever the path turns out to be, which is a primitive worth denying
+    // rather than an improvement.
   }
 
   // The random suffix, not the pid, is what makes the name unique: two dumps in
