@@ -19,8 +19,10 @@ function emitProgress(slug, event) {
     if (!eventHistory.has(slug)) eventHistory.set(slug, []);
     eventHistory.get(slug).push(event);
 
-    if (event.type === "all_complete")
-      setTimeout(() => eventHistory.delete(slug), 10_000);
+    if (event.type === "all_complete") {
+      const cleanupTimer = setTimeout(() => eventHistory.delete(slug), 10_000);
+      cleanupTimer.unref?.();
+    }
   }
 
   const connections = sseConnections.get(slug);
