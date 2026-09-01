@@ -456,6 +456,48 @@ rest of the line — `8", () => {` — as a comment that opens a block, and the
 issue cannot be closed. The gate is deliberately conservative about what it
 treats as human prose, and this shape falls on the wrong side of it.
 
+#### The same split hits JS private fields
+
+`#` is also JavaScript's private-field sigil, and the gate splits on it wherever
+it appears — including mid-expression, in ordinary code with no comment at all:
+
+```js
+if (this.#hasDiskCache) {      // gate reads the "comment" as `hasDiskCache) {`
+```
+
+That ends in `{`, so it is flagged. Verified by running the gate's own logic
+(`task.sh` `gate_commented_code`, the `*\#*) comment="${content#*#}"` branch)
+against that exact line.
+
+The exposure is not small: **124 files under `server/` use private fields, and 59
+lines across 16 files already match the flagged shape** — every `AiProvider`,
+`BackgroundWorkers`, `EncryptionManager`, `ModelPricing`. They pass today only
+because the gate reads *added* lines, so a file trips it the day it is edited,
+not the day it was written. Anyone adding a private field to a class inside an
+`if` or a callback will hit this with no idea why.
+
+Workaround, until the gate is fixed — lift the condition into a local:
+
+```js
+const hasDiskCache = this.#hasDiskCache;   // no `{` at end of line
+if (hasDiskCache) {                        // no `#` on this line
+```
+
+Do this only where the gate actually blocks you. Rewriting working code to
+appease a tool is a cost; paying it across 124 files is not worth it, and the
+real fix belongs in the gate.
+
+**Fix filed upstream** (infi-skills): the comment split should not treat `#` as
+a comment start when it directly follows a `.` and is followed by an identifier —
+that is unambiguously a private-field access, never a comment, in any language
+the gate covers. `//` needs no such carve-out.
+
+The general shape is one this repo has hit twice now in its own gates: **a gate
+whose false positive lands on correct code teaches people to bypass it**, which
+is worse than the gate not existing. Both times the fix was to match the precise
+construct rather than the loose token — the call form for `db push`, the
+declaration for model imports.
+
 It has cost three issues (#8, #11, #14) roughly ten minutes each. Both tokens
 trip it: `#` for issue references, `//` for any URL in a title (`http://…`).
 
