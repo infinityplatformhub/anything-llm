@@ -1446,7 +1446,36 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
 
   await logChangesToEventLog(newValues, userId);
   if (process.env.NODE_ENV === "production") dumpENV();
-  return { newValues, error: error?.length > 0 ? error : false };
+  return {
+    newValues: maskSecretValues(newValues),
+    error: error?.length > 0 ? error : false,
+  };
+}
+
+// Names whose value is a credential. The caller already knows the secret it
+// just submitted, so echoing it back only creates copies in response bodies,
+// proxy logs, and browser devtools.
+// ponytail: a name heuristic, not a per-key declaration. A new secret whose
+// env name avoids all of these words would be echoed in full. Upgrade to a
+// `secret: true` flag on the KEY_MAPPING entries when provider credentials
+// move into the CredentialStore, which has to enumerate them anyway.
+const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|PEPPER|SALT|CREDENTIAL|PWD/i;
+
+/**
+ * Replaces the value of every credential-shaped setting with a fixed mask, so
+ * the response says which settings changed without repeating what they are.
+ *
+ * @param {Record<string, any>} values changed settings, keyed by KEY_MAPPING name
+ * @returns {Record<string, any>} the same keys, secret values replaced
+ */
+function maskSecretValues(values = {}) {
+  const masked = {};
+  for (const [key, value] of Object.entries(values)) {
+    const envKey = KEY_MAPPING[key]?.envKey ?? key;
+    masked[key] =
+      SECRET_ENV_NAME.test(envKey) && value ? "**********" : value;
+  }
+  return masked;
 }
 
 async function executeValidationChecks(checks, value, force) {
@@ -1575,11 +1604,62 @@ function dumpENV() {
     .join("\n");
 
   const envPath = path.join(__dirname, "../../.env");
-  fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "w" });
+  return writeEnvFileAtomic(envPath, envResult);
+}
+
+/**
+ * Writes the .env file so that a crash cannot leave it truncated and no other
+ * local account can read the provider secrets inside it: the content goes to a
+ * temporary file in the same directory with mode 0600, is fsync'd, and is then
+ * renamed over the destination. Rename within a directory is atomic, so a
+ * reader sees either the whole old file or the whole new one.
+ *
+ * Refuses to write when the existing file belongs to another account - that is
+ * either a misconfigured deployment or a planted file, and overwriting it would
+ * hand our secrets to whoever owns it.
+ *
+ * @param {string} envPath absolute path of the .env file to replace
+ * @param {string} contents the full file body to write
+ * @returns {boolean} true when written, false when refused
+ */
+function writeEnvFileAtomic(envPath, contents) {
+  const fs = require("fs");
+  const path = require("path");
+
+  if (fs.existsSync(envPath)) {
+    const stats = fs.statSync(envPath);
+    if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      console.error(
+        `Refusing to write ${envPath}: file is owned by uid ${stats.uid}, not by the uid this process runs as.`
+      );
+      return false;
+    }
+    if ((stats.mode & 0o777) !== 0o600) fs.chmodSync(envPath, 0o600);
+  }
+
+  const tempPath = path.join(
+    path.dirname(envPath),
+    `.${path.basename(envPath)}.${process.pid}.${Date.now()}.tmp`
+  );
+  let handle = null;
+  try {
+    handle = fs.openSync(tempPath, "wx", 0o600);
+    fs.writeFileSync(handle, contents, { encoding: "utf8" });
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = null;
+    fs.renameSync(tempPath, envPath);
+  } catch (error) {
+    if (handle !== null) fs.closeSync(handle);
+    fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
   return true;
 }
 
 module.exports = {
   dumpENV,
   updateENV,
+  writeEnvFileAtomic,
+  maskSecretValues,
 };
