@@ -16,6 +16,7 @@ const { test, expect } = require("@playwright/test");
  */
 
 const path = require("path");
+const { MOCK_LLM } = require("../config");
 
 const ADMIN = { username: "e2eadmin", password: "E2eAdmin!2345" };
 const MEMBER = { username: "e2emember", password: "E2eMember!2345" };
@@ -90,7 +91,7 @@ test("01 onboarding wizard completes and lands in the app", async ({ page }) => 
     .filter({ hasText: /^Generic OpenAI$/ })
     .first()
     .click();
-  await page.locator('input[name="GenericOpenAiBasePath"]').fill("http://mock-llm:8080/v1");
+  await page.locator('input[name="GenericOpenAiBasePath"]').fill(MOCK_LLM);
   await page.locator('input[name="GenericOpenAiKey"]').fill("e2e-mock-key");
   // Model field is a disabled <select> while custom-models loads, then a
   // free-form <input>; wait for the input. All required fields must be set —
@@ -167,7 +168,7 @@ test("02 embedder switched to the mock provider; instance is multi-user", async 
 
   await page
     .locator('input[name="EmbeddingBasePath"]')
-    .fill("http://mock-llm:8080/v1");
+    .fill(MOCK_LLM);
   await page.locator('input[name="EmbeddingModelPref"]').fill("mock-embed");
   const apiKeyField = page.locator('input[name="GenericOpenAiEmbeddingApiKey"]');
   if (await apiKeyField.count()) await apiKeyField.fill("e2e-mock-key");
