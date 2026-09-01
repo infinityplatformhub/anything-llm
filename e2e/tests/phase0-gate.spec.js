@@ -148,7 +148,13 @@ test("02 embedder switched to mock provider; instance is multi-user", async ({
   // the real embedding-preference settings page.
   await login(page, ADMIN);
   await page.goto("/settings/embedding-preference");
-  // Provider card sits behind a search menu; the visible label is enough.
+  // The current-provider card opens a search menu; the provider list is inside.
+  await page
+    .locator('button:has-text("Embedder")')
+    .or(page.getByText(/ApproofWorkspace Embedder/i))
+    .first()
+    .click({ force: true });
+  await page.waitForTimeout(500);
   await page.getByText("Generic OpenAI").first().click({ force: true });
   await page.waitForTimeout(500);
   await page
@@ -208,7 +214,7 @@ test("05 upload a small .txt document and wait for embedding", async ({
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
   // Upload is the sidebar's per-workspace button, opening ManageWorkspace.
   await page.locator('[data-tooltip-id="upload-workspace"]').first().click();
-  const fileInput = page.locator('input[type="file"]');
+  const fileInput = page.locator('input[type="file"]').last();
   await fileInput.waitFor({ state: "attached", timeout: 30_000 });
   await fileInput.setInputFiles({
     name: DOC_NAME,
@@ -306,7 +312,7 @@ test("10 member cannot see admin UI or hit admin routes", async ({ page }) => {
   // No admin settings entry in the sidebar for a default user.
   await expect(page.getByRole("link", { name: /settings/i })).toHaveCount(0);
   // Admin route denied through the same browser session.
-  const res = await authedFetch(page, "/api/system/env-dump");
+  const res = await authedFetch(page, "/api/env-dump");
   expect(res.status()).toBe(401);
 });
 
