@@ -250,10 +250,20 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
     }
   );
   expect(upload.status()).toBe(200);
-  const uploaded = await upload.json();
-  expect(uploaded.success).toBe(true);
-  const docPath = uploaded.documents?.[0]?.location;
-  expect(docPath).toBeTruthy();
+  expect((await upload.json()).success).toBe(true);
+
+  // The upload response carries no path; the picker reads the folder listing,
+  // where each parsed file is custom-documents/<name>.json with the original
+  // filename as its title.
+  const listing = await authedFetch(
+    page,
+    "/api/system/local-files?folder=custom-documents&limit=all"
+  );
+  const parsed = (await listing.json()).documents.find(
+    (d) => d.title === DOC_NAME
+  );
+  expect(parsed).toBeTruthy();
+  const docPath = `custom-documents/${parsed.name}`;
 
   // Embed it into the workspace.
   const embed = await authedFetch(
