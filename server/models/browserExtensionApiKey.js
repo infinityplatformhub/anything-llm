@@ -8,8 +8,8 @@ const BrowserExtensionApiKey = {
    * @returns {string} brx-*** API key to use with extension
    */
   makeSecret: () => {
-    const uuidAPIKey = require("uuid-apikey");
-    return `brx-${uuidAPIKey.create().apiKey}`;
+    const crypto = require("crypto");
+    return `brx-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   /**
