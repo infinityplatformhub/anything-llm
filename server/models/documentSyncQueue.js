@@ -92,11 +92,11 @@ const DocumentSyncQueue = {
     try {
       const { Document } = require("./documents");
 
-      // Get all documents that are watched and share the same unique filename. If this value is
+      // Get all documents that are watched and share the same docpath (the physical file). If this value is
       // non-zero then we exit early so that we do not have duplicated watch queues for the same file
       // across many workspaces.
       const workspaceDocIds = (
-        await Document.where({ filename: document.filename, watched: true })
+        await Document.where({ docpath: document.docpath, watched: true })
       ).map((rec) => rec.id);
       const hasRecords =
         (await this.count({ workspaceDocId: { in: workspaceDocIds } })) > 0;
@@ -113,7 +113,7 @@ const DocumentSyncQueue = {
         },
       });
       await Document._updateAll(
-        { filename: document.filename },
+        { docpath: document.docpath },
         { watched: true }
       );
       return queue || null;
@@ -135,11 +135,11 @@ const DocumentSyncQueue = {
       // We could have been given a document to unwatch which is a clone of one that is already being watched but by another workspaceDocument id.
       // so in this instance we need to delete any queues related to this document by any WorkspaceDocumentId it is referenced by.
       const workspaceDocIds = (
-        await Document.where({ filename: document.filename, watched: true })
+        await Document.where({ docpath: document.docpath, watched: true })
       ).map((rec) => rec.id);
       await this.delete({ workspaceDocId: { in: workspaceDocIds } });
       await Document._updateAll(
-        { filename: document.filename },
+        { docpath: document.docpath },
         { watched: false }
       );
       return true;
