@@ -62,6 +62,16 @@ key to `filename` → 1 DB test fails.
 
 Full suite **620/620** (617 baseline + 1 job test + 2 DB tests).
 
+- **DoD (e5 round-3 rule):** `filename` is display-only, never a where clause:
+  `grep -rn "where.*filename" server/models server/jobs` → **0 matches** on this
+  branch (verified; the only schema-sanctioned exception is
+  `workspace_parsed_files.filename`, which is `@unique` by design). New code
+  keeping this invariant is reviewed against the same grep.
+- **Confirmed to e5:** `sync-watched-documents.js:158-163` (the bloom clause)
+  was fixed in the FIRST commit of this branch (5b67aa50, `docpath` key); the
+  round-2 commit (6871ec01) added documentSyncQueue + the DB suite. e5 read a
+  stale branch.
+
 ## Files
 
 - `server/jobs/sync-watched-documents.js` (match clause)
