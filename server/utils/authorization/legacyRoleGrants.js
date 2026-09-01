@@ -15,7 +15,10 @@
 
 const prisma = require("../prisma");
 const { grantRole, revokeGrant } = require("./policyRepository");
-const { SERVICE_PRINCIPALS } = require("./actorResolver");
+// Hotfix #39: import from the leaf module, NOT through actorResolver — this file
+// is inside the require cycle and would otherwise get a half-built exports
+// object whose SERVICE_PRINCIPALS is undefined at call time.
+const { SERVICE_PRINCIPALS } = require("./principals");
 
 const ORG_ROLE_FOR_LEGACY = { admin: "super_admin", manager: "member", default: "member" };
 
@@ -95,7 +98,11 @@ async function syncWorkspaceMembershipGrant({
   db = prisma,
 }) {
   if (!userId || !workspaceId) return;
-  try {
+  // Hotfix #39 (QA-2): NOT wrapped in try/catch. Membership IS workspace access,
+  // so a membership row without its grant is a user who appears to belong to a
+  // workspace and gets 404 from every route in it — silently. Throwing lets
+  // WorkspaceUser roll the membership back in the same transaction.
+  {
     // T-4b (#29), Techlead §7.7: the grant follows `workspace_users.role_id`. Defaulting
     // straight to `editor` made the engine disagree with the membership row that granted
     // access in the first place — T-1 backfills `role_id` to `owner` for a workspace's
@@ -125,7 +132,10 @@ async function syncWorkspaceMembershipGrant({
           select: { id: true },
         })
       )?.id;
-    if (!resolvedRoleId) return;
+    if (!resolvedRoleId)
+      throw new Error(
+        "cannot grant workspace membership: no workspace-scoped 'editor' role is seeded"
+      );
     await grantRole({
       actor,
       principalType: "user",
@@ -134,11 +144,6 @@ async function syncWorkspaceMembershipGrant({
       workspaceId,
       db,
     });
-  } catch (error) {
-    console.error(
-      `[authorization] failed to grant workspace ${workspaceId} to user ${userId}:`,
-      error.message
-    );
   }
 }
 
@@ -153,28 +158,25 @@ async function revokeWorkspaceMembershipGrants({
   db = prisma,
 }) {
   if (!userId || !workspaceId) return;
-  try {
-    const roles = await db.roles.findMany({
-      where: { scope: "workspace" },
-      select: { id: true },
+  // Also not swallowed (#39 QA-2): a membership deleted while its grant survives
+  // leaves someone with access to a workspace they were removed from, which is
+  // the direction that actually matters.
+  const roles = await db.roles.findMany({
+    where: { scope: "workspace" },
+    select: { id: true },
+  });
+  for (const role of roles) {
+    await revokeGrant({
+      actor,
+      principalType: "user",
+      principalId: String(userId),
+      roleId: role.id,
+      workspaceId,
+      db,
     });
-    for (const role of roles) {
-      await revokeGrant({
-        actor,
-        principalType: "user",
-        principalId: String(userId),
-        roleId: role.id,
-        workspaceId,
-        db,
-      });
-    }
-  } catch (error) {
-    console.error(
-      `[authorization] failed to revoke workspace ${workspaceId} from user ${userId}:`,
-      error.message
-    );
   }
 }
+
 
 /**
  * Report users who can log in but can do nothing: no workspace membership and no
