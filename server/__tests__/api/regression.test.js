@@ -42,6 +42,9 @@ jest.mock("../../utils/boot", () => ({
   bootSSL: jest.fn(),
 }));
 jest.mock("../../utils/boot/patchSdkTimeouts", () => jest.fn());
+jest.mock("../../utils/AiProviders/modelMap", () => ({
+  MODEL_MAP: { get: jest.fn(() => null) },
+}));
 jest.mock("../../utils/helpers/modelPricing", () => ({
   addChatCostToMetrics: jest.fn((metrics) => metrics),
 }));
