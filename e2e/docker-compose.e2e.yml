@@ -18,5 +18,9 @@ services:
 
   mock-llm:
     build: ../e2e/mock-llm
+    # Must share the app's network, otherwise the app cannot resolve mock-llm
+    # and every embedding call fails with a connection error.
+    networks:
+      - anything-llm
     ports:
       - "127.0.0.1:${E2E_MOCK_PORT:-3112}:8080"
