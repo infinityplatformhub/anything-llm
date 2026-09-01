@@ -199,6 +199,10 @@ ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_role_id_fkey" FO
 -- AddForeignKey
 ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permission_id_fkey" FOREIGN KEY ("permission_id") REFERENCES "permissions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- AddForeignKey (e5 review): grants must not outlive their workspace, and a reused
+-- workspace id (restore/reseed) must not inherit old grants — cross-tenant by accident.
+ALTER TABLE "principal_role_grants" ADD CONSTRAINT "principal_role_grants_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 -- AddForeignKey
 ALTER TABLE "principal_role_grants" ADD CONSTRAINT "principal_role_grants_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

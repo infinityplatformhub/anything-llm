@@ -213,8 +213,6 @@ describe("T-1 migration on real Postgres", () => {
   });
 
   describe("doc-vectors-canonicalize job", () => {
-    const { run } = require("../../jobs/docVectorsCanonicalize");
-
     beforeAll(async () => {
       // vector fixture: one vector per mapped workspace_documents row + one dead-pair row
       // (a document_vectors row whose workspace_documents counterpart is gone)
@@ -227,8 +225,16 @@ describe("T-1 migration on real Postgres", () => {
       });
     });
 
+    const { run, CanonicalizeNotEnabledError } = require("../../jobs/docVectorsCanonicalize");
+
+    test("refuses to run without the T-5 enable flag — legacy-uuid runtime callers must migrate first", async () => {
+      await expect(run({ db: prisma, enable: false })).rejects.toBeInstanceOf(CanonicalizeNotEnabledError);
+      const mapped = await prisma.legacy_docid_map.count();
+      expect(mapped).toBe(0); // refused before touching anything
+    });
+
     test("rewrites every mapped vector to its canonical id and reports orphans", async () => {
-      const result = await run({ db: prisma, emit: () => {}, batch: 2 });
+      const result = await run({ db: prisma, emit: () => {}, batch: 2, enable: true });
       expect(result.done).toBe(4); // shared-1, shared-2, private, orphan (each is its own canonical)
       expect(result.total).toBe(4);
       expect(result.orphanVectors).toBe(1); // uuid-dead-pair has no workspace_documents row
@@ -242,7 +248,7 @@ describe("T-1 migration on real Postgres", () => {
 
     test("re-running is a no-op", async () => {
       const before = await prisma.document_vectors.count();
-      const result = await run({ db: prisma, emit: () => {} });
+      const result = await run({ db: prisma, emit: () => {}, enable: true });
       expect(result.done).toBe(0);
       expect(await prisma.document_vectors.count()).toBe(before);
     });

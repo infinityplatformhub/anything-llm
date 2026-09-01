@@ -157,6 +157,7 @@ model workspaces {
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
   api_keys                     api_keys[]
+  grants                       principal_role_grants[]
   // T-1 (P0-5, R1): backfilled from the earliest workspace_users row; null where no
   // membership row exists (reported — those get no owner).
   created_by                   Int?
@@ -639,17 +640,18 @@ model role_permissions {
 }
 
 model principal_role_grants {
-  id             Int       @id @default(autoincrement())
-  orgId          Int       @default(1)
+  id             Int         @id @default(autoincrement())
+  orgId          Int         @default(1)
   principal_type String // 'user' | 'group' | 'service' | 'embed' | 'system'
   principal_id   String
   role_id        Int
   workspace_id   Int? // null = org-wide grant
   granted_by     Int?
-  granted_at     DateTime  @default(now()) @db.Timestamptz(3)
-  expires_at     DateTime? @db.Timestamptz(3)
-  policy_version BigInt    @default(0)
-  roles          roles     @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  granted_at     DateTime    @default(now()) @db.Timestamptz(3)
+  expires_at     DateTime?   @db.Timestamptz(3)
+  policy_version BigInt      @default(0)
+  roles          roles       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  workspaces     workspaces? @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   // NOTE: the migration creates this constraint as UNIQUE NULLS NOT DISTINCT (PG15+) —
   // org-wide grants have workspace_id NULL and plain UNIQUE lets them duplicate on re-runs.
