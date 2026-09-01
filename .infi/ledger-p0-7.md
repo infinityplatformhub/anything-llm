@@ -11,3 +11,12 @@ Ruling: Retain `@mintplex-labs/*` dependencies and original MIT notice — packa
 Ruling: Ship plain AW placeholder assets — removes upstream marks now while allowing design replacement without code changes — cost if wrong: placeholder visual quality is below final brand standard.
 
 Ruling: Flag unknown, GPL-option, and LGPL licenses for human review rather than infer legal compatibility — automated metadata cannot make distribution decisions — cost if wrong: release waits for avoidable review.
+
+## Verification
+
+- `node -e "require('./models/telemetry')"` in `server/`: passed.
+- `grep -ri posthog server/package.json frontend/package.json | wc -l`: `0`.
+- `npx yarn@1.22.22 build` in `frontend/`: passed (Vite 6,165 modules; warnings only for existing chunk size and browser-externalized Node modules).
+- Server package has no `test` script; full server test command unavailable.
+- License inventories: server 890, frontend 366, collector 515 production package records.
+- Network telemetry smoke: adapter exposes no client (`connect().client === null`); PostHog package and lock entry absent.
