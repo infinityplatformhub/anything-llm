@@ -251,7 +251,7 @@ module.exports.CreatePptxPresentation = {
 
               pptx.title = title;
               if (author) pptx.author = author;
-              pptx.company = "AnythingLLM";
+              pptx.company = "ApproofWorkspace";
 
               const totalSlideCount = allSlides.length;
 

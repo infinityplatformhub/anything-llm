@@ -366,7 +366,7 @@ export default function LLMPreference({
   const [settings, setSettings] = useState(null);
   const formRef = useRef(null);
   const hiddenSubmitButtonRef = useRef(null);
-  const isHosted = window.location.hostname.includes("useanything.com");
+  const isHosted = window.location.hostname.includes("approofworkspace.com");
   const navigate = useNavigate();
 
   const TITLE = t("onboarding.llm.title");
@@ -404,7 +404,7 @@ export default function LLMPreference({
     const data = {};
     const formData = new FormData(form);
     data.LLMProvider = selectedLLM;
-    // Default to AnythingLLM embedder and LanceDB
+    // Default to ApproofWorkspace embedder and LanceDB
     data.EmbeddingEngine = "native";
     data.VectorDB = "lancedb";
     for (var [key, value] of formData.entries()) data[key] = value;

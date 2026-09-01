@@ -26,12 +26,12 @@ export default function VertexLLMOptions({ settings }) {
               endpoint and a Vertex AI API key.
               <br />
               <a
-                href="https://docs.anythingllm.com/setup/llm-configuration/cloud/google-vertex"
+                href="https://docs.approofworkspace.com/setup/llm-configuration/cloud/google-vertex"
                 target="_blank"
                 className="underline flex gap-x-1 items-center"
                 rel="noreferrer"
               >
-                Read more on how to use Google Vertex AI in AnythingLLM
+                Read more on how to use Google Vertex AI in ApproofWorkspace
                 <ArrowSquareOut size={14} />
               </a>
             </p>

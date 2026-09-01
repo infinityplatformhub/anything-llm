@@ -7,7 +7,7 @@ const TRANSLATIONS = {
     llm: {
       title: "LLM-inställning",
       description:
-        "AnythingLLM fungerar med många LLM-leverantörer. Den här tjänsten hanterar chattningen.",
+        "ApproofWorkspace fungerar med många LLM-leverantörer. Den här tjänsten hanterar chattningen.",
     },
     userSetup: {
       title: "Användarinställning",
@@ -34,15 +34,15 @@ const TRANSLATIONS = {
         "Du kan när som helst ändra de här inställningarna i inställningarna.",
     },
     survey: {
-      title: "Välkommen till AnythingLLM",
+      title: "Välkommen till ApproofWorkspace",
       description:
-        "Hjälp oss att utveckla AnythingLLM för dina behov. Valfritt.",
+        "Hjälp oss att utveckla ApproofWorkspace för dina behov. Valfritt.",
       email: "Vad är din e-postadress?",
-      useCase: "Vad ska du använda AnythingLLM till?",
+      useCase: "Vad ska du använda ApproofWorkspace till?",
       useCaseWork: "Arbete",
       useCasePersonal: "Personligt bruk",
       useCaseOther: "Annat",
-      comment: "Hur fick du höra talas om AnythingLLM?",
+      comment: "Hur fick du höra talas om ApproofWorkspace?",
       commentPlaceholder:
         "Reddit, Twitter, GitHub, YouTube med mera – berätta gärna hur du hittade oss!",
       skip: "Hoppa över enkäten",
@@ -113,7 +113,7 @@ const TRANSLATIONS = {
     "experimental-features": "Experimentella funktioner",
     contact: "Kontakta supporten",
     "browser-extension": "Webbläsartillägg",
-    "mobile-app": "AnythingLLM Mobile",
+    "mobile-app": "ApproofWorkspace Mobile",
     channels: "Kanaler",
     "available-channels": {
       telegram: "Telegram",
@@ -172,7 +172,7 @@ const TRANSLATIONS = {
       add: "Lägg till meddelande",
       save: "Spara meddelanden",
       heading: "Förklara för mig",
-      body: "fördelarna med AnythingLLM",
+      body: "fördelarna med ApproofWorkspace",
     },
     delete: {
       title: "Ta bort arbetsyta",
@@ -752,7 +752,7 @@ const TRANSLATIONS = {
       "intelligent-skill-selection": {
         title: "Intelligent val av färdigheter",
         description:
-          "Aktivera obegränsat antal verktyg och minska tokenanvändningen med upp till 80 % per fråga – AnythingLLM väljer automatiskt rätt färdigheter för varje prompt.",
+          "Aktivera obegränsat antal verktyg och minska tokenanvändningen med upp till 80 % per fråga – ApproofWorkspace väljer automatiskt rätt färdigheter för varje prompt.",
         "max-tools": {
           title: "Högsta antal verktyg",
           description:
@@ -789,15 +789,15 @@ const TRANSLATIONS = {
   customization: {
     interface: {
       title: "Gränssnittsinställningar",
-      description: "Ange dina gränssnittsinställningar för AnythingLLM.",
+      description: "Ange dina gränssnittsinställningar för ApproofWorkspace.",
     },
     branding: {
       title: "Varumärke och vitmärkning",
-      description: "Vitmärka din AnythingLLM-instans med anpassad profilering.",
+      description: "Vitmärka din ApproofWorkspace-instans med anpassad profilering.",
     },
     chat: {
       title: "Chatt",
-      description: "Ange dina chattinställningar för AnythingLLM.",
+      description: "Ange dina chattinställningar för ApproofWorkspace.",
       auto_submit: {
         title: "Skicka röstinmatning automatiskt",
         description: "Skicka röstinmatning automatiskt efter en stunds tystnad",
@@ -840,7 +840,7 @@ const TRANSLATIONS = {
       "display-language": {
         title: "Visningsspråk",
         description:
-          "Välj det språk som AnythingLLM:s gränssnitt ska visas på när översättningar finns tillgängliga.",
+          "Välj det språk som ApproofWorkspace:s gränssnitt ska visas på när översättningar finns tillgängliga.",
       },
       logo: {
         title: "Varumärkeslogotyp",
@@ -880,7 +880,7 @@ const TRANSLATIONS = {
   api: {
     title: "API-nycklar",
     description:
-      "API-nycklar ger innehavaren programmatisk åtkomst till och möjlighet att hantera denna AnythingLLM-instans.",
+      "API-nycklar ger innehavaren programmatisk åtkomst till och möjlighet att hantera denna ApproofWorkspace-instans.",
     link: "Läs API-dokumentationen",
     generate: "Skapa ny API-nyckel",
     empty: "Inga API-nycklar hittades",
@@ -894,7 +894,7 @@ const TRANSLATIONS = {
       close: "Stäng",
       create: "Skapa API-nyckel",
       helper:
-        "När API-nyckeln har skapats kan den användas för att programmässigt komma åt och konfigurera denna AnythingLLM-instans.",
+        "När API-nyckeln har skapats kan den användas för att programmässigt komma åt och konfigurera denna ApproofWorkspace-instans.",
       name: {
         label: "Namn",
         placeholder: "Produktionsintegrering",
@@ -919,7 +919,7 @@ const TRANSLATIONS = {
   llm: {
     title: "LLM-inställning",
     description:
-      "Här finns autentiseringsuppgifter och inställningar för din valda LLM-leverantör för chatt och inbäddning. Det är viktigt att nycklarna är aktuella och korrekta, annars fungerar inte AnythingLLM som det ska.",
+      "Här finns autentiseringsuppgifter och inställningar för din valda LLM-leverantör för chatt och inbäddning. Det är viktigt att nycklarna är aktuella och korrekta, annars fungerar inte ApproofWorkspace som det ska.",
     provider: "LLM-leverantör",
     providers: {
       azure_openai: {
@@ -1119,7 +1119,7 @@ const TRANSLATIONS = {
       "Här finns autentiseringsuppgifter och inställningar för din valda leverantör av transkriberingsmodell. Det är viktigt att nycklarna är aktuella och korrekta, annars kan mediefiler och ljud inte transkriberas.",
     provider: "Leverantör av transkribering",
     "warn-start":
-      "Att använda den lokala Whisper-modellen på datorer med begränsat RAM eller CPU kan göra att AnythingLLM hänger sig när mediefiler behandlas.",
+      "Att använda den lokala Whisper-modellen på datorer med begränsat RAM eller CPU kan göra att ApproofWorkspace hänger sig när mediefiler behandlas.",
     "warn-recommend": "Vi rekommenderar minst 2 GB RAM och filer under 10 MB.",
     "warn-end":
       "Den inbyggda modellen hämtas automatiskt vid första användningen.",
@@ -1129,7 +1129,7 @@ const TRANSLATIONS = {
     "desc-start":
       "När du använder en LLM som inte har inbyggt stöd för en inbäddningsmotor kan du behöva ange separata autentiseringsuppgifter för textinbäddning.",
     "desc-end":
-      "Inbäddning är processen att omvandla text till vektorer. Dessa autentiseringsuppgifter behövs för att omvandla dina filer och promptar till ett format som AnythingLLM kan behandla.",
+      "Inbäddning är processen att omvandla text till vektorer. Dessa autentiseringsuppgifter behövs för att omvandla dina filer och promptar till ett format som ApproofWorkspace kan behandla.",
     provider: {
       title: "Leverantör av inbäddning",
     },
@@ -1173,7 +1173,7 @@ const TRANSLATIONS = {
   vector: {
     title: "Vektordatabas",
     description:
-      "Här finns autentiseringsuppgifter och inställningar för hur AnythingLLM-instansen fungerar. Det är viktigt att nycklarna är aktuella och korrekta.",
+      "Här finns autentiseringsuppgifter och inställningar för hur ApproofWorkspace-instansen fungerar. Det är viktigt att nycklarna är aktuella och korrekta.",
     provider: {
       title: "Leverantör av vektordatabas",
       description: "LanceDB kräver ingen konfiguration.",
@@ -1207,7 +1207,7 @@ const TRANSLATIONS = {
   telegram: {
     title: "Telegram-bot",
     description:
-      "Anslut din AnythingLLM-instans till Telegram så att du kan chatta med arbetsytorna från vilken enhet som helst.",
+      "Anslut din ApproofWorkspace-instans till Telegram så att du kan chatta med arbetsytorna från vilken enhet som helst.",
     setup: {
       step1: {
         title: "Steg 1: Skapa din Telegram-bot",
@@ -1285,7 +1285,7 @@ const TRANSLATIONS = {
     password: {
       title: "Lösenordsskydd",
       description:
-        "Skydda AnythingLLM-instansen med ett lösenord. Om du glömmer det går det inte att återställa, så se till att spara lösenordet.",
+        "Skydda ApproofWorkspace-instansen med ett lösenord. Om du glömmer det går det inte att återställa, så se till att spara lösenordet.",
       "password-label": "Instanslösenord",
     },
   },
@@ -1303,7 +1303,7 @@ const TRANSLATIONS = {
   privacy: {
     title: "Integritet och datahantering",
     description:
-      "Här konfigurerar du hur anslutna tredjepartsleverantörer och AnythingLLM hanterar dina data.",
+      "Här konfigurerar du hur anslutna tredjepartsleverantörer och ApproofWorkspace hanterar dina data.",
     anonymous: "Anonym telemetri är aktiverad",
   },
   connectors: {
@@ -1501,22 +1501,22 @@ const TRANSLATIONS = {
       fetching: "Hämtar …",
       "fetch-website": "Hämta webbplats",
       "privacy-notice":
-        "Dessa filer laddas upp till dokumentprocessorn som körs på denna AnythingLLM-instans. Filerna skickas inte till eller delas med tredje part.",
+        "Dessa filer laddas upp till dokumentprocessorn som körs på denna ApproofWorkspace-instans. Filerna skickas inte till eller delas med tredje part.",
     },
     pinning: {
       what_pinning: "Vad är fästning av dokument?",
       pin_explained_block1:
-        "När du <b>fäster</b> ett dokument i AnythingLLM infogas hela dokumentinnehållet i promptfönstret så att LLM:en kan förstå det fullt ut.",
+        "När du <b>fäster</b> ett dokument i ApproofWorkspace infogas hela dokumentinnehållet i promptfönstret så att LLM:en kan förstå det fullt ut.",
       pin_explained_block2:
         "Detta fungerar bäst med <b>modeller med stor kontext</b> eller små filer som är viktiga för kunskapsbasen.",
       pin_explained_block3:
-        "Om du inte får önskade svar från AnythingLLM som standard är fästning ett enkelt sätt att få svar av högre kvalitet.",
+        "Om du inte får önskade svar från ApproofWorkspace som standard är fästning ett enkelt sätt att få svar av högre kvalitet.",
       accept: "Okej, jag förstår",
     },
     watching: {
       what_watching: "Vad innebär det att bevaka ett dokument?",
       watch_explained_block1:
-        "När du <b>bevakar</b> ett dokument i AnythingLLM synkroniseras dokumentinnehållet <i>automatiskt</i> från ursprungskällan med jämna mellanrum. Detta uppdaterar automatiskt innehållet i varje arbetsyta där filen hanteras.",
+        "När du <b>bevakar</b> ett dokument i ApproofWorkspace synkroniseras dokumentinnehållet <i>automatiskt</i> från ursprungskällan med jämna mellanrum. Detta uppdaterar automatiskt innehållet i varje arbetsyta där filen hanteras.",
       watch_explained_block2:
         "Denna funktion stöder för närvarande nätbaserat innehåll och är inte tillgänglig för manuellt uppladdade dokument.",
       watch_explained_block3_start:
@@ -1663,7 +1663,7 @@ const TRANSLATIONS = {
         edit_description: "Uppdatera innehållet i detta minne.",
         label: "Minne",
         placeholder:
-          "t.ex. Användaren heter Kim, användaren arbetar med AnythingLLM osv.",
+          "t.ex. Användaren heter Kim, användaren arbetar med ApproofWorkspace osv.",
         create: "Skapa",
         save: "Spara",
         cancel: "Avbryt",
@@ -1797,7 +1797,7 @@ const TRANSLATIONS = {
         unauthenticated: {
           title: "Autentisering krävs",
           description:
-            "Du måste autentisera med AnythingLLM Community Hub innan du publicerar objekt.",
+            "Du måste autentisera med ApproofWorkspace Community Hub innan du publicerar objekt.",
           button: "Anslut till Community Hub",
         },
       },

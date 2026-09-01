@@ -1168,7 +1168,7 @@ function supportedLLM(input = "") {
     "minimax",
     "cerebras",
     "omlx",
-    "anythingllm-router",
+    "approofworkspace-router",
     "vertex",
   ].includes(input);
   return validSelection ? null : `${input} is not a valid LLM provider.`;
@@ -1272,7 +1272,7 @@ async function validDockerizedUrl(input = "") {
 
     const isPortAvailableFromDocker = await isPortInUse(port, hostname);
     if (isPortAvailableFromDocker)
-      return "Port is not running a reachable service on loopback address from inside the AnythingLLM container. Please use host.docker.internal (for linux use 172.17.0.1), a real machine ip, or domain to connect to your service.";
+      return "Port is not running a reachable service on loopback address from inside the ApproofWorkspace container. Please use host.docker.internal (for linux use 172.17.0.1), a real machine ip, or domain to connect to your service.";
   } catch (error) {
     console.error(error.message);
     return "An error occurred while validating the URL";
