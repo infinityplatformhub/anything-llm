@@ -15,8 +15,14 @@ const BATCH = 1000;
 // canonical ids, every runtime caller still looking vectors up by the legacy uuid
 // (DocumentVectors.where({docId}) in 8 providers, Documents.removeDocuments,
 // deleteForWorkspace) silently matches nothing — deleted documents would leave
-// vectors behind. The job MUST NOT run until T-4b/T-5 migrate those call sites.
-// ENABLE_DOC_VECTORS_CANONICALIZE is set by T-5 when the last call site moves.
+// vectors behind. The job MUST NOT run until those call sites migrate.
+//
+// C-1 (PMO ruling, superseding this file's original note): the flag is set by **T-6**, not
+// T-5. Seven of the legacy call sites are the non-Lance providers, which T-6 owns and which
+// are off the Phase 0 gate — enabling while they still read legacy uuids leaves vectors
+// behind on every non-Lance deployment. T-4b (#29) migrated its own two sites
+// (Documents.removeDocuments, DocumentVectors.deleteForWorkspace) to match on BOTH ids,
+// which is what makes them correct during the batched run as well as after it.
 class CanonicalizeNotEnabledError extends Error {}
 
 async function run({ db = prisma, emit = () => {}, batch = BATCH, enable } = {}) {

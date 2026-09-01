@@ -220,8 +220,19 @@ const Document = {
         await prisma.workspace_documents.delete({
           where: { id: document.id, workspaceId: workspace.id },
         });
+        // T-4b (#29) W-12: doc-vectors-canonicalize rewrites document_vectors.docId from
+        // the legacy uuid to the canonical documents.id, and it runs in batches — so
+        // mid-run one document's vectors are canonical while another's are still legacy.
+        // Matching on both is correct before, during and after; matching on one leaves the
+        // vectors of a deleted document in the store with no row left to find them by.
         await prisma.document_vectors.deleteMany({
-          where: { docId: document.docId },
+          where: {
+            docId: {
+              in: [document.docId, document.documentId]
+                .filter((id) => id !== null && id !== undefined)
+                .map(String),
+            },
+          },
         });
       } catch (error) {
         console.error(error.message);
