@@ -6,7 +6,9 @@
 // Also enforces grant-escalation rules the engine cannot see (S-5/S-6/S-9):
 // a granter cannot hand out a role carrying permissions they do not themselves hold.
 
+const crypto = require("crypto");
 const prisma = require("../prisma");
+const { publishOperationalEvent } = require("../events");
 const { AuthorizationContractError } = require("./errors");
 
 const SCOPE_KEY = (orgId) => `org:${orgId}`;
@@ -19,11 +21,37 @@ const EXEMPT_PRINCIPAL_IDS = new Set(["single-user", "core-jobs"]);
 const isExemptPrincipal = (actor) =>
   actor.type === "service" && EXEMPT_PRINCIPAL_IDS.has(String(actor.id));
 
-async function bumpVersion(tx, changeType, scopeKey, actorId) {
+// Every gateway entry point demands an explicit actor — no default free pass.
+const requireActor = (actor, fn) => {
+  if (!actor) {
+    throw new AuthorizationContractError(
+      `${fn} requires an explicit actor — pass SERVICE_PRINCIPALS.singleUser/coreJobs for seed and migration writes`
+    );
+  }
+};
+const actorIdOf = (actor) => (actor && actor.type === "user" ? Number(actor.id) : null);
+
+async function bumpVersion(tx, changeType, scopeKey, actorId, extraScopeKeys = []) {
   const row = await tx.policy_versions.create({
     data: { change_type: changeType, scope_key: scopeKey, actor_id: actorId ?? null },
     select: { version: true },
   });
+  // Published INSIDE the transaction (outbox): a crash between commit and publish would
+  // leave every cache stale forever with no event to correct it (T-3 recon §8).
+  await publishOperationalEvent(
+    {
+      type: "policy.changed",
+      actor: { type: "system", id: actorId ? String(actorId) : null, orgId: 1 },
+      resource: { type: "policy", id: scopeKey },
+      traceId: crypto.randomUUID(),
+      data: {
+        changeType,
+        version: String(row.version),
+        scopeKeys: [scopeKey, ...extraScopeKeys],
+      },
+    },
+    tx
+  );
   return row.version;
 }
 
@@ -94,7 +122,7 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
         );
       }
     }
-    const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actor ? Number(actor.id) || null : null);
+    const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actorIdOf(actor), workspaceId ? [`workspace:${workspaceId}`] : []);
     const existing = await tx.principal_role_grants.findFirst({
       where: {
         orgId: 1, principal_type: principalType, principal_id: String(principalId),
@@ -126,8 +154,9 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
 
 /** Revoke a grant — same gateway, same transactional version bump. */
 async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null, db = prisma }) {
+  requireActor(actor, "revokeGrant");
   return db.$transaction(async (tx) => {
-    const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actor ? Number(actor.id) || null : null);
+    const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actorIdOf(actor), workspaceId ? [`workspace:${workspaceId}`] : []);
     const res = await tx.principal_role_grants.deleteMany({
       where: {
         orgId: 1, principal_type: principalType, principal_id: String(principalId),
@@ -140,8 +169,9 @@ async function revokeGrant({ actor, principalType, principalId, roleId, workspac
 
 /** Set document visibility — T-3's documentFilter reads this as a hard override. */
 async function setDocumentVisibility({ actor, documentId, hidden, reason = null, db = prisma }) {
+  requireActor(actor, "setDocumentVisibility");
   return db.$transaction(async (tx) => {
-    const version = await bumpVersion(tx, "visibility", `document:${documentId}`, actor ? Number(actor.id) || null : null);
+    const version = await bumpVersion(tx, "visibility", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
     const row = await tx.document_visibility.upsert({
       where: { document_id: documentId },
       create: {
@@ -158,6 +188,45 @@ async function setDocumentVisibility({ actor, documentId, hidden, reason = null,
   });
 }
 
+/**
+ * Runtime document_acl writes go through the gateway too — T-1's migration wrote the
+ * inherited rows directly, but nothing at runtime may bypass the version bump.
+ */
+async function grantDocumentAcl({ actor, documentId, principalType, principalId, action, effect = "allow", source = "manual", db = prisma }) {
+  requireActor(actor, "grantDocumentAcl");
+  return db.$transaction(async (tx) => {
+    const version = await bumpVersion(tx, "document_acl", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
+    const row = await tx.document_acl.upsert({
+      where: {
+        document_id_principal_type_principal_id_action: {
+          document_id: documentId, principal_type: principalType,
+          principal_id: String(principalId), action,
+        },
+      },
+      create: {
+        orgId: 1, document_id: documentId, principal_type: principalType,
+        principal_id: String(principalId), action, effect, source, policy_version: version,
+      },
+      update: { effect, source, policy_version: version },
+    });
+    return { id: row.id, policyVersion: version };
+  });
+}
+
+async function revokeDocumentAcl({ actor, documentId, principalType, principalId, action, db = prisma }) {
+  requireActor(actor, "revokeDocumentAcl");
+  return db.$transaction(async (tx) => {
+    const version = await bumpVersion(tx, "document_acl", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
+    const res = await tx.document_acl.deleteMany({
+      where: {
+        document_id: documentId, principal_type: principalType,
+        principal_id: String(principalId), action,
+      },
+    });
+    return { deleted: res.count, policyVersion: version };
+  });
+}
+
 /** Monotonic clock head — T-3 caches stamp and compare against this. */
 async function currentPolicyVersion(db = prisma) {
   const row = await db.policy_versions.findFirst({
@@ -170,6 +239,8 @@ async function currentPolicyVersion(db = prisma) {
 module.exports = {
   grantRole,
   revokeGrant,
+  grantDocumentAcl,
+  revokeDocumentAcl,
   setDocumentVisibility,
   currentPolicyVersion,
 };

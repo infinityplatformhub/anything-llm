@@ -33,7 +33,10 @@ async function resolveActor(request, response) {
   // Row 3 (P0-4 PR-3): scoped API key — RAW context only; this is where it becomes an Actor.
   if (locals.apiKeyContext) {
     const ctx = locals.apiKeyContext;
-    if (ctx.revokedAt) return null;
+    // Key lifecycle is checked in full here, not half of it: an expired key must yield
+    // no actor even if the ingress middleware ever stops checking (F-20d, QA-2 round 2).
+    const expired = ctx.expiresAt && new Date(ctx.expiresAt) <= new Date();
+    if (ctx.revokedAt || expired) return null;
     return {
       type: "service",
       id: `api-key:${ctx.keyId}`,
