@@ -26,3 +26,5 @@ Ruling: Replace upstream repository and fallback support destinations with `http
 Ruling: Remove survey, beta email, hosting, and remote social-preview CTAs without known ApproofWorkspace equivalents — a missing optional CTA is safer than sending users or air-gapped browsers to upstream services — cost if wrong: fewer feedback, hosting, and link-preview entry points.
 
 Ruling: Replace telemetry controls with static Thai disclosure text — telemetry adapter cannot send or enable events, so controls would lie about runtime behavior — cost if wrong: locale-specific copy appears unchanged in non-Thai UI until translation keys are added.
+
+Ruling: Point embed documentation CTA at current Infinity Platform Hub repository — no dedicated embed repository exists at supplied namespace, and current repository is known-valid destination — cost if wrong: CTA lands on project root rather than embed-specific instructions.
