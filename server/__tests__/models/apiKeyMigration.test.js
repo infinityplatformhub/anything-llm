@@ -3,8 +3,8 @@ const path = require("path");
 
 test("forced-rotation migrations delete legacy rows and remove both plaintext columns", () => {
   const migrations = path.resolve(__dirname, "../../prisma/migrations");
-  const api = fs.readFileSync(path.join(migrations, "20260902020000_key_hardening/migration.sql"), "utf8");
-  const browser = fs.readFileSync(path.join(migrations, "20260902021000_browser_key_digest/migration.sql"), "utf8");
+  const api = fs.readFileSync(path.join(migrations, "20260902030000_key_hardening/migration.sql"), "utf8");
+  const browser = fs.readFileSync(path.join(migrations, "20260902031000_browser_key_digest/migration.sql"), "utf8");
   expect(api).toMatch(/DELETE FROM "api_keys"/);
   expect(api).toMatch(/DROP COLUMN "secret"/);
   expect(browser).toMatch(/DELETE FROM "browser_extension_api_keys"/);
