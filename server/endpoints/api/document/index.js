@@ -1,4 +1,3 @@
-const { requireScope } = require("../../../utils/middleware/requireScope");
 const { emitAuditEvent } = require("../../../utils/events");
 const { Telemetry } = require("../../../models/telemetry");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
@@ -50,7 +49,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload",
-    [validApiKey, requireScope("*"), handleAPIFileUpload, validateWorkspaceSlugQuery],
+    [validApiKey("*"), handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -175,7 +174,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload/:folderName",
-    [validApiKey, requireScope("*"), handleAPIFileUpload, validateWorkspaceSlugQuery],
+    [validApiKey("*"), handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -324,7 +323,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/upload-link",
-    [validApiKey, requireScope("*"), validateWorkspaceSlugQuery],
+    [validApiKey("*"), validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -448,7 +447,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/raw-text",
-    [validApiKey, requireScope("*"), validateWorkspaceSlugQuery],
+    [validApiKey("*"), validateWorkspaceSlugQuery],
     async (request, response) => {
       /*
      #swagger.tags = ['Documents']
@@ -590,7 +589,7 @@ function apiDocumentEndpoints(app) {
     }
   );
 
-  app.get("/v1/documents", [validApiKey, requireScope("*")], async (request, response) => {
+  app.get("/v1/documents", [validApiKey("*")], async (request, response) => {
     /*
     #swagger.tags = ['Documents']
     #swagger.description = 'List of all locally-stored documents in instance. Optionally, pass ?folder=name to fetch the contents of a single folder, paginated with offset and limit (limit=all returns every document in that folder).'
@@ -648,7 +647,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/documents/folder/:folderName",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -733,7 +732,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/accepted-file-types",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (_, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -790,7 +789,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/metadata-schema",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (_, response) => {
       /*
     #swagger.tags = ['Documents']
@@ -840,7 +839,7 @@ function apiDocumentEndpoints(app) {
 
   // Be careful and place as last route to prevent override of the other /document/ GET
   // endpoints!
-  app.get("/v1/document/:docName", [validApiKey, requireScope("*")], async (request, response) => {
+  app.get("/v1/document/:docName", [validApiKey("*")], async (request, response) => {
     /*
     #swagger.tags = ['Documents']
     #swagger.description = 'Get a single document by its unique ApproofWorkspace document name'
@@ -897,7 +896,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/create-folder",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -963,7 +962,7 @@ function apiDocumentEndpoints(app) {
 
   app.delete(
     "/v1/document/remove-folder",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -1022,7 +1021,7 @@ function apiDocumentEndpoints(app) {
 
   app.post(
     "/v1/document/move-files",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']
@@ -1125,7 +1124,7 @@ function apiDocumentEndpoints(app) {
 
   app.get(
     "/v1/document/generated-files/:filename",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Documents']

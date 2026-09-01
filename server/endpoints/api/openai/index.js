@@ -1,4 +1,3 @@
-const { requireScope } = require("../../../utils/middleware/requireScope");
 const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { Document } = require("../../../models/documents");
@@ -17,7 +16,7 @@ const { handleImageGenUpload } = require("../../../utils/files/multer");
 function apiOpenAICompatibleEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/openai/models", [validApiKey, requireScope("*")], async (_, response) => {
+  app.get("/v1/openai/models", [validApiKey("*")], async (_, response) => {
     /*
     #swagger.tags = ['OpenAI Compatible Endpoints']
     #swagger.description = 'Get all available "models" which are workspaces you can use for chatting.'
@@ -76,7 +75,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/chat/completions",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -193,7 +192,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/images/generations",
-    [validApiKey, requireScope("*"), handleImageGenUpload],
+    [validApiKey("*"), handleImageGenUpload],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -288,7 +287,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/embeddings",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -355,7 +354,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.get(
     "/v1/openai/vector_stores",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']

@@ -1,4 +1,3 @@
-const { requireScope } = require("../../../utils/middleware/requireScope");
 const { emitAuditEvent } = require("../../../utils/events");
 const { SystemSettings } = require("../../../models/systemSettings");
 const { purgeDocument } = require("../../../utils/files/purgeDocument");
@@ -35,7 +34,7 @@ function apiSystemEndpoints(app) {
     }
   });
 
-  app.get("/v1/system", [validApiKey, requireScope("*")], async (_, response) => {
+  app.get("/v1/system", [validApiKey("*")], async (_, response) => {
     /*
     #swagger.tags = ['System Settings']
     #swagger.description = 'Get all current system settings that are defined.'
@@ -72,7 +71,7 @@ function apiSystemEndpoints(app) {
     }
   });
 
-  app.get("/v1/system/vector-count", [validApiKey, requireScope("*")], async (_, response) => {
+  app.get("/v1/system/vector-count", [validApiKey("*")], async (_, response) => {
     /*
     #swagger.tags = ['System Settings']
     #swagger.description = 'Number of all vectors in connected vector database'
@@ -106,7 +105,7 @@ function apiSystemEndpoints(app) {
 
   app.post(
     "/v1/system/update-env",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['System Settings']
@@ -155,7 +154,7 @@ function apiSystemEndpoints(app) {
 
   app.get(
     "/v1/system/export-chats",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
     #swagger.tags = ['System Settings']
@@ -217,7 +216,7 @@ function apiSystemEndpoints(app) {
   );
   app.delete(
     "/v1/system/remove-documents",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['System Settings']

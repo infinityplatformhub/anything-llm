@@ -1,4 +1,3 @@
-const { requireScope } = require("../../../utils/middleware/requireScope");
 const { EmbedConfig } = require("../../../models/embedConfig");
 const { EmbedChats } = require("../../../models/embedChats");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
@@ -8,7 +7,7 @@ const { Workspace } = require("../../../models/workspace");
 function apiEmbedEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/embed", [validApiKey, requireScope("*")], async (request, response) => {
+  app.get("/v1/embed", [validApiKey("*")], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'List all active embeds'
@@ -78,7 +77,7 @@ function apiEmbedEndpoints(app) {
 
   app.get(
     "/v1/embed/:embedUuid/chats",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']
@@ -140,7 +139,7 @@ function apiEmbedEndpoints(app) {
 
   app.get(
     "/v1/embed/:embedUuid/chats/:sessionUuid",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']
@@ -199,7 +198,7 @@ function apiEmbedEndpoints(app) {
     }
   );
 
-  app.post("/v1/embed/new", [validApiKey, requireScope("*")], async (request, response) => {
+  app.post("/v1/embed/new", [validApiKey("*")], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'Create a new embed configuration'
@@ -285,7 +284,7 @@ function apiEmbedEndpoints(app) {
     }
   });
 
-  app.post("/v1/embed/:embedUuid", [validApiKey, requireScope("*")], async (request, response) => {
+  app.post("/v1/embed/:embedUuid", [validApiKey("*")], async (request, response) => {
     /*
       #swagger.tags = ['Embed']
       #swagger.description = 'Update an existing embed configuration'
@@ -357,7 +356,7 @@ function apiEmbedEndpoints(app) {
 
   app.delete(
     "/v1/embed/:embedUuid",
-    [validApiKey, requireScope("*")],
+    [validApiKey("*")],
     async (request, response) => {
       /*
       #swagger.tags = ['Embed']

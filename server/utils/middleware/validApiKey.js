@@ -3,26 +3,29 @@ const { SystemSettings } = require("../../models/systemSettings");
 const { emitAuditEvent } = require("../events");
 const prisma = require("../prisma");
 
-async function validApiKey(request, response, next) {
-  response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
-  const auth = request.header("Authorization");
-  const bearerKey = auth?.match(/^Bearer\s+(.+)$/i)?.[1];
-  const apiKey = bearerKey ? await ApiKey.resolve(bearerKey) : null;
-  if (!apiKey) return response.status(403).json({ error: "No valid api key found." });
-
-  const workspaceIds = apiKey.workspaceId ? [String(apiKey.workspaceId)] : [];
-  response.locals.actor = {
-    type: "service", id: `api-key:${apiKey.id}`, orgId: "default", workspaceIds, groupIds: [],
-    scopedKeyId: String(apiKey.id),
-  };
-  response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };
-  await prisma.$transaction(async (transaction) => {
-    await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
-    await emitAuditEvent("api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
-      actor: response.locals.actor, resource: { type: "api_key", id: String(apiKey.id) }, transaction,
+function validApiKey(action) {
+  if (typeof action !== "string" || !action) throw new Error("validApiKey requires an explicit scope");
+  return async function apiKeyRequired(request, response, next) {
+    response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
+    const bearerKey = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const apiKey = bearerKey ? await ApiKey.resolve(bearerKey) : null;
+    if (!apiKey) return response.status(403).json({ error: "No valid api key found." });
+    const context = {
+      keyId: String(apiKey.id), keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes,
+      workspaceId: apiKey.workspaceId ? String(apiKey.workspaceId) : null,
+      expiresAt: apiKey.expiresAt, revokedAt: apiKey.revokedAt,
+    };
+    response.locals.apiKeyContext = context;
+    const allowed = context.scopes.includes("*") || context.scopes.includes(action);
+    await prisma.$transaction(async (transaction) => {
+      await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
+      await emitAuditEvent("auth.key_used", {
+        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: "default",
+      }, null, { resource: { type: "api_key", id: context.keyId }, transaction });
     });
-  });
-  next();
+    if (!allowed) return response.status(403).json({ error: "Insufficient scope." });
+    next();
+  };
 }
 
 module.exports = { validApiKey };

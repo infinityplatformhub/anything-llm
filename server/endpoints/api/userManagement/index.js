@@ -1,4 +1,3 @@
-const { requireScope } = require("../../../utils/middleware/requireScope");
 const { User } = require("../../../models/user");
 const { TemporaryAuthToken } = require("../../../models/temporaryAuthToken");
 const { multiUserMode } = require("../../../utils/http");
@@ -13,7 +12,7 @@ const {
 function apiUserManagementEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/users", [validApiKey, requireScope("*")], async (request, response) => {
+  app.get("/v1/users", [validApiKey("*")], async (request, response) => {
     /*
       #swagger.tags = ['User Management']
       #swagger.description = 'List all users'
@@ -70,7 +69,7 @@ function apiUserManagementEndpoints(app) {
 
   app.get(
     "/v1/users/:id/issue-auth-token",
-    [ssoIssuanceLock, validApiKey, requireScope("*"), simpleSSOEnabled],
+    [ssoIssuanceLock, validApiKey("*"), simpleSSOEnabled],
     async (request, response) => {
       /*
       #swagger.tags = ['User Management']

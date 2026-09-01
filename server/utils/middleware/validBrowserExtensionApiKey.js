@@ -4,30 +4,31 @@ const { User } = require("../../models/user");
 const { emitAuditEvent } = require("../events");
 const prisma = require("../prisma");
 
-async function validBrowserExtensionApiKey(request, response, next) {
-  const multiUserMode = await SystemSettings.isMultiUserMode();
-  response.locals.multiUserMode = multiUserMode;
-  const bearerKey = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  const apiKey = bearerKey ? await BrowserExtensionApiKey.validate(bearerKey) : null;
-  if (!apiKey) return response.status(403).json({ error: "No valid API key found." });
-  const user = apiKey.user_id ? await User.get({ id: apiKey.user_id }) : null;
-  if (multiUserMode && !user) return response.status(403).json({ error: "User not found." });
-  if (user?.suspended) return response.status(401).json({ error: "User is suspended from system" });
-
-  response.locals.user = user;
-  response.locals.actor = {
-    type: "service", id: `browser-key:${apiKey.id}`, orgId: "default",
-    workspaceIds: apiKey.workspaceId ? [String(apiKey.workspaceId)] : [], groupIds: [],
-    scopedKeyId: String(apiKey.id), onBehalfOf: user ? { type: "user", id: String(user.id) } : undefined,
-  };
-  response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };
-  await prisma.$transaction(async (transaction) => {
-    await transaction.browser_extension_api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
-    await emitAuditEvent("browser_extension_api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
-      actor: response.locals.actor, resource: { type: "browser_extension_api_key", id: String(apiKey.id) }, transaction,
+function validBrowserExtensionApiKey(action) {
+  if (typeof action !== "string" || !action) throw new Error("validBrowserExtensionApiKey requires an explicit scope");
+  return async function browserKeyRequired(request, response, next) {
+    const multiUserMode = await SystemSettings.isMultiUserMode();
+    response.locals.multiUserMode = multiUserMode;
+    const secret = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const apiKey = secret ? await BrowserExtensionApiKey.validate(secret) : null;
+    if (!apiKey) return response.status(403).json({ error: "No valid api key found." });
+    const user = apiKey.user_id ? await User.get({ id: apiKey.user_id }) : null;
+    if (multiUserMode && (!user || user.suspended)) return response.status(403).json({ error: "No valid api key found." });
+    response.locals.user = user;
+    const context = {
+      keyId: String(apiKey.id), keyPrefix: apiKey.keyPrefix, scopes: ["*"],
+      workspaceId: null, expiresAt: null, revokedAt: null,
+    };
+    response.locals.apiKeyContext = context;
+    const allowed = context.scopes.includes("*") || context.scopes.includes(action);
+    await prisma.$transaction(async (transaction) => {
+      await emitAuditEvent("auth.key_used", {
+        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: "default",
+      }, null, { resource: { type: "browser_extension_api_key", id: context.keyId }, transaction });
     });
-  });
-  next();
+    if (!allowed) return response.status(403).json({ error: "Insufficient scope." });
+    next();
+  };
 }
 
 module.exports = { validBrowserExtensionApiKey };
