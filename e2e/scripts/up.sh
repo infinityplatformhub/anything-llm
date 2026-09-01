@@ -16,6 +16,8 @@ APP_PORT="${E2E_APP_PORT:-3111}"
 
 down() {
   docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+  # storage carries the vector-cache; stale cached vectors would be replayed
+  # for a document even after the embedder changes.
   rm -rf "$E2E/../e2e-storage"
 }
 

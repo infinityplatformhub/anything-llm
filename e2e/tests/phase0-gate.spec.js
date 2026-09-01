@@ -283,6 +283,11 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   const token = await page.evaluate(() =>
     localStorage.getItem("approofworkspace_authToken")
   );
+  // Guard the ordering the vector cache depends on: the mock embedder must
+  // already be active, or 05 would cache vectors from a different engine.
+  const engine = await (await page.request.get("/api/setup-complete")).json();
+  expect(engine.results.EmbeddingEngine).toBe("generic-openai");
+
   const upload = await page.request.post(
     `/api/workspace/${WORKSPACE_SLUG}/upload`,
     {
