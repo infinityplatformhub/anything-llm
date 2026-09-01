@@ -218,6 +218,30 @@ string silently default-denies or, worse, silently matches nothing in a filter.
 - Env vars: `SCREAMING_SNAKE`, prefixed by subsystem where ambiguous.
 - Do not introduce an abbreviation that is not already in the codebase.
 
+### 6.1 Credential prefixes
+
+Every generated bearer credential MUST carry an `apw-` prefix naming its kind:
+
+| Credential | Prefix | Generator |
+|---|---|---|
+| Developer API key | `apw-` | `server/models/apiKeys.js` |
+| Temporary auth token | `apw-tat-` | `server/models/temporaryAuthToken.js` |
+| Browser extension key | `apw-brx-` | `server/models/browserExtensionApiKey.js` |
+| Invite code | `apw-inv-` | `server/models/invite.js` |
+
+Why: a prefix makes a leaked credential identifiable in a log or a paste, lets
+`startsWith` route a token to the right verifier, and keeps the fork's
+credentials distinguishable from upstream's. Adopting it late is expensive —
+every old prefix has to be accepted forever — so it is settled now, before any
+of these ship.
+
+Entropy: **256 bits minimum**, `crypto.randomBytes(32).toString("base64url")`.
+Do not use `uuid-apikey` — a UUIDv4 in Base32 is 122 bits, below the floor.
+
+A generator that changes prefix MUST be checked for consumers that parse the old
+one (`grep -rn "<old-prefix>" server frontend embed`). Changing a prefix with a
+live consumer is a breaking change requiring a `startsWith` compatibility branch.
+
 ---
 
 ## 7. Tests
@@ -250,3 +274,17 @@ Jest, `yarn test` from `server/`, `--runInBand`.
 - Whitespace-only reformatting of shared files (`schema.prisma`,
   `endpoints/system.js`, `utils/helpers/updateENV.js`) is not allowed in a
   feature branch. It converts a clean auto-merge into a manual conflict.
+
+### 8.1 Adding a developer API route breaks someone else's test
+
+`server/__tests__/endpoints/apiRouteAuthSweep.test.js` asserts an exact route
+count across `server/endpoints/api/*/index.js` (currently **63**). It is exact on
+purpose: a route that appears without anyone noticing is how
+`GET /v1/system/env-dump` shipped unauthenticated.
+
+If you add or remove a `/v1` route, update that number **in the same commit**.
+Otherwise the suite fails on a branch that never touched your code, and the next
+person spends an hour bisecting someone else's feature.
+
+Every `/v1` route MUST carry `validApiKey` in its middleware array. The sweep
+enforces this; do not register a route as `app.get(path, handler)` with no array.
