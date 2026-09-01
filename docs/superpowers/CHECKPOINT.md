@@ -6,9 +6,11 @@
 
 - **integration branch**: `approof/main` @ `ffca31ad` (push แล้ว)
 - **baseline**: ~759 tests / 68 suites บน PostgreSQL (ยืนยันโดย QA-1)
-- **ปิดแล้ว 20 issues**: #1-#6, #8-#14, #16-#21
-- **เปิดอยู่ 4**: #7 (subagent dev-7, worktree env7, updateENV.js in progress), #15 (Dev3 5/12), #22 T-3 (Dev4, worktree t3 rebase บน main), #23 (rl23 `f200e7b5` gate PASS 768/768 · รอ QA-1 verdict → close/merge)
-- **main**: `323b2256` (T-2 merged) · reboot แล้ว session ชื่อใหม่: PMO=anything-llm-47, Dev3=3d, Dev4=ff, QA-1=af, QA-2=e6, Techlead=b2, security=13, architect=6f · Dev1/Dev2 ไม่กลับมา (งานย้ายเป็น subagent)
+- **ปิดแล้ว 21 issues**: #1-#6, #8-#14, #16-#21, #23
+- **เปิดอยู่ 3**: #7 (subagent dev-7, worktree env7, updateENV.js in progress; QA-2 harness /tmp/qa2-env7.test.js), #15 (Dev3 5/12), #22 T-3 (Dev4, worktree t3 rebased)
+- **main code**: `731e4c1d` (T-2 + #23 merged)
+- **contract ใหม่** ทุก task.sh start: `yarn test 2>&1 | grep -E "Tests:" | grep -v failed; exit 0` (เทสแดง = ไม่ match)
+- **รอ dev ใหม่ 2 คน** (user จะเพิ่ม): Dev1 → PR-4b/4c (recon จาก Techlead b2), Dev2 → T-4a (recon จาก architect 6f) · ทักมาที่ PMO แล้วแจกทันที · reboot แล้ว session ชื่อใหม่: PMO=anything-llm-47, Dev3=3d, Dev4=ff, QA-1=af, QA-2=e6, Techlead=b2, security=13, architect=6f · Dev1/Dev2 ไม่กลับมา (งานย้ายเป็น subagent)
 - **test PG หลัง reboot**: docker down → ใช้ local PG17 `postgresql://approof:approof@localhost:5432/approofworkspace_<name>` + API_KEY_PEPPER 32+ bytes
 
 ## รันเทส local (บังคับ — ไม่งั้น fail แบบหลอก)
