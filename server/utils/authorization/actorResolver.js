@@ -7,6 +7,7 @@
 // Single-user mode (R5): NO code path skips checks — the resolver yields an explicit
 // service principal carrying the seeded super_admin grant (principal 'single-user').
 
+const prisma = require("../prisma");
 const { SystemSettings } = require("../../models/systemSettings");
 
 const SINGLE_USER_ACTOR = Object.freeze({
@@ -27,7 +28,7 @@ const SERVICE_PRINCIPALS = Object.freeze({
  * @param {import("express").Response} response
  * @returns {Promise<Object|null>} Actor or null when NO ingress authenticated anything.
  */
-async function resolveActor(request, response) {
+async function resolveActor(request, response, { db = prisma } = {}) {
   const locals = response?.locals ?? {};
 
   // Row 3 (P0-4 PR-3): scoped API key — RAW context only; this is where it becomes an Actor.
@@ -51,11 +52,20 @@ async function resolveActor(request, response) {
   // key, mobile device token, SSO-exchanged JWT) all land on locals.user.
   if (locals.user) {
     if (locals.user.suspended) return null; // suspended = no actor, engine denies
+    // Membership is read here rather than trusted from locals: nothing in the request
+    // pipeline populates it today, so trusting it would hand every user an empty scope
+    // and make documentFilter match nothing on real routes (B-2, architect review).
+    // locals.userWorkspaceIds stays supported as an override for callers that already
+    // loaded membership (T-4a route wiring).
+    const workspaceIds =
+      locals.userWorkspaceIds !== undefined
+        ? locals.userWorkspaceIds.map(String)
+        : await workspaceIdsForUser(locals.user.id, db);
     return {
       type: "user",
       id: String(locals.user.id),
       orgId: 1,
-      workspaceIds: (locals.userWorkspaceIds ?? []).map(String),
+      workspaceIds,
       impersonatedBy: locals.impersonatedBy ? { type: "user", id: String(locals.impersonatedBy) } : undefined,
     };
   }
@@ -80,6 +90,21 @@ async function resolveActor(request, response) {
   // Rows 8-11: agent runtime with null user_id, background jobs, telegram channel state,
   // and unauthenticated routes yield NULL — the engine denies (missing_actor / S-4).
   return null;
+}
+
+/** Workspace ids the user belongs to — the scope every document filter is built on. */
+async function workspaceIdsForUser(userId, db = prisma) {
+  try {
+    const rows = await db.workspace_users.findMany({
+      where: { user_id: Number(userId) },
+      select: { workspace_id: true },
+    });
+    return rows.map((row) => String(row.workspace_id));
+  } catch {
+    // Fail restrictive: an unreadable membership table yields no scope, which the
+    // filter turns into match-none rather than an unbounded read.
+    return [];
+  }
 }
 
 async function isMultiUserModeSafe() {

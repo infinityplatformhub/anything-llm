@@ -48,7 +48,7 @@ afterAll(async () => {
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
     await admin.$disconnect();
   }
-});
+}, 60_000);
 
 const { buildDocumentFilter } = require("../../../utils/authorization/documentFilter");
 const { FilterCache } = require("../../../utils/authorization/cache");
@@ -182,6 +182,37 @@ describe("T-3 documentFilter", () => {
     const after = await buildDocumentFilter({ actor, action: READER, db: prisma });
     expect(after.deniedDocumentIds).toContain(String(docs.visible.id));
     expect(after.policyVersion).toBeGreaterThan(before.policyVersion);
+  });
+});
+
+describe("T-3 end-to-end: resolver-built actor, not a fixture", () => {
+  test("B-2: a real user row + membership resolves to a scoped actor whose filter matches something", async () => {
+    // The earlier tests hand documentFilter a hand-built Actor. This one goes through
+    // the real resolver, which is where an empty workspaceIds would silently turn every
+    // production filter into match-none (architect review).
+    jest.resetModules();
+    const realUser = await prisma.users.create({
+      data: { username: `e2e-${dbSuffix}`, password: "x", role: "default" },
+    });
+    await prisma.workspace_users.create({
+      data: { user_id: realUser.id, workspace_id: W1.id },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(realUser.id),
+      roleId: roles.viewer.id, workspaceId: W1.id, db: prisma,
+    });
+
+    const { resolveActor } = require("../../../utils/authorization/actorResolver");
+    const actor = await resolveActor(
+      {},
+      { locals: { user: { id: realUser.id, suspended: 0 } } },
+      { db: prisma }
+    );
+    expect(actor.workspaceIds).toEqual([String(W1.id)]);
+
+    const filter = await buildDocumentFilter({ actor, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds).toContain(String(W1.id));
   });
 });
 

@@ -104,7 +104,7 @@ afterAll(async () => {
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
     await admin.$disconnect();
   }
-});
+}, 60_000);
 
 describe("T-1 migration on real Postgres", () => {
   test("every workspace_documents row gets a canonical documentId (round 1, first run)", async () => {
