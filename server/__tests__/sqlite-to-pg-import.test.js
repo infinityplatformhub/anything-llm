@@ -22,8 +22,12 @@ beforeAll(async () => {
     fixture,
     `CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT, suspended INTEGER, createdAt DATETIME, lastUpdatedAt DATETIME);
      CREATE TABLE workspaces (id INTEGER PRIMARY KEY, name TEXT, slug TEXT, openAiHistory INTEGER, createdAt DATETIME, lastUpdatedAt DATETIME);
+     CREATE TABLE workspace_chats (id INTEGER PRIMARY KEY, workspaceId INTEGER, prompt TEXT, response TEXT, include INTEGER, createdAt DATETIME, lastUpdatedAt DATETIME);
+     CREATE TABLE event_logs (id INTEGER PRIMARY KEY, event TEXT, metadata TEXT, userId INTEGER, occurredAt DATETIME);
      INSERT INTO users VALUES (7, 'fixture-user', 'hash', 'default', 0, '2026-01-02T03:04:05Z', '2026-01-02T03:04:05Z');
-     INSERT INTO workspaces VALUES (9, 'Fixture', 'fixture', 20, '2026-01-02T03:04:05Z', '2026-01-02T03:04:05Z');`,
+     INSERT INTO workspaces VALUES (9, 'Fixture', 'fixture', 20, '2026-01-02T03:04:05Z', '2026-01-02T03:04:05Z');
+     INSERT INTO workspace_chats VALUES (11, 9, 'fixture prompt', '{"textResponse":"fixture answer"}', 1, '2026-01-02T03:04:05Z', '2026-01-02T03:04:05Z');
+     INSERT INTO event_logs VALUES (12, 'fixture_event', '{"source":"fixture"}', 7, '2026-01-02T03:04:05Z');`,
   ]);
 
   const setup = new Client({ connectionString: databaseUrl });
@@ -65,4 +69,21 @@ test("imports fixture rows and preserves IDs", async () => {
   expect((await client.query("SELECT id, slug FROM workspaces")).rows).toEqual([
     { id: 9, slug: "fixture" },
   ]);
+  expect(
+    (
+      await client.query(
+        "SELECT id, prompt, response, include FROM workspace_chats"
+      )
+    ).rows
+  ).toEqual([
+    {
+      id: 11,
+      prompt: "fixture prompt",
+      response: '{"textResponse":"fixture answer"}',
+      include: true,
+    },
+  ]);
+  expect(
+    (await client.query("SELECT id, metadata FROM event_logs")).rows
+  ).toEqual([{ id: 12, metadata: '{"source":"fixture"}' }]);
 });

@@ -12,6 +12,12 @@ const TABLES = [
   "workspace_threads",
   "workspace_chats",
   "workspace_documents",
+  "workspace_agent_invocations",
+  "workspace_suggested_messages",
+  "document_sync_queues",
+  "document_sync_executions",
+  "slash_command_presets",
+  "prompt_history",
   "api_keys",
   "event_logs",
   "system_settings",
@@ -41,10 +47,21 @@ function sqliteRows(database, table) {
 
 async function destinationColumns(client, table) {
   const { rows } = await client.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1`,
+    `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1`,
     [table]
   );
-  return new Set(rows.map(({ column_name }) => column_name));
+  return new Map(
+    rows.map(({ column_name, data_type }) => [column_name, data_type])
+  );
+}
+
+function postgresValue(value, dataType) {
+  if (value === null) return null;
+  if (dataType === "boolean") return Boolean(value);
+  if (dataType === "json" || dataType === "jsonb") {
+    return typeof value === "string" ? JSON.parse(value) : value;
+  }
+  return value;
 }
 
 async function importTable(client, database, table) {
@@ -54,7 +71,9 @@ async function importTable(client, database, table) {
   const allowed = await destinationColumns(client, table);
   for (const row of rows) {
     const columns = Object.keys(row).filter((column) => allowed.has(column));
-    const values = columns.map((column) => row[column]);
+    const values = columns.map((column) =>
+      postgresValue(row[column], allowed.get(column))
+    );
     const updates = columns
       .filter((column) => column !== "id")
       .map((column) => `${quote(column)} = EXCLUDED.${quote(column)}`)
