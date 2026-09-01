@@ -53,3 +53,4 @@
 - [BLOCKER on #29, fixing] isMultiUserMode swallows DB errors → returns false → resolver treats as single-user → anonymous = super_admin when DB unreadable or multi_user_mode row missing. Fix: single-user only if users.count()===0; unreadable → multi-user/deny. (QA-2 T-4b)
 - [→ #41] 7 /v1/document routes give bound keys cross-tenant disk storage access; carve-out comment overclaims. (QA-1 T-4b)
 - [→ #40 frontend-authz / UX] Login form shows nothing on 429 from /api/request-token (rate limit #6, 5/window) — user just stays on /login. Found by E2E #15. (Dev3)
+- [→ #45] apiKeyContext without keyKind defaults to api_keys branch (latent; only ingress today is tagged). Make keyKind required, resolver fails closed. (QA-2 T-4b)
