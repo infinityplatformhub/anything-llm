@@ -31,16 +31,15 @@ async function login(page, { username, password }) {
     await page.goto("/login");
     await page.locator('input[name="username"]').fill(username);
     await page.locator('input[name="password"]').fill(password);
-    await Promise.all([
-      page
-        .waitForResponse(
-          (r) => r.url().includes("/api/request-token"),
-          { timeout: 30_000 }
-        )
-        .catch(() => null),
-      page.locator('button:has-text("Login")').click(),
-    ]);
-    await page.waitForTimeout(2_000);
+    const tokenResponse = page
+      .waitForResponse((r) => r.url().includes("/api/request-token"), {
+        timeout: 30_000,
+      })
+      .catch(() => null);
+    // The form submits on the button, which is type=submit inside the form.
+    await page.locator('input[name="password"]').press("Enter");
+    await tokenResponse;
+    await page.waitForTimeout(2_500);
 
     // First login of a fresh account shows the Recovery Codes modal.
     const recovery = page.getByRole("heading", { name: "Recovery Codes" });
