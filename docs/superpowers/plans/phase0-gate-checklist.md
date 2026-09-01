@@ -208,7 +208,15 @@ bash ~/.claude/plugins/cache/infi-skills/infi-skills/0.1.0/skills/infi-dev/scrip
   check --base approof/main --issue <the issue number this branch closes>
 ```
 
-Both must pass on the merge candidate. `check-local.sh` runs the §5.1 model-import gate and the §7.1a `db push` gate; anything added later is picked up automatically.
+**Generate the Prisma client first.** A gate run against a stale client reports
+the wrong thing rather than an error (code-standards §7.6): the legacy-wildcard
+boot report answers count 0, which reads as "clean".
+
+```bash
+cd server && ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
+```
+
+Both must pass on the merge candidate. `check-local.sh` runs the §5.1 model-import gate, the §7.1a `db push` gate, and the §7.5 locals-contract gate; anything added later is picked up automatically.
 
 `check-db-push.sh` reports a **pending count** for the five HTTP suites still on `db push` (code-standards §7.1a). Pending is not passing: the gate opens only when that count is 0 and the allowlist in the script is empty. Those five ran for weeks against an empty `permissions` table, so any authorization assertion they made proved nothing.
 
