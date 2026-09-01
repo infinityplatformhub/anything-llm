@@ -5,18 +5,33 @@
 // policy.changed invalidation. If the bus subscription is down the cache disables
 // itself and every call rebuilds — stale is never served.
 
+const crypto = require("crypto");
 const prisma = require("../prisma");
 const { currentPolicyVersion } = require("./policyRepository");
 
 const DEFAULT_TTL_MS = 30_000;
 
-const keyFor = ({ actor, action }) =>
+// The allow-list is part of the identity of a filter, not an incidental input: two
+// requests from the same embed actor asking for different document sets must not share
+// an entry, or the second inherits the first's access (B2, QA-1). Hashed so the key
+// stays bounded for a 500-entry list.
+const allowListDigest = (allowedDocumentIds) => {
+  if (allowedDocumentIds === undefined) return "none";
+  return crypto
+    .createHash("sha256")
+    .update([...allowedDocumentIds].map(String).sort().join(","))
+    .digest("hex")
+    .slice(0, 16);
+};
+
+const keyFor = ({ actor, action, allowedDocumentIds }) =>
   [
     actor?.type ?? "none",
     actor ? String(actor.id) : "none",
     action,
     actor?.orgId ?? 1,
     [...(actor?.workspaceIds ?? [])].map(String).sort().join(","),
+    allowListDigest(allowedDocumentIds),
   ].join("|");
 
 // Scope keys an entry depends on, matched against policy.changed payloads.

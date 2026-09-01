@@ -185,6 +185,33 @@ describe("T-3 documentFilter", () => {
   });
 });
 
+describe("T-3 non-user principals (B1)", () => {
+  test("the single-user service principal with an org-wide grant builds a usable filter", async () => {
+    // Every earlier test uses a type:"user" actor, so none of them enters the org-wide
+    // branch with a non-numeric id — the exact shape that took down single-user
+    // deployments by handing Prisma a NaN user_id (QA-1 B1).
+    await repository.grantRole({
+      actor: SYS, principalType: SYS.type, principalId: SYS.id,
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const filter = await buildDocumentFilter({ actor: SYS, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds.length).toBeGreaterThan(0);
+    expect(filter.principalType).toBe("service");
+  });
+
+  test("an org-scoped service actor also survives the ACL/visibility reads", async () => {
+    const keyActor = { type: "service", id: `api-key:${dbSuffix}`, orgId: 1, workspaceIds: [String(W1.id)] };
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: keyActor.id,
+      roleId: roles.viewer.id, workspaceId: W1.id, db: prisma,
+    });
+    const filter = await buildDocumentFilter({ actor: keyActor, action: READER, db: prisma });
+    expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds).toContain(String(W1.id));
+  });
+});
+
 describe("T-3 end-to-end: resolver-built actor, not a fixture", () => {
   test("B-2: a real user row + membership resolves to a scoped actor whose filter matches something", async () => {
     // The earlier tests hand documentFilter a hand-built Actor. This one goes through
@@ -249,6 +276,44 @@ describe("T-3 filter cache", () => {
     cache.invalidateScopes(["org:1"]);
     await cache.get({ actor, action: READER, db: prisma }, build);
     expect(builds).toBe(2);
+  });
+
+  test("B2: two allow-lists from the same embed actor never share a cache entry", async () => {
+    const embed = { type: "embed", id: `emb-cache-${dbSuffix}`, orgId: 1, workspaceIds: [String(W1.id)] };
+    const cache = new FilterCache();
+    const build = (allowedDocumentIds) => () =>
+      buildDocumentFilter({ actor: embed, action: READER, db: prisma, allowedDocumentIds });
+
+    const first = await cache.get(
+      { actor: embed, action: READER, db: prisma, allowedDocumentIds: ["1", "2", "3"] },
+      build(["1", "2", "3"])
+    );
+    const second = await cache.get(
+      { actor: embed, action: READER, db: prisma, allowedDocumentIds: ["77", "88"] },
+      build(["77", "88"])
+    );
+    expect(first.allowedDocumentIds).toEqual(["1", "2", "3"]);
+    // Without the allow-list in the key this returns the first list — the second embed
+    // request would inherit access to documents it never asked for.
+    expect(second.allowedDocumentIds).toEqual(["77", "88"]);
+  });
+
+  test("B2: an over-cap match-none is not cached for later requests", async () => {
+    const embed = { type: "embed", id: `emb-cap-${dbSuffix}`, orgId: 1, workspaceIds: [String(W1.id)] };
+    const cache = new FilterCache();
+    const tooMany = Array.from({ length: 501 }, (_, i) => String(i + 1));
+    const over = await cache.get(
+      { actor: embed, action: READER, db: prisma, allowedDocumentIds: tooMany },
+      () => buildDocumentFilter({ actor: embed, action: READER, db: prisma, allowedDocumentIds: tooMany })
+    );
+    expect(over.matchNone).toBe(true);
+
+    const ok = await cache.get(
+      { actor: embed, action: READER, db: prisma, allowedDocumentIds: ["5"] },
+      () => buildDocumentFilter({ actor: embed, action: READER, db: prisma, allowedDocumentIds: ["5"] })
+    );
+    expect(ok.matchNone).toBe(false);
+    expect(ok.allowedDocumentIds).toEqual(["5"]);
   });
 
   test("a disabled cache always rebuilds — stale is never served", async () => {
