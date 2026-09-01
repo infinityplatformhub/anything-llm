@@ -368,11 +368,14 @@ test("06 chat answers with a citation pointing at the upload", async ({
   await prompt.waitFor({ state: "visible", timeout: 30_000 });
   await prompt.fill("What is the secret codeword?");
   await prompt.press("Enter");
-  // Assert a citation naming the uploaded doc appears — never the answer's
-  // content (mock LLM is canned anyway). The citation block renders the doc
-  // title once RAG sources are attached to the reply.
+  // Assert the reply is non-empty and carries citations — never the answer's
+  // content (the mock LLM is canned). Citations render as a collapsed
+  // "Sources" control; expand it to reveal the citing document's name.
+  const sources = page.getByText(/^Sources$/i).first();
+  await sources.waitFor({ state: "visible", timeout: 90_000 });
+  await sources.click();
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
-    timeout: 90_000,
+    timeout: 30_000,
   });
 });
 
