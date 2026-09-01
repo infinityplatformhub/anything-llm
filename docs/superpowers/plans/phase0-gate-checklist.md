@@ -1,7 +1,7 @@
 # Phase 0 gate checklist
 
 What must be true before Track V fan-out opens month 2. Baseline for every number
-below: `approof/main` @ `6a4307a8`.
+below: `approof/main` @ `7587e74e`.
 
 This file is the authority on these counts. `phase0-foundation.md` records earlier
 figures taken before P0-3/P0-4 added route files, and counts invocations where this
@@ -18,15 +18,15 @@ not in the room.
 | # | Track | What closing it proves | State at `54db4028` |
 |---|---|---|---|
 | #15 | E2E | 12 scenarios green headed against a real stack | 14 `test()` blocks on `7e6ed3bb`; see §4 |
-| #26 | PR-4b(4) | Last 11 wildcard routes carry named scopes | counter at 11 (was 52) |
-| #27 | PR-4c | No key can be minted with `*` | not started |
+| #26 | PR-4b | ~~Every route carries a named scope~~ | **closed** — counter 0 at `b66ebc5d` |
+| #27 | PR-4c | No key can be minted with `*` | started; three sites, see §2.1 |
 | #25 | T-4a | Role literals gone from internal routes | GREEN in progress |
 | #29 | T-4b | Jobs + embed + `/v1` wired to the engine | not started |
 | #30 | T-5 | Vector queries filter by ACL — **the one that matters most** | not started |
 | #28 | T-6 | Audit export + retention + redaction | not started |
 | #31 | T-7 | Admin duties separable | not started |
 
-Merge order is fixed by file overlap, not by importance: **4b-4 → T-4a → T-4b → T-5 → T-7 → PR-4c**. PR-4c is last on purpose — it removes `*` from keys, and every route must already want a named scope before that is safe (see `.infi/recon/pr4c.md`).
+Merge order is fixed by file overlap, not by importance: **T-4a → T-4b → T-5 → T-7 → PR-4c**. PR-4c is last on purpose — it removes `*` from keys, and every route must already want a named scope before that is safe (see `.infi/recon/pr4c.md`).
 
 T-6 is off the critical path and can land any time after T-4b.
 
@@ -41,14 +41,18 @@ Run from the repo root on the merge candidate. Each row is pass/fail, no judgmen
 ```bash
 grep "EXPECTED_WILDCARD_ROUTES =" server/__tests__/utils/middleware/apiKeyWildcardSweep.test.js
 ```
-**Must read 0**, and the sweep test must still pass — the counter and the code are checked against each other by the test itself. At `6a4307a8` it reads 11.
+**Reads 0 since `b66ebc5d`** (#26). The counter and the code check each other — the sweep test recounts the source rather than trusting the number.
 
-When it reaches 0, delete `API_KEY_SCOPES.TEMPORARY_ALL` and the sweep test in the same PR. A counter that can only ever read 0 is not a gate any more.
+Zero here means no **route** still asks for the wildcard. It does not mean no **key** still holds one: `schema.prisma` defaults `scopes` to `["\*"]` and `apiKeys.js` falls back to the same, so every existing key still satisfies every scope #26 introduced. The sweep test says so in its own comment, which is the right place for it.
+
+`API_KEY_SCOPES.TEMPORARY_ALL` stays in `scopes.js` until PR-4c; delete it and this whole test file together in that PR. A counter that can only ever read 0 is not a gate any more — but it is not zero-and-done until the key half lands.
 
 ```sql
 SELECT count(*) FROM api_keys WHERE scopes::jsonb ? '*';
 ```
 **Must be 0** on a database that has run every migration and had a key minted through each creation path. Run it against a real Postgres — the DB default is the thing under test, and a fake db reports whatever the model sent (code-standards §7.1).
+
+**This is the half that is still open.** #27 (PR-4c) removes the schema default, the model fallback, and the `scopes.includes("\*")` short-circuit in `validApiKey.js:34`. Until all three go, the route-side zero above buys nothing against a key minted today.
 
 ### 2.2 Role literals
 
@@ -59,7 +63,7 @@ git grep -l 'strictMultiUserRoleValid' -- 'server/**/*.js' | wc -l
 git grep -nE 'role (===|!==) "(admin|manager|default)"' -- 'server/**/*.js' | grep -v __tests__
 ```
 
-**All four must be 0** outside `server/utils/authorization/`. At `6a4307a8`: 185 refs, 27 files, 2 files, 2 sites.
+**All four must be 0** outside `server/utils/authorization/`. At `7587e74e`: 185 refs, 27 files, 2 files, 2 sites — unchanged, because T-4a has not merged yet.
 
 The fourth grep is not redundant. `utils/chats/commands/img.js:55` and `utils/helpers/documentPurgeGuard.js:33` compare `user.role` to a string literal and never import `ROLES`, so the first grep cannot see them. Both are named in the P0-5 DoD and both are still present.
 
@@ -69,7 +73,7 @@ The fourth grep is not redundant. `utils/chats/commands/img.js:55` and `utils/he
 git grep -l '"admin"\|"manager"\|"default"' -- 'frontend/src/**/*.jsx' | wc -l
 ```
 
-32 files at `6a4307a8`. These are UI affordances, not a security boundary — but they all evaluate false once the legacy role column stops being written, so **a real admin stops seeing the admin UI**. This ships in the same release as T-4a or the product is broken for its own operators. It is a gate item because it is the failure that looks like a bug report, not like a security finding.
+32 files at `7587e74e`. These are UI affordances, not a security boundary — but they all evaluate false once the legacy role column stops being written, so **a real admin stops seeing the admin UI**. This ships in the same release as T-4a or the product is broken for its own operators. It is a gate item because it is the failure that looks like a bug report, not like a security finding.
 
 ### 2.4 Vector ACL — the load-bearing one
 
@@ -80,7 +84,7 @@ grep -n "CanonicalizeNotEnabledError" server/jobs/docVectorsCanonicalize.js
 git grep -n "DocumentVectors.where\|deleteForWorkspace\|removeDocuments" -- 'server/**/*.js' | grep -v __tests__ | wc -l
 ```
 
-20 call sites across 8 providers at `6a4307a8`. The guard comment in `docVectorsCanonicalize.js:14-20` states the failure precisely: after the job rewrites `document_vectors.docId` to canonical ids, any caller still looking up by legacy uuid **silently matches nothing**, so deleting a document leaves its vectors behind and they stay answerable. Silent, not loud.
+20 call sites across 8 providers at `7587e74e`. The guard comment in `docVectorsCanonicalize.js:14-20` states the failure precisely: after the job rewrites `document_vectors.docId` to canonical ids, any caller still looking up by legacy uuid **silently matches nothing**, so deleting a document leaves its vectors behind and they stay answerable. Silent, not loud.
 
 **Gate: the enable flag is only set after the last of those 20 sites moves, and the vector-leak test passes with the flag on.** Setting the flag earlier turns a refusing job into a corrupting one.
 
@@ -100,7 +104,7 @@ cd server && yarn test
 One remains:
 - `modelPricing/index.test.js` etag `""` vs `"abc123"` — shared temp cacheDir across suites. Isolate the cacheDir per test when it recurs.
 
-The DROP DATABASE race is **fixed on main**: `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` all close their `afterAll` with `}, 60_000);`. Verified at `6a4307a8`. The `.infi/residual-risks.md` line calling it unowned is stale.
+The DROP DATABASE race is **fixed on main**: `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` all close their `afterAll` with `}, 60_000);`. Verified at `7587e74e`. The `.infi/residual-risks.md` line calling it unowned is stale.
 
 Without both env vars, six suites fail at import time and are counted as *failed*, not skipped — the `Tests:` line silently shrinks. A reviewer who forgets them reads a smaller green number as success.
 
@@ -119,7 +123,7 @@ Both must pass on the merge candidate. `check-local.sh` currently runs the §5.1
 git grep -A2 '"engines"' -- '**/package.json' | grep '"node"'
 ```
 
-Every package that runs Node must pin `">=22 <23"`. At `6a4307a8`: root, `server/`, and `collector/` are pinned; **`frontend/package.json` has no `engines` block at all** — it builds through vite rather than running under Node in production, but an unpinned workspace is what lets a toolchain drift to 26 unnoticed. Add the block or record why it is exempt.
+Every package that runs Node must pin `">=22 <23"`. At `7587e74e` all four are pinned, `frontend/` included (`3caffef6`) — one rule everywhere beat writing down an exemption.
 
 The pin is not cosmetic. `jsonwebtoken@9.0.2` fails to load on Node 26 (SlowBuffer) at `utils/http/index.js:4`, so a CI image bump would break authentication and the cause would look unrelated to the change.
 
@@ -127,7 +131,7 @@ The pin is not cosmetic. `jsonwebtoken@9.0.2` fails to load on Node 26 (SlowBuff
 
 Every line in `.infi/residual-risks.md` must carry either an issue number or an explicit "accepted, revisit at X" ruling. See §3.
 
-Lines that describe something since fixed must be struck, not left standing — a stale risk register costs the same review time as a live one and teaches readers to skim it. Three lines are stale as of `6a4307a8` (§3.1).
+Lines that describe something since fixed must be struck, not left standing — a stale risk register costs the same review time as a live one and teaches readers to skim it. Stale lines were struck at `6a4307a8`; check again each time the gate runs.
 
 ---
 
@@ -137,17 +141,17 @@ Read from `.infi/residual-risks.md`, verified against the tree at `6a4307a8`. Or
 
 ### 3.1 Closed since this file was written
 
-All three of the original blockers were resolved at `6a4307a8`. Verified, not taken on report:
+All three of the original blockers were resolved by `6a4307a8`. Verified, not taken on report:
 
 **DROP DATABASE flake — fixed.** `}, 60_000);` closes the `afterAll` in all three suites (`engine.test.js:44`, `t1-authz-migration.test.js:99`, `documentFilter.test.js:43`). The `[flake, unowned]` line in `.infi/residual-risks.md` is stale and should be struck.
 
 **`document_acl` org-wide kill switch — assigned.** The `"*"` sentinel becomes `orgWide:true` in #29 (T-4b), which lands before T-5 wires drivers. The ordering is the point: if T-5 went first the sentinel would be baked into every provider.
 
-**Node 26 — pinned.** `engines.node` is `">=22 <23"` in root, `server/`, and `collector/`. `frontend/` has no `engines` block (§2.7).
+**Node 26 — pinned.** `engines.node` is `">=22 <23"` in all four package.json files, `frontend/` included since `3caffef6`.
 
 Also confirmed: **`actorResolver` now checks `expiresAt`** — `actorResolver.js:39`, `const expired = ctx.expiresAt && new Date(ctx.expiresAt) <= new Date();`. An expired key no longer resolves to a valid actor on its own; it is not relying on PR-3's upstream filter any more.
 
-**Nothing is blocking today.** This section stays because the gate re-runs: anything that lands here later must be empty again before the gate opens, and "it was empty last week" is not the check.
+**Nothing is blocking as of `7587e74e`.** This section stays because the gate re-runs: anything that lands here later must be empty again before the gate opens, and "it was empty last week" is not the check.
 
 ### 3.2 Should have an issue before fan-out
 
