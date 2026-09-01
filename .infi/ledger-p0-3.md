@@ -1,0 +1,5 @@
+Ruling: Reuse Jest 29 and add Supertest only — root already standardizes Jest but server lacked direct runner — cost if wrong: duplicated Jest dependency and lockfile weight
+Ruling: Export existing Express app and suppress listener when imported — Supertest should exercise production route registration without opening a port — cost if wrong: index.js consumers could depend on import side effects
+Ruling: Allow DATABASE_URL Prisma constructor override while retaining sqlite default — regression tests need isolated temporary databases without changing current deployment schema — cost if wrong: malformed deployment override can select unintended database
+Ruling: Test current lockout absence rather than invent lockout — P0-4 owns login rate limiting and P0-3 must freeze current behavior — cost if wrong: future hardening intentionally breaks this assertion and requires suite update
+Ruling: Split PR CI from tag release workflow — PR gate stays fast while release can build and publish image — cost if wrong: image build regressions appear only at tag time
