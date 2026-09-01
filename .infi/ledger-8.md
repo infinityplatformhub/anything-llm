@@ -47,6 +47,17 @@ impersonation (recon F-4).
   unset keeps it closed; anything else is the deliberate opt-in. 8 off-value test
   cases added; mutation reverting to truthiness → 7 tests fail.
 
+- **Ruling (QA-2 round 3, PMO):** Flag flipped from off-set to **allowlist**
+  `{"1","true","yes","on"}` (trim+lowercase). The off-set still let `"null"`,
+  `"undefined"`, `"disabled"`, `"n"`, `"-1"`, `"0.0"` open the endpoint —
+  templating garbage and operator-intent strings. For a flag that opens admin
+  impersonation, fail-closed on everything not explicitly listed.
+- **Ruling (QA-2 round 3):** HTTP-level suite added (`ssoIssuanceLockHttp.test.js`,
+  adapted from QA-2's pattern-8): real app via `require("../index")`, pushed temp
+  SQLite schema, counts `temporary_auth_tokens` rows, asserts response BODIES to
+  distinguish the lock's 403 from validApiKey's 403. `supertest` added as a
+  devDependency (QA's pattern depends on it; test-only).
+
 ## Files
 
 - `server/utils/middleware/ssoIssuanceLock.js` (new)

@@ -15,13 +15,14 @@
  * @param {import("express").NextFunction} next
  * @returns {void}
  */
-/** Values an operator plausibly sets MEANING "off" — these keep the lock closed. */
-const OFF_VALUES = new Set(["", "0", "false", "no", "off"]);
+/** Only these values open the lock — everything else (unset, "0", "false",
+ * "null", "undefined", "disabled", typos, templating garbage) stays closed. */
+const ON_VALUES = new Set(["1", "true", "yes", "on"]);
 
 function ssoIssuanceUnlocked() {
   const raw = process.env.SIMPLE_SSO_ISSUE_UNSAFE_ALLOW;
   if (raw === undefined) return false;
-  return !OFF_VALUES.has(String(raw).trim().toLowerCase());
+  return ON_VALUES.has(String(raw).trim().toLowerCase());
 }
 
 function ssoIssuanceLock(_, response, next) {
