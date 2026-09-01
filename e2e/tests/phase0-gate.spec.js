@@ -72,7 +72,12 @@ async function login(page, { username, password }) {
       .catch(() => false);
     if (authed && !page.url().includes("/login")) return;
   }
-  throw new Error("login did not establish a session after 3 attempts");
+  const diag = {
+    url: page.url(),
+    token: await page.evaluate(() => !!localStorage.getItem("approofworkspace_authToken")).catch(() => "n/a"),
+    body: ((await page.textContent("body").catch(() => "")) || "").replace(/\s+/g, " ").slice(0, 200),
+  };
+  throw new Error("login failed after 3 attempts: " + JSON.stringify(diag));
 }
 
 /** The SPA keeps its JWT in localStorage — page.request only carries cookies,

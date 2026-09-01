@@ -9,21 +9,22 @@ const http = require("http");
 const CHAT_ANSWER =
   "The answer is forty-two. This response is canned for the E2E gate.";
 
+// Bag-of-words embedding: texts sharing words get similar vectors, so the
+// retriever actually matches a question against the uploaded document (a pure
+// hash vector never clears the workspace similarity threshold).
 function embed(text, dim) {
-  // Simple deterministic hash -> vector; same text => same vector.
   const vec = new Array(dim).fill(0);
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+  const words = String(text).toLowerCase().match(/[a-z0-9]+/g) || [];
+  for (const w of words) {
+    let h = 2166136261;
+    for (let i = 0; i < w.length; i++) {
+      h ^= w.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    vec[Math.abs(h) % dim] += 1;
   }
-  for (let i = 0; i < dim; i++) {
-    h ^= h << 13;
-    h ^= h >>> 17;
-    h ^= h << 5;
-    vec[i] = ((h >>> 0) % 2000 - 1000) / 1000;
-  }
-  return vec;
+  const norm = Math.sqrt(vec.reduce((a, b) => a + b * b, 0)) || 1;
+  return vec.map((v) => v / norm);
 }
 
 const server = http.createServer((req, res) => {
