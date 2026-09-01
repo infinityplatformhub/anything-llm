@@ -35,17 +35,29 @@ describe("T-4b W-5: resolveActorRef — jobs build Actors in the resolver too", 
     expect(inJob.workspaceIds).toEqual(["3", "9"]);
   });
 
-  test("the Actor carries no user-row columns beyond the seam-02 shape", async () => {
-    const db = memberDb([], {
+  test("the Actor carries ONLY seam-02 keys — the whole user row is denied by allowlist", async () => {
+    // Asserted as an allowlist, not a list of known-bad names: ActorIdentityStore spread
+    // `...user`, so every column the users table grows would have joined the object the
+    // engine reads. A denylist passes the day someone adds column 12 (QA-1 baseline).
+    const ACTOR_KEYS = ["type", "id", "orgId", "workspaceIds", "impersonatedBy"];
+    const db = memberDb([3], {
       id: 5,
       username: "u",
       password: "hash",
       pfpFilename: "me.png",
       seen_recovery_codes: true,
+      web_push_subscription_config: "{}",
+      role: "admin",
       suspended: 0,
+      dailyMessageLimit: 10,
+      bio: "x",
+      createdAt: new Date(),
+      lastUpdatedAt: new Date(),
     });
     const actor = await resolveActorRef({ type: "user", id: "5" }, { db });
-    for (const leaked of ["password", "pfpFilename", "seen_recovery_codes", "username"]) {
+    expect(Object.keys(actor).sort()).toEqual([...ACTOR_KEYS].sort());
+    // named explicitly so a failure reads as the leak it is
+    for (const leaked of ["password", "seen_recovery_codes", "web_push_subscription_config", "role"]) {
       expect(actor).not.toHaveProperty(leaked);
     }
   });
@@ -83,6 +95,18 @@ describe("T-4b W-5: resolveActorRef — jobs build Actors in the resolver too", 
     };
     const actor = await resolveActorRef({ type: "service", id: "core-jobs", orgId: 1 }, { db });
     expect(actor).toMatchObject({ type: "service", id: "core-jobs", orgId: 1 });
+  });
+
+  test("orgId is derived, never taken from the persisted job row", async () => {
+    // orgId decides which org's policy rows are read, so a written row choosing its own
+    // tenant would be a cross-tenant read waiting to happen (QA-1).
+    const asUser = await resolveActorRef({ type: "user", id: "5", orgId: 42 }, { db: memberDb([]) });
+    expect(asUser.orgId).toBe(1);
+    const asService = await resolveActorRef(
+      { type: "service", id: "core-jobs", orgId: 42 },
+      { db: memberDb([]) }
+    );
+    expect(asService.orgId).toBe(1);
   });
 
   test("an unknown actorRef yields null — the worker never runs an actorless job", async () => {

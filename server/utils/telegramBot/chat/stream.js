@@ -61,9 +61,14 @@ async function streamResponse({
   message = "",
   attachments = [],
   voiceResponse = false,
+  // T-4b (#29) W-11: the channel's principal, resolved by the caller. Required rather than
+  // defaulted, so a new caller cannot reach retrieval with no identity — T-5 turns this
+  // into the documentFilter for the similarity search at :226.
+  actor = null,
 }) {
   if (!ctx?.bot || !chatId || !workspace || !message)
     throw new Error("Invalid context or missing required parameters!");
+  if (!actor) throw new Error("streamResponse requires a resolved actor");
 
   await ctx.bot.sendChatAction(chatId, "typing");
 

@@ -70,6 +70,18 @@ class DatabaseAuthorizationEngine {
       return asDenied("impersonated_mutation_denied");
     }
 
+    // T-4b (#29) B-1: a workspace-bound API key reaches only the workspace it was issued
+    // for, whatever its creator's grants say. The binding is a property of the credential,
+    // not of the policy store, so it gates like impersonation — blanket, before any lookup.
+    // A resource with no workspaceId cannot be attributed to the binding, and
+    // unattributable is not the same as in-scope, so it is denied too.
+    if (Array.isArray(actor.keyWorkspaceBinding) && actor.keyWorkspaceBinding.length > 0) {
+      const bound = new Set(actor.keyWorkspaceBinding.map(String));
+      if (resource.workspaceId == null || !bound.has(String(resource.workspaceId))) {
+        return asDenied("outside_key_binding");
+      }
+    }
+
     try {
       return await this.evaluate(actor, action, resource);
     } catch (error) {

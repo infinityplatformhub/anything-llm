@@ -136,7 +136,8 @@ async function resolveActorRef(actorRef, { db = prisma } = {}) {
     return {
       type: actorRef.type,
       id: String(actorRef.id),
-      orgId: actorRef.orgId ?? 1,
+      // Same rule as the user branch: the tenant is derived, never taken from the row.
+      orgId: 1,
       ...(actorRef.workspaceIds ? { workspaceIds: actorRef.workspaceIds.map(String) } : {}),
     };
   }
@@ -152,12 +153,33 @@ async function resolveActorRef(actorRef, { db = prisma } = {}) {
   return {
     type: "user",
     id: String(user.id),
-    orgId: actorRef.orgId ?? 1,
+    // Derived, never read from the job row: orgId decides which org's policy rows are
+    // read, so taking it from persisted job data would let a written row pick its own
+    // tenant (QA-1). Single-org today; this is the one place that changes when it is not.
+    orgId: 1,
     workspaceIds: await workspaceIdsForUser(user.id, db),
     impersonatedBy: actorRef.impersonatedBy
       ? { type: "user", id: String(actorRef.impersonatedBy) }
       : undefined,
   };
+}
+
+/**
+ * T-4b (#29) W-11: the principal a background job or channel runs as. `jobs/*.js` are
+ * standalone scripts that resolved workspaces, chats and documents with no actor at all;
+ * a null actor is not a safe default, because the engine denies it and the job breaks
+ * silently rather than loudly. Each site chooses: the originating user for per-user work,
+ * `core-jobs` for system work.
+ *
+ * A failed user lookup returns null — it never falls back to the service principal, which
+ * would silently escalate a suspended user's queued work to system privileges.
+ *
+ * @param {{userId?: number|string|null, db?: Object}} input
+ * @returns {Promise<Object|null>}
+ */
+async function jobActor({ userId = null, db = prisma } = {}) {
+  if (userId === null || userId === undefined) return { ...SERVICE_PRINCIPALS.coreJobs };
+  return resolveActorRef({ type: "user", id: userId }, { db });
 }
 
 /**
@@ -206,6 +228,7 @@ async function isMultiUserModeSafe() {
 module.exports = {
   resolveActor,
   resolveActorRef,
+  jobActor,
   SINGLE_USER_ACTOR,
   SERVICE_PRINCIPALS,
 };

@@ -6,6 +6,16 @@ const { log, conclude } = require("./helpers/index.js");
 const { Workspace } = require("../models/workspace");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { streamResponse } = require("../utils/telegramBot/chat/stream");
+// T-4b (#29) W-11: this channel resolved any workspace by slug with no actor at all.
+// It now runs as a named principal so the engine has something to evaluate.
+//
+// NOTE for T-5/T-7: `approved_users` (utils/telegramBot/index.js:369) stores chatId,
+// telegram username and the active workspace slug — it carries NO AnythingLLM user id, so
+// there is no originating user to resolve here and the channel can only run as a service
+// principal. That means every verified Telegram chat shares one identity and one document
+// scope. Linking approved_users to a real user row is a schema change, not wiring, and is
+// out of T-4b's scope — flagged to PMO.
+const { jobActor } = require("../utils/authorization/actorResolver");
 
 process.on("message", async (payload) => {
   // Ignore tool approval responses - these are handled by http-socket plugin
@@ -29,6 +39,7 @@ process.on("message", async (payload) => {
         log(args.length ? `${text} ${args.join(" ")}` : text),
     };
 
+    const actor = await jobActor();
     const workspace = await Workspace.get({ slug: workspaceSlug });
     if (!workspace) {
       await bot.sendMessage(
@@ -51,6 +62,7 @@ process.on("message", async (payload) => {
       message,
       attachments,
       voiceResponse,
+      actor,
     });
   } catch (error) {
     log(`Telegram chat error: ${error.message}`);

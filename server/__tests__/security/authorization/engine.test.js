@@ -327,6 +327,72 @@ describe("T-4b B-1: an API-key Actor evaluates grants as its creator", () => {
     expect(decision.allowed).toBe(false);
   });
 
+  test("a workspace-bound key is denied on any OTHER workspace, before the grant lookup", async () => {
+    // QA-1 blocker on cfa3388a: the binding was honoured only in documentFilter, so a key
+    // bound to workspace X could authorize a mutation against workspace Y through its
+    // creator's grants. The binding is a property of the credential, so it gates like
+    // impersonation does — blanket, before any policy is read.
+    const creator = await principal({ id: 954, grants: [{ roleId: roles.member.id }] });
+    const other = await prisma.workspaces.create({
+      data: { name: "w-other", slug: `t4b-other-${dbSuffix}` },
+    });
+    const boundKey = {
+      type: "service",
+      id: "api-key:954",
+      orgId: 1,
+      grantPrincipal: { type: creator.type, id: creator.id },
+      keyWorkspaceBinding: [String(W1.id)],
+      attributes: { scopes: ["chat.send"] },
+    };
+    // its own workspace still works
+    expect(
+      await engine.authorize({ actor: boundKey, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+    // another workspace does not, even though the creator holds an org-wide grant
+    expect(
+      await engine.authorize({
+        actor: boundKey,
+        action: "chat.send",
+        resource: { type: "workspace", id: null, orgId: 1, workspaceId: other.id },
+      })
+    ).toMatchObject({ allowed: false, reason: "outside_key_binding" });
+  });
+
+  test("a bound key is denied on org-wide resources it cannot attribute to its workspace", async () => {
+    // A resource with no workspaceId (system-level) cannot be checked against the binding,
+    // so a bound key must not reach it: unattributable is not the same as in-scope.
+    await principal({ id: 955, grants: [{ roleId: roles.super_admin.id }] });
+    const boundKey = {
+      type: "service",
+      id: "api-key:955",
+      orgId: 1,
+      grantPrincipal: { type: "user", id: "955" },
+      keyWorkspaceBinding: [String(W1.id)],
+      attributes: { scopes: ["system.read"] },
+    };
+    const decision = await engine.authorize({
+      actor: boundKey,
+      action: "system.read",
+      resource: { type: "system", id: null, orgId: 1, workspaceId: null },
+    });
+    expect(decision).toMatchObject({ allowed: false, reason: "outside_key_binding" });
+  });
+
+  test("an UNBOUND key is not narrowed — the binding only applies when one exists", async () => {
+    await principal({ id: 956, grants: [{ roleId: roles.member.id }] });
+    const unbound = {
+      type: "service",
+      id: "api-key:956",
+      orgId: 1,
+      grantPrincipal: { type: "user", id: "956" },
+      keyWorkspaceBinding: [],
+      attributes: { scopes: ["chat.send"] },
+    };
+    expect(
+      await engine.authorize({ actor: unbound, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+  });
+
   test("a service principal without grantPrincipal still evaluates as itself (core-jobs)", async () => {
     // Only API-key Actors carry grantPrincipal. Built-in service principals hold real
     // grants under their own ids and must keep working unchanged.
