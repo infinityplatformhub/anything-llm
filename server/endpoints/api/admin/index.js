@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { Invite } = require("../../../models/invite");
 const { SystemSettings } = require("../../../models/systemSettings");
@@ -13,7 +13,7 @@ const { validApiKey } = require("../../../utils/middleware/validApiKey");
 function apiAdminEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/admin/is-multi-user-mode", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], (_, response) => {
+  app.get("/v1/admin/is-multi-user-mode", [validApiKey(scopeFor("GET", "/v1/admin/is-multi-user-mode"))], (_, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Check to see if the instance is in multi-user-mode first. Methods are disabled until multi user mode is enabled via the UI.'
@@ -39,7 +39,7 @@ function apiAdminEndpoints(app) {
     response.status(200).json({ isMultiUser });
   });
 
-  app.get("/v1/admin/users", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/admin/users", [validApiKey(scopeFor("GET", "/v1/admin/users"))], async (request, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Check to see if the instance is in multi-user-mode first. Methods are disabled until multi user mode is enabled via the UI.'
@@ -83,7 +83,7 @@ function apiAdminEndpoints(app) {
     }
   });
 
-  app.post("/v1/admin/users/new", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.post("/v1/admin/users/new", [validApiKey(scopeFor("POST", "/v1/admin/users/new"))], async (request, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Create a new user with username and password. Methods are disabled until multi user mode is enabled via the UI.'
@@ -141,7 +141,7 @@ function apiAdminEndpoints(app) {
     }
   });
 
-  app.post("/v1/admin/users/:id", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.post("/v1/admin/users/:id", [validApiKey(scopeFor("POST", "/v1/admin/users/:id"))], async (request, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.parameters['id'] = {
@@ -215,7 +215,7 @@ function apiAdminEndpoints(app) {
 
   app.delete(
     "/v1/admin/users/:id",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/admin/users/:id"))],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -268,7 +268,7 @@ function apiAdminEndpoints(app) {
     }
   );
 
-  app.get("/v1/admin/invites", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/admin/invites", [validApiKey(scopeFor("GET", "/v1/admin/invites"))], async (request, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.description = 'List all existing invitations to instance regardless of status. Methods are disabled until multi user mode is enabled via the UI.'
@@ -314,7 +314,7 @@ function apiAdminEndpoints(app) {
     }
   });
 
-  app.post("/v1/admin/invite/new", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.post("/v1/admin/invite/new", [validApiKey(scopeFor("POST", "/v1/admin/invite/new"))], async (request, response) => {
     /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Create a new invite code for someone to use to register with instance. Methods are disabled until multi user mode is enabled via the UI.'
@@ -374,7 +374,7 @@ function apiAdminEndpoints(app) {
 
   app.delete(
     "/v1/admin/invite/:id",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("DELETE", "/v1/admin/invite/:id"))],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -441,7 +441,7 @@ function apiAdminEndpoints(app) {
 
   app.get(
     "/v1/admin/workspaces/:workspaceId/users",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/admin/workspaces/:workspaceId/users"), { workspaceParam: "workspaceId" })],
     async (request, response) => {
       /*
       #swagger.tags = ['Admin']
@@ -496,7 +496,7 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/workspaces/:workspaceId/update-users",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/admin/workspaces/:workspaceId/update-users"), { workspaceParam: "workspaceId" })],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -563,7 +563,7 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/workspaces/:workspaceSlug/manage-users",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/admin/workspaces/:workspaceSlug/manage-users"), { workspaceSlugParam: "workspaceSlug" })],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -678,7 +678,7 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/workspace-chats",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/admin/workspace-chats"))],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -734,7 +734,7 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/preferences",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/admin/preferences"))],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']

@@ -3,7 +3,22 @@ const { SystemSettings } = require("../../models/systemSettings");
 const { emitAuditEvent } = require("../events");
 const prisma = require("../prisma");
 
-function validApiKey(action) {
+
+async function workspaceBindingMatches(context, request, binding, db = prisma) {
+  if (!context?.workspaceId || !binding) return true;
+  if (binding.workspaceParam)
+    return context.workspaceId === String(request.params?.[binding.workspaceParam]);
+  if (binding.workspaceSlugParam) {
+    const workspace = await db.workspaces.findUnique({
+      where: { slug: String(request.params?.[binding.workspaceSlugParam]) },
+      select: { id: true },
+    });
+    return !!workspace && context.workspaceId === String(workspace.id);
+  }
+  return true;
+}
+
+function validApiKey(action, binding = null) {
   if (typeof action !== "string" || !action) throw new Error("validApiKey requires an explicit scope");
   const middleware = async function apiKeyRequired(request, response, next) {
     response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
@@ -16,7 +31,9 @@ function validApiKey(action) {
       expiresAt: apiKey.expiresAt, revokedAt: apiKey.revokedAt,
     };
     response.locals.apiKeyContext = context;
-    const allowed = context.scopes.includes("*") || context.scopes.includes(action);
+    const scopeAllowed = context.scopes.includes("*") || context.scopes.includes(action);
+    const workspaceAllowed = await workspaceBindingMatches(context, request, binding);
+    const allowed = scopeAllowed && workspaceAllowed;
     await prisma.$transaction(async (transaction) => {
       await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
       await emitAuditEvent("auth.key_used", {
@@ -31,4 +48,4 @@ function validApiKey(action) {
   return middleware;
 }
 
-module.exports = { validApiKey };
+module.exports = { validApiKey, workspaceBindingMatches };

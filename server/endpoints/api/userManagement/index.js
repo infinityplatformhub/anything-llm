@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { User } = require("../../../models/user");
 const { TemporaryAuthToken } = require("../../../models/temporaryAuthToken");
 const { multiUserMode } = require("../../../utils/http");
@@ -13,7 +13,7 @@ const {
 function apiUserManagementEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/users", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (request, response) => {
+  app.get("/v1/users", [validApiKey(scopeFor("GET", "/v1/users"))], async (request, response) => {
     /*
       #swagger.tags = ['User Management']
       #swagger.description = 'List all users'
@@ -70,7 +70,7 @@ function apiUserManagementEndpoints(app) {
 
   app.get(
     "/v1/users/:id/issue-auth-token",
-    [ssoIssuanceLock, validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), simpleSSOEnabled],
+    [ssoIssuanceLock, validApiKey(scopeFor("GET", "/v1/users/:id/issue-auth-token")), simpleSSOEnabled],
     async (request, response) => {
       /*
       #swagger.tags = ['User Management']
