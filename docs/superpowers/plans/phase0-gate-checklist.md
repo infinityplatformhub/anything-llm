@@ -96,9 +96,16 @@ legacy rows, so it exercises the new default but never the backfill.
 # does not encode its own exemptions gets run without them by whoever runs it next.
 EXCL='server/utils/authorization/|server/utils/helpers/admin/index.js|server/utils/chats/commands/img.js'
 
-git grep -c 'ROLES\.' -- 'server/**/*.js' | grep -vE "^($EXCL)" | awk -F: '{s+=$2} END {print s+0}'
-git grep -l 'flexUserRoleValid'       -- 'server/**/*.js' | grep -vcE "^($EXCL)"
-git grep -l 'strictMultiUserRoleValid' -- 'server/**/*.js' | grep -vcE "^($EXCL)"
+# \bROLES\. not ROLES\. — the bare form also matches VALID_ROLES. in models/user.js,
+# a role-name validator rather than a role check. Two false positives without it.
+git grep -cE '\bROLES\.' -- 'server/**/*.js' | grep -vE "^($EXCL)" | awk -F: '{s+=$2} END {print s+0}'
+
+# Match the CALL. The bare names survive in comments explaining what replaced them
+# (deploymentMode.js:9, requirePermission.js:1-2); a gate that reads its own
+# documentation as a violation gets bypassed rather than fixed.
+git grep -cE 'flexUserRoleValid\('        -- 'server/**/*.js' | awk -F: '{s+=$2} END {print s+0}'
+git grep -cE 'strictMultiUserRoleValid\(' -- 'server/**/*.js' | awk -F: '{s+=$2} END {print s+0}'
+test ! -e server/utils/middleware/multiUserProtected.js && echo "multiUserProtected: deleted"
 git grep -nE 'role (===|!==) "(admin|manager|default)"' -- 'server/**/*.js' \
   | grep -v __tests__ | grep -vE "^($EXCL)"
 ```
@@ -117,7 +124,12 @@ behind the engine or be deleted by the issue named. An exemption whose issue
 closes without touching the file is a bug in this table, not a permanent waiver —
 re-check the file when that issue closes.
 
-At `401c325e`, running the commands exactly as written above: **177 refs, 27 files, 2 files, 1 site**. The one literal is `utils/helpers/documentPurgeGuard.js:33`, which is *not* exempt and must reach 0. T-4a has not merged, so these are pre-sweep figures.
+At `70283c1b`, after T-4a merged, running the commands exactly as written:
+**0 refs, 0 calls, 0 calls, 0 non-exempt literals**, and `multiUserProtected.js`
+is deleted. **§2.2 passes.**
+
+The one literal left is `utils/chats/commands/img.js:55`, which is exempt
+(→ #30 T-5). `documentPurgeGuard.js:33`, which was *not* exempt, is gone.
 
 ### 2.2a Every org-wide grant outside `super_admin` is justified in the seed
 
@@ -176,7 +188,14 @@ grep -n "CanonicalizeNotEnabledError" server/jobs/docVectorsCanonicalize.js
 git grep -n "DocumentVectors.where\|deleteForWorkspace\|removeDocuments" -- 'server/**/*.js' | grep -v __tests__ | wc -l
 ```
 
-20 call sites across 8 providers at `7587e74e`. The guard comment in `docVectorsCanonicalize.js:14-20` states the failure precisely: after the job rewrites `document_vectors.docId` to canonical ids, any caller still looking up by legacy uuid **silently matches nothing**, so deleting a document leaves its vectors behind and they stay answerable. Silent, not loud.
+**8 provider files** at `70283c1b`. The unit is files, not matched lines — a
+provider is migrated or it is not, and one file holds several call sites, so a
+line count moves for reasons that are not progress:
+
+```bash
+git grep -l 'DocumentVectors\|deleteForWorkspace\|removeDocuments' \
+  -- 'server/utils/vectorDbProviders/**' | wc -l
+``` The guard comment in `docVectorsCanonicalize.js:14-20` states the failure precisely: after the job rewrites `document_vectors.docId` to canonical ids, any caller still looking up by legacy uuid **silently matches nothing**, so deleting a document leaves its vectors behind and they stay answerable. Silent, not loud.
 
 **Gate: the enable flag is only set after the last of those 20 sites moves, and the vector-leak test passes with the flag on.** Setting the flag earlier turns a refusing job into a corrupting one.
 
