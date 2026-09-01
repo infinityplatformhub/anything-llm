@@ -5,11 +5,11 @@ const { ROLES } = require("../utils/middleware/multiUserProtected");
 const BrowserExtensionApiKey = {
   /**
    * Creates a new secret for a browser extension API key.
-   * @returns {string} brx-*** API key to use with extension
+   * @returns {string} apw-brx-*** API key to use with extension
    */
   makeSecret: () => {
-    const uuidAPIKey = require("uuid-apikey");
-    return `brx-${uuidAPIKey.create().apiKey}`;
+    const crypto = require("crypto");
+    return `apw-brx-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   /**
@@ -38,7 +38,7 @@ const BrowserExtensionApiKey = {
    * @returns {Promise<{apiKey: import("@prisma/client").browser_extension_api_keys|boolean}>}
    */
   validate: async function (key) {
-    if (!key.startsWith("brx-")) return false;
+    if (!key.startsWith("apw-brx-")) return false;
     const apiKey = await prisma.browser_extension_api_keys.findUnique({
       where: { key: key.toString() },
       include: { user: true },

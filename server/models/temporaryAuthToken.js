@@ -12,8 +12,8 @@ const TemporaryAuthToken = {
   writable: [],
 
   makeTempToken: () => {
-    const uuidAPIKey = require("uuid-apikey");
-    return `allm-tat-${uuidAPIKey.create().apiKey}`;
+    const crypto = require("crypto");
+    return `apw-tat-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   /**

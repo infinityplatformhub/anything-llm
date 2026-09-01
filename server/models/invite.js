@@ -2,9 +2,11 @@ const { safeJsonParse } = require("../utils/http");
 const prisma = require("../utils/prisma");
 
 const Invite = {
+  // 256-bit from crypto.randomBytes (R6/R7); uuid-apikey was 122 bits and an
+  // invite code redeems a real account.
   makeCode: () => {
-    const uuidAPIKey = require("uuid-apikey");
-    return uuidAPIKey.create().apiKey;
+    const crypto = require("crypto");
+    return `apw-inv-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
   create: async function ({ createdByUserId = 0, workspaceIds = [] }) {
