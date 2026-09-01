@@ -65,7 +65,7 @@ function passthroughEnv() {
   delete process.env.JWT_SECRET;
 }
 
-describe("#46: validatedRequest confirms single-user before waving a request through", () => {
+describe("issue 46: validatedRequest confirms single-user before waving a request through", () => {
   test("an unreadable settings table does not admit an unauthenticated request", async () => {
     passthroughEnv();
     SystemSettings.isMultiUserMode.mockResolvedValue(false); // swallowed error
