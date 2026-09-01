@@ -27,6 +27,46 @@ Date: 2026-09-02 · Owner: Dev 3/4
   endpoint module resolves it at require time; without it the suite can't load.
   Test-only, no runtime change.
 
+## QA-2 round 2 — second hole, same class (fixed)
+
+QA-2 exploited `GET /api/env-dump` (endpoints/system.js:91, the INTERNAL admin
+route — distinct from /v1/system/env-dump): **no middleware at all, not even
+validatedRequest**. Unauthenticated 200 → production dumpENV() rewrites
+server/.env from protectedKeys — env values not in that list are lost after the
+rewrite: data-loss DoS on restart.
+
+Fixes:
+1. Guard added: `[validatedRequest, flexUserRoleValid([ROLES.admin])]` —
+   admin-only, not admin+manager: rewriting the environment file is a
+   system-management action, and this route has no API-key equivalent, so the
+   strictest existing gate applies.
+2. Sweep extended beyond endpoints/api/*: the internal system.js env-dump route
+   is asserted from source (system.js registers the real Express app and cannot
+   be required standalone into a recorder). Only dumpENV-triggering routes are
+   source-asserted; a full internal-route sweep is P0-5 territory.
+3. Per-module assertions (PMO suggestion, adopted): every module must register
+   ≥1 route and `register()` must return undefined — kills the
+   silent-empty-module failure mode where a `return express.Router()` early-exit
+   makes the recorder see 0 routes and the count assertion silently absorbs it.
+
+### Rulings (round 2)
+
+- **Ruling:** `/v1/system` env-dump and `/v1/system` currentSettings must get
+  **admin-level scopes in PR-B** — not a general scope. QA also flagged that
+  currentSettings may return **actual secret values**, not just presence
+  (swagger example shows `"[KEY_NAME]": "KEY_VALUE"`). Verify at PR-B; if true,
+  that's its own finding.
+- **Ruling:** internal-system.js routes are covered by source-assertion only for
+  dumpENV routes; the api/ recorder sweep stays identity-based.
+
+### Evidence (round 2)
+
+- Initial RED: reverting system.js guard (git checkout HEAD) → 1 failed
+  (internal env-dump test).
+- Mutation: `apiAuthEndpoints` returns before registering → 2 failed (per-module
+  ≥1-route + count 62≠63) — proves the silent-module guard.
+- Final: full suite **622/622** (617 baseline + 3 + 2 new).
+
 ## Files
 
 - `server/endpoints/api/system/index.js` (1-line: add `[validApiKey]`)
