@@ -35,6 +35,16 @@ const API_ACTIONS = [
   "workspace.read",
   "workspace.write",
   "workspace.delete",
+  // PR-4b(1): creating a workspace is not writing to one — a key scoped to edit
+  // the workspaces it was given must not be able to mint new ones.
+  "workspace.create",
+  // Attaching and detaching documents rewrites what the workspace retrieves from.
+  // It is neither document.write (the document is unchanged) nor workspace.write
+  // (settings are unchanged), so it is grantable on its own.
+  "workspace.embeddings.manage",
+  "thread.create",
+  "thread.write",
+  "thread.delete",
   "document.read",
   "document.write",
   "document.delete",
