@@ -3,7 +3,7 @@ const path = require("path");
 
 const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
 
-const EXPECTED_WILDCARD_ROUTES = 67;
+const EXPECTED_WILDCARD_ROUTES = 68;
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>

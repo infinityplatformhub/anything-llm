@@ -23,6 +23,7 @@ if (!baseDatabaseUrl?.startsWith("postgresql://")) {
 const databaseUrl = new URL(baseDatabaseUrl);
 databaseUrl.searchParams.set("schema", schema);
 process.env.DATABASE_URL = databaseUrl.toString();
+process.env.API_KEY_PEPPER = "http-test-api-key-pepper-32-bytes";
 fs.mkdirSync(process.env.STORAGE_DIR, { recursive: true });
 
 const testSchema = path.resolve(__dirname, "../prisma/schema.prisma");

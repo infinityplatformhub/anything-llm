@@ -78,7 +78,7 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
 
   it("every route carries validApiKey middleware", () => {
     const unguarded = routes.filter(
-      (route) => !route.middlewares.includes(validApiKey)
+      (route) => !route.middlewares.some((middleware) => middleware.isApiKeyGuard === true)
     );
     expect(
       unguarded.map((r) => `${r.method.toUpperCase()} ${r.path} (${r.module})`)
@@ -88,7 +88,7 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
   it("env-dump specifically is guarded", () => {
     const envDump = routes.find((r) => r.path === "/v1/system/env-dump");
     expect(envDump).toBeDefined();
-    expect(envDump.middlewares).toContain(validApiKey);
+    expect(envDump.middlewares.some((middleware) => middleware.isApiKeyGuard === true)).toBe(true);
   });
 });
 

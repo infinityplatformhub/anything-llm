@@ -20,7 +20,7 @@ describe("API key security primitives", () => {
     expect(matchesDigest(secret, Buffer.alloc(3))).toBe(false);
   });
 
-  test.each([undefined, "short"])("missing or short pepper fails closed: %s", (value) => {
+  test.each([undefined, "", " ", "undefined", "null", "short"])("missing or short pepper fails closed: %s", (value) => {
     if (value === undefined) delete process.env.API_KEY_PEPPER;
     else process.env.API_KEY_PEPPER = value;
     expect(assertApiKeyPepper).toThrow("API_KEY_PEPPER must be at least 32 bytes");

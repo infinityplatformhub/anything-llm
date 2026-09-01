@@ -5,7 +5,7 @@ const prisma = require("../prisma");
 
 function validApiKey(action) {
   if (typeof action !== "string" || !action) throw new Error("validApiKey requires an explicit scope");
-  return async function apiKeyRequired(request, response, next) {
+  const middleware = async function apiKeyRequired(request, response, next) {
     response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
     const bearerKey = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
     const apiKey = bearerKey ? await ApiKey.resolve(bearerKey) : null;
@@ -26,6 +26,9 @@ function validApiKey(action) {
     if (!allowed) return response.status(403).json({ error: "Insufficient scope." });
     next();
   };
+  middleware.isApiKeyGuard = true;
+  middleware.scope = action;
+  return middleware;
 }
 
 module.exports = { validApiKey };

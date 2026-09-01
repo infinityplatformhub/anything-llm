@@ -22,6 +22,7 @@ if (!baseDatabaseUrl?.startsWith("postgresql://")) {
 const databaseUrl = new URL(baseDatabaseUrl);
 databaseUrl.searchParams.set("schema", schema);
 process.env.DATABASE_URL = databaseUrl.toString();
+process.env.API_KEY_PEPPER = "http-test-api-key-pepper-32-bytes";
 fs.mkdirSync(process.env.STORAGE_DIR, { recursive: true });
 
 const testSchema = path.resolve(__dirname, "../prisma/schema.prisma");
@@ -102,8 +103,10 @@ beforeAll(async () => {
   admin = await mkUser("p-admin", "admin");
   manager = await mkUser("p-manager", "manager");
   plain = await mkUser("p-plain", "default");
+  const { digestSecret, keyPrefix } = require("../utils/apiKeySecurity");
+  const secret = "apw-key-a-valid-api-key";
   await prisma.api_keys.create({
-    data: { name: "k", secret: "a-valid-api-key" },
+    data: { name: "k", secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(["*"]) },
   });
 });
 afterAll(async () => {
@@ -118,7 +121,7 @@ describe("internal /api/env-dump — multi-user", () => {
     ["no credential", undefined, 401],
     ["manager JWT", () => auth(manager), 401],
     ["default JWT", () => auth(plain), 401],
-    ["API key (not a session)", () => "Bearer a-valid-api-key", 401],
+    ["API key (not a session)", () => "Bearer apw-key-a-valid-api-key", 401],
     [
       "forged JWT for ghost user",
       () => `Bearer ${makeJWT({ id: 99999, username: "ghost" })}`,

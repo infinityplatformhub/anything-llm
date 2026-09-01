@@ -5,7 +5,7 @@ const MIN_PEPPER_BYTES = 32;
 
 function pepper() {
   const value = process.env.API_KEY_PEPPER;
-  if (!value || Buffer.byteLength(value) < MIN_PEPPER_BYTES)
+  if (!value || ["undefined", "null"].includes(value.trim().toLowerCase()) || Buffer.byteLength(value.trim()) < MIN_PEPPER_BYTES)
     throw new Error("API_KEY_PEPPER must be at least 32 bytes");
   return value;
 }

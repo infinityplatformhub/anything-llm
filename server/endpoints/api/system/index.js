@@ -14,7 +14,7 @@ const { validApiKey } = require("../../../utils/middleware/validApiKey");
 function apiSystemEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/system/env-dump", [validApiKey], async (_, response) => {
+  app.get("/v1/system/env-dump", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (_, response) => {
     /*
    #swagger.tags = ['System Settings']
    #swagger.description = 'Dump all settings to file storage'
