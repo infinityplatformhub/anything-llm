@@ -88,12 +88,16 @@ function systemEndpoints(app) {
     response.sendStatus(200);
   });
 
-  app.get("/env-dump", async (_, response) => {
-    if (process.env.NODE_ENV !== "production")
-      return response.sendStatus(200).end();
-    dumpENV();
-    response.sendStatus(200).end();
-  });
+  app.get(
+    "/env-dump",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_, response) => {
+      if (process.env.NODE_ENV !== "production")
+        return response.sendStatus(200).end();
+      dumpENV();
+      response.sendStatus(200).end();
+    }
+  );
 
   app.get("/onboarding", async (_, response) => {
     try {

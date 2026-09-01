@@ -88,7 +88,7 @@ Ordered so each step lands with its own tests and nothing half-migrates.
 
 ### Step 2 — scope-aware `validApiKey`
 - Resolve key → build a seam 02 `Actor` (`type:"service"`, `scopedKeyId`, `orgId`, `workspaceIds`) on `response.locals`, so P0-5's engine consumes it unchanged.
-- `requireScope("workspace.write")` per route; all 30 call sites get an explicit scope drawn from seam 02 action names (R3). Unknown or absent scope → 403, default deny.
+- `requireScope("workspace.write")` per route; all 62 call sites across 9 endpoint files (the F-2 table — an earlier draft said 30/5 from a truncated grep) get an explicit scope drawn from seam 02 action names (R3). Unknown or absent scope → 403, default deny.
 - Update `lastUsedAt`; reject `revokedAt`/`expiresAt` keys.
 - Publish an authentication event through the P0-6 bus carrying `scopedKeyId` (R4). Per seam 10 boundary, the event carries **no key material** — id and prefix only.
 
@@ -108,7 +108,7 @@ One config-driven middleware, default off. Empty list means allow-all so an unco
 Three things, and explicitly **not** provider-secret migration:
 - **(a)** `.env` written atomically with `0600` and correct owner — covers `dumpENV()` in `updateENV.js`.
 - **(b)** No secret reaches any response body, log line, or audit event. Assert it: a test that scans serialised output for known secret values.
-- **(c)** A `CredentialStore` interface plus an encrypted Postgres driver (AES-256-GCM, master key from env) used by the **new** API-key and browser-extension-key paths from Steps 1–2.
+- **(c)** A `CredentialStore` interface plus an encrypted Postgres driver (AES-256-GCM, master key from env). Note: Steps 1–2 store keys as **one-way digests** — there is no reversible secret left on those paths for this store to hold, so it ships as a tested library with **no consumer yet**. Its first consumer is the provider-secret migration (the later task, per R2); no doc or release note may claim the key paths use it.
 
 Moving provider secrets out of `.env` into that store is a **later task**. Until it ships, no doc, release note, or issue comment may claim secrets are encrypted system-wide.
 
