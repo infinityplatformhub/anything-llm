@@ -15,7 +15,7 @@ not in the room.
 
 ## 1. Issues that must be merged
 
-| # | Track | What closing it proves | State at `c190bf8d` |
+| # | Track | What closing it proves | State at `cd6faf84` |
 |---|---|---|---|
 | #15 | E2E | 12 scenarios green headed against a real stack | 14 `test()` blocks on `7e6ed3bb`; see §4 |
 | #26 | PR-4b | ~~Every route carries a named scope~~ | **closed** — counter 0 at `b66ebc5d` |
@@ -23,7 +23,9 @@ not in the room.
 | #25 | T-4a | ~~Role literals gone from internal routes~~ | **closed** at `70283c1b` — §2.2 passes |
 | #29 | T-4b | ~~Jobs + embed + `/v1` wired to the engine~~ | **closed** at `800292ff` |
 | #30 | T-5 | Vector queries filter by ACL — **the one that matters most** | not started |
-| #28 | T-6 | Audit export + retention + redaction | not started |
+| #28 | T-6 | Audit export + retention + redaction | part A **closed**; retention + redaction open |
+| #42 | cleanup | ~~`PG_SCHEME` in test setup~~ | **closed** at `b46655e5` |
+| #33 | P0-4D(c) | ~~CredentialStore, encrypted at rest~~ | **closed** — parts 1-3 |
 | #38 | flake | ~~`modelPricing` etag~~ | **closed** at `0fce7589` — see §2.5 |
 | #31 | T-7 | Admin duties separable | not started |
 
