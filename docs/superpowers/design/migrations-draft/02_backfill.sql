@@ -35,7 +35,7 @@ INSERT INTO permissions (action, description, category) VALUES
   ('user.manage','Manage users','admin')
 ON CONFLICT (action) DO NOTHING;
 
-INSERT INTO roles (name, scope, "orgId", isSystem) VALUES
+INSERT INTO roles (name, scope, "orgId", "isSystem") VALUES
   ('super_admin','org',1,true),
   ('setup_admin','org',1,true),
   ('content_moderator','org',1,true),

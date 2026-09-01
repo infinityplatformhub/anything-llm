@@ -44,7 +44,10 @@ CREATE TABLE "principal_role_grants" (
   "expires_at" TIMESTAMPTZ(3),
   "policy_version" BIGINT NOT NULL DEFAULT 0,
   CONSTRAINT "principal_role_grants_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "prg_unique" UNIQUE ("orgId", "principal_type", "principal_id", "role_id", "workspace_id")
+  -- NULLS NOT DISTINCT (PG15+): org-wide grants have workspace_id NULL and plain UNIQUE
+  -- treats NULL != NULL, so re-runs would duplicate every org-wide grant (found by live run).
+  -- If a nullable column ever joins document_acl_unique, it needs the same treatment.
+  CONSTRAINT "prg_unique" UNIQUE NULLS NOT DISTINCT ("orgId", "principal_type", "principal_id", "role_id", "workspace_id")
 );
 CREATE INDEX "prg_forward" ON "principal_role_grants"("principal_type", "principal_id", "workspace_id");
 CREATE INDEX "prg_reverse" ON "principal_role_grants"("workspace_id", "role_id");

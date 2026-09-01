@@ -8,7 +8,7 @@ SELECT u.id            AS user_id,
        u.role          AS legacy_role,
        count(w.id) FILTER (WHERE w.created_by = u.id) AS workspaces_kept_as_owner,
        (SELECT count(*) FROM workspaces)              AS workspaces_total,
-       count(w.id) FILTER (WHERE w.created_by = u.id) - (SELECT count(*) FROM workspaces)
+       (SELECT count(*) FROM workspaces) - count(w.id) FILTER (WHERE w.created_by = u.id)
                                                       AS workspaces_access_lost
 FROM users u LEFT JOIN workspaces w ON w.created_by = u.id
 WHERE u.role = 'manager'
