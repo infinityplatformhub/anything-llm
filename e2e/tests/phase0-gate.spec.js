@@ -300,18 +300,16 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
     .toBe(true);
 
   // Light coverage of the document-picker modal so it is not 0-coverage:
-  // open it and confirm the uploaded file is listed under custom-documents.
+  // open it and confirm the embedded file is listed in the tree. After
+  // embedding it appears under the workspace folder, not custom-documents.
   await page.reload();
   await page.locator("[data-tooltip-id=upload-workspace]").last().click({ force: true });
-  const folderRow = page.getByRole("row", { name: /custom-documents/ }).first();
-  await folderRow.waitFor({ state: "visible", timeout: 60_000 });
-  const fileRow = page.locator("tr.file-row").filter({ hasText: DOC_NAME }).first();
-  for (let i = 0; i < 3; i++) {
-    if (await fileRow.isVisible().catch(() => false)) break;
-    await folderRow.click();
-    await page.waitForTimeout(2_000);
-  }
-  await expect(fileRow).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("My Documents").first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText(DOC_NAME).first()).toBeVisible({
+    timeout: 60_000,
+  });
 });
 
 test("06 chat answers with a citation pointing at the upload", async ({
@@ -319,6 +317,9 @@ test("06 chat answers with a citation pointing at the upload", async ({
 }) => {
   await login(page, ADMIN);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
+  await expect(
+    page.getByText(/how can i help|send a message/i).first()
+  ).toBeVisible({ timeout: 60_000 });
   const prompt = page.locator("textarea").first();
   await prompt.waitFor({ state: "visible", timeout: 30_000 });
   await prompt.fill("What is the secret codeword?");
