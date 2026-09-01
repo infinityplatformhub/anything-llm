@@ -21,10 +21,14 @@ const okResponse = (etag) => ({
 });
 
 const dirs = [];
+/** Refreshes started by requiring the module, which no test awaits by itself. */
+const abandonedBoots = [];
 const originalFetch = global.fetch;
 const originalStorage = process.env.STORAGE_DIR;
 
-afterEach(() => {
+afterEach(async () => {
+  // Nothing may still be writing when the directories below are removed.
+  await settleAbandoned();
   global.fetch = originalFetch;
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   if (originalStorage === undefined) delete process.env.STORAGE_DIR;
@@ -33,9 +37,19 @@ afterEach(() => {
 
 function instanceIn(dir) {
   jest.resetModules();
-  const { ModelPricing } = require("../../../../utils/helpers/modelPricing");
+  const mod = require("../../../../utils/helpers/modelPricing");
+  const { ModelPricing } = mod;
+  // Requiring the module constructs MODEL_PRICING and starts a refresh nobody awaits.
+  // Abandoning it leaves a write in flight that lands during a later assertion — the
+  // same defect this file was written to prove, reintroduced by the file itself.
+  abandonedBoots.push(mod.MODEL_PRICING.bootRefresh);
   ModelPricing.instance = null;
   return new ModelPricing({ cacheDir: path.join(dir, "models", "pricing") });
+}
+
+/** Settles every refresh started by module-level construction in this test. */
+async function settleAbandoned() {
+  await Promise.all(abandonedBoots.splice(0).map((p) => p?.catch(() => {})));
 }
 
 test("an instance writes to the directory it was built with, not the one current at write time", async () => {
@@ -58,6 +72,7 @@ test("an instance writes to the directory it was built with, not the one current
   process.env.STORAGE_DIR = theirs;
   release();
   await pricing.bootRefresh;
+  await settleAbandoned();
 
   expect(etagIn(mine)).toBe('"mine"');
   expect(fs.existsSync(path.join(theirs, "models", "pricing", ".etag"))).toBe(false);
@@ -75,17 +90,19 @@ test("two instances with different directories do not overwrite each other", asy
   await a.bootRefresh;
   const b = instanceIn(second);
   await b.bootRefresh;
+  await settleAbandoned();
 
   expect(etagIn(first)).toBe('"first"');
   expect(etagIn(second)).toBe('"second"');
 });
 
-test("the cache directory is captured once and survives a later environment change", () => {
+test("the cache directory is captured once and survives a later environment change", async () => {
   const dir = freshDir("captured");
   dirs.push(dir);
   global.fetch = jest.fn(async () => okResponse('"x"'));
 
   const pricing = instanceIn(dir);
+  await settleAbandoned();
   const captured = pricing.cacheDir;
 
   process.env.STORAGE_DIR = "/somewhere/else/entirely";
