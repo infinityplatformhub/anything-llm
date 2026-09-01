@@ -1,0 +1,62 @@
+name: Docker build
+
+# The image is the runtime nothing else checks. CI runs the suite on a GitHub
+# runner and lint runs on another; neither builds docker/Dockerfile, so a change
+# that breaks the image — a base bump, an apt package that moved, a COPY path
+# that no longer exists — is found by E2E or by a user, whichever comes first.
+#
+# This builds and throws the image away. It does not push, does not tag, and
+# needs no registry credentials: the question is only "does it still build".
+
+on:
+  pull_request:
+    branches: ["approof/main"]
+    paths:
+      - "docker/**"
+      - "server/package.json"
+      - "frontend/package.json"
+      - "collector/package.json"
+      - "**/yarn.lock"
+      - ".github/workflows/docker-build.yaml"
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Single platform on purpose. The Dockerfile is multi-arch and building both
+      # roughly doubles the time for a check whose job is to catch a broken
+      # Dockerfile, which breaks the same way on either arch. A release build is
+      # where multi-arch belongs.
+      - name: Build image (amd64, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Guards the pin the image cannot state for itself. engines in package.json
+      # is a declaration; these lines are the Node that actually runs, and they
+      # have drifted twice — node:18 base and node_18.x from nodesource, each
+      # found after the fact rather than by a check (checklist §2.7).
+      - name: Node version pins are 22
+        run: |
+          set -euo pipefail
+          if grep -nE 'node_(1[0-9]|2[01])\.x|node:(1[0-9]|2[01])[.-]' docker/Dockerfile; then
+            echo "::error::docker/Dockerfile pins a Node older than 22 (see lines above)"
+            exit 1
+          fi
+          grep -q 'node_22\.x' docker/Dockerfile || {
+            echo "::error::expected a node_22.x nodesource line in docker/Dockerfile"; exit 1; }
+          echo "docker/Dockerfile: Node 22 throughout"

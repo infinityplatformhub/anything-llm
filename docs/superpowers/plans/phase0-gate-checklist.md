@@ -277,9 +277,16 @@ Node that runs. E2E caught a regression the pin itself could not: the container
 was still on 18.
 
 ```bash
-git grep -n 'FROM.*node:' -- docker/Dockerfile        # must be node:22-*
-git grep -n 'node-version' -- .github/workflows       # must all be 22
+git grep -nE 'node_[0-9]+\.x|node:[0-9]+' -- docker/   # every pin must be 22
+git grep -n 'node-version' -- .github/workflows        # must all be 22
 ```
+
+The first grep is deliberately wider than `FROM.*node:`. That narrower form was
+used once and **missed two lines**: the Dockerfile installs Node from nodesource
+in both arch base stages (`docker/Dockerfile:25` and `:94`,
+`deb.nodesource.com/node_18.x`), which is not a `FROM` line at all. A base image
+tag and an apt repository are both "which Node runs", and a check that knows only
+one shape finds only one.
 
 Dockerfile is `node:22-slim` since `450b19b1`. **The workflows are not.** At
 `c190bf8d`, five steps across three files still request Node 18:
@@ -294,10 +301,18 @@ Only `ci.yml` is on 22. `lint.yaml` runs `yarn install --frozen-lockfile` under
 Node 18 against `"engines": {"node": ">=22 <23"}` — an install whose declared
 requirement its own runtime does not meet.
 
-They are green today because none of them loads `jsonwebtoken`, which is the
-package that fails on the wrong Node. That is luck about *which* code each
-workflow touches, not a property of the pin, and it changes the first time a lint
-or version-check step imports a runtime module.
+All workflows are on 22 as of `main`, `run-tests.yaml` included — that one
+matters most, since it is the one that actually loads `jsonwebtoken`.
+
+**Nothing builds the image.** CI runs the suite on a runner, lint runs on
+another; neither builds `docker/Dockerfile`. E2E is the only thing that has ever
+caught an image regression, and it catches it late and by symptom. Both Node
+drifts above were found after the fact for this reason.
+
+`.github/workflows/docker-build.yaml` closes it: build on PR when anything the
+image depends on changes, single-arch, no push, no registry credentials — the
+question is only whether it still builds. It carries the pin grep as a step, so
+the check lives beside the thing it checks rather than in this document.
 
 The pin is not cosmetic. `jsonwebtoken@9.0.2` fails to load on Node 26 (SlowBuffer) at `utils/http/index.js:4`, so a CI image bump would break authentication and the cause would look unrelated to the change.
 
