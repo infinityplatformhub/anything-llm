@@ -40,6 +40,8 @@ const moreReferences = await Document.where({
 
 This is a two-word change and it closes failure (1) completely.
 
+**Change line 162 only.** `document.filename` also appears at `:94`, `:116` and `:208`, all as the `filename` field of a `DocumentSyncQueue.saveRun` record. Those are log/report fields where the basename is the correct, human-readable value — leave them alone. Only the `Document.where` clause at `:162` is a lookup key.
+
 Failure (2) — the missing job actor — is **not** fixed here. It belongs to P0-5 T-4b, which gives jobs explicit actors. Recording the boundary so the hotfix is not mistaken for closing G3: after PR-0e the job still writes across workspaces without a principal, but it can no longer write to the *wrong* document.
 
 ## Tests
