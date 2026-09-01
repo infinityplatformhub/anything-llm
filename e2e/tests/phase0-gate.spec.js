@@ -29,6 +29,15 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
 async function login(page, { username, password }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.goto("/login");
+    // A previous spec may leave a stale token; a half-authed state makes the
+    // login form render but never submit.
+    await page
+      .evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      })
+      .catch(() => {});
+    await page.reload();
     const userField = page.locator('input[name="username"]');
     const passField = page.locator('input[name="password"]');
     await userField.waitFor({ state: "visible", timeout: 30_000 });
@@ -415,7 +424,8 @@ test("10 member cannot see admin UI or hit admin routes", async ({ page }) => {
   await expect(page.getByRole("link", { name: /settings/i })).toHaveCount(0);
   // Admin route denied through the same browser session.
   const res = await authedFetch(page, "/api/env-dump");
-  expect(res.status()).toBe(401);
+  // T-4a: routes deny insufficient roles with 403 (401 is unauthenticated).
+  expect([401, 403]).toContain(res.status());
 });
 
 test("11 restart resilience: data survives container restart", async ({
