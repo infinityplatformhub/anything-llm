@@ -62,7 +62,7 @@ class PostgresJobScheduler {
     const now = this.now();
     return this.db.$transaction(async (tx) => {
       if (typeof tx.$queryRawUnsafe === "function") {
-        await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock($1)", 1_347_579);
+        await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock($1)::text", 1_347_579);
       }
       const schedules = await tx.job_schedules.findMany({
         where: { enabled: true, OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }] },

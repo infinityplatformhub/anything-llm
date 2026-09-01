@@ -13,7 +13,7 @@ test("scheduler takes transaction advisory lock and materializes idempotent occu
   };
   const scheduler = new PostgresJobScheduler({ db: { $transaction: (fn) => fn(tx) }, now: () => now });
   expect(await scheduler.materialize()).toEqual({ queued: 1 });
-  expect(tx.$queryRawUnsafe).toHaveBeenCalledWith("SELECT pg_advisory_xact_lock($1)", 1_347_579);
+  expect(tx.$queryRawUnsafe).toHaveBeenCalledWith("SELECT pg_advisory_xact_lock($1)::text", 1_347_579);
   expect(tx.jobs.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { type_idempotencyKey: { type: "purge", idempotencyKey: `daily:${now.toISOString()}` } } }));
 });
 

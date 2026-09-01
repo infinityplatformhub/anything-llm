@@ -15,7 +15,7 @@
     "lint": "eslint --fix .",
     "lint:check": "eslint .",
     "swagger": "node ./swagger/init.js",
-    "test": "jest --runInBand"
+    "test": "prisma generate && jest --runInBand"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
