@@ -4,10 +4,10 @@
 
 ## สถานะ
 
-- **integration branch**: `approof/main` @ `de95015b` (push แล้ว)
-- **baseline**: 752 tests / 66 suites บน PostgreSQL (ยืนยันโดย QA-1)
-- **ปิดแล้ว 16 issues**: #1-#5, #8-#14, #16-#18
-- **เปิดอยู่ 5**: #6, #7, #15, #19, #20
+- **integration branch**: `approof/main` @ `ffca31ad` (push แล้ว)
+- **baseline**: ~759 tests / 68 suites บน PostgreSQL (ยืนยันโดย QA-1)
+- **ปิดแล้ว 17 issues**: #1-#6, #8-#14, #16-#18
+- **เปิดอยู่ 4**: #7, #15, #19, #20
 
 ## รันเทส local (บังคับ — ไม่งั้น fail แบบหลอก)
 
@@ -22,7 +22,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 
 | worktree | branch | issue | HEAD | สถานะ |
 |---|---|---|---|---|
-| `.claude/worktrees/p0-4a` | `approof/p0-4a-ratelimit` | #6 | `6973304e` | QA PASS แล้ว · rebase บน de95015b ยังไม่จบ (conflict index.js / api/index.js กับ PR-3) |
+| `.claude/worktrees/p0-4a` | `approof/p0-4a-ratelimit` | #6 |  merged | ✅ merged แล้ว (ffca31ad) |
 | `.claude/worktrees/pr4a` | `approof/pr4a-scope-admin` | #19 | base | scope table 16 routes อนุมัติแล้ว รอเขียนโค้ด |
 | `.claude/worktrees/t2` | `approof/t2-authz-engine` | #20 | base | เพิ่งเปิด — engine core + actor resolver |
 | `.claude/worktrees/e2e` | `approof/e2e-playwright` | #15 | `88364c8d` | 4/12 spec ผ่าน กำลังแก้ selector |
