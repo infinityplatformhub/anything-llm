@@ -230,12 +230,24 @@ a risk nobody owns.
 
 ```bash
 grep -nE '^[-0-9]' docs/superpowers/residual-risks.md \
-  | grep -vE '\[→ #[0-9]+\]|\[closed|~~' | wc -l
+  | grep -vE '\[→ #[0-9]+|\[→ backlog|\[→ needs issue|\[closed|\[reference|~~' | wc -l
 ```
 
-**Must be 0.** At `dffad34f` it is **30** — the register predates the convention,
-so every line needs a marker added or the line struck. That is a pass of its own,
-not something to do at gate time.
+**Must be 0.** Four markers count as owned:
+
+| Marker | Means |
+|---|---|
+| `[→ #N …]` | An open issue owns it. Text after the number is allowed and encouraged — `[→ #25 T-4a, slot 044000]` says more than the bare number. |
+| `[→ backlog …]` | Real, scheduled past Phase 0, no issue yet. Names the track. |
+| `[closed: …]` | Fixed or accepted. **The marker states what closed it** — a SHA, a doc section, or "accepted by design". `[closed]` alone is not evidence. |
+| `[reference, not a risk]` | The line is a note that landed in the register — a command to copy, a release note. Not everything filed here is a risk, and pretending otherwise inflates the count. |
+| `[→ needs issue …]` | Real and unowned. **This is a finding at gate time**, not a pass — it counts as marked so the register is honest about what has no owner, rather than laundering it behind an issue number that does not exist. |
+
+`~~struck~~` also passes, for a line kept as history.
+
+At `dffad34f` the count was **30**: the register predates the convention. Cleared
+in one pass rather than at gate time — a register read during an incident is
+worth more than one reconstructed under time pressure.
 
 The register moved out of `.infi/` (gitignored — a fresh worktree had no copy at
 all, and a risk register that does not survive a clone is not a register) to
