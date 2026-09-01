@@ -5,6 +5,9 @@ const {
   simpleSSOEnabled,
 } = require("../../../utils/middleware/simpleSSOEnabled");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
+const {
+  ssoIssuanceLock,
+} = require("../../../utils/middleware/ssoIssuanceLock");
 
 function apiUserManagementEndpoints(app) {
   if (!app) return;
@@ -66,7 +69,7 @@ function apiUserManagementEndpoints(app) {
 
   app.get(
     "/v1/users/:id/issue-auth-token",
-    [validApiKey, simpleSSOEnabled],
+    [ssoIssuanceLock, validApiKey, simpleSSOEnabled],
     async (request, response) => {
       /*
       #swagger.tags = ['User Management']
