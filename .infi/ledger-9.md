@@ -43,16 +43,22 @@ Replace `uuid-apikey` (Base32 of UUIDv4 — 122 bits) with
 > immediately** — operators must reissue them (the extension treats the key as
 > an opaque string; only paste needed). Pre-existing API keys and invite codes
 > keep working until the API-key migration force-rotates them (PR-3).
+>
+> **Known-open after this release (closed by PR-3/PR-4, not this PR):**
+> `/v1/system/remove-documents` still lets ANY valid API key purge documents
+> system-wide — the #11 hotfix closed only the workspace-side route. The
+> `document.delete` scope lands with the scoped-key rollout; until then the
+> document-purge attack surface is NOT fully closed.
 - **Ruling (QA-2/PMO):** temp-token prefix `allm-tat-` → `apw-tat-` — old brand
   string survived P0-7's de-brand; caught in QA-2 pass.
-- **Scope-out (explicit, per PMO):**
-  1. `models/invite.js:6-7` still generates invite codes via uuid-apikey
-     (122-bit) — PMO opens a separate follow-up; not bearer credentials.
-  2. **Dual-format window:** pre-existing keys (uuid-apikey format, plaintext)
-     still authenticate until the PR-A/PR-3 migration force-rotates them. This PR
-     changes only what NEW keys look like.
-- **Ruling:** `uuid-apikey` dependency NOT removed from package.json — invite.js
-  still consumes it.
+- **Scope-out (explicit, per PMO; closed by later commit on this branch):**
+  1. ~~`models/invite.js` still generates invite codes via uuid-apikey~~ —
+     **closed in 9899cea4**: invite codes now use `crypto.randomBytes(32)` with
+     `apw-inv-` prefix, and `uuid-apikey` is removed from package.json and
+     yarn.lock (zero consumers left).
+  2. **Dual-format window (still open):** pre-existing keys (uuid-apikey format,
+     plaintext) still authenticate until the PR-3 migration force-rotates them.
+     This PR changes only what NEW keys look like.
 
 ## Files
 

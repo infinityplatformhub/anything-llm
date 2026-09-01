@@ -5,7 +5,7 @@ const { ROLES } = require("../utils/middleware/multiUserProtected");
 const BrowserExtensionApiKey = {
   /**
    * Creates a new secret for a browser extension API key.
-   * @returns {string} brx-*** API key to use with extension
+   * @returns {string} apw-brx-*** API key to use with extension
    */
   makeSecret: () => {
     const crypto = require("crypto");
