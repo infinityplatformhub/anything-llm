@@ -767,6 +767,50 @@ side effect that another subsystem depends on, a fixture that skips the model
 skips the side effect**, and the test then measures a world the product never
 produces.
 
+### 7.8 After T-4b, single-user is a database fact — review on a fresh database
+
+`isConfirmedSingleUser` (`actorResolver.js`) no longer trusts the
+`multi_user_mode` setting alone. It reads `users.count()`, because a setting that
+says single-user while user rows exist is not evidence of anything (FINDING-1:
+the settings read failing open resolved anonymous requests to `SINGLE_USER_ACTOR`,
+which holds the seeded `super_admin` grant).
+
+That is the right fix, and it changes what a test database has to be:
+
+**A leftover user row makes the R5 single-user tests fail — and the failure names
+the test, not the row.** QA-2 hit this: a probe left a user behind, the next run
+took the deployment for multi-user, and a correct assertion went red with nothing
+in the output pointing at the cause.
+
+So: **run the gate and any authorization review against a freshly migrated
+database**, not one carried over from a previous probe.
+
+```bash
+DB="gate_$$"
+psql "postgresql://…/postgres" -c "CREATE DATABASE $DB;"
+export DATABASE_URL="postgresql://…/$DB"
+cd server && ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+# … run …
+psql "postgresql://…/postgres" -c "DROP DATABASE $DB;"
+```
+
+`$$` is the shell PID, so parallel runs do not share a database — the same reason
+the per-process test schemas exist (§7.0).
+
+This is §7.1a's lesson at the row level rather than the schema level: there, a
+database built the wrong way was missing seed data; here, a database *reused* is
+carrying rows that change an answer. Both produce a confident wrong result rather
+than an error.
+
+**A second identity surface.** `resolveActorRef` reads the actor from a job row
+(`{type, id}` as stored by whoever enqueued it), which means job rows are an
+identity input that no ingress middleware guards. Today every enqueue is
+first-party, so this is a noted primitive rather than a hole — but a future
+feature that lets a request choose a job's actor turns it into privilege
+escalation with no middleware in the path. Recorded in
+`docs/superpowers/residual-risks.md`; anything that widens who can enqueue must
+answer it first.
+
 ### 7.2 Definition of done for background services
 
 A scheduler, worker, or pump is not done because its tests pass. Before handing

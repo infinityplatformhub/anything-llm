@@ -15,18 +15,19 @@ not in the room.
 
 ## 1. Issues that must be merged
 
-| # | Track | What closing it proves | State at `54db4028` |
+| # | Track | What closing it proves | State at `c190bf8d` |
 |---|---|---|---|
 | #15 | E2E | 12 scenarios green headed against a real stack | 14 `test()` blocks on `7e6ed3bb`; see §4 |
 | #26 | PR-4b | ~~Every route carries a named scope~~ | **closed** — counter 0 at `b66ebc5d` |
 | #27 | PR-4c | No key can be minted with `*` | started; three sites, see §2.1 |
-| #25 | T-4a | Role literals gone from internal routes | GREEN in progress |
-| #29 | T-4b | Jobs + embed + `/v1` wired to the engine | not started |
+| #25 | T-4a | ~~Role literals gone from internal routes~~ | **closed** at `70283c1b` — §2.2 passes |
+| #29 | T-4b | ~~Jobs + embed + `/v1` wired to the engine~~ | **closed** at `800292ff` |
 | #30 | T-5 | Vector queries filter by ACL — **the one that matters most** | not started |
 | #28 | T-6 | Audit export + retention + redaction | not started |
+| #38 | flake | ~~`modelPricing` etag~~ | **closed** at `0fce7589` — see §2.5 |
 | #31 | T-7 | Admin duties separable | not started |
 
-Merge order is fixed by file overlap, not by importance: **T-4a → T-4b → T-5 → T-7 → PR-4c**. PR-4c is last on purpose — it removes `*` from keys, and every route must already want a named scope before that is safe (see `.infi/recon/pr4c.md`).
+Merge order is fixed by file overlap, not by importance: ~~T-4a → T-4b~~ → **#39 → T-5 → T-7 → PR-4c**. PR-4c is last on purpose — it removes `*` from keys, and every route must already want a named scope before that is safe (see `.infi/recon/pr4c.md`).
 
 T-6 is off the critical path and can land any time after T-4b.
 
@@ -188,9 +189,17 @@ grep -n "CanonicalizeNotEnabledError" server/jobs/docVectorsCanonicalize.js
 git grep -n "DocumentVectors.where\|deleteForWorkspace\|removeDocuments" -- 'server/**/*.js' | grep -v __tests__ | wc -l
 ```
 
-**8 provider files** at `70283c1b`. The unit is files, not matched lines — a
-provider is migrated or it is not, and one file holds several call sites, so a
-line count moves for reasons that are not progress:
+**Still 8 provider files at `c190bf8d`, after T-4b.** T-4b's W-12 added dual-id
+handling but did not migrate any provider — nothing under `vectorDbProviders/`
+changed, so this criterion is untouched by #29 and belongs entirely to #30.
+
+Worth stating because "T-4b touched vector identity" reads like progress here and
+is not: the guard in `docVectorsCanonicalize.js` still refuses to run, which is
+correct, and the count that would let it run has not moved.
+
+The unit is files, not matched lines — a provider is migrated or it is not, and
+one file holds several call sites, so a line count moves for reasons that are not
+progress:
 
 ```bash
 git grep -l 'DocumentVectors\|deleteForWorkspace\|removeDocuments' \
@@ -220,7 +229,9 @@ Also verified in the same pass, per §2.2a:
 SELECT r.name, count(*) FROM principal_role_grants g JOIN roles r ON r.id = g.role_id
 WHERE g.workspace_id IS NULL GROUP BY r.name;
 ```
-→ **`super_admin` only.** T-4a's `044000` narrowed org `member` as intended; no other role holds an org-wide grant.
+→ **`super_admin` only**, re-verified on a fresh migrated database at `c190bf8d`
+(after T-4b). T-4a's `044000` narrowed org `member` as intended, and #29 did not
+reintroduce an org-wide grant.
 
 This is a snapshot, not a standing pass. Re-run it on the merge candidate — #27, #29 and #30 all change the authorization path, and a suite that was stable before them says nothing about after.
 
@@ -237,6 +248,8 @@ Without both env vars, six suites fail at import time and are counted as *failed
 bash ~/.claude/plugins/cache/infi-skills/infi-skills/0.1.0/skills/infi-dev/scripts/task.sh \
   check --base approof/main --issue <the issue number this branch closes>
 ```
+
+**Use a fresh database.** Since T-4b, single-user is decided by `users.count()`, so a leftover row from an earlier probe makes the R5 tests fail with an error that names the test rather than the row (code-standards §7.8).
 
 **Generate the Prisma client first.** A gate run against a stale client reports
 the wrong thing rather than an error (code-standards §7.6): the legacy-wildcard
