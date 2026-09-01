@@ -72,6 +72,7 @@ const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const prisma = require("../utils/prisma");
 const { app } = require("../index");
+const { resetRequestControls } = require("../utils/middleware/requestControls");
 const { makeJWT } = require("../utils/http");
 
 const auth = (user) =>
@@ -100,6 +101,7 @@ const mkUser = (username, role) =>
 let admin, manager, plain;
 
 beforeAll(async () => {
+  await resetRequestControls();
   admin = await mkUser("p-admin", "admin");
   manager = await mkUser("p-manager", "manager");
   plain = await mkUser("p-plain", "default");

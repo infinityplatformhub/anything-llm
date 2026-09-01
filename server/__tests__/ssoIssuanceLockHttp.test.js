@@ -73,6 +73,7 @@ const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const prisma = require("../utils/prisma");
 const { app } = require("../index");
+const { resetRequestControls } = require("../utils/middleware/requestControls");
 
 const FLAG = "SIMPLE_SSO_ISSUE_UNSAFE_ALLOW";
 const setFlag = (v) =>
@@ -82,6 +83,7 @@ const tokenRows = () => prisma.temporary_auth_tokens.count();
 let apiKeySecret, targetAdmin;
 
 beforeAll(async () => {
+  await resetRequestControls();
   const existing = await prisma.system_settings.findFirst({
     where: { label: "multi_user_mode" },
   });

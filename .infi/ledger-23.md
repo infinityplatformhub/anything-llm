@@ -1,0 +1,3 @@
+Ruling: Track limiter stores at construction and reset them through one exported test seam — preserves production middleware instances while clearing singleton state — if wrong, test suites could retain rate-limit hits or production behavior could change.
+Ruling: Reset controls at start of each HTTP suite before database fixtures — isolates suite state without reloading Express — if wrong, cross-suite request counts could remain order-dependent.
+Ruling: Prove reset with a small Express route using production login limiter — exercises real middleware and HTTP statuses without booting another full application — if wrong, reset wiring could pass without clearing active store.

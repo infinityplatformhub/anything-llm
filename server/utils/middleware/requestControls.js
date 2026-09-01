@@ -91,7 +91,11 @@ function integerEnv(name, fallback) {
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
+const requestControlStores = [];
+
 function limiter({ windowEnv, limitEnv, windowMs, limit, keyGenerator }) {
+  const store = new BoundedMemoryStore();
+  requestControlStores.push(store);
   return rateLimit({
     windowMs: integerEnv(windowEnv, windowMs),
     limit: integerEnv(limitEnv, limit),
@@ -99,9 +103,13 @@ function limiter({ windowEnv, limitEnv, windowMs, limit, keyGenerator }) {
     legacyHeaders: false,
     keyGenerator,
     handler: (_request, response) => response.status(429).json(LIMIT_MESSAGE),
-    store: new BoundedMemoryStore(),
+    store,
     validate: false,
   });
+}
+
+async function resetRequestControls() {
+  await Promise.all(requestControlStores.map((store) => store.resetAll()));
 }
 
 const ipKey = (request) => digest(`ip:${canonicalIp(request, true)}`);
@@ -213,4 +221,5 @@ module.exports = {
   inviteRateLimit,
   loginAccountRateLimit,
   loginIpRateLimit,
+  resetRequestControls,
 };
