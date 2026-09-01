@@ -261,16 +261,7 @@ function FeatureVerification({ children }) {
                   </ul>
                 </div>
 
-                <p>
-                  Access to any features requires approval of this modal. If you
-                  would like to read more you can refer to{" "}
-                  <a
-                    href="https://docs.approofworkspace.com/beta-preview/overview"
-                    className="underline text-blue-500"
-                  >
-                    docs.approofworkspace.com
-                  </a>
-                </p>
+                <p>Access to any features requires approval of this modal.</p>
               </div>
             </ModalBody>
             <ModalFooter>

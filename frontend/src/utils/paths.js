@@ -1,4 +1,4 @@
-import { BRAND_REPOSITORY_URL } from "./branding";
+import { BRAND_DOCS_URL, BRAND_REPOSITORY_URL } from "./branding";
 import { API_BASE } from "./constants";
 
 /**
@@ -62,10 +62,10 @@ export default {
     return "https://discord.com/invite/6UyHPeGZAC";
   },
   docs: (path = "") => {
-    return `https://docs.approofworkspace.com${path}`;
+    return `${BRAND_DOCS_URL}${path}`;
   },
   chatModes: () => {
-    return "https://docs.approofworkspace.com/features/chat-modes";
+    return `${BRAND_DOCS_URL}/features/chat-modes`;
   },
   support: () => {
     return `${BRAND_REPOSITORY_URL}/issues`;
@@ -237,17 +237,17 @@ export default {
       return `${this.website()}/me`;
     },
     noPrivateItems: () => {
-      return "https://docs.approofworkspace.com/community-hub/faq#no-private-items";
+      return `${BRAND_DOCS_URL}/community-hub/faq#no-private-items`;
     },
   },
 
   // Legacy documentation routes remain until replacement content exists.
   documentation: {
     mobileIntroduction: () => {
-      return "https://docs.approofworkspace.com/mobile/overview";
+      return `${BRAND_DOCS_URL}/mobile/overview`;
     },
     contextWindows: () => {
-      return "https://docs.approofworkspace.com/chatting-with-documents/introduction#you-exceed-the-context-window---what-now";
+      return `${BRAND_DOCS_URL}/chatting-with-documents/introduction#you-exceed-the-context-window---what-now`;
     },
   },
 

@@ -202,7 +202,7 @@ For example, if the docker instance is available on `192.186.1.222` your `VITE_A
 
 If you are getting errors like `llama:streaming - could not stream chat. Error: connect ECONNREFUSED 172.17.0.1:11434` then visit the README below.
 
-[Fix common issues with Ollama](https://docs.approofworkspace.com/ollama-connection-troubleshooting)
+Fix common Ollama connection issues by checking the configured host and port.
 
 ### Still not working?
 

@@ -40,7 +40,7 @@ https://github.com/infinityplatformhub/anything-llm
   data-base-api-url="${serverHost}/api/embed"
   src="${scriptHost}/embed/approofworkspace-chat-widget.min.js">
 </script>
-<!-- ApproofWorkspace (https://approofworkspace.com) -->
+<!-- ApproofWorkspace -->
 `;
 }
 

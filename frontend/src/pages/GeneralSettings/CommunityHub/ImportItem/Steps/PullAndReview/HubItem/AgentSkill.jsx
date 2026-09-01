@@ -80,14 +80,6 @@ export default function AgentSkill({ item, settings, setStep }) {
               This skill is not verified.
             </p>
           )}
-          <a
-            href="https://docs.approofworkspace.com/community-hub/faq#verification"
-            target="_blank"
-            className="text-xs font-mono text-blue-500 hover:underline"
-            rel="noreferrer"
-          >
-            Learn more &rarr;
-          </a>
         </div>
       </div>
       <div className="flex flex-col gap-y-[25px] text-white/80 light:text-theme-text-secondary text-sm">

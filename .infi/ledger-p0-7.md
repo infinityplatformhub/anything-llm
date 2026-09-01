@@ -48,3 +48,7 @@ Ruling: Restore `anythingllm-router` compatibility ID across all frontend and se
 Ruling: Remove remaining Admin documentation CTAs instead of pointing them at nonexistent docs domains — no equivalent destination exists and dead links mislead users — cost if wrong: Agent Flow, imported skill, and MCP screens lose contextual help until documentation ships.
 
 Ruling: Ignore `frontend/src/locales/` for product-name gate — translated UI strings must name ApproofWorkspace and are not hardcoded network destinations — cost if wrong: future non-name branding regressions inside locale files require dedicated locale review.
+
+Ruling: Complete repository-wide invented-domain sweep by routing remaining frontend documentation helpers through `VITE_BRAND_DOCS_URL` with repository fallback and deleting CTAs lacking real content — exact zero-domain evidence prevents another partial file-list fix — cost if wrong: generic repository fallback may not contain route-specific documentation until a docs deployment is configured.
+
+Ruling: Remove invented deployment domains from embed examples, comments, and Docker guidance — examples must not imply nonexistent services or create outbound references — cost if wrong: examples become less product-specific.

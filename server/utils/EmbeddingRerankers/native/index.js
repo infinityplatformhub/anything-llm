@@ -106,7 +106,7 @@ class NativeEmbeddingReranker {
         // Attempt to load the model and tokenizer in this order:
         // 1. From local file system cache
         // 2. Download and cache from remote host (hf.co)
-        // 3. Download and cache from fallback host (cdn.approofworkspace.com)
+        // 3. Download and cache from configured fallback host
         await this.#getPreTrainedModel();
         await this.#getPreTrainedTokenizer();
       } finally {
