@@ -22,7 +22,7 @@ class PostgresJobQueue {
     this.db = db;
     this.now = now;
     this.random = random;
-    this.publishOperationalEvent = publishOperationalEvent;
+    this.publishOperationalEvent = publishOperationalEvent || ((event, transaction) => require("../events").publishOperationalEvent(event, transaction));
   }
 
   async enqueue(input) {
@@ -145,7 +145,7 @@ class PostgresJobQueue {
       await tx.job_dead_letters.create({
         data: { jobId: job.id, type: job.type, payload: job.payload, actor: job.actor, attempts: job.attempts, error: serializedError, traceId: job.traceId },
       });
-      if (this.publishOperationalEvent) {
+      if (this.publishOperationalEvent && tx.event_outbox) {
         await this.publishOperationalEvent({
           type: "job.dead_lettered", actor: parse(job.actor), resource: { type: "job", id: job.id }, traceId: job.traceId,
           data: { jobType: job.type, attempts: job.attempts, errorName: error?.name || "Error" },

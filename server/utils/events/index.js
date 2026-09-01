@@ -15,6 +15,23 @@ async function ensureAuditSubscriber() {
   await auditRegistered;
 }
 
+async function publishOperationalEvent(fact, transaction) {
+  return eventBus.publish({
+    event: {
+      eventId: crypto.randomUUID(),
+      type: fact.type,
+      version: 1,
+      occurredAt: new Date(),
+      actor: fact.actor,
+      resource: fact.resource,
+      traceId: fact.traceId,
+      data: fact.data,
+      sensitivity: "metadata",
+    },
+    transaction,
+  });
+}
+
 async function emitAuditEvent(type, data = {}, userId = null, options = {}) {
   await ensureAuditSubscriber();
   const event = {
@@ -38,4 +55,4 @@ async function startEventServices() {
   outboxPump.start();
 }
 
-module.exports = { eventBus, emitAuditEvent, ensureAuditSubscriber, outboxPump, startEventServices };
+module.exports = { eventBus, emitAuditEvent, publishOperationalEvent, ensureAuditSubscriber, outboxPump, startEventServices };
