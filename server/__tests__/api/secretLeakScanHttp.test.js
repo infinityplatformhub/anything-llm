@@ -45,6 +45,14 @@ jest.mock("../../utils/helpers/modelPricing", () => ({
 jest.mock("../../models/telemetry", () => ({
   Telemetry: { sendTelemetry: jest.fn(), flush: jest.fn() },
 }));
+// The connection check dials a real Postgres. Stub it so this suite measures
+// what the response says about the value, not whether the host is reachable.
+jest.mock("../../utils/vectorDbProviders/pgvector", () => ({
+  PGVector: {
+    validateConnection: jest.fn(async () => ({ error: null, success: true })),
+    validateTableName: jest.fn(async () => ({ error: null, success: true })),
+  },
+}));
 jest.mock("../../utils/boot/MetaGenerator", () => ({
   MetaGenerator: jest.fn().mockImplementation(() => ({
     generate: jest.fn(),
@@ -62,6 +70,10 @@ const { app } = require("../../index");
 const { makeJWT } = require("../../utils/http");
 
 const CANARY = "sk-canary-do-not-log-8f3a91c04d7e";
+// A connection string carries its password inline, so the whole value is the
+// secret even though the key name says nothing about credentials.
+const DSN_PASSWORD = "dsn-canary-pw-4b7c2e19";
+const DSN_CANARY = `postgresql:${"//"}pguser:${DSN_PASSWORD}@db.internal:5432/vectors`;
 let admin;
 
 beforeAll(async () => {
@@ -97,7 +109,11 @@ describe("POST /api/system/update-env does not leak the submitted secret", () =>
     response = await request(app)
       .post("/api/system/update-env")
       .set("Authorization", `Bearer ${makeJWT({ id: admin.id, username: admin.username })}`)
-      .send({ LLMProvider: "openai", OpenAiKey: CANARY });
+      .send({
+        LLMProvider: "openai",
+        OpenAiKey: CANARY,
+        PGVectorConnectionString: DSN_CANARY,
+      });
 
     sinks.forEach((sink) => sink.mockRestore());
   });
@@ -112,19 +128,30 @@ describe("POST /api/system/update-env does not leak the submitted secret", () =>
     expect(response.text).not.toContain(CANARY);
   });
 
+  it("keeps the password embedded in a connection string out of the response", () => {
+    expect(response.text).not.toContain(DSN_PASSWORD);
+    expect(response.text).not.toContain(DSN_CANARY);
+  });
+
   it("keeps the secret out of console output", () => {
     expect(consoleOutput.join("\n")).not.toContain(CANARY);
+    expect(consoleOutput.join("\n")).not.toContain(DSN_PASSWORD);
   });
 
   it("keeps the secret out of every audit event payload", async () => {
     const events = await prisma.event_logs.findMany();
     expect(events.length).toBeGreaterThan(0);
     expect(JSON.stringify(events)).not.toContain(CANARY);
+    expect(JSON.stringify(events)).not.toContain(DSN_PASSWORD);
   });
 
   it("still reports which settings changed", () => {
     expect(Object.keys(response.body.newValues)).toEqual(
-      expect.arrayContaining(["LLMProvider", "OpenAiKey"])
+      expect.arrayContaining([
+        "LLMProvider",
+        "OpenAiKey",
+        "PGVectorConnectionString",
+      ])
     );
   });
 });

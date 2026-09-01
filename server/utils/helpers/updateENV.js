@@ -1455,11 +1455,17 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
 // Names whose value is a credential. The caller already knows the secret it
 // just submitted, so echoing it back only creates copies in response bodies,
 // proxy logs, and browser devtools.
+//
+// CONNECTION_STRING and DSN are here because a connection string carries its
+// password inline, so the whole value is a secret even though the name says
+// nothing about credentials.
+//
 // ponytail: a name heuristic, not a per-key declaration. A new secret whose
 // env name avoids all of these words would be echoed in full. Upgrade to a
 // `secret: true` flag on the KEY_MAPPING entries when provider credentials
 // move into the CredentialStore, which has to enumerate them anyway.
-const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|PEPPER|SALT|CREDENTIAL|PWD/i;
+const SECRET_ENV_NAME =
+  /KEY|TOKEN|SECRET|PASSWORD|PEPPER|SALT|CREDENTIAL|PWD|CONNECTION_STRING|DSN/i;
 
 /**
  * Replaces the value of every credential-shaped setting with a fixed mask, so
