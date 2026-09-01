@@ -15,8 +15,17 @@
  * @param {import("express").NextFunction} next
  * @returns {void}
  */
+/** Values an operator plausibly sets MEANING "off" — these keep the lock closed. */
+const OFF_VALUES = new Set(["", "0", "false", "no", "off"]);
+
+function ssoIssuanceUnlocked() {
+  const raw = process.env.SIMPLE_SSO_ISSUE_UNSAFE_ALLOW;
+  if (raw === undefined) return false;
+  return !OFF_VALUES.has(String(raw).trim().toLowerCase());
+}
+
 function ssoIssuanceLock(_, response, next) {
-  if (!process.env.SIMPLE_SSO_ISSUE_UNSAFE_ALLOW) {
+  if (!ssoIssuanceUnlocked()) {
     return response.status(403).json({
       error:
         "Temporary auth token issuance is disabled pending the API key scope rollout. See release notes.",

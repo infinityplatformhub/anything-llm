@@ -39,6 +39,14 @@ impersonation (recon F-4).
   inverted to an allow-flag because "disabled flag absent = disabled" double-negative
   is error-prone. Semantics identical (default-closed).
 
+- **Ruling (QA-2 CONFIRMED fix):** Truthy check replaced with an explicit off-set.
+  Plain JS truthiness meant `"false"`, `"0"`, `"no"`, `"off"`, `" "` all REOPENED
+  the endpoint (QA-2 exploited 5/5) — an operator writing
+  `SIMPLE_SSO_ISSUE_UNSAFE_ALLOW=false` to disable would enable. Now
+  `{"", "0", "false", "no", "off"}` after trim+lowercase keep the lock closed;
+  unset keeps it closed; anything else is the deliberate opt-in. 8 off-value test
+  cases added; mutation reverting to truthiness → 7 tests fail.
+
 ## Files
 
 - `server/utils/middleware/ssoIssuanceLock.js` (new)

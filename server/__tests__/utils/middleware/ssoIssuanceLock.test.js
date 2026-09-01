@@ -35,16 +35,20 @@ describe("ssoIssuanceLock middleware (P0-4 PR-0 hotfix)", () => {
     });
   });
 
-  it("returns 403 when flag is set to empty string", () => {
-    process.env[FLAG] = "";
-    const next = jest.fn();
-    const response = makeResponse();
+  // QA-2 finding: plain JS truthiness let "false"/"0"/"no"/"off"/" " reopen the
+  // endpoint. Every value an operator would set MEANING "off" must stay closed.
+  for (const offValue of ["", "0", "false", "no", "off", " ", "FALSE", " Off "]) {
+    it(`returns 403 when flag is set to ${JSON.stringify(offValue)}`, () => {
+      process.env[FLAG] = offValue;
+      const next = jest.fn();
+      const response = makeResponse();
 
-    ssoIssuanceLock({}, response, next);
+      ssoIssuanceLock({}, response, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(response.status).toHaveBeenCalledWith(403);
-  });
+      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(403);
+    });
+  }
 
   it("calls next only when flag is explicitly set to a truthy value, and warns loudly", () => {
     process.env[FLAG] = "1";
