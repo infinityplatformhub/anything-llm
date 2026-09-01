@@ -90,3 +90,60 @@ describe("T-4b W-5: resolveActorRef — jobs build Actors in the resolver too", 
     expect(await resolveActorRef({ type: "user" }, { db: memberDb([]) })).toBeNull();
   });
 });
+
+describe("T-4b W-5: the resolved Actor is authoritative over the persisted job row", () => {
+  const { CoreJobWorker } = require("../../../utils/jobs/CoreJobWorker");
+
+  test("fields on the stored job.actor never override the freshly resolved scope", async () => {
+    // CoreJobWorker.claim spread the persisted row OVER the resolved Actor, so anything
+    // that can write a job row (a compromised enqueue path, a stale row written before a
+    // revoke) chose its own workspaceIds and impersonatedBy at run time. The row names
+    // WHO the job runs as; what that principal may do is resolved fresh, every claim.
+    const storedActor = {
+      type: "user",
+      id: "5",
+      workspaceIds: ["999"],
+      impersonatedBy: undefined,
+      orgId: 42,
+    };
+    const queue = {
+      claim: async () => [{ jobId: "1", actor: storedActor, payload: { version: 1 } }],
+      fail: jest.fn(),
+    };
+    const worker = new CoreJobWorker({
+      queue,
+      identityStore: {
+        resolveActor: async () => ({
+          type: "user",
+          id: "5",
+          orgId: 1,
+          workspaceIds: ["3"],
+          impersonatedBy: { type: "user", id: "1" },
+        }),
+      },
+      handlers: {},
+    });
+    const [job] = await worker.claim({ workerId: "w" });
+    expect(job.actor.workspaceIds).toEqual(["3"]);
+    expect(job.actor.orgId).toBe(1);
+    expect(job.actor.impersonatedBy).toEqual({ type: "user", id: "1" });
+  });
+
+  test("a null resolution fails the job closed rather than running it unresolved", async () => {
+    const queue = {
+      claim: async () => [{ jobId: "1", actor: { type: "user", id: "5" }, payload: { version: 1 } }],
+      fail: jest.fn(),
+    };
+    const worker = new CoreJobWorker({
+      queue,
+      identityStore: { resolveActor: async () => null },
+      handlers: {},
+    });
+    expect(await worker.claim({ workerId: "w" })).toEqual([]);
+    expect(queue.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ retryable: false }),
+      })
+    );
+  });
+});

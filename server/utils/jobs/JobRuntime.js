@@ -1,15 +1,19 @@
 const { PostgresJobQueue } = require("./PostgresJobQueue");
 const { PostgresJobScheduler } = require("./PostgresJobScheduler");
 const { CoreJobWorker } = require("./CoreJobWorker");
-const { ActorIdentityStore } = require("./ActorIdentityStore");
 const { handlers, registerCoreSchedules } = require("./handlers");
 // T-2 (#20): service Actor literals live only in utils/authorization/actorResolver.js
-const { SERVICE_PRINCIPALS } = require("../authorization/actorResolver");
+// T-4b (#29) W-5: and so does Actor construction — resolveActorRef replaced the local
+// ActorIdentityStore, so a job and an HTTP request resolve the same user identically.
+const {
+  SERVICE_PRINCIPALS,
+  resolveActorRef,
+} = require("../authorization/actorResolver");
 
 const systemActor = SERVICE_PRINCIPALS.coreJobs;
 
 class JobRuntime {
-  constructor({ queue = new PostgresJobQueue(), scheduler = new PostgresJobScheduler(), identityStore = new ActorIdentityStore(), intervalMs = 1000 } = {}) {
+  constructor({ queue = new PostgresJobQueue(), scheduler = new PostgresJobScheduler(), identityStore = { resolveActor: resolveActorRef }, intervalMs = 1000 } = {}) {
     this.queue = queue;
     this.scheduler = scheduler;
     this.worker = new CoreJobWorker({ queue, identityStore, handlers });
