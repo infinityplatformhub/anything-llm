@@ -33,6 +33,35 @@ file `updateSourceDocument` actually rewrote). Two-line diff plus comment.
   addDocumentToNamespace calls = 2. Regression test now also asserts the bloom
   targets `other-workspace`'s namespace (mutation 3 exposed that gap).
 
+## QA-2 round 2 — documentSyncQueue keyed by basename (fixed)
+
+QA-2 ran the real exploit against `models/documentSyncQueue.js`: tenant A calls
+`unwatch(docA)` → tenant B's queue was **deleted** and B's `watched` flag
+**cleared** — pure basename collision, cross-tenant DoS. Symmetrically, `watch`
+threw "already has a queue" for tenant B's own file because A's same-basename
+file was watched. Four selection keys (:99, :116 watch; :138, :142 unwatch)
+changed `filename` → `docpath`, same rationale and identity as the job fix.
+
+DB-level proof added (`documentSyncQueueSelection.dbtest.js`): real prisma
+client on a pushed temp SQLite schema, real model code, no mocks. Cases: A's
+unwatch touches only A (B's queue + watched flag intact); B can watch its own
+file while A's same-basename file is watched. Mutation reverting one selection
+key to `filename` → 1 DB test fails.
+
+### Rulings (round 2)
+
+- **Ruling (PMO team rule, adopted):** model-finder mocks used in
+  selection-sensitive tests must filter on the clause — static
+  `mockResolvedValue` is banned there. This suite avoids the question by using
+  a real DB.
+- **Ruling:** temp-schema-copy + `prisma db push` per suite run (schema's
+  datasource url is a hardcoded sqlite path, so the copy re-points it). ~1s;
+  teardown removes the tmpdir.
+
+### Evidence (round 2)
+
+Full suite **620/620** (617 baseline + 1 job test + 2 DB tests).
+
 ## Files
 
 - `server/jobs/sync-watched-documents.js` (match clause)
