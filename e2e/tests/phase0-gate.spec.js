@@ -43,9 +43,12 @@ async function login(page, { username, password }) {
       .click({ timeout: 15_000 });
   }
 
-  await expect(
-    page.getByText(/how can i help|send a message/i).first()
-  ).toBeVisible({ timeout: 30_000 });
+  // Landing view differs by state (chat pane, or a workspace-less home), so
+  // assert the session instead: the login form is gone.
+  await expect(page.locator('button:has-text("Login")')).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await page.waitForTimeout(1_000);
 }
 
 /** The SPA keeps its JWT in localStorage — page.request only carries cookies,
