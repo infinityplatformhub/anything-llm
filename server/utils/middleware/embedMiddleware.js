@@ -201,12 +201,12 @@ async function embedHistoryAccess(request, response, next) {
   try {
     const embed = response.locals.embedConfig;
     if (!embed) {
-      response.sendStatus(404).end();
+      response.status(404).json({ error: "Embed not found." });
       return;
     }
 
     const { sessionId } = request.params;
-    if (typeof sessionId !== "string" || !validate(String(sessionId))) {
+    if (typeof sessionId !== "string" || !validate(sessionId)) {
       response.status(404).json({ error: "Invalid session ID." });
       return;
     }
@@ -221,7 +221,12 @@ async function embedHistoryAccess(request, response, next) {
 
     const host = request.headers?.origin ?? "";
     const allowedHosts = EmbedConfig.parseAllowedHosts(embed);
-    if (allowedHosts !== null && !allowedHosts.includes(host)) {
+    // EMBED_REQUIRE_ALLOWLIST: same rule as canRespond — an embed with no
+    // allowlist is denied, not allowed (F-12a).
+    if (
+      (allowedHosts === null && "EMBED_REQUIRE_ALLOWLIST" in process.env) ||
+      (allowedHosts !== null && !allowedHosts.includes(host))
+    ) {
       response.status(401).json({ error: "Invalid request." });
       return;
     }

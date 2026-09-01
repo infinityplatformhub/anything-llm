@@ -32,6 +32,31 @@ New `embedHistoryAccess` middleware (after `validEmbedConfig` on both routes):
 - **Ruling:** Error bodies are minimal `{error}` JSON, not the chat-shaped abort
   envelope — these are REST reads, not stream chunks.
 
+## QA-2 round 2 (fixed)
+
+- **F-12a (CONFIRMED):** `embedHistoryAccess` lacked the `EMBED_REQUIRE_ALLOWLIST`
+  branch `canRespond` has — with the flag set and `allowlist_domains = null`,
+  chat POST got 401 while history GET passed 200: half-applied hardening. Branch
+  copied; two tests cover deny-no-allowlist and allow-matching-origin under the
+  flag.
+- **Error shape (e5 F3):** missing-embed path was `sendStatus(404).end()` —
+  upstream bug: `sendStatus` already ends the response; `.end()` after it is
+  dead code and the shape differed from the other three responses. All four
+  branches now `status(...).json({error})`.
+- Nit: `validate(String(sessionId))` → `validate(sessionId)` (typeof checked on
+  the line above).
+- **Recorded per QA:** origin allowlist only constrains browser contexts —
+  server-side callers forge the Origin header freely (CORS is not enforced
+  outside browsers). Anyone guessing a session UUID can still read that
+  conversation. Real closure is session ownership at P0-5; rate limiting on the
+  history routes is folded into #6's targets (login + /v1 + /invite/:code +
+  embed history).
+
+### Evidence (round 2)
+
+Full suite **625/625** (617 baseline + 8). Mutation removing the F-12a branch →
+1 failed (deny-no-allowlist case).
+
 ## Files
 
 - `server/utils/middleware/embedMiddleware.js` (new middleware + export)

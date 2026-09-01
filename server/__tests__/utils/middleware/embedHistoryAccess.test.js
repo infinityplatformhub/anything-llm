@@ -97,6 +97,39 @@ describe("embedHistoryAccess middleware (PR-0d / G12)", () => {
 
     expect(next).toHaveBeenCalledTimes(1);
   });
+
+  // F-12a: canRespond denies allowlist-less embeds under EMBED_REQUIRE_ALLOWLIST;
+  // the history gate used to let them through — half-applied hardening.
+  describe("EMBED_REQUIRE_ALLOWLIST set (F-12a)", () => {
+    const FLAG = "EMBED_REQUIRE_ALLOWLIST";
+    const hadFlag = FLAG in process.env;
+
+    afterEach(() => {
+      if (hadFlag) process.env[FLAG] = "1";
+      else delete process.env[FLAG];
+    });
+
+    it("denies an embed with no allowlist", async () => {
+      process.env[FLAG] = "1";
+      const response = makeResponse({ ...baseEmbed, allowlist_domains: null });
+      const next = jest.fn();
+
+      await embedHistoryAccess(makeRequest(), response, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(401);
+    });
+
+    it("still allows an embed whose allowlist matches the origin", async () => {
+      process.env[FLAG] = "1";
+      const response = makeResponse(baseEmbed);
+      const next = jest.fn();
+
+      await embedHistoryAccess(makeRequest(), response, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe("route wiring (PR-0d)", () => {
