@@ -26,12 +26,17 @@ const dbSuffix = crypto.randomBytes(4).toString("hex");
 const testDb = `t7_caps_${dbSuffix}`;
 const testUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 
-const ACTOR = { id: 7701 };
+// Unique per run: utils/prisma is required by many suites and NODE_ENV/test
+// binding means a fixed id can collide with a sibling suite's database.
+const ACTOR = { id: 7000 + (process.pid % 900) };
 
 jest.mock("../../../utils/middleware/validatedRequest", () => ({
   validatedRequest: (_request, response, next) => {
     response.locals.multiUserMode = true;
-    response.locals.user = { id: 7701, suspended: 0 };
+    response.locals.user = {
+      id: 7000 + (process.pid % 900),
+      suspended: 0,
+    };
     next();
   },
 }));
@@ -63,7 +68,11 @@ beforeAll(async () => {
   });
   process.env.DATABASE_URL = testUrl;
 
-  prisma = new PrismaClient({ datasources: { db: { url: testUrl } } });
+  // Use the SHARED client, not a second one: the endpoint under test resolves
+  // utils/prisma, so a separate PrismaClient would have the test writing to one
+  // database while the route read another — and every capability would come
+  // back false, which looks exactly like a correct deny.
+  prisma = require("../../../utils/prisma");
   repository = require("../../../utils/authorization/policyRepository");
   const {
     SERVICE_PRINCIPALS,
@@ -155,5 +164,54 @@ describe("GET /system/my-capabilities", () => {
     // An endpoint that enumerated everything would hand any caller a map of the
     // permission model.
     expect(caps).not.toHaveProperty("role.grant");
+  });
+});
+
+describe("delegated admin: assigning a role you do not hold (T-7)", () => {
+  const {
+    canAssignLegacyRole,
+  } = require("../../../utils/authorization/policyRepository");
+
+  test("a content_moderator cannot mint an admin", async () => {
+    // The old helper compared role strings in a fixed hierarchy, so anyone
+    // whose legacy role read "admin" could assign "admin". The question is now
+    // the escalation guard: you may hand over only what you already hold.
+    const actor = { type: "user", id: String(ACTOR.id), orgId: 1 };
+    await expect(
+      canAssignLegacyRole({ actor, targetRole: "admin", db: prisma })
+    ).resolves.toBe(false);
+  });
+
+  test("a super_admin can", async () => {
+    const {
+      SERVICE_PRINCIPALS,
+    } = require("../../../utils/authorization/actorResolver");
+    const boss = await prisma.users.create({
+      data: { username: `boss-${dbSuffix}`, password: "unused", role: "admin" },
+    });
+    const superAdmin = await prisma.roles.findFirstOrThrow({
+      where: { name: "super_admin", scope: "org" },
+    });
+    await repository.grantRole({
+      actor: SERVICE_PRINCIPALS.singleUser,
+      principalType: "user",
+      principalId: String(boss.id),
+      roleId: superAdmin.id,
+      db: prisma,
+    });
+
+    await expect(
+      canAssignLegacyRole({
+        actor: { type: "user", id: String(boss.id), orgId: 1 },
+        targetRole: "admin",
+        db: prisma,
+      })
+    ).resolves.toBe(true);
+  });
+
+  test("a null actor assigns nothing", async () => {
+    await expect(
+      canAssignLegacyRole({ actor: null, targetRole: "default", db: prisma })
+    ).resolves.toBe(false);
   });
 });

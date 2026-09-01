@@ -67,7 +67,10 @@ function adminEndpoints(app) {
       try {
         const currUser = await userFromSession(request, response);
         const newUserParams = reqBody(request);
-        const roleValidation = validRoleSelection(currUser, newUserParams);
+        const roleValidation = await validRoleSelection(
+          response.locals.actor,
+          newUserParams
+        );
 
         if (!roleValidation.valid) {
           response
@@ -106,13 +109,16 @@ function adminEndpoints(app) {
         const updates = reqBody(request);
         const user = await User.get({ id: Number(id) });
 
-        const canModify = validCanModify(currUser, user);
+        const canModify = await validCanModify(response.locals.actor, user);
         if (!canModify.valid) {
           response.status(200).json({ success: false, error: canModify.error });
           return;
         }
 
-        const roleValidation = validRoleSelection(currUser, updates);
+        const roleValidation = await validRoleSelection(
+          response.locals.actor,
+          updates
+        );
         if (!roleValidation.valid) {
           response
             .status(200)
@@ -146,7 +152,7 @@ function adminEndpoints(app) {
         const { id } = request.params;
         const user = await User.get({ id: Number(id) });
 
-        const canModify = validCanModify(currUser, user);
+        const canModify = await validCanModify(response.locals.actor, user);
         if (!canModify.valid) {
           response.status(200).json({ success: false, error: canModify.error });
           return;

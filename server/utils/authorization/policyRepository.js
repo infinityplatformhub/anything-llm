@@ -305,8 +305,43 @@ async function currentPolicyVersion(db = prisma) {
   return row?.version ?? 0n;
 }
 
+
+/**
+ * T-7 (#31): may `actor` assign the legacy role string `targetRole` to someone?
+ *
+ * This is the same question `grantRole`'s escalation guard already answers —
+ * you may hand over only what you already hold — expressed for the legacy
+ * `users.role` column, which R4 keeps frozen rather than dropped. The old
+ * helper compared role strings in a fixed hierarchy (admin > manager >
+ * default), which cannot express a delegated admin who may create members but
+ * not other admins.
+ */
+async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
+  if (!actor) return false;
+  // Read-only, so it needs no transaction of its own — it runs inside the
+  // caller's when there is one. (#39 adds inTransaction for the write paths.)
+  const tx = db;
+  {
+    if (isExemptPrincipal(actor)) return true;
+    const {
+      ORG_ROLE_FOR_LEGACY,
+    } = require("./legacyRoleGrants");
+    const orgRoleName =
+      ORG_ROLE_FOR_LEGACY[targetRole] ?? ORG_ROLE_FOR_LEGACY.default;
+    const role = await tx.roles.findFirst({
+      where: { name: orgRoleName, scope: "org" },
+      select: { id: true },
+    });
+    if (!role) return false;
+    const rolePerms = await permissionIdsForRole(tx, role.id);
+    const held = await heldPermissionIds(tx, actor, null);
+    return [...rolePerms].every((permission) => held.has(permission));
+  }
+}
+
 module.exports = {
   grantRole,
+  canAssignLegacyRole,
   revokeGrant,
   grantDocumentAcl,
   revokeDocumentAcl,

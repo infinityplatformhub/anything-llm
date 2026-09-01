@@ -40,3 +40,12 @@ Ruling: read-only is NOT re-enforced in the route or the UI. The engine denies e
 Ruling: an impersonated session cannot impersonate again, and nobody can view as themselves or as a suspended user. Chaining would lose the head of the provenance chain — the second hop would record the first target as the impersonator.
 Ruling: the token expires in 30 minutes, against the normal 30 days. This is a support tool, not a login.
 Note: the S-tests drive the REAL middleware with the REAL signed token. A test that hands `{impersonatedBy}` to `authorize()` proves the engine, which T-2 already did — it cannot prove the feature exists.
+
+## Admin helper on grants
+
+Ruling: `validRoleSelection` / `validCanModify` now ask `canAssignLegacyRole` — the same escalation guard `grantRole` uses (you may hand over only what you hold) — instead of comparing `user.role` in a fixed hierarchy. The old shape could not express a delegated admin who may create members but not other admins, and it read the caller's legacy role, which R4 froze precisely because it is no longer the source of truth. `canModifyAdmin` is left reading the column: it is a lockout guard, not an authorization decision, and the admin UI still writes that column. If wrong, the last-admin guard needs to count org-role grants rather than legacy role strings.
+
+## Two test defects found and fixed while adding coverage
+
+Note: `myCapabilities.test.js` first used its own `new PrismaClient(...)` while the endpoint under test resolves the shared `utils/prisma`. The test wrote to one database and the route read another, so every capability came back false — which is indistinguishable from a correct deny, and the "plain member holds nothing" case passed for entirely the wrong reason. Fixed by using the shared client. Worth remembering: an all-denied result is exactly what a misconfigured authorization test looks like when it is right AND when it is broken.
+Note: with the shared client, a hard-coded actor id collided with another suite's data in the full run while passing in isolation. Actor ids are now derived per process.
