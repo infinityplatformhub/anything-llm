@@ -259,7 +259,14 @@ async function workspaceIdsForUser(userId, db = prisma) {
  * callers expect a boolean, and `false` is correct for a genuine single-user install.
  *
  * Both reads fail closed: an unreadable users table denies too, because absence of
- * evidence is not evidence of absence.
+ * evidence is not evidence of absence. Returning 0 on that error would simply move
+ * FINDING-1 from the settings read to this one.
+ *
+ * ORDERING NOTE for endpoints/system.js onboarding: the first `User.create` happens BEFORE
+ * `multi_user_mode` is written to true. During that window the setting still says
+ * single-user while a user row exists, so this returns false and an anonymous request is
+ * denied — fail-closed, and deliberate. Do NOT "fix" it by flipping the setting first:
+ * that would leave a window where the deployment claims multi-user with no admin in it.
  */
 async function isConfirmedSingleUser(db = prisma) {
   try {

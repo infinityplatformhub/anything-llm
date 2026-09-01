@@ -82,6 +82,35 @@ describe("QA-2 FINDING-1: single-user is confirmed by evidence, not by a setting
     expect(await resolveActor({}, res({}), { db })).toBeNull();
   });
 
+  test("both reads failing at once still denies — the bug must not move to the second read", async () => {
+    // Techlead: if the users.count() catch returned 0 rather than denying, this fix would
+    // simply relocate FINDING-1 from the settings read to the membership read.
+    SystemSettings.isMultiUserMode.mockRejectedValue(new Error("db down"));
+    const db = {
+      users: {
+        count: async () => {
+          throw new Error("db down");
+        },
+      },
+      workspace_users: { findMany: async () => [] },
+    };
+    expect(await resolveActor({}, res({}), { db })).toBeNull();
+  });
+
+  test("mid-onboarding (admin created, mode not yet flipped) denies rather than granting", async () => {
+    // endpoints/system.js creates the first User BEFORE writing multi_user_mode=true.
+    // In that window the setting still says single-user while a user row exists, so this
+    // resolver returns null and the request is denied. That is the correct direction:
+    // the alternative is handing super_admin to an anonymous caller for the length of the
+    // window. See the note at isConfirmedSingleUser about the ordering of those two lines.
+    SystemSettings.isMultiUserMode.mockResolvedValue(false);
+    const db = {
+      users: { count: async () => 1 },
+      workspace_users: { findMany: async () => [] },
+    };
+    expect(await resolveActor({}, res({}), { db })).toBeNull();
+  });
+
   test("a genuinely empty deployment still resolves the single-user principal (R5)", async () => {
     // The fallback exists for a reason: single-user deployments have no user rows at all,
     // and R5 says no code path may skip checks — the principal is explicit and evaluated.
