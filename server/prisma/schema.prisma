@@ -328,6 +328,21 @@ model document_sync_executions {
   queue     document_sync_queues @relation(fields: [queueId], references: [id], onDelete: Cascade)
 }
 
+// P0-4D(c): provider credentials, encrypted at rest with AES-256-GCM. One row per env
+// key; iv and authTag are per-row. Deliberately not EncryptionManager's aes-256-cbc:
+// an unauthenticated cipher lets anyone who can write this table alter the plaintext
+// without detection.
+model credential_store {
+  id            Int      @id @default(autoincrement())
+  envKey        String   @unique
+  ciphertext    Bytes
+  iv            Bytes
+  authTag       Bytes
+  keyVersion    Int      @default(1)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
 model browser_extension_api_keys {
   id            Int      @id @default(autoincrement())
   secretDigest  Bytes    @unique
