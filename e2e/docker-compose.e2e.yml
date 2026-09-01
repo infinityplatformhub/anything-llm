@@ -2,6 +2,10 @@
 # stack. Started by e2e/scripts/up.sh which sets COMPOSE_PROJECT_NAME and ports.
 # The app container reaches the mock provider as http://mock-llm:8080/v1.
 services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${E2E_PG_PORT:-55434}:5432"
+
   anything-llm:
     ports: !override
       - "127.0.0.1:${E2E_APP_PORT:-3111}:3001"

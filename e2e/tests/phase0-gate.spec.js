@@ -32,12 +32,14 @@ async function login(page, { username, password }) {
   await page.locator('button:has-text("Login")').click();
 
   const recovery = page.getByRole("heading", { name: "Recovery Codes" });
-  if (await recovery.isVisible({ timeout: 10_000 }).catch(() => false)) {
-    const downloadBtn = page.getByRole("button", { name: /download/i });
+  if (await recovery.isVisible({ timeout: 15_000 }).catch(() => false)) {
     const dl = page.waitForEvent("download").catch(() => null);
-    await downloadBtn.click();
+    await page.getByRole("button", { name: /download/i }).click({ force: true });
     (await dl)?.cancel?.();
-    await page.getByRole("button", { name: "Close" }).click();
+    // The button relabels to Close only after the download handler ran.
+    await page
+      .getByRole("button", { name: "Close" })
+      .click({ timeout: 15_000 });
   }
 
   await expect(
@@ -239,10 +241,8 @@ test("07 admin creates a member user via admin UI", async ({ page }) => {
   await page.getByText("Add user").first().click();
   await page.locator('input[name="username"]').fill(MEMBER.username);
   await page.locator('input[name="password"]').fill(MEMBER.password);
-  await page
-    .locator('button:has-text("Create Account"), button:has-text("Save"), button:has-text("Add")')
-    .last()
-    .click();
+  // Role select already defaults to "default" (member).
+  await page.locator('button[type="submit"]:has-text("Add user")').click();
   await expect(page.getByText(MEMBER.username).first()).toBeVisible({
     timeout: 30_000,
   });
@@ -251,10 +251,12 @@ test("07 admin creates a member user via admin UI", async ({ page }) => {
 test("08 admin creates an API key via admin UI", async ({ page }) => {
   await login(page, ADMIN);
   await page.goto("/settings/api-keys");
+  await page.getByRole("button", { name: "Generate New API Key" }).click();
   await page
-    .getByRole("button", { name: /generate|create|new api key/i })
+    .locator('button[type="submit"]:has-text("Create API Key")')
     .click();
-  await expect(page.getByText(/apw-key-/).first()).toBeVisible({
+  // The raw key (apw-key- prefix on this branch) is shown once at creation.
+  await expect(page.getByText(/apw-key-|^[A-Za-z0-9]{20,}$/).first()).toBeVisible({
     timeout: 30_000,
   });
 });

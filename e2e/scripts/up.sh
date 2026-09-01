@@ -10,6 +10,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"   # repo root (worktree)
 E2E="$ROOT/e2e"
 export COMPOSE_PROJECT_NAME=aproof-e2e
 export COMPOSE_FILE="$ROOT/docker/docker-compose.yml:$E2E/docker-compose.e2e.yml"
+# Dev machine holds 5432; the e2e postgres publishes on 55434 instead.
+export E2E_PG_PORT="${E2E_PG_PORT:-55434}"
 APP_PORT="${E2E_APP_PORT:-3111}"
 
 down() {
