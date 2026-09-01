@@ -1,0 +1,18 @@
+# E2E stack: this worktree's build + mock LLM provider, isolated from the dev
+# stack. Started by e2e/scripts/up.sh which sets COMPOSE_PROJECT_NAME and ports.
+# The app container reaches the mock provider as http://mock-llm:8080/v1.
+services:
+  anything-llm:
+    ports: !override
+      - "127.0.0.1:${E2E_APP_PORT:-3111}:3001"
+    volumes: !override
+      - "../e2e-storage:/app/server/storage"
+    env_file:
+      - ../e2e/e2e.env
+    depends_on:
+      - mock-llm
+
+  mock-llm:
+    build: ../e2e/mock-llm
+    ports:
+      - "127.0.0.1:${E2E_MOCK_PORT:-3112}:8080"
