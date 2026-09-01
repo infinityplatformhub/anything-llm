@@ -13,8 +13,16 @@ const FIXTURE = JSON.parse(
  * own instance against a fresh temp STORAGE_DIR and a mocked global fetch.
  */
 let lastInstance = null;
+/** Refreshes started by module-level construction that nobody else awaits. */
+let abandonedBoots = [];
 function freshInstance() {
-  const { ModelPricing } = require("../../../../utils/helpers/modelPricing");
+  const mod = require("../../../../utils/helpers/modelPricing");
+  const { ModelPricing } = mod;
+  // Requiring the module constructs MODEL_PRICING (index.js:332) and starts an
+  // unawaited background refresh against this same cache directory. Abandoning it here
+  // leaves a write in flight that lands after the test's own refresh and overwrites
+  // .etag / .cached_at — the etag flake in issue 38. Settle it before taking over.
+  abandonedBoots.push(mod.MODEL_PRICING.bootRefresh);
   ModelPricing.instance = null;
   lastInstance = new ModelPricing();
   return lastInstance;
@@ -34,7 +42,8 @@ function okResponse(data, { etag = null } = {}) {
 
 /** Waits for the constructor's background refresh to settle. */
 async function flushRefresh() {
-  await lastInstance.bootRefresh;
+  // Every refresh touching this directory, not just the instance under test.
+  await Promise.all([...abandonedBoots.splice(0), lastInstance.bootRefresh]);
 }
 
 describe("ModelPricing", () => {
