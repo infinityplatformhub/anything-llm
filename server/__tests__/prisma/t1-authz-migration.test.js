@@ -10,6 +10,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { PrismaClient } = require("@prisma/client");
 const { ALL_ACTIONS } = require("../../prisma/seeds/permissions");
+const { forPsql } = require("../../utils/test/postgresUrl");
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const MIGRATION_DIR = fs
@@ -35,7 +36,7 @@ let prisma;
 const BACKFILL_FILE = path.join("/tmp", `t1-backfill-${dbSuffix}.sql`);
 function runBackfill() {
   fs.writeFileSync(BACKFILL_FILE, BACKFILL_SQL);
-  execSync(`psql "${testUrl}" -v ON_ERROR_STOP=1 -q -f ${BACKFILL_FILE}`, { stdio: "pipe" });
+  execSync(`psql "${forPsql(testUrl)}" -v ON_ERROR_STOP=1 -q -f ${BACKFILL_FILE}`, { stdio: "pipe" });
 }
 
 beforeAll(async () => {

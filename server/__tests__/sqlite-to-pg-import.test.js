@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { Client } = require("pg");
+const { forPostgresClient, forPrismaTest } = require("../utils/test/postgresUrl");
 
 const script = path.resolve(__dirname, "../../scripts/sqlite-to-pg-import.js");
 const databaseUrl = process.env.DATABASE_URL;
@@ -11,7 +12,7 @@ let client;
 let fixture;
 
 beforeAll(async () => {
-  if (!databaseUrl?.startsWith("postgresql://")) {
+  if (!databaseUrl?.startsWith("postgresql:")) {
     throw new Error("DATABASE_URL must point to PostgreSQL for import tests");
   }
   fixture = path.join(
@@ -30,13 +31,13 @@ beforeAll(async () => {
      INSERT INTO event_logs VALUES (12, 'fixture_event', '{"source":"fixture"}', 7, '2026-01-02T03:04:05Z');`,
   ]);
 
-  const setup = new Client({ connectionString: databaseUrl });
+  const clientUrl = forPostgresClient(databaseUrl);
+  const setup = new Client({ connectionString: clientUrl });
   await setup.connect();
   await setup.query(`CREATE SCHEMA "${schema}"`);
   await setup.end();
 
-  const target = new URL(databaseUrl);
-  target.searchParams.set("schema", schema);
+  const target = forPrismaTest(databaseUrl, { schema });
   execFileSync(
     path.resolve(__dirname, "../node_modules/.bin/prisma"),
     [
@@ -46,21 +47,23 @@ beforeAll(async () => {
       "--schema",
       path.resolve(__dirname, "../prisma/schema.prisma"),
     ],
-    { env: { ...process.env, DATABASE_URL: target.toString() } }
+    { env: { ...process.env, DATABASE_URL: target } }
   );
-  execFileSync(process.execPath, [script, fixture, target.toString()]);
-  client = new Client({ connectionString: databaseUrl });
+  execFileSync(process.execPath, [script, fixture, target]);
+  client = new Client({ connectionString: clientUrl });
   await client.connect();
   await client.query(`SET search_path TO "${schema}"`);
-});
+}, 30_000);
 
 afterAll(async () => {
   await client?.end();
-  const cleanup = new Client({ connectionString: databaseUrl });
+  const cleanup = new Client({
+    connectionString: forPostgresClient(databaseUrl),
+  });
   await cleanup.connect();
   await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   await cleanup.end();
-});
+}, 30_000);
 
 test("imports fixture rows and preserves IDs", async () => {
   expect((await client.query("SELECT id, username FROM users")).rows).toEqual([
