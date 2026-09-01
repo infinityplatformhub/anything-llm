@@ -129,3 +129,48 @@ describe("a membership without its grant must not survive (QA-2, #39)", () => {
     ).rejects.toThrow(/no workspace-scoped 'editor' role is seeded/);
   });
 });
+
+describe("JobRuntime keeps BOTH imports after the #39/#41 merge", () => {
+  test("it takes SERVICE_PRINCIPALS from the leaf and resolveActorRef from the resolver", () => {
+    // Techlead's trial-merge warning: resolving this conflict by taking either
+    // side whole silently removes a working feature. Choosing #39's line drops
+    // resolveActorRef, so every job resolves to undefined and is denied — and
+    // the suite stays GREEN, because default-deny is what a denied job looks
+    // like. This asserts the shape directly instead.
+    const fs = require("fs");
+    const path = require("path");
+    const source = fs.readFileSync(
+      path.join(__dirname, "../../../utils/jobs/JobRuntime.js"),
+      "utf8"
+    );
+    expect(source).toMatch(
+      /require\("\.\.\/authorization\/principals"\)/
+    );
+    expect(source).toMatch(
+      /resolveActorRef[\s\S]*require\("\.\.\/authorization\/actorResolver"\)/
+    );
+  });
+
+  test("a job's actorRef resolves to that user, not to a denied blank", async () => {
+    jest.resetModules();
+    const {
+      resolveActorRef,
+    } = require("../../../utils/authorization/actorResolver");
+    expect(typeof resolveActorRef).toBe("function");
+
+    const actor = await resolveActorRef(
+      { type: "user", id: "4242" },
+      {
+        db: {
+          users: {
+            findUnique: async () => ({ id: 4242, suspended: 0 }),
+          },
+          workspace_users: { findMany: async () => [] },
+        },
+      }
+    );
+    // The failure this guards: undefined resolveActorRef -> no actor -> the
+    // engine denies, which looks identical to a correct denial.
+    expect(actor).toMatchObject({ type: "user", id: "4242" });
+  });
+});
