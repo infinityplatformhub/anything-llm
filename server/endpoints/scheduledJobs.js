@@ -1,7 +1,7 @@
 const { ScheduledJob } = require("../models/scheduledJob");
 const { ScheduledJobRun } = require("../models/scheduledJobRun");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const { isSingleUserMode } = require("../utils/middleware/multiUserProtected");
+const { isSingleUserMode } = require("../utils/middleware/deploymentMode");
 const { reqBody, safeJsonParse } = require("../utils/http");
 const { BackgroundService } = require("../utils/BackgroundWorkers");
 const { Telemetry } = require("../models/telemetry");

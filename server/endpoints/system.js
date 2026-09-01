@@ -32,6 +32,8 @@ const { v4 } = require("uuid");
 const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -51,11 +53,7 @@ const { getCustomModels } = require("../utils/helpers/customModels");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { WorkspaceParsedFiles } = require("../models/workspaceParsedFiles");
-const {
-  flexUserRoleValid,
-  ROLES,
-  isMultiUserSetup,
-} = require("../utils/middleware/multiUserProtected");
+const { isMultiUserSetup } = require("../utils/middleware/deploymentMode");
 const { fetchPfp, determinePfpFilepath } = require("../utils/files/pfp");
 const { exportChatsAsType } = require("../utils/helpers/chat/convertTo");
 const { emitAuditEvent } = require("../utils/events");
@@ -95,7 +93,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/env-dump",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (_, response) => {
       if (process.env.NODE_ENV !== "production")
         return response.sendStatus(200).end();
@@ -204,158 +202,164 @@ function systemEndpoints(app) {
     }
   );
 
-  app.post("/request-token", [loginIpRateLimit, loginAccountRateLimit], async (request, response) => {
-    try {
-      const bcrypt = require("bcryptjs");
+  app.post(
+    "/request-token",
+    [loginIpRateLimit, loginAccountRateLimit],
+    async (request, response) => {
+      try {
+        const bcrypt = require("bcryptjs");
 
-      if (await SystemSettings.isMultiUserMode()) {
-        if (simpleSSOLoginDisabled()) {
-          response.status(403).json({
-            user: null,
-            valid: false,
-            token: null,
-            message:
-              "[005] Login via credentials has been disabled by the administrator.",
-          });
-          return;
-        }
+        if (await SystemSettings.isMultiUserMode()) {
+          if (simpleSSOLoginDisabled()) {
+            response.status(403).json({
+              user: null,
+              valid: false,
+              token: null,
+              message:
+                "[005] Login via credentials has been disabled by the administrator.",
+            });
+            return;
+          }
 
-        const { username, password } = reqBody(request);
-        const existingUser = await User._get({ username: String(username) });
+          const { username, password } = reqBody(request);
+          const existingUser = await User._get({ username: String(username) });
 
-        if (!existingUser) {
+          if (!existingUser) {
+            await emitAuditEvent(
+              "failed_login_invalid_username",
+              {
+                ip: request.ip || "Unknown IP",
+                username: username || "Unknown user",
+              },
+              existingUser?.id
+            );
+            response.status(401).json({
+              user: null,
+              valid: false,
+              token: null,
+              message: "Invalid login credentials.",
+            });
+            return;
+          }
+
+          if (!bcrypt.compareSync(String(password), existingUser.password)) {
+            await emitAuditEvent(
+              "failed_login_invalid_password",
+              {
+                ip: request.ip || "Unknown IP",
+                username: username || "Unknown user",
+              },
+              existingUser?.id
+            );
+            response.status(401).json({
+              user: null,
+              valid: false,
+              token: null,
+              message: "Invalid login credentials.",
+            });
+            return;
+          }
+
+          if (existingUser.suspended) {
+            await emitAuditEvent(
+              "failed_login_account_suspended",
+              {
+                ip: request.ip || "Unknown IP",
+                username: username || "Unknown user",
+              },
+              existingUser?.id
+            );
+            response.status(401).json({
+              user: null,
+              valid: false,
+              token: null,
+              message: "Invalid login credentials.",
+            });
+            return;
+          }
+
+          await Telemetry.sendTelemetry(
+            "login_event",
+            { multiUserMode: false },
+            existingUser?.id
+          );
+
           await emitAuditEvent(
-            "failed_login_invalid_username",
+            "login_event",
             {
               ip: request.ip || "Unknown IP",
-              username: username || "Unknown user",
+              username: existingUser.username || "Unknown user",
             },
             existingUser?.id
           );
-          response.status(401).json({
-            user: null,
-            valid: false,
-            token: null,
-            message: "Invalid login credentials.",
-          });
-          return;
-        }
 
-        if (!bcrypt.compareSync(String(password), existingUser.password)) {
-          await emitAuditEvent(
-            "failed_login_invalid_password",
-            {
-              ip: request.ip || "Unknown IP",
-              username: username || "Unknown user",
-            },
-            existingUser?.id
+          // Generate a session token for the user then check if they have seen the recovery codes
+          // and if not, generate recovery codes and return them to the frontend.
+          const sessionToken = makeJWT(
+            { id: existingUser.id, username: existingUser.username },
+            process.env.JWT_EXPIRY
           );
-          response.status(401).json({
-            user: null,
-            valid: false,
-            token: null,
-            message: "Invalid login credentials.",
-          });
-          return;
-        }
+          if (!existingUser.seen_recovery_codes) {
+            const plainTextCodes = await generateRecoveryCodes(existingUser.id);
+            response.status(200).json({
+              valid: true,
+              user: User.filterFields(existingUser),
+              token: sessionToken,
+              message: null,
+              recoveryCodes: plainTextCodes,
+            });
+            return;
+          }
 
-        if (existingUser.suspended) {
-          await emitAuditEvent(
-            "failed_login_account_suspended",
-            {
-              ip: request.ip || "Unknown IP",
-              username: username || "Unknown user",
-            },
-            existingUser?.id
-          );
-          response.status(401).json({
-            user: null,
-            valid: false,
-            token: null,
-            message: "Invalid login credentials.",
-          });
-          return;
-        }
-
-        await Telemetry.sendTelemetry(
-          "login_event",
-          { multiUserMode: false },
-          existingUser?.id
-        );
-
-        await emitAuditEvent(
-          "login_event",
-          {
-            ip: request.ip || "Unknown IP",
-            username: existingUser.username || "Unknown user",
-          },
-          existingUser?.id
-        );
-
-        // Generate a session token for the user then check if they have seen the recovery codes
-        // and if not, generate recovery codes and return them to the frontend.
-        const sessionToken = makeJWT(
-          { id: existingUser.id, username: existingUser.username },
-          process.env.JWT_EXPIRY
-        );
-        if (!existingUser.seen_recovery_codes) {
-          const plainTextCodes = await generateRecoveryCodes(existingUser.id);
           response.status(200).json({
             valid: true,
             user: User.filterFields(existingUser),
             token: sessionToken,
             message: null,
-            recoveryCodes: plainTextCodes,
           });
           return;
-        }
+        } else {
+          const { password } = reqBody(request);
+          if (
+            !bcrypt.compareSync(
+              password,
+              bcrypt.hashSync(process.env.AUTH_TOKEN, 10)
+            )
+          ) {
+            await emitAuditEvent("failed_login_invalid_password", {
+              ip: request.ip || "Unknown IP",
+              multiUserMode: false,
+            });
+            response.status(401).json({
+              valid: false,
+              token: null,
+              message: "[003] Invalid password provided",
+            });
+            return;
+          }
 
-        response.status(200).json({
-          valid: true,
-          user: User.filterFields(existingUser),
-          token: sessionToken,
-          message: null,
-        });
-        return;
-      } else {
-        const { password } = reqBody(request);
-        if (
-          !bcrypt.compareSync(
-            password,
-            bcrypt.hashSync(process.env.AUTH_TOKEN, 10)
-          )
-        ) {
-          await emitAuditEvent("failed_login_invalid_password", {
+          await Telemetry.sendTelemetry("login_event", {
+            multiUserMode: false,
+          });
+          await emitAuditEvent("login_event", {
             ip: request.ip || "Unknown IP",
             multiUserMode: false,
           });
-          response.status(401).json({
-            valid: false,
-            token: null,
-            message: "[003] Invalid password provided",
+          response.status(200).json({
+            valid: true,
+            token: makeJWT(
+              { p: new EncryptionManager().encrypt(password) },
+              process.env.JWT_EXPIRY
+            ),
+            message: null,
           });
-          return;
         }
-
-        await Telemetry.sendTelemetry("login_event", { multiUserMode: false });
-        await emitAuditEvent("login_event", {
-          ip: request.ip || "Unknown IP",
-          multiUserMode: false,
-        });
-        response.status(200).json({
-          valid: true,
-          token: makeJWT(
-            { p: new EncryptionManager().encrypt(password) },
-            process.env.JWT_EXPIRY
-          ),
-          message: null,
-        });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
       }
-    } catch (e) {
-      console.error(e.message, e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
   app.get(
     "/request-token/sso/simple",
@@ -451,7 +455,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/system-vectors",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const query = queryParams(request);
@@ -469,7 +473,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/remove-document",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.delete", orgResource)],
     async (request, response) => {
       try {
         const { name } = reqBody(request);
@@ -484,7 +488,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/remove-documents",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.delete", orgResource)],
     async (request, response) => {
       try {
         const { names } = reqBody(request);
@@ -499,7 +503,10 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/remove-folder",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission("document.folder.manage", orgResource),
+    ],
     async (request, response) => {
       try {
         const { name } = reqBody(request);
@@ -514,7 +521,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/local-files",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.read", orgResource)],
     async (request, response) => {
       try {
         const { folder, offset, limit } = queryParams(request);
@@ -536,7 +543,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/local-files/search",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.search", orgResource)],
     async (request, response) => {
       try {
         const { q } = queryParams(request);
@@ -551,7 +558,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/local-files/by-docpaths",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("document.read", orgResource)],
     async (request, response) => {
       try {
         const { docpaths = [] } = reqBody(request);
@@ -599,7 +606,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/update-env",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         const body = reqBody(request);
@@ -678,7 +685,7 @@ function systemEndpoints(app) {
         const { user, error } = await User.create({
           username,
           password,
-          role: ROLES.admin,
+          role: "admin",
         });
 
         if (error || !user) {
@@ -812,7 +819,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/pfp/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("user.read", orgResource)],
     async function (request, response) {
       try {
         const { id } = request.params;
@@ -841,7 +848,11 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/upload-pfp",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), handlePfpUpload],
+    [
+      validatedRequest,
+      requirePermission("user.write", orgResource),
+      handlePfpUpload,
+    ],
     async function (request, response) {
       try {
         const user = await userFromSession(request, response);
@@ -880,7 +891,7 @@ function systemEndpoints(app) {
   );
   app.get(
     "/system/default-system-prompt",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (_, response) => {
       try {
         const defaultSystemPrompt = await SystemSettings.get({
@@ -905,7 +916,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/default-system-prompt",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         const { defaultSystemPrompt } = reqBody(request);
@@ -932,7 +943,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/remove-pfp",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("user.write", orgResource)],
     async function (request, response) {
       try {
         const user = await userFromSession(request, response);
@@ -970,7 +981,7 @@ function systemEndpoints(app) {
     "/system/upload-logo",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("settings.write", orgResource),
       handleAssetUpload,
     ],
     async (request, response) => {
@@ -1019,7 +1030,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/remove-logo",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (_request, response) => {
       try {
         const currentLogoFilename = await SystemSettings.currentLogoFilename();
@@ -1118,7 +1129,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/custom-models",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const {
@@ -1146,7 +1157,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/event-logs",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const { offset = 0, limit = 10 } = reqBody(request);
@@ -1166,7 +1177,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/event-logs",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (_, response) => {
       try {
         await EventLogs.delete();
@@ -1188,7 +1199,7 @@ function systemEndpoints(app) {
     [
       chatHistoryViewable,
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("chat.read_others", orgResource),
     ],
     async (request, response) => {
       try {
@@ -1212,7 +1223,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/workspace-chats/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("chat.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -1232,7 +1243,7 @@ function systemEndpoints(app) {
     [
       chatHistoryViewable,
       validatedRequest,
-      flexUserRoleValid([ROLES.manager, ROLES.admin]),
+      requirePermission("document.bulk_export", orgResource),
     ],
     async (request, response) => {
       try {
@@ -1295,7 +1306,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/slash-command-presets",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1310,7 +1321,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/slash-command-presets",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1348,7 +1359,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/slash-command-presets/:slashCommandId",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1394,7 +1405,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/slash-command-presets/:slashCommandId",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { slashCommandId } = request.params;
@@ -1421,7 +1432,7 @@ function systemEndpoints(app) {
 
   app.get(
     "/system/prompt-variables",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1439,7 +1450,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/prompt-variables",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1475,7 +1486,7 @@ function systemEndpoints(app) {
 
   app.put(
     "/system/prompt-variables/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -1517,7 +1528,7 @@ function systemEndpoints(app) {
 
   app.delete(
     "/system/prompt-variables/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -1545,7 +1556,11 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/transcribe-audio",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), handleAudioUpload],
+    [
+      validatedRequest,
+      requirePermission("system.read", orgResource),
+      handleAudioUpload,
+    ],
     async (request, response) => {
       try {
         if (!request.file?.buffer) {
@@ -1582,7 +1597,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/validate-sql-connection",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       const { engine, connectionString } = reqBody(request);
       try {

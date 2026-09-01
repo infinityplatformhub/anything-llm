@@ -85,7 +85,7 @@ describe("remove-and-unembed purge guard (PR-0c / G11)", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("allows an admin even when the document spans workspaces (system-wide doc management)", async () => {
+  it("allows an org-wide document.delete holder even when the document spans workspaces", async () => {
     prisma.workspace_documents.findFirst.mockResolvedValue({
       id: 5,
       workspaceId: 1,
@@ -96,10 +96,14 @@ describe("remove-and-unembed purge guard (PR-0c / G11)", () => {
       { workspaceId: 2 },
     ]);
 
+    // T-4a (#25): the capability is passed in by the route from an engine
+    // decision, instead of being read off `user.role` here. Same outcome, but
+    // now revoking the grant revokes the purge.
     const result = await canPurgeDocumentFromWorkspace({
       workspace,
       user: admin,
       documentLocation: "custom-documents/shared.json",
+      orgWideDocumentDelete: true,
     });
 
     expect(result.allowed).toBe(true);

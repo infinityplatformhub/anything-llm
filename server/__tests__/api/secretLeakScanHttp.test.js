@@ -32,6 +32,15 @@ execFileSync(
   ["db", "push", "--skip-generate", "--schema", testSchema],
   { cwd: path.resolve(__dirname, "../.."), env: process.env, stdio: "ignore" }
 );
+// T-4a (#25): `db push` creates tables but runs no seed, so the roles and
+// permissions the engine reads would not exist and every request would 403.
+// Authorization is now part of the HTTP path, so the seed is part of the world
+// these suites need.
+execFileSync(
+  process.execPath,
+  [path.resolve(__dirname, "../../prisma/seed.js")],
+  { cwd: path.resolve(__dirname, "../.."), env: process.env, stdio: "ignore" }
+);
 
 jest.mock("../../utils/logger", () => () => {});
 jest.mock("../../utils/boot", () => ({ bootHTTP: jest.fn(), bootSSL: jest.fn() }));
@@ -82,6 +91,16 @@ const URL_HOST = "chroma.internal:8000";
 const URL_CANARY = `https:${"//"}chromauser:${URL_PASSWORD}@${URL_HOST}`;
 let admin;
 
+// T-4a (#25): raw `prisma.users.create` bypasses `User.create`, which is where
+// the legacy-role -> grant sync lives. The engine reads grants, so a fixture
+// user must be granted the same way production grants.
+async function grantLegacyRole(prisma, user) {
+  const {
+    syncLegacyRoleGrant,
+  } = require("../../utils/authorization/legacyRoleGrants");
+  await syncLegacyRoleGrant(user, { db: prisma });
+}
+
 beforeAll(async () => {
   admin = await prisma.users.create({
     data: {
@@ -90,8 +109,12 @@ beforeAll(async () => {
       role: "admin",
     },
   });
-  await prisma.system_settings.create({
-    data: { label: "multi_user_mode", value: "true" },
+  await grantLegacyRole(prisma, admin);
+  // upsert: the seed already writes this label (T-4a added the seed run above)
+  await prisma.system_settings.upsert({
+    where: { label: "multi_user_mode" },
+    update: { value: "true" },
+    create: { label: "multi_user_mode", value: "true" },
   });
 });
 

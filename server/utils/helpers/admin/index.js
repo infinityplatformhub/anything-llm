@@ -1,5 +1,8 @@
 const { User } = require("../../../models/user");
-const { ROLES } = require("../../middleware/multiUserProtected");
+// Role ASSIGNMENT validation, not access control: these decide which legacy role
+// value a caller may write onto another user. Whether the caller may manage users
+// at all is `user.manage`, decided by the engine at the route (T-4a).
+const { ROLES } = require("../../legacyRoles");
 
 // When a user is updating or creating a user in multi-user, we need to check if they
 // are allowed to do this and that the new or existing user will be at or below their permission level.

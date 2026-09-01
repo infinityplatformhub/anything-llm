@@ -18,12 +18,15 @@ const {
   validCanModify,
 } = require("../utils/helpers/admin");
 const { reqBody, userFromSession, safeJsonParse } = require("../utils/http");
-const {
-  strictMultiUserRoleValid,
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const {
+  orgResource,
+  workspaceByIdParam,
+} = require("../utils/middleware/resourceResolvers");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
 const ImportedPlugin = require("../utils/agents/imported");
 const {
   simpleSSOLoginDisabledMiddleware,
@@ -32,12 +35,14 @@ const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
 
+const authorizationEngine = new DatabaseAuthorizationEngine();
+
 function adminEndpoints(app) {
   if (!app) return;
 
   app.get(
     "/admin/users",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("user.read", orgResource)],
     async (_request, response) => {
       try {
         const users = await User.where();
@@ -51,7 +56,7 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/users/new",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("user.manage", orgResource)],
     async (request, response) => {
       try {
         const currUser = await userFromSession(request, response);
@@ -87,7 +92,7 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/user/:id",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("user.manage", orgResource)],
     async (request, response) => {
       try {
         const currUser = await userFromSession(request, response);
@@ -128,7 +133,7 @@ function adminEndpoints(app) {
 
   app.delete(
     "/admin/user/:id",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("user.manage", orgResource)],
     async (request, response) => {
       try {
         const currUser = await userFromSession(request, response);
@@ -161,7 +166,7 @@ function adminEndpoints(app) {
 
   app.get(
     "/admin/invites",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("invite.read", orgResource)],
     async (_request, response) => {
       try {
         const invites = await Invite.whereWithUsers();
@@ -177,7 +182,7 @@ function adminEndpoints(app) {
     "/admin/invite/new",
     [
       validatedRequest,
-      strictMultiUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("invite.create", orgResource),
       simpleSSOLoginDisabledMiddleware,
     ],
     async (request, response) => {
@@ -207,7 +212,7 @@ function adminEndpoints(app) {
 
   app.delete(
     "/admin/invite/:id",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("invite.delete", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -227,7 +232,7 @@ function adminEndpoints(app) {
 
   app.get(
     "/admin/workspaces",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("workspace.read", orgResource)],
     async (_request, response) => {
       try {
         const workspaces = await Workspace.whereWithUsers();
@@ -241,7 +246,13 @@ function adminEndpoints(app) {
 
   app.get(
     "/admin/workspaces/:workspaceId/users",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission(
+        "workspace.members.manage",
+        workspaceByIdParam("workspaceId")
+      ),
+    ],
     async (request, response) => {
       try {
         const { workspaceId } = request.params;
@@ -256,7 +267,7 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/workspaces/new",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("workspace.create", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -275,7 +286,13 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/workspaces/:workspaceId/update-users",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin, ROLES.manager])],
+    [
+      validatedRequest,
+      requirePermission(
+        "workspace.members.manage",
+        workspaceByIdParam("workspaceId")
+      ),
+    ],
     async (request, response) => {
       try {
         const { workspaceId } = request.params;
@@ -296,7 +313,7 @@ function adminEndpoints(app) {
     "/admin/workspaces/:id",
     [
       validatedRequest,
-      strictMultiUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("workspace.delete", workspaceByIdParam("id")),
       workspaceDeletionProtection,
     ],
     async (request, response) => {
@@ -330,10 +347,9 @@ function adminEndpoints(app) {
   // System preferences but only by array of labels
   app.get(
     "/admin/system-preferences-for",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
-        const user = await userFromSession(request, response);
         const requestedSettings = {};
         const labels = request.query.labels?.split(",") || [];
         const needEmbedder = [
@@ -359,13 +375,19 @@ function adminEndpoints(app) {
           "meta_page_favicon",
         ];
 
+        const unrestrictedSettings = await authorizationEngine.authorize({
+          actor: response.locals.actor,
+          action: "system.write",
+          resource: await orgResource(),
+        });
+
         for (const label of labels) {
           // Skip any settings that are not explicitly defined as public
           if (!SystemSettings.publicFields.includes(label)) continue;
 
-          // Managers can only read manager-allowed fields
+          // Callers without broad system write access can only read manager fields.
           if (
-            user?.role === ROLES.manager &&
+            !unrestrictedSettings.allowed &&
             !managerAllowedFields.includes(label)
           )
             continue;
@@ -461,16 +483,19 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/system-preferences",
-    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
         let updates = reqBody(request);
 
-        // Managers can only update a limited set of settings.
-        // These match the ManagerRoute pages in the frontend.
-        // Admin users can update all supportedFields without restriction.
-        if (user?.role === ROLES.manager) {
+        // Callers without broad system write access can update manager fields only.
+        const unrestrictedSettings = await authorizationEngine.authorize({
+          actor: response.locals.actor,
+          action: "system.write",
+          resource: await orgResource(),
+        });
+        if (!unrestrictedSettings.allowed) {
           const managerAllowedFields = [
             "custom_app_name",
             "footer_data",
@@ -498,7 +523,7 @@ function adminEndpoints(app) {
 
   app.get(
     "/admin/api-keys",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("key.manage", orgResource)],
     async (_request, response) => {
       try {
         const apiKeys = await ApiKey.whereWithUser({});
@@ -518,7 +543,7 @@ function adminEndpoints(app) {
 
   app.post(
     "/admin/generate-api-key",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("key.manage", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -542,7 +567,7 @@ function adminEndpoints(app) {
 
   app.delete(
     "/admin/delete-api-key/:id",
-    [validatedRequest, strictMultiUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("key.manage", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;

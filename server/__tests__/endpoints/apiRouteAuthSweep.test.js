@@ -78,7 +78,10 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
 
   it("every route carries validApiKey middleware", () => {
     const unguarded = routes.filter(
-      (route) => !route.middlewares.some((middleware) => middleware.isApiKeyGuard === true)
+      (route) =>
+        !route.middlewares.some(
+          (middleware) => middleware.isApiKeyGuard === true
+        )
     );
     expect(
       unguarded.map((r) => `${r.method.toUpperCase()} ${r.path} (${r.module})`)
@@ -88,7 +91,11 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
   it("env-dump specifically is guarded", () => {
     const envDump = routes.find((r) => r.path === "/v1/system/env-dump");
     expect(envDump).toBeDefined();
-    expect(envDump.middlewares.some((middleware) => middleware.isApiKeyGuard === true)).toBe(true);
+    expect(
+      envDump.middlewares.some(
+        (middleware) => middleware.isApiKeyGuard === true
+      )
+    ).toBe(true);
   });
 });
 
@@ -102,11 +109,13 @@ describe("internal env-dump routes (P0-4 PR-0b, QA-2 round 2)", () => {
     "utf8"
   );
 
-  it("GET /env-dump (internal) carries validatedRequest + admin-only role gate", () => {
+  it("GET /env-dump (internal) carries validatedRequest + settings permission gate", () => {
     const routeBlock = SYSTEM_SOURCE.split('app.get(\n    "/env-dump"')[1];
     expect(routeBlock).toBeDefined();
     const middlewareBlock = routeBlock.split("),\n")[0];
     expect(middlewareBlock).toContain("validatedRequest");
-    expect(middlewareBlock).toContain("flexUserRoleValid([ROLES.admin])");
+    expect(middlewareBlock).toContain(
+      'requirePermission("settings.write", orgResource)'
+    );
   });
 });

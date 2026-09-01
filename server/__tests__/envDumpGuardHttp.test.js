@@ -31,6 +31,15 @@ execFileSync(
   ["db", "push", "--skip-generate", "--schema", testSchema],
   { cwd: path.resolve(__dirname, ".."), env: process.env, stdio: "ignore" }
 );
+// T-4a (#25): `db push` creates tables but runs no seed, so the roles and
+// permissions the engine reads would not exist and every request would 403.
+// Authorization is now part of the HTTP path, so the seed is part of the world
+// these suites need.
+execFileSync(
+  process.execPath,
+  [path.resolve(__dirname, "../prisma/seed.js")],
+  { cwd: path.resolve(__dirname, ".."), env: process.env, stdio: "ignore" }
+);
 
 jest.mock("../utils/logger", () => () => {});
 jest.mock("../utils/boot", () => ({ bootHTTP: jest.fn(), bootSSL: jest.fn() }));
@@ -88,15 +97,26 @@ async function setMultiUserMode(on) {
       data: { value: String(on) },
     });
   else
-    await prisma.system_settings.create({
-      data: { label: "multi_user_mode", value: String(on) },
+    await prisma.system_settings.upsert({
+      where: { label: "multi_user_mode" },
+      update: { value: String(on) },
+      create: { label: "multi_user_mode", value: String(on) },
     });
 }
 
-const mkUser = (username, role) =>
-  prisma.users.create({
+const mkUser = async (username, role) => {
+  const user = await prisma.users.create({
     data: { username, password: bcrypt.hashSync("Pw123456!", 10), role },
   });
+  // T-4a (#25): raw prisma.users.create bypasses User.create, where the
+  // legacy-role -> grant sync lives. The engine reads grants, so the fixture
+  // must grant the way production does.
+  const {
+    syncLegacyRoleGrant,
+  } = require("../utils/authorization/legacyRoleGrants");
+  await syncLegacyRoleGrant(user, { db: prisma });
+  return user;
+};
 
 let admin, manager, plain;
 
@@ -120,9 +140,12 @@ describe("internal /api/env-dump — multi-user", () => {
   beforeAll(() => setMultiUserMode(true));
 
   it.each([
+    // T-4a (#25) API contract: unauthenticated 401, authenticated-but-
+    // unauthorized 403, secret-existence 404. A manager holding a valid session
+    // is identified — refusing them is 403, not "who are you?".
     ["no credential", undefined, 401],
-    ["manager JWT", () => auth(manager), 401],
-    ["default JWT", () => auth(plain), 401],
+    ["manager JWT", () => auth(manager), 403],
+    ["default JWT", () => auth(plain), 403],
     ["API key (not a session)", () => "Bearer apw-key-a-valid-api-key", 401],
     [
       "forged JWT for ghost user",

@@ -3,11 +3,15 @@ const { reqBody, userFromSession, multiUserMode } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
 const { streamChatWithWorkspace } = require("../utils/chats/stream");
-const {
-  ROLES,
-  flexUserRoleValid,
-} = require("../utils/middleware/multiUserProtected");
 const { emitAuditEvent } = require("../utils/events");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
+const {
+  workspaceBySlug,
+  orgResource,
+} = require("../utils/middleware/resourceResolvers");
 const {
   validWorkspaceAndThreadSlug,
   validWorkspaceSlug,
@@ -17,12 +21,18 @@ const { WorkspaceThread } = require("../models/workspaceThread");
 const { User } = require("../models/user");
 const { getModelTag } = require("./utils");
 
+const authorizationEngine = new DatabaseAuthorizationEngine();
+
 function chatEndpoints(app) {
   if (!app) return;
 
   app.post(
     "/workspace/:slug/stream-chat",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.send", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -47,7 +57,21 @@ function chatEndpoints(app) {
         response.setHeader("Connection", "keep-alive");
         response.flushHeaders();
 
-        if (multiUserMode(response) && !(await User.canSendChat(user))) {
+        if (
+          multiUserMode(response) &&
+          !(await User.canSendChat(user, {
+            // The daily quota is not an authorization decision, but who is
+            // exempt from it is. `system.write` stands in for the admin role
+            // string this used to read off the user row.
+            exemptFromLimit: (
+              await authorizationEngine.authorize({
+                actor: response.locals.actor,
+                action: "system.write",
+                resource: await orgResource(),
+              })
+            ).allowed,
+          }))
+        ) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "abort",
@@ -106,7 +130,7 @@ function chatEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/stream-chat",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.send", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {
@@ -134,7 +158,21 @@ function chatEndpoints(app) {
         response.setHeader("Connection", "keep-alive");
         response.flushHeaders();
 
-        if (multiUserMode(response) && !(await User.canSendChat(user))) {
+        if (
+          multiUserMode(response) &&
+          !(await User.canSendChat(user, {
+            // The daily quota is not an authorization decision, but who is
+            // exempt from it is. `system.write` stands in for the admin role
+            // string this used to read off the user row.
+            exemptFromLimit: (
+              await authorizationEngine.authorize({
+                actor: response.locals.actor,
+                action: "system.write",
+                resource: await orgResource(),
+              })
+            ).allowed,
+          }))
+        ) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "abort",

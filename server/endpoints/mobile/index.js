@@ -1,12 +1,12 @@
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
+const {
+  requirePermission,
+} = require("../../utils/middleware/requirePermission");
+const { orgResource } = require("../../utils/middleware/resourceResolvers");
 const { MobileDevice } = require("../../models/mobileDevice");
 const { handleMobileCommand } = require("./utils");
 const { validDeviceToken, validRegistrationToken } = require("./middleware");
 const { reqBody } = require("../../utils/http");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../../utils/middleware/multiUserProtected");
 
 function mobileEndpoints(app) {
   if (!app) return;
@@ -18,7 +18,7 @@ function mobileEndpoints(app) {
    */
   app.get(
     "/mobile/devices",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (_request, response) => {
       try {
         const devices = await MobileDevice.where({}, null, null, {
@@ -39,7 +39,7 @@ function mobileEndpoints(app) {
    */
   app.post(
     "/mobile/update/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const body = reqBody(request);
@@ -64,7 +64,7 @@ function mobileEndpoints(app) {
    */
   app.delete(
     "/mobile/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const device = await MobileDevice.get({
@@ -83,7 +83,7 @@ function mobileEndpoints(app) {
 
   app.get(
     "/mobile/connect-info",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.read", orgResource)],
     async (_request, response) => {
       try {
         return response.status(200).json({

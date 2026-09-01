@@ -8,9 +8,12 @@ const {
   featureFlagEnabled,
 } = require("../../utils/middleware/featureFlagEnabled");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../../utils/middleware/multiUserProtected");
+  requirePermission,
+} = require("../../utils/middleware/requirePermission");
+const {
+  orgResource,
+  watchedDocumentInWorkspaceBySlug,
+} = require("../../utils/middleware/resourceResolvers");
 const { validWorkspaceSlug } = require("../../utils/middleware/validWorkspace");
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 
@@ -19,7 +22,7 @@ function liveSyncEndpoints(app) {
 
   app.post(
     "/experimental/toggle-live-sync",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         const { updatedStatus = false } = reqBody(request);
@@ -61,7 +64,7 @@ function liveSyncEndpoints(app) {
     "/experimental/live-sync/queues",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin]),
+      requirePermission("system.read", orgResource),
       featureFlagEnabled(DocumentSyncQueue.featureKey),
     ],
     async (_, response) => {
@@ -86,7 +89,7 @@ function liveSyncEndpoints(app) {
     "/workspace/:slug/update-watch-status",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("document.watch", watchedDocumentInWorkspaceBySlug),
       validWorkspaceSlug,
       featureFlagEnabled(DocumentSyncQueue.featureKey),
     ],

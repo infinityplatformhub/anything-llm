@@ -34,6 +34,15 @@ execFileSync(
     stdio: "ignore",
   }
 );
+// T-4a (#25): `db push` creates tables but runs no seed, so the roles and
+// permissions the engine reads would not exist and every request would 403.
+// Authorization is now part of the HTTP path, so the seed is part of the world
+// these suites need.
+execFileSync(
+  process.execPath,
+  [path.resolve(__dirname, "../../prisma/seed.js")],
+  { cwd: path.resolve(__dirname, "../.."), env: process.env, stdio: "ignore" }
+);
 
 jest.mock("../../utils/logger", () => () => {});
 jest.mock("../../utils/boot", () => ({
@@ -129,6 +138,16 @@ async function auth(user) {
   return `Bearer ${makeJWT({ id: user.id, username: user.username })}`;
 }
 
+// T-4a (#25): raw `prisma.users.create` bypasses `User.create`, which is where
+// the legacy-role -> grant sync lives. The engine reads grants, so a fixture
+// user must be granted the same way production grants.
+async function grantLegacyRole(prisma, user) {
+  const {
+    syncLegacyRoleGrant,
+  } = require("../../utils/authorization/legacyRoleGrants");
+  await syncLegacyRoleGrant(user, { db: prisma });
+}
+
 async function setMultiUserMode(enabled) {
   await prisma.system_settings.upsert({
     where: { label: "multi_user_mode" },
@@ -148,6 +167,7 @@ beforeAll(async () => {
       seen_recovery_codes: true,
     },
   });
+  await grantLegacyRole(prisma, admin);
   member = await prisma.users.create({
     data: {
       username: "member-user",
@@ -156,15 +176,18 @@ beforeAll(async () => {
       seen_recovery_codes: true,
     },
   });
+  await grantLegacyRole(prisma, member);
   assignedWorkspace = await prisma.workspaces.create({
     data: { name: "Assigned", slug: "assigned" },
   });
   hiddenWorkspace = await prisma.workspaces.create({
     data: { name: "Hidden", slug: "hidden" },
   });
-  await prisma.workspace_users.create({
-    data: { user_id: member.id, workspace_id: assignedWorkspace.id },
-  });
+  // T-4a (#25): membership IS workspace access now, and the grant is written by
+  // WorkspaceUser.create. A raw prisma insert leaves the row without its grant,
+  // which is exactly the drift this suite should catch, not reproduce.
+  const { WorkspaceUser } = require("../../models/workspaceUsers");
+  await WorkspaceUser.create(member.id, assignedWorkspace.id);
   apiKey = "apw-key-test-api-key-secret";
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
   await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]) } });
@@ -333,13 +356,16 @@ describe("role gates", () => {
     ["get", "/api/admin/workspaces"],
   ];
 
-  test.each(routes)("default user gets 401 on %s %s", async (method, route) => {
+  // T-4a (#25) API contract: unauthenticated 401, authenticated-but-unauthorized
+  // 403, secret-existence 404. The old middleware answered 401 for everything,
+  // which said "who are you?" to someone it had already identified.
+  test.each(routes)("default user gets 403 on %s %s", async (method, route) => {
     const resolvedRoute = route.replace("/0", `/${member.id}`);
     const res = await request(app)
       [method](resolvedRoute)
       .set("Authorization", await auth(member))
       .send({});
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   test("admin can list users", async () => {
@@ -374,10 +400,15 @@ describe("workspace isolation", () => {
   });
 
   test("member cannot fetch unassigned workspace", async () => {
+    // T-4a (#25) strengthened this: the route used to answer 200 with
+    // `workspace: null`, which confirms the slug exists to anyone who asks.
+    // requirePermission now refuses before the handler runs, and a workspace the
+    // caller may not read is indistinguishable from one that does not exist.
     const res = await request(app)
       .get("/api/workspace/hidden")
       .set("Authorization", await auth(member));
-    expect(res.body.workspace).toBeNull();
+    expect(res.status).toBe(404);
+    expect(res.body.workspace).toBeUndefined();
   });
 
   test("missing member token is rejected", async () => {

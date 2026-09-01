@@ -6,11 +6,9 @@ const {
 } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
 const { emitAuditEvent } = require("../utils/events");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { workspaceBySlug } = require("../utils/middleware/resourceResolvers");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const {
   validWorkspaceSlug,
@@ -25,7 +23,11 @@ function workspaceThreadEndpoints(app) {
 
   app.post(
     "/workspace/:slug/thread/new",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -64,7 +66,11 @@ function workspaceThreadEndpoints(app) {
 
   app.get(
     "/workspace/:slug/threads",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -94,7 +100,7 @@ function workspaceThreadEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.write", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (_, response) => {
@@ -111,7 +117,11 @@ function workspaceThreadEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/thread-bulk-delete",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("chat.write", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { slugs = [] } = reqBody(request);
@@ -136,7 +146,7 @@ function workspaceThreadEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/chats",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.read", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {
@@ -168,7 +178,7 @@ function workspaceThreadEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/update",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.write", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {
@@ -191,7 +201,7 @@ function workspaceThreadEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/delete-edited-chats",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.write", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {
@@ -220,7 +230,7 @@ function workspaceThreadEndpoints(app) {
     "/workspace/:slug/thread/:threadSlug/update-chat",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("chat.write", workspaceBySlug),
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {

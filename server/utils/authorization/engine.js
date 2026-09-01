@@ -38,6 +38,9 @@ const READ_ACTIONS = new Set([
   "access.diagnose",
 ]);
 
+// T-4a (W-6): batch ceiling for authorizeMany.
+const MAX_BATCH_RESOURCES = 500;
+
 const asDenied = (reason, matchedPolicyIds = []) => ({
   allowed: false,
   reason,
@@ -92,6 +95,14 @@ class DatabaseAuthorizationEngine {
     if (!Array.isArray(resources) || resources.length === 0) {
       throw new AuthorizationContractError("resources must be a non-empty array");
     }
+    // T-4a (W-6): each resource costs 3 queries, so an unbounded batch is a
+    // self-inflicted denial of service. Refuse rather than truncate — a short
+    // answer would read as "denied" for the resources that fell off the end.
+    if (resources.length > MAX_BATCH_RESOURCES) {
+      throw new AuthorizationContractError(
+        `authorizeMany accepts at most ${MAX_BATCH_RESOURCES} resources, got ${resources.length}`
+      );
+    }
     const decisions = await Promise.all(
       resources.map((resource) => this.authorize({ actor, action, resource }))
     );
@@ -141,4 +152,4 @@ class DatabaseAuthorizationEngine {
   }
 }
 
-module.exports = { DatabaseAuthorizationEngine, READ_ACTIONS };
+module.exports = { DatabaseAuthorizationEngine, READ_ACTIONS, MAX_BATCH_RESOURCES };

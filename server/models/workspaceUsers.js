@@ -1,4 +1,13 @@
 const prisma = require("../utils/prisma");
+const {
+  syncWorkspaceMembershipGrant,
+  revokeWorkspaceMembershipGrants,
+} = require("../utils/authorization/legacyRoleGrants");
+
+// T-4a (#25): membership IS workspace access now — the org-wide `member` role no
+// longer carries workspace actions (migration 20260902044000). Every write here
+// must move the grant with it, or the engine answers from rows that no longer
+// describe reality: someone removed from a workspace would keep reading it.
 
 const WorkspaceUser = {
   createMany: async function (userId, workspaceIds = []) {
@@ -11,6 +20,8 @@ const WorkspaceUser = {
           })
         )
       );
+      for (const workspaceId of workspaceIds)
+        await syncWorkspaceMembershipGrant({ userId, workspaceId });
     } catch (error) {
       console.error(error.message);
     }
@@ -36,6 +47,11 @@ const WorkspaceUser = {
           })
         )
       );
+      for (const userId of userIds)
+        await syncWorkspaceMembershipGrant({
+          userId: Number(userId),
+          workspaceId: Number(workspaceId),
+        });
     } catch (error) {
       console.error(error.message);
     }
@@ -46,6 +62,10 @@ const WorkspaceUser = {
     try {
       await prisma.workspace_users.create({
         data: { user_id: Number(userId), workspace_id: Number(workspaceId) },
+      });
+      await syncWorkspaceMembershipGrant({
+        userId: Number(userId),
+        workspaceId: Number(workspaceId),
       });
       return true;
     } catch (error) {
@@ -92,7 +112,15 @@ const WorkspaceUser = {
 
   delete: async function (clause = {}) {
     try {
+      // Read the rows BEFORE deleting: afterwards there is nothing left to say
+      // whose grants to revoke.
+      const doomed = await prisma.workspace_users.findMany({ where: clause });
       await prisma.workspace_users.deleteMany({ where: clause });
+      for (const row of doomed)
+        await revokeWorkspaceMembershipGrants({
+          userId: row.user_id,
+          workspaceId: row.workspace_id,
+        });
     } catch (error) {
       console.error(error.message);
     }

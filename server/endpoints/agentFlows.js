@@ -1,8 +1,6 @@
 const { AgentFlows } = require("../utils/agentFlows");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
 
@@ -12,7 +10,7 @@ function agentFlowEndpoints(app) {
   // Save a flow configuration
   app.post(
     "/agent-flows/save",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("agent-flow.write", orgResource)],
     async (request, response) => {
       try {
         const { name, config, uuid } = request.body;
@@ -53,7 +51,7 @@ function agentFlowEndpoints(app) {
   // List all available flows
   app.get(
     "/agent-flows/list",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("agent-flow.read", orgResource)],
     async (_request, response) => {
       try {
         const flows = AgentFlows.listFlows();
@@ -74,7 +72,7 @@ function agentFlowEndpoints(app) {
   // Get a specific flow by UUID
   app.get(
     "/agent-flows/:uuid",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("agent-flow.read", orgResource)],
     async (request, response) => {
       try {
         const { uuid } = request.params;
@@ -103,7 +101,7 @@ function agentFlowEndpoints(app) {
   // Run a specific flow
   // app.post(
   //   "/agent-flows/:uuid/run",
-  //   [validatedRequest, flexUserRoleValid([ROLES.admin])],
+  //   [validatedRequest, requirePermission("agent-flow.write", orgResource)],
   //   async (request, response) => {
   //     try {
   //       const { uuid } = request.params;
@@ -137,7 +135,7 @@ function agentFlowEndpoints(app) {
   // Delete a specific flow
   app.delete(
     "/agent-flows/:uuid",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("agent-flow.write", orgResource)],
     async (request, response) => {
       try {
         const { uuid } = request.params;
@@ -166,7 +164,7 @@ function agentFlowEndpoints(app) {
   // Toggle flow active status
   app.post(
     "/agent-flows/:uuid/toggle",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("agent-flow.write", orgResource)],
     async (request, response) => {
       try {
         const { uuid } = request.params;

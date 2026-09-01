@@ -3,7 +3,7 @@ const prisma = require("../utils/prisma");
 const slugifyModule = require("slugify");
 const { Document } = require("./documents");
 const { WorkspaceUser } = require("./workspaceUsers");
-const { ROLES } = require("../utils/middleware/multiUserProtected");
+
 const { v4: uuidv4 } = require("uuid");
 const { User } = require("./user");
 const { PromptHistory } = require("./promptHistory");
@@ -295,10 +295,13 @@ const Workspace = {
     }
   },
 
+  // T-4a (#25): the role branch is gone. This used to return ANY workspace to
+  // anyone whose legacy `user.role` was admin or manager, which made it the live
+  // cross-workspace IDOR (S-1) — the middleware said "manager may call this route"
+  // and the model then said "and may see every workspace". Membership is now a
+  // data filter and nothing else; whether a non-member may reach a workspace is
+  // an org-wide grant, decided by the engine at the route.
   getWithUser: async function (user = null, clause = {}) {
-    if ([ROLES.admin, ROLES.manager].includes(user.role))
-      return this.get(clause);
-
     try {
       const workspace = await prisma.workspaces.findFirst({
         where: {
@@ -422,9 +425,7 @@ const Workspace = {
     limit = null,
     orderBy = null
   ) {
-    if ([ROLES.admin, ROLES.manager].includes(user.role))
-      return await this.where(clause, limit, orderBy);
-
+    // T-4a (#25): same bypass as getWithUser, in list form (S-2).
     try {
       const workspaces = await prisma.workspaces.findMany({
         where: {

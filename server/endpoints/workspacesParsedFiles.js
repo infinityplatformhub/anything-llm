@@ -2,11 +2,9 @@ const { reqBody, multiUserMode, userFromSession } = require("../utils/http");
 const { handleFileUpload } = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
 const { emitAuditEvent } = require("../utils/events");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { workspaceBySlug } = require("../utils/middleware/resourceResolvers");
 const { validWorkspaceSlug } = require("../utils/middleware/validWorkspace");
 const { CollectorApi } = require("../utils/collectorApi");
 const { WorkspaceThread } = require("../models/workspaceThread");
@@ -17,7 +15,11 @@ function workspaceParsedFilesEndpoints(app) {
 
   app.get(
     "/workspace/:slug/parsed-files",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("document.read", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const threadSlug = request.query.threadSlug || null;
@@ -45,7 +47,11 @@ function workspaceParsedFilesEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/delete-parsed-files",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      requirePermission("document.delete", workspaceBySlug),
+      validWorkspaceSlug,
+    ],
     async function (request, response) {
       try {
         const { fileIds = [] } = reqBody(request);
@@ -72,7 +78,7 @@ function workspaceParsedFilesEndpoints(app) {
     [
       validatedRequest,
       // Embed is still an admin/manager only feature
-      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      requirePermission("document.create", workspaceBySlug),
       validWorkspaceSlug,
     ],
     async function (request, response) {
@@ -122,7 +128,7 @@ function workspaceParsedFilesEndpoints(app) {
     "/workspace/:slug/parse",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("document.create", workspaceBySlug),
       handleFileUpload,
       validWorkspaceSlug,
     ],

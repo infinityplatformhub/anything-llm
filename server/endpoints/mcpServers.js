@@ -1,9 +1,7 @@
 const { reqBody } = require("../utils/http");
 const MCPCompatibilityLayer = require("../utils/MCP");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 
 function mcpServersEndpoints(app) {
@@ -11,7 +9,7 @@ function mcpServersEndpoints(app) {
 
   app.get(
     "/mcp-servers/force-reload",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("mcp-server.write", orgResource)],
     async (_request, response) => {
       try {
         const mcp = new MCPCompatibilityLayer();
@@ -34,7 +32,7 @@ function mcpServersEndpoints(app) {
 
   app.get(
     "/mcp-servers/list",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("mcp-server.read", orgResource)],
     async (_request, response) => {
       try {
         const servers = await new MCPCompatibilityLayer().servers();
@@ -54,7 +52,7 @@ function mcpServersEndpoints(app) {
 
   app.post(
     "/mcp-servers/toggle",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("mcp-server.write", orgResource)],
     async (request, response) => {
       try {
         const { name } = reqBody(request);
@@ -77,7 +75,7 @@ function mcpServersEndpoints(app) {
 
   app.post(
     "/mcp-servers/delete",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("mcp-server.write", orgResource)],
     async (request, response) => {
       try {
         const { name } = reqBody(request);
@@ -98,7 +96,7 @@ function mcpServersEndpoints(app) {
 
   app.post(
     "/mcp-servers/toggle-tool",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("mcp-server.write", orgResource)],
     async (request, response) => {
       try {
         const { serverName, toolName, enabled } = reqBody(request);

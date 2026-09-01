@@ -1,6 +1,6 @@
 const {
   isSingleUserMode,
-} = require("../../utils/middleware/multiUserProtected");
+} = require("../../utils/middleware/deploymentMode");
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 const { GmailBridge } = require("../../utils/agents/aibitat/plugins/gmail/lib");
 const {

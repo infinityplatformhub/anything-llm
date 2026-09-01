@@ -1,8 +1,8 @@
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../../utils/middleware/multiUserProtected");
+  requirePermission,
+} = require("../../utils/middleware/requirePermission");
+const { orgResource } = require("../../utils/middleware/resourceResolvers");
 const { reqBody } = require("../../utils/http");
 const { safeJsonParse, decodeHtmlEntities } = require("../../utils/http");
 const {
@@ -14,7 +14,7 @@ function lemonadeUtilsEndpoints(app) {
 
   app.post(
     "/utils/lemonade/download-model",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { modelId, basePath = "" } = reqBody(request);
@@ -110,7 +110,7 @@ function lemonadeUtilsEndpoints(app) {
 
   app.post(
     "/utils/lemonade/delete-model",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { modelId, basePath = "" } = reqBody(request);

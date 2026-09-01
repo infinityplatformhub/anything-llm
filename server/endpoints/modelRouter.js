@@ -3,10 +3,8 @@ const { ModelRouterRule } = require("../models/modelRouterRule");
 const { Telemetry } = require("../models/telemetry");
 const { ModelRouterService } = require("../utils/router");
 const { reqBody, userFromSession } = require("../utils/http");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 
 function modelRouterEndpoints(app) {
@@ -14,7 +12,7 @@ function modelRouterEndpoints(app) {
 
   app.get(
     "/model-routers",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.read", orgResource)],
     async (_request, response) => {
       try {
         const routers = await ModelRouter.getAllWithCounts();
@@ -28,7 +26,7 @@ function modelRouterEndpoints(app) {
 
   app.get(
     "/model-routers/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.read", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -51,7 +49,7 @@ function modelRouterEndpoints(app) {
 
   app.post(
     "/model-routers/new",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -73,7 +71,7 @@ function modelRouterEndpoints(app) {
 
   app.put(
     "/model-routers/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -91,7 +89,7 @@ function modelRouterEndpoints(app) {
 
   app.delete(
     "/model-routers/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -111,7 +109,7 @@ function modelRouterEndpoints(app) {
 
   app.post(
     "/model-routers/:id/rules/new",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -137,7 +135,7 @@ function modelRouterEndpoints(app) {
 
   app.put(
     "/model-routers/:id/rules/reorder",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id } = request.params;
@@ -161,7 +159,7 @@ function modelRouterEndpoints(app) {
 
   app.put(
     "/model-routers/:id/rules/:ruleId",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id, ruleId } = request.params;
@@ -182,7 +180,7 @@ function modelRouterEndpoints(app) {
 
   app.delete(
     "/model-routers/:id/rules/:ruleId",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("model-router.write", orgResource)],
     async (request, response) => {
       try {
         const { id, ruleId } = request.params;

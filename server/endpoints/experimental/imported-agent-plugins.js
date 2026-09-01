@@ -1,9 +1,9 @@
 const ImportedPlugin = require("../../utils/agents/imported");
 const { reqBody } = require("../../utils/http");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../../utils/middleware/multiUserProtected");
+  requirePermission,
+} = require("../../utils/middleware/requirePermission");
+const { orgResource } = require("../../utils/middleware/resourceResolvers");
 const { validatedRequest } = require("../../utils/middleware/validatedRequest");
 
 function importedAgentPluginEndpoints(app) {
@@ -11,7 +11,7 @@ function importedAgentPluginEndpoints(app) {
 
   app.post(
     "/experimental/agent-plugins/:hubId/toggle",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     (request, response) => {
       try {
         const { hubId } = request.params;
@@ -29,7 +29,7 @@ function importedAgentPluginEndpoints(app) {
 
   app.post(
     "/experimental/agent-plugins/:hubId/config",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     (request, response) => {
       try {
         const { hubId } = request.params;
@@ -48,7 +48,7 @@ function importedAgentPluginEndpoints(app) {
 
   app.delete(
     "/experimental/agent-plugins/:hubId",
-    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         const { hubId } = request.params;

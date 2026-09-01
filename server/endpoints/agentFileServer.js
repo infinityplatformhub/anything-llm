@@ -4,10 +4,8 @@ const {
   safeJsonParse,
 } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+const { requirePermission } = require("../utils/middleware/requirePermission");
+const { orgResource } = require("../utils/middleware/resourceResolvers");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { Workspace } = require("../models/workspace");
 const { ScheduledJobRun } = require("../models/scheduledJobRun");
@@ -28,7 +26,9 @@ function agentFileServerEndpoints(app) {
    */
   app.get(
     "/agent-skills/generated-files/:filename",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    // The handler resolves the file through the caller's own workspaces, so this
+    // gate only establishes org principalship (T-4a).
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -94,7 +94,7 @@ function agentFileServerEndpoints(app) {
    */
   app.get(
     "/image-generation/generated-images/:filename",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, requirePermission("chat.send", orgResource)],
     async (request, response) => {
       try {
         const fs = require("fs");

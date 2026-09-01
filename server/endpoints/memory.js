@@ -2,10 +2,11 @@ const { Memory } = require("../models/memory");
 const { SystemSettings } = require("../models/systemSettings");
 const { userFromSession, reqBody } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requirePermission } = require("../utils/middleware/requirePermission");
 const {
-  flexUserRoleValid,
-  ROLES,
-} = require("../utils/middleware/multiUserProtected");
+  workspaceBySlug,
+  memoryByIdParam,
+} = require("../utils/middleware/resourceResolvers");
 const { validWorkspaceSlug } = require("../utils/middleware/validWorkspace");
 
 async function memoryFeatureEnabled(_req, response, next) {
@@ -45,7 +46,7 @@ function memoryEndpoints(app) {
     "/workspaces/:slug/memories",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.read", workspaceBySlug),
       memoryFeatureEnabled,
       validWorkspaceSlug,
     ],
@@ -72,7 +73,7 @@ function memoryEndpoints(app) {
     "/workspaces/:slug/memories",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.write", workspaceBySlug),
       memoryFeatureEnabled,
       validWorkspaceSlug,
     ],
@@ -101,7 +102,7 @@ function memoryEndpoints(app) {
     "/memories/:memoryId",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.write", memoryByIdParam()),
       memoryFeatureEnabled,
       validateMemoryOwner,
     ],
@@ -126,7 +127,7 @@ function memoryEndpoints(app) {
     "/memories/:memoryId",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.write", memoryByIdParam()),
       memoryFeatureEnabled,
       validateMemoryOwner,
     ],
@@ -146,7 +147,7 @@ function memoryEndpoints(app) {
     "/memories/:memoryId/promote",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.write", memoryByIdParam()),
       memoryFeatureEnabled,
       validateMemoryOwner,
     ],
@@ -168,7 +169,7 @@ function memoryEndpoints(app) {
     "/memories/:memoryId/demote/:slug",
     [
       validatedRequest,
-      flexUserRoleValid([ROLES.all]),
+      requirePermission("memory.write", workspaceBySlug),
       memoryFeatureEnabled,
       validateMemoryOwner,
       validWorkspaceSlug,
