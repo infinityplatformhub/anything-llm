@@ -32,6 +32,13 @@ execFileSync(
   ["db", "push", "--skip-generate", "--schema", testSchema],
   { cwd: path.resolve(__dirname, ".."), env: process.env, stdio: "ignore" }
 );
+// T-4b: `db push` runs no migration, so T-1's vocabulary, roles and grants are absent —
+// and /v1 now checks the grant half. The seed script is that migration's idempotent mirror.
+execFileSync(process.execPath, [path.resolve(__dirname, "../prisma/seed.js")], {
+  cwd: path.resolve(__dirname, ".."),
+  env: process.env,
+  stdio: "ignore",
+});
 
 jest.mock("../utils/logger", () => () => {});
 jest.mock("../utils/boot", () => ({ bootHTTP: jest.fn(), bootSSL: jest.fn() }));
@@ -104,6 +111,18 @@ beforeAll(async () => {
     });
   const caller = await mkUser("caller-admin", "admin");
   targetAdmin = await mkUser("target-admin", "admin");
+  // T-4b: the key's grants are its creator's, and T-1 backfills super_admin for every
+  // `role: "admin"` user. `db push` skips migrations, so it is written explicitly here.
+  await prisma.principal_role_grants.create({
+    data: {
+      orgId: 1,
+      principal_type: "user",
+      principal_id: String(caller.id),
+      role_id: (
+        await prisma.roles.findFirstOrThrow({ where: { name: "super_admin", scope: "org" } })
+      ).id,
+    },
+  });
   const { ApiKey } = require("../models/apiKeys");
   const { apiKey } = await ApiKey.create(caller.id, "test key");
   apiKeySecret = apiKey.secret;

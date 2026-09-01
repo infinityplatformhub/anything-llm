@@ -15,6 +15,7 @@ jest.mock("../../../models/systemSettings", () => ({
   SystemSettings: { isMultiUserMode: jest.fn() },
 }));
 
+const { SystemSettings } = require("../../../models/systemSettings");
 const { resolveActor } = require("../../../utils/authorization/actorResolver");
 
 const res = (locals) => ({ locals });
@@ -33,6 +34,10 @@ const context = (over = {}) => ({
 });
 
 describe("T-4b B-1: a key's grants come from its creator, not from the key principal", () => {
+  // Multi-user is the default here: it is the mode where a null creator means "orphan".
+  // The single-user fallback is exercised explicitly by the test that names it.
+  beforeEach(() => SystemSettings.isMultiUserMode.mockResolvedValue(true));
+
   test("the Actor keeps api-key provenance but resolves grants as the creator", async () => {
     const db = keyDb({ id: 7, createdBy: 5 }, [3]);
     const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
@@ -42,14 +47,36 @@ describe("T-4b B-1: a key's grants come from its creator, not from the key princ
     expect(actor.grantPrincipal).toEqual({ type: "user", id: "5" });
   });
 
-  test("a key whose creator is null carries no grant principal — it can only deny", async () => {
+  test("in MULTI-user mode a key whose creator is null is an orphan and can only deny", async () => {
+    SystemSettings.isMultiUserMode.mockResolvedValue(true);
     const db = keyDb({ id: 7, createdBy: null });
     const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
     expect(actor.grantPrincipal).toBeNull();
   });
 
+  test("in SINGLE-user mode a creatorless key falls back to the single-user principal", async () => {
+    // endpoints/system.js:1073 mints keys with ApiKey.create(null, name) and refuses to
+    // run in multi-user mode: in a single-user deployment there are NO user rows, so every
+    // key ever issued there has a null creator. Denying them takes the whole /v1 surface
+    // offline on upgrade, for the deployments least able to diagnose it.
+    SystemSettings.isMultiUserMode.mockResolvedValue(false);
+    const db = keyDb({ id: 7, createdBy: null });
+    const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
+    expect(actor.grantPrincipal).toEqual({ type: "service", id: "single-user" });
+  });
+
   test("a key whose creator row is gone carries no grant principal", async () => {
+    SystemSettings.isMultiUserMode.mockResolvedValue(true);
     const db = keyDb(null);
+    const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
+    expect(actor.grantPrincipal).toBeNull();
+  });
+
+  test("the single-user fallback is never reachable in multi-user mode", async () => {
+    // The fallback is a compatibility path, not a bypass: if isMultiUserMode is ever
+    // unreadable it fails toward multi-user (deny), the same as every other branch.
+    SystemSettings.isMultiUserMode.mockRejectedValue(new Error("db down"));
+    const db = keyDb({ id: 7, createdBy: null });
     const actor = await resolveActor({}, res({ apiKeyContext: context() }), { db });
     expect(actor.grantPrincipal).toBeNull();
   });
@@ -101,6 +128,33 @@ describe("T-4b B-1: a key's grants come from its creator, not from the key princ
         { db }
       )
     ).toBeNull();
+  });
+
+  test("a browser-extension key is NOT looked up in api_keys — different table, colliding ids", async () => {
+    // validBrowserExtensionApiKey writes apiKeyContext too, but its keyId comes from
+    // `browser_extension_api_keys`, a separate table with its own id sequence. Resolving
+    // it against `api_keys` hands extension key 7 the grants of API key 7's creator — an
+    // unrelated user. The extension already resolves its own user onto locals.user, and
+    // that is the identity its grants must come from.
+    const db = {
+      api_keys: {
+        findUnique: async () => {
+          throw new Error("an extension key must not be resolved against api_keys");
+        },
+      },
+      workspace_users: { findMany: async () => [{ workspace_id: 3 }] },
+    };
+    const actor = await resolveActor(
+      {},
+      res({
+        apiKeyContext: context({ keyKind: "browser-extension" }),
+        user: { id: 5, suspended: 0 },
+      }),
+      { db }
+    );
+    // it resolves as the extension's user, not as a service principal borrowing grants
+    expect(actor).toMatchObject({ type: "user", id: "5" });
+    expect(actor.workspaceIds).toEqual(["3"]);
   });
 
   test("an unreadable api_keys table denies rather than resolving an ungranted actor", async () => {

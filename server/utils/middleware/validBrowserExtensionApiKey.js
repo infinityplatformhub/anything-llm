@@ -22,6 +22,11 @@ function validBrowserExtensionApiKey(action) {
       // a service Actor holding every scope in the system.
       keyId: String(apiKey.id), keyPrefix: apiKey.keyPrefix, scopes: [...EXTENSION_SCOPES],
       workspaceId: null, expiresAt: null, revokedAt: null,
+      // T-4b (#29): this id belongs to `browser_extension_api_keys`, not `api_keys`. The
+      // tables have independent id sequences, so the resolver must not look it up there —
+      // extension key 7 would inherit API key 7's creator's grants. Tagged rather than
+      // inferred, so a future context shape cannot silently land in the wrong branch.
+      keyKind: "browser-extension",
     };
     response.locals.apiKeyContext = context;
     response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix };

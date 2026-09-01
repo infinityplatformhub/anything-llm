@@ -27,21 +27,17 @@ fs.mkdirSync(path.resolve(__dirname, "../../../collector/hotdir"), {
 const testSchema = path.resolve(__dirname, "../../prisma/schema.prisma");
 execFileSync(
   path.resolve(__dirname, "../../node_modules/.bin/prisma"),
-  ["db", "push", "--skip-generate", "--schema", testSchema],
+  // §7.1a: `migrate deploy` rather than `db push`. T-4a reached the same conclusion from
+  // the other direction — that the engine needs seeded roles or every request 403s — and
+  // fixed it by running prisma/seed.js after a `db push`. Running the migrations gives the
+  // same rows plus the ones seed.js does not mirror (T-1's per-user grant backfill), and
+  // it is what the db-push gate requires, so the seed call is redundant here.
+  ["migrate", "deploy", "--schema", testSchema],
   {
     cwd: path.resolve(__dirname, "../.."),
     env: process.env,
     stdio: "ignore",
   }
-);
-// T-4a (#25): `db push` creates tables but runs no seed, so the roles and
-// permissions the engine reads would not exist and every request would 403.
-// Authorization is now part of the HTTP path, so the seed is part of the world
-// these suites need.
-execFileSync(
-  process.execPath,
-  [path.resolve(__dirname, "../../prisma/seed.js")],
-  { cwd: path.resolve(__dirname, "../.."), env: process.env, stdio: "ignore" }
 );
 
 jest.mock("../../utils/logger", () => () => {});
@@ -190,7 +186,20 @@ beforeAll(async () => {
   await WorkspaceUser.create(member.id, assignedWorkspace.id);
   apiKey = "apw-key-test-api-key-secret";
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
-  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]) } });
+  // T-4b: /v1 checks the grant half too, so the key needs a creator holding grants for the
+  // routes below. T-1's migration backfills super_admin for every `role: "admin"` user;
+  // `db push` skips migrations, so the same grant is written here explicitly.
+  await prisma.principal_role_grants.create({
+    data: {
+      orgId: 1,
+      principal_type: "user",
+      principal_id: String(admin.id),
+      role_id: (
+        await prisma.roles.findFirstOrThrow({ where: { name: "super_admin", scope: "org" } })
+      ).id,
+    },
+  });
+  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]), createdBy: admin.id } });
   await setMultiUserMode(true);
   global.fetch = jest.fn(async (url, options) => {
     if (!options) return { ok: true };

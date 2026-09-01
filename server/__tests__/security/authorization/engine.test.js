@@ -393,6 +393,74 @@ describe("T-4b B-1: an API-key Actor evaluates grants as its creator", () => {
     ).toMatchObject({ allowed: true });
   });
 
+  // Handed over from Dev2 (t4a) when B-1 consolidated into the resolver. Rewritten to go
+  // through resolveActor against real api_keys rows rather than hand-built Actors: B-1
+  // lives in the resolver, so a hand-built Actor tests the half that was removed.
+  test("S-9 ingress, both directions: a key never exceeds its creator, and a valid key still passes", async () => {
+    const { resolveActor } = require("../../../utils/authorization/actorResolver");
+    const keyFor = async ({ creatorId, scopes, workspaceId = null, name }) => {
+      const row = await prisma.api_keys.create({
+        data: {
+          name,
+          secretDigest: Buffer.from(crypto.randomBytes(32)),
+          keyPrefix: `t4b-${name}-${dbSuffix}`.slice(0, 16),
+          scopes: JSON.stringify(scopes),
+          workspaceId,
+          createdBy: creatorId,
+        },
+      });
+      return resolveActor(
+        {},
+        { locals: { apiKeyContext: { keyId: row.id, keyPrefix: row.keyPrefix, scopes, workspaceId: workspaceId ? String(workspaceId) : null } } },
+        { db: prisma }
+      );
+    };
+
+    // over-scoped: the key's scope string permits workspace.write, the creator holds only
+    // viewer, and a grant row deliberately names the key principal itself.
+    const limited = await prisma.users.create({
+      data: { username: `limited-${dbSuffix}`, password: "unused", role: "default" },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(limited.id),
+      roleId: roles.viewer.id, workspaceId: W1.id, db: prisma,
+    });
+    const overScoped = await keyFor({
+      creatorId: limited.id, scopes: ["workspace.write"], name: "over",
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "service", principalId: overScoped.id,
+      roleId: roles.owner.id, workspaceId: W1.id, db: prisma,
+    });
+    expect(
+      await engine.authorize({
+        actor: overScoped,
+        action: "workspace.write",
+        resource: { type: "workspace", id: String(W1.id), orgId: 1, workspaceId: W1.id },
+      })
+    ).toMatchObject({ allowed: false });
+
+    // the other direction: a key whose creator DOES hold the grant must still pass, or
+    // B-1 has simply broken /v1 instead of securing it.
+    const allowed = await prisma.users.create({
+      data: { username: `allowed-${dbSuffix}`, password: "unused", role: "default" },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(allowed.id),
+      roleId: roles.viewer.id, workspaceId: W1.id, db: prisma,
+    });
+    const validKey = await keyFor({
+      creatorId: allowed.id, scopes: ["document.read"], name: "ok",
+    });
+    expect(
+      await engine.authorize({
+        actor: validKey,
+        action: "document.read",
+        resource: { type: "document", id: "1", orgId: 1, workspaceId: W1.id },
+      })
+    ).toMatchObject({ allowed: true });
+  });
+
   test("a service principal without grantPrincipal still evaluates as itself (core-jobs)", async () => {
     // Only API-key Actors carry grantPrincipal. Built-in service principals hold real
     // grants under their own ids and must keep working unchanged.

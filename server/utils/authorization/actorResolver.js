@@ -32,7 +32,13 @@ async function resolveActor(request, response, { db = prisma } = {}) {
   const locals = response?.locals ?? {};
 
   // Row 3 (P0-4 PR-3): scoped API key — RAW context only; this is where it becomes an Actor.
-  if (locals.apiKeyContext) {
+  //
+  // T-4b (#29): a browser-extension key writes apiKeyContext too, but its keyId comes from
+  // `browser_extension_api_keys` — a separate table with its own id sequence. Resolving it
+  // against `api_keys` would hand extension key 7 the grants of API key 7's creator, an
+  // unrelated user. The extension already resolves its own user onto locals.user, so it
+  // falls through to the user branch below, which is where its grants belong.
+  if (locals.apiKeyContext && locals.apiKeyContext.keyKind !== "browser-extension") {
     const ctx = locals.apiKeyContext;
     // Key lifecycle is checked in full here, not half of it: an expired key must yield
     // no actor even if the ingress middleware ever stops checking (F-20d, QA-2 round 2).
@@ -46,7 +52,7 @@ async function resolveActor(request, response, { db = prisma } = {}) {
     // against `grantPrincipal`, the ingress middleware enforces the scope half, and the
     // `api-key:` id stays as audit provenance.
     const creatorId = await apiKeyCreatorId(ctx.keyId, db);
-    const grantPrincipal = creatorId === null ? null : { type: "user", id: String(creatorId) };
+    const grantPrincipal = await keyGrantPrincipal(creatorId);
 
     // An unbound key inherits its creator's reach; a workspace-bound key keeps its
     // binding and never widens to everything the creator can see.
@@ -180,6 +186,25 @@ async function resolveActorRef(actorRef, { db = prisma } = {}) {
 async function jobActor({ userId = null, db = prisma } = {}) {
   if (userId === null || userId === undefined) return { ...SERVICE_PRINCIPALS.coreJobs };
   return resolveActorRef({ type: "user", id: userId }, { db });
+}
+
+/**
+ * The principal a key's grants resolve against, given its creator id.
+ *
+ * A null `createdBy` is not always an error. `endpoints/system.js:1073` mints keys with
+ * `ApiKey.create(null, name)` and refuses to run in multi-user mode — in a single-user
+ * deployment there are no user rows to attribute a key to, and every key ever issued there
+ * has a null creator. Denying those would take the whole `/v1` surface offline on upgrade,
+ * for the deployments least able to diagnose it.
+ *
+ * So a creatorless key falls back to the `single-user` service principal, which holds the
+ * seeded grants — and ONLY in single-user mode. In multi-user mode a null creator is a real
+ * orphan (creator deleted, or a key written outside the model), and it denies.
+ */
+async function keyGrantPrincipal(creatorId) {
+  if (creatorId !== null) return { type: "user", id: String(creatorId) };
+  if (await isMultiUserModeSafe()) return null;
+  return { type: SINGLE_USER_ACTOR.type, id: SINGLE_USER_ACTOR.id };
 }
 
 /**
