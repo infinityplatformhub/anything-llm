@@ -69,9 +69,6 @@ const { EncryptionManager } = require("../utils/EncryptionManager");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { MobileDevice } = require("../models/mobileDevice");
 const {
-  chatHistoryViewable,
-} = require("../utils/middleware/chatHistoryViewable");
-const {
   simpleSSOEnabled,
   simpleSSOLoginDisabled,
 } = require("../utils/middleware/simpleSSOEnabled");
@@ -1205,7 +1202,6 @@ function systemEndpoints(app) {
   app.post(
     "/system/workspace-chats",
     [
-      chatHistoryViewable,
       validatedRequest,
       requirePermission("chat.read_others", orgResource),
     ],
@@ -1249,8 +1245,12 @@ function systemEndpoints(app) {
   app.get(
     "/system/export-chats",
     [
-      chatHistoryViewable,
       validatedRequest,
+      // D-2: reading other people's chats and bulk-extracting them are
+      // separately grantable, and this route does both. Requiring only the
+      // export permission would let someone with no right to read a single
+      // conversation download all of them at once.
+      requirePermission("chat.read_others", orgResource),
       requirePermission("document.bulk_export", orgResource),
     ],
     async (request, response) => {

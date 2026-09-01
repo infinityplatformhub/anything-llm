@@ -6,9 +6,6 @@ const { validEmbedConfigId } = require("../utils/middleware/embedMiddleware");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { requirePermission } = require("../utils/middleware/requirePermission");
 const { orgResource } = require("../utils/middleware/resourceResolvers");
-const {
-  chatHistoryViewable,
-} = require("../utils/middleware/chatHistoryViewable");
 
 function embedManagementEndpoints(app) {
   if (!app) return;
@@ -95,7 +92,6 @@ function embedManagementEndpoints(app) {
   app.post(
     "/embed/chats",
     [
-      chatHistoryViewable,
       validatedRequest,
       requirePermission("chat.read_others", orgResource),
     ],
