@@ -29,8 +29,18 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
 async function login(page, { username, password }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.goto("/login");
-    await page.locator('input[name="username"]').fill(username);
-    await page.locator('input[name="password"]').fill(password);
+    const userField = page.locator('input[name="username"]');
+    const passField = page.locator('input[name="password"]');
+    await userField.waitFor({ state: "visible", timeout: 30_000 });
+    await userField.fill(username);
+    await passField.click();
+    await passField.fill(password);
+    // The password field is a controlled component that can drop a
+    // programmatic fill on re-render; verify before submitting.
+    if ((await passField.inputValue()) !== password) {
+      await passField.fill("");
+      await passField.type(password, { delay: 30 });
+    }
     const tokenResponse = page
       .waitForResponse((r) => r.url().includes("/api/request-token"), {
         timeout: 30_000,
