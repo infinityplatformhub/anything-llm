@@ -264,10 +264,16 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   });
   // Files live inside the custom-documents folder. Rows are tr.file-row and
   // selection is an onClick on the row itself (the checkbox is a styled div).
-  await page.getByText(/custom-documents/).first().click({ force: true });
-  await page.waitForTimeout(1_500);
+  const folderRow = page.getByRole("row", { name: /custom-documents/ }).first();
+  await folderRow.waitFor({ state: "visible", timeout: 60_000 });
   const fileRow = page.locator("tr.file-row").filter({ hasText: DOC_NAME }).first();
-  await fileRow.waitFor({ state: "visible", timeout: 30_000 });
+  // Expand the folder (click toggles); retry once if it collapsed instead.
+  for (let i = 0; i < 3; i++) {
+    if (await fileRow.isVisible().catch(() => false)) break;
+    await folderRow.click();
+    await page.waitForTimeout(2_000);
+  }
+  await fileRow.waitFor({ state: "visible", timeout: 60_000 });
   await fileRow.click();
   await expect(fileRow).toHaveClass(/selected/, { timeout: 10_000 });
   const move = page.locator('button:has-text("Move to Workspace")');
