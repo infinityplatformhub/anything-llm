@@ -261,6 +261,65 @@ Jest, `yarn test` from `server/`, `--runInBand`.
   actors against the same row. "It compiles" is not evidence of atomicity.
 - Do not assert on log output.
 
+### 7.1 A fake database cannot validate SQL
+
+The in-memory fake above is the right default, and it has one blind spot: it
+answers every query the way the test author expected, including queries Postgres
+would reject. A suite built entirely on it stays green while the feature is
+broken in production.
+
+This is not hypothetical. `PostgresJobScheduler.materialize()` called
+`$queryRawUnsafe("SELECT pg_advisory_xact_lock($1)")`, which fails on real
+Postgres — Prisma cannot deserialize a `void` return — aborting the transaction
+every time. Recurring jobs never materialized, `nextRunAt` stayed null, and an
+error repeated on every scheduler tick. All 632 unit tests passed, `prisma
+migrate deploy` succeeded, and `prisma migrate diff` reported no drift. None of
+those checks execute application queries; the fake supplied `$queryRawUnsafe`
+itself.
+
+So: **changes that touch raw SQL, transactions, background workers, or
+schedulers MUST ship at least one integration test that runs against a real
+Postgres.** One case is enough — it only has to execute the statement the fake
+was standing in for.
+
+```js
+// Skips locally without a database; CI always has one (ci.yml provides postgres:16).
+const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+describeDb("PostgresJobScheduler against real Postgres", () => { /* ... */ });
+```
+
+Raw SQL specifically:
+
+- Prefer a Prisma model call. Reach for raw SQL only for something Prisma cannot
+  express (advisory locks, `SKIP LOCKED`).
+- `$queryRaw` returns rows. A statement returning `void` or no rows goes through
+  `$executeRaw`, which returns an affected-row count.
+- Use the tagged-template forms (`$queryRaw`/`$executeRaw`) so values are bound
+  as parameters. `*Unsafe` requires a comment justifying it.
+- A `typeof tx.$queryRawUnsafe === "function"` guard makes the statement
+  disappear under a fake instead of failing loudly. If a statement is required
+  for correctness, do not guard it — let the fake break, and fix the fake.
+
+### 7.2 Definition of done for background services
+
+A scheduler, worker, or pump is not done because its tests pass. Before handing
+off, boot the app the way production does and confirm it is actually working:
+
+```bash
+NODE_ENV=production node index.js     # from server/
+```
+
+- No repeating error in the log across at least 3 tick intervals.
+- The state the service is supposed to write is present in the database —
+  query it (`nextRunAt` populated, delivery rows acknowledged, jobs claimed).
+  A quiet log is not evidence; an empty table with a quiet log means the work
+  never ran.
+- Say in the handoff what you observed, not that it "should" work.
+
+Why: unit tests prove the logic you modelled. Booting proves the logic you
+actually shipped, against the driver, the schema, and the wiring in
+`utils/boot/index.js`.
+
 ---
 
 ## 8. Merge discipline
