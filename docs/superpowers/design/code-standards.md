@@ -207,6 +207,50 @@ starts throwing across seams, every `catch` site breaks. Seam 02 already names
 Authorization failures — missing actor, unknown action, unresolvable policy,
 driver error — deny. A `catch` that falls through to allow is a merge blocker.
 
+### 3.4 HTTP status contract
+
+One meaning per code. These are not interchangeable: a client, a log, and an
+on-call engineer each read them differently, and the wrong one sends all three
+to the wrong conclusion.
+
+| Code | Means | The question it answers |
+|---|---|---|
+| **401** | Not authenticated | *Who are you?* — no credential, expired, or unparseable |
+| **403** | Authenticated, not permitted | *You, specifically, may not do this* |
+| **404** | Exists but its existence is not yours to know | *Is there such a workspace?* — answered as "no" on purpose |
+| **503** | Policy store unavailable | *We cannot decide right now* — not a denial |
+
+**401 vs 403 is the one that gets confused, and legacy code has it wrong.**
+`flexUserRoleValid` answers 401 for a request that authenticated perfectly well
+and merely lacks the role. That tells the client "your credential failed", which
+is false — retrying with the same credential is correct behaviour for a 401 and
+pointless here. T-4a converts eleven tests from 401 to 403 for exactly this
+reason, and the conversion is a **fix, not a compatibility break**.
+
+**404 over 403 for secret existence.** A 403 on `GET /workspace/:slug` confirms
+the workspace exists. Enumerate slugs against a 403/404 split and you have a
+directory of every workspace in the org without reading one. So: a non-member
+asking for a workspace gets **404**, identical to a slug that was never real.
+This applies to any resource whose existence is itself information — workspaces
+today, and anything named by a user-chosen slug later.
+
+The cost is a worse error message for a legitimate user who mistyped nothing and
+simply is not a member. That trade is deliberate: the user asks an admin, while
+the enumeration attack gets nothing.
+
+**503 is not a denial.** When the policy store is unreachable, the engine cannot
+decide. Returning 403 says "we decided, and the answer is no", which is a lie
+that sends the user to an admin to fix permissions that were never the problem.
+Return 503 so it reads as an outage — which it is. This does not contradict §3.3:
+the request is still denied access, it is just not *reported* as an authorization
+decision.
+
+**Frontend note.** Nothing in `frontend/src` logs the user out on a 401 today —
+verified by grep (`frontend/src/utils/session.js:11` checks only `status === 200`).
+So the 401→403 correction breaks no client behaviour now. If a logout-on-401
+interceptor is ever added, it must land **after** this contract is uniform, or
+every legacy 403-shaped-as-401 will silently log people out mid-session.
+
 ---
 
 ## 4. Authorization vocabulary (seam 02)
@@ -523,6 +567,12 @@ spawnSync(prismaBin, ["migrate", "deploy", "--schema", testSchema], { env });
 // wrong — schema without seed data
 spawnSync(prismaBin, ["db", "push", "--skip-generate", "--schema", testSchema], { env });
 ```
+
+The gate caught its first live case within a day of landing: the #34 hotfix
+added a new HTTP suite built with `db push`, and `check-db-push.sh` flagged it
+before merge. That is the intended shape — a rule that only exists in a document
+is one every new test has to be told about individually, and the tests that most
+need it are the ones written by whoever has not read it yet.
 
 `db push` is legitimate in exactly one place: a test whose subject is the schema
 shape itself and which seeds its own rows. Those go in the allowlist at the top
