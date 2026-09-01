@@ -41,6 +41,23 @@ const ROUTE_SCOPES = Object.freeze({
   "GET /v1/workspace/:slug/thread/:threadSlug/chats": "chat.read",
   "POST /v1/workspace/:slug/thread/:threadSlug/chat": "chat.write",
   "POST /v1/workspace/:slug/thread/:threadSlug/stream-chat": "chat.write",
+
+  // PR-4b(2) document — no workspace binding: documents live in a global store and
+  // workspace attachment happens later, so there is no workspace in the path to bind
+  // against. Per-actor document scoping is T-3's documentFilter, not this middleware.
+  "POST /v1/document/upload": "document.write",
+  "POST /v1/document/upload/:folderName": "document.write",
+  "POST /v1/document/upload-link": "document.write",
+  "POST /v1/document/raw-text": "document.write",
+  "GET /v1/documents": "document.read",
+  "GET /v1/documents/folder/:folderName": "document.read",
+  "GET /v1/document/accepted-file-types": "system.read",
+  "GET /v1/document/metadata-schema": "system.read",
+  "GET /v1/document/:docName": "document.read",
+  "POST /v1/document/create-folder": "document.folder.manage",
+  "DELETE /v1/document/remove-folder": "document.folder.manage",
+  "POST /v1/document/move-files": "document.folder.manage",
+  "GET /v1/document/generated-files/:filename": "document.read",
 });
 
 const scopeFor = (method, path) => ROUTE_SCOPES[`${method} ${path}`];

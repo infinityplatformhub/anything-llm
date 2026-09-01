@@ -41,7 +41,7 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
   });
 
   test("seed carries the PMO-approved API scope list in full", () => {
-    // 38 approved API scopes (PMO 2026-09-02, +5 PR-4b(1)) — subset of ALL_ACTIONS, single namespace per R3
+    // 39 approved API scopes (PMO 2026-09-02, +5 PR-4b(1), +1 PR-4b(2)) — subset of ALL_ACTIONS, single namespace per R3
     const approved = [
       "workspace.read", "workspace.write", "workspace.delete",
       "document.read", "document.write", "document.delete",
@@ -59,8 +59,10 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
       // PR-4b(1)
       "workspace.create", "workspace.embeddings.manage",
       "thread.create", "thread.write", "thread.delete",
+      // PR-4b(2)
+      "document.folder.manage",
     ];
     expect(approved.filter((a) => !ALL_ACTIONS.includes(a))).toEqual([]);
-    expect(ALL_ACTIONS.length).toBe(55);
+    expect(ALL_ACTIONS.length).toBe(56);
   });
 });

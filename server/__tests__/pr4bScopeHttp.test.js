@@ -41,9 +41,14 @@ const GRID = [
   ["thread.create", "thread.write"],
   ["thread.write", "thread.create"],
   ["thread.delete", "thread.write"],
+  // PR-4b(2)
+  ["document.write", "document.read"],
+  ["document.read", "document.write"],
+  ["document.folder.manage", "document.write"],
+  ["system.read", "document.read"],
 ];
 
-describe("PR-4b workspace and thread scope enforcement", () => {
+describe("PR-4b workspace, thread and document scope enforcement", () => {
   test.each(GRID)("a key holding only %s is refused where %s is required", async (required, owned) => {
     ApiKey.resolve.mockResolvedValueOnce(key([owned]));
     const response = await call(appFor(required));
@@ -72,9 +77,11 @@ describe("PR-4b workspace and thread scope enforcement", () => {
     expect(response.status).toBe(200);
   });
 
-  test("every workspace and thread route resolves to a scope, so none can boot unguarded", () => {
-    const routes = Object.keys(ROUTE_SCOPES).filter((entry) => entry.includes("/v1/workspace"));
-    expect(routes).toHaveLength(17);
+  test("every workspace, thread and document route resolves to a scope, so none can boot unguarded", () => {
+    const routes = Object.keys(ROUTE_SCOPES).filter(
+      (entry) => entry.includes("/v1/workspace") || entry.includes("/v1/document")
+    );
+    expect(routes).toHaveLength(30);
     for (const entry of routes) {
       const [method, ...rest] = entry.split(" ");
       const scope = scopeFor(method, rest.join(" "));

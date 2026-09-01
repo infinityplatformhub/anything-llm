@@ -45,6 +45,10 @@ const API_ACTIONS = [
   "thread.create",
   "thread.write",
   "thread.delete",
+  // PR-4b(2): folders are the document store's containers. Creating, removing and
+  // moving between them rearranges what other keys can reach by path, which neither
+  // document.write (contents) nor document.delete (one document) covers.
+  "document.folder.manage",
   "document.read",
   "document.write",
   "document.delete",
