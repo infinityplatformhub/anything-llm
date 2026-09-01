@@ -1,8 +1,7 @@
 const crypto = require("crypto");
 const prisma = require("../prisma");
+const { EventConflictError, UnknownEventVersionError } = require("./errors");
 
-class EventConflictError extends Error {}
-class UnknownEventVersionError extends Error {}
 const canonical = (event) => crypto.createHash("sha256").update(JSON.stringify(event)).digest("hex");
 
 class PostgresEventBus {
