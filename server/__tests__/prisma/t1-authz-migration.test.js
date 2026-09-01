@@ -24,7 +24,10 @@ if (!BACKFILL_SQL) throw new Error("T-1 step-7a marker missing from migration.sq
 
 const dbSuffix = crypto.randomBytes(4).toString("hex");
 const testDb = `t1_it_${dbSuffix}`;
-const testUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
+const testDatabaseUrl = new URL(baseDatabaseUrl);
+testDatabaseUrl.pathname = `/${testDb}`;
+testDatabaseUrl.search = "";
+const testUrl = testDatabaseUrl.toString();
 const SERVER_DIR = path.join(__dirname, "../..");
 const SCHEMA = path.join(SERVER_DIR, "prisma/schema.prisma");
 
