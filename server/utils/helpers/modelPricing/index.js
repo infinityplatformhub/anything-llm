@@ -78,17 +78,25 @@ function cacheDir() {
   );
 }
 
-const CACHE_FILES = {
-  get data() {
-    return path.resolve(cacheDir(), "model-pricing.json");
-  },
-  get expiry() {
-    return path.resolve(cacheDir(), ".cached_at");
-  },
-  get etag() {
-    return path.resolve(cacheDir(), ".etag");
-  },
-};
+/**
+ * Where one instance keeps its cache, fixed when the instance is built.
+ *
+ * These used to be lazy getters over `cacheDir()`, which re-read STORAGE_DIR at every
+ * write. A refresh runs in the background and nobody awaits it, so a write started
+ * under one STORAGE_DIR landed in whichever directory STORAGE_DIR pointed at by the
+ * time it finished — across tests, that is one test's fetch overwriting another's
+ * cache. Resolving once per instance makes a refresh write where it was started.
+ *
+ * @param {string} dir the instance's cache directory
+ * @returns {{data:string, expiry:string, etag:string}}
+ */
+function cacheFilesIn(dir) {
+  return {
+    data: path.resolve(dir, "model-pricing.json"),
+    expiry: path.resolve(dir, ".cached_at"),
+    etag: path.resolve(dir, ".etag"),
+  };
+}
 
 /**
  * Extracts only cost data from the full models.dev API response.
@@ -143,11 +151,18 @@ class ModelPricing {
   /** @type {Record<string, Record<string, string>>} - lazy bedrock normalization index per provider */
   #normalizedIndexes = {};
 
-  constructor() {
+  /**
+   * @param {{cacheDir?: string}} options `cacheDir` overrides STORAGE_DIR for this
+   *   instance; it is captured here and never re-read, so a background refresh cannot
+   *   be redirected by a later environment change.
+   */
+  constructor({ cacheDir: overrideDir = null } = {}) {
     if (ModelPricing.instance) return ModelPricing.instance;
     ModelPricing.instance = this;
 
-    const dir = cacheDir();
+    const dir = overrideDir ?? cacheDir();
+    this.cacheDir = dir;
+    this.cacheFiles = cacheFilesIn(dir);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     this.#loadFromDisk();
@@ -167,17 +182,17 @@ class ModelPricing {
   }
 
   #isCacheStale() {
-    if (!fs.existsSync(CACHE_FILES.expiry)) return true;
-    const cachedAt = Number(fs.readFileSync(CACHE_FILES.expiry, "utf8"));
+    if (!fs.existsSync(this.cacheFiles.expiry)) return true;
+    const cachedAt = Number(fs.readFileSync(this.cacheFiles.expiry, "utf8"));
     if (!Number.isFinite(cachedAt)) return true;
     return Date.now() - cachedAt > CACHE_EXPIRY_MS;
   }
 
   #loadFromDisk() {
     try {
-      if (!fs.existsSync(CACHE_FILES.data)) return;
+      if (!fs.existsSync(this.cacheFiles.data)) return;
       this.#pricing = JSON.parse(
-        fs.readFileSync(CACHE_FILES.data, { encoding: "utf8" })
+        fs.readFileSync(this.cacheFiles.data, { encoding: "utf8" })
       );
       this.#hasDiskCache = true;
     } catch (error) {
@@ -190,8 +205,10 @@ class ModelPricing {
   async #refresh() {
     try {
       const headers = {};
-      if (this.#hasDiskCache && fs.existsSync(CACHE_FILES.etag)) {
-        const etag = fs.readFileSync(CACHE_FILES.etag, "utf8").trim();
+      const canRevalidate =
+        this.#hasDiskCache && fs.existsSync(this.cacheFiles.etag);
+      if (canRevalidate) {
+        const etag = fs.readFileSync(this.cacheFiles.etag, "utf8").trim();
         if (etag) headers["If-None-Match"] = etag;
       }
 
@@ -200,7 +217,7 @@ class ModelPricing {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (response.status === 304) {
-        await fs.promises.writeFile(CACHE_FILES.expiry, Date.now().toString());
+        await fs.promises.writeFile(this.cacheFiles.expiry, Date.now().toString());
         log("Remote pricing unchanged (304) - cache expiry bumped.");
         return;
       }
@@ -219,10 +236,10 @@ class ModelPricing {
 
       const etag = response.headers.get("etag");
       await Promise.all([
-        fs.promises.writeFile(CACHE_FILES.data, JSON.stringify(pricing)),
-        fs.promises.writeFile(CACHE_FILES.expiry, Date.now().toString()),
+        fs.promises.writeFile(this.cacheFiles.data, JSON.stringify(pricing)),
+        fs.promises.writeFile(this.cacheFiles.expiry, Date.now().toString()),
         etag
-          ? fs.promises.writeFile(CACHE_FILES.etag, etag)
+          ? fs.promises.writeFile(this.cacheFiles.etag, etag)
           : Promise.resolve(),
       ]);
       log("Remote pricing data synced and cached.");
