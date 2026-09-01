@@ -173,7 +173,7 @@ function apiSystemEndpoints(app) {
             example: [
               {
                 "role": "user",
-                "content": "What is AnythinglLM?"
+                "content": "What is ApproofWorkspace?"
               },
               {
                 "role": "assistant",

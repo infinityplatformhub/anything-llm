@@ -5,7 +5,7 @@ const OpenAI = require("openai");
  */
 const client = new OpenAI({
   baseURL: "http://localhost:3001/api/v1/openai",
-  apiKey: "ENTER_ANYTHINGLLM_API_KEY_HERE",
+  apiKey: "ENTER_APPROOFWORKSPACE_API_KEY_HERE",
 });
 
 (async () => {
