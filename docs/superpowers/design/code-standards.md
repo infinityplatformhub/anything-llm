@@ -490,6 +490,116 @@ Raw SQL specifically:
   disappear under a fake instead of failing loudly. If a statement is required
   for correctness, do not guard it — let the fake break, and fix the fake.
 
+### 7.1a A test database is built by `migrate deploy`, never `db push`
+
+`prisma db push` shapes the schema from `schema.prisma`. It does not run
+migration files, so **it skips every `INSERT` those files carry.** The schema is
+right and the data is missing, which is worse than a schema error: the tables all
+exist, so nothing throws — the rows are simply not there.
+
+The gap is real and was live for weeks. Five migrations carry seed data:
+
+| Migration | INSERT statements |
+|---|---|
+| `20260902020000_t1_authz_schema` | 21 (57 permission rows + roles + grants) |
+| `20260902040000_pr4b_workspace_thread_scopes` | 3 |
+| `20260902041000_pr4b_document_scopes` | 3 |
+| `20260902042000_pr4b_embed_scopes` | 2 |
+| `20260902043000_pr4b_system_openai_scopes` | 2 |
+
+Every HTTP suite built with `db push` therefore ran against a database with an
+**empty `permissions` table**. `engine.evaluate()` returns `unknown_action` for
+every action when that table is empty, so authorization tests in those suites
+were asserting against a system that denied everything for the wrong reason. They
+passed. They would have passed with the engine deleted.
+
+So: **any suite that boots the app or exercises authorization builds its database
+with `migrate deploy`.**
+
+```js
+// right
+spawnSync(prismaBin, ["migrate", "deploy", "--schema", testSchema], { env });
+
+// wrong — schema without seed data
+spawnSync(prismaBin, ["db", "push", "--skip-generate", "--schema", testSchema], { env });
+```
+
+`db push` is legitimate in exactly one place: a test whose subject is the schema
+shape itself and which seeds its own rows. Those go in the allowlist at the top
+of `scripts/check-db-push.sh`, with a comment saying why — the allowlist is the
+record of the decision, so an entry without a reason is a bug.
+
+Check:
+
+```bash
+./scripts/check-db-push.sh
+```
+
+Run via `./scripts/check-local.sh`.
+
+This is the same failure as §7.1 one layer down: there, a fake stood in for
+Postgres and hid a broken statement; here, a real Postgres stood in for a
+migrated one and hid missing data. Both pass every check that does not look at
+what the application actually reads.
+
+### 7.5 Rewriting a middleware means testing the routes under it
+
+A middleware and the routes beneath it share an undeclared contract: what the
+middleware puts on `response.locals`, and what each route reads back. Nothing
+checks it. Express throws at the *read*, not at the wiring, so a route whose key
+stopped being written 500s in production while every existing test stays green.
+
+Issue #34. PR-3 (`fcf09619`) rewrote `validBrowserExtensionApiKey` to write
+`locals.apiKeyContext`. Two routes still read `locals.apiKey.id`:
+
+```js
+// validBrowserExtensionApiKey.js:26
+response.locals.apiKeyContext = context;
+
+// browserExtension.js:30 and :50 — unchanged
+const apiKeyId = response.locals.apiKey.id;   // TypeError, 500
+```
+
+`/browser-extension/check` and `/browser-extension/disconnect` were dead from
+that commit onward. An 895-test green run said nothing, because no test touched
+either route. A user found it.
+
+Two rules follow:
+
+**1. Rewriting a middleware means the PR carries an HTTP test for every route
+under it.** Not a unit test of the middleware — a request through the stack that
+asserts the status the route is supposed to return. Write it against the
+pre-change code first and watch it fail; a test written after the fix proves the
+fix, not the contract.
+
+**2. Every `response.locals` key a route reads must be written somewhere.** This
+half is mechanical:
+
+```bash
+./scripts/check-locals-contract.sh
+```
+
+It compares the keys read under `server/endpoints/` against the keys assigned
+anywhere under `server/`, and names any read with no writer. Run via
+`./scripts/check-local.sh`.
+
+`locals.apiKey` sits in the script's PENDING list while #34 is in flight: reported
+every run, not failing the gate, so this landed before the fix. Delete the entry
+when #34 merges. A PENDING entry with no open issue is a bug, not a waiver.
+
+The gate finds a live bug the day it is added, which is the point — it was found
+by running it, not written from a description of the bug. It cannot see a key
+whose *shape* changed (`locals.user` going from a row to an id), so rule 1 is not
+optional because rule 2 exists.
+
+**Not proposed: a route-coverage gate.** Diffing middleware files, resolving
+which routes mount them, and grepping tests for those paths is three inferences
+deep — Express mounts middleware in arrays, at routers, and conditionally, so the
+route list is not reliably greppable. A gate that is wrong in either direction is
+worse than a review item: false negatives teach people it is covered, false
+positives teach people to bypass it. Rule 1 stays a review item; rule 2 is
+mechanical because it needs no inference at all.
+
 ### 7.2 Definition of done for background services
 
 A scheduler, worker, or pump is not done because its tests pass. Before handing
