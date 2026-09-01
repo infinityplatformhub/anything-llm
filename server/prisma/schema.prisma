@@ -261,6 +261,7 @@ model embed_chats {
 
 model event_logs {
   id         Int      @id @default(autoincrement())
+  eventId    String?  @unique
   event      String
   metadata   String?
   userId     Int?

@@ -37,7 +37,7 @@ function eventDb() {
         upsert: async ({ where, create, update }) => { const k = key(where); const row = { ...(deliveries.get(k) || create), ...(deliveries.has(k) ? update : {}) }; deliveries.set(k, row); return row; },
         deleteMany: async ({ where }) => { deliveries.delete(`${where.subscriberId}:${where.eventId}`); },
       },
-      event_logs: { create: async ({ data }) => (logs.push(data), data) },
+      event_logs: { upsert: async ({ create }) => { if (!logs.some((row) => row.eventId === create.eventId)) logs.push(create); return create; } },
     },
   };
 }
@@ -74,6 +74,6 @@ test("outbox retries but subscriber effect remains exactly once after acknowledg
 
 test("audit subscriber preserves legacy event row fields", async () => {
   const state = eventDb(); const subscriber = new AuditEventSubscriber({ db: state.db }); const occurredAt = new Date();
-  await subscriber.handle({ type: "login_event", data: { ip: "127.0.0.1" }, actor: { type: "user", id: "7" }, occurredAt });
-  expect(state.logs[0]).toEqual({ event: "login_event", metadata: JSON.stringify({ ip: "127.0.0.1" }), userId: 7, occurredAt });
+  await subscriber.handle({ eventId: "audit-1", type: "login_event", data: { ip: "127.0.0.1" }, actor: { type: "user", id: "7" }, occurredAt });
+  expect(state.logs[0]).toEqual({ eventId: "audit-1", event: "login_event", metadata: JSON.stringify({ ip: "127.0.0.1" }), userId: 7, occurredAt });
 });

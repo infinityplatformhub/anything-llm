@@ -1,3 +1,6 @@
+ALTER TABLE "event_logs" ADD COLUMN "eventId" TEXT;
+CREATE UNIQUE INDEX "event_logs_eventId_key" ON "event_logs"("eventId");
+
 CREATE TABLE "jobs" (
   "id" TEXT PRIMARY KEY,
   "type" TEXT NOT NULL,
