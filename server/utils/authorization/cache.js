@@ -88,7 +88,9 @@ class FilterCache {
 
     const key = keyFor(input);
     const entry = this.entries.get(key);
-    const head = await currentPolicyVersion(input.db ?? this.db);
+    // Filters stamp policyVersion as a string (BigInt is not JSON-serializable), so the
+    // clock head is compared in the same form.
+    const head = String(await currentPolicyVersion(input.db ?? this.db));
 
     const fresh =
       entry &&
@@ -108,8 +110,8 @@ class FilterCache {
 
   /** A filter is stale once any newer policy version exists. */
   async isStale(filter, db = this.db) {
-    const head = await currentPolicyVersion(db);
-    return filter.policyVersion !== head;
+    const head = String(await currentPolicyVersion(db));
+    return String(filter.policyVersion) !== head;
   }
 
   get size() {

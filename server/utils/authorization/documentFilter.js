@@ -54,7 +54,10 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       orderBy: { version: "desc" },
       select: { version: true },
     });
-    const policyVersion = head?.version ?? 0n;
+    // Stamped as a string at build time, not at serialize time: a BigInt in the filter
+    // makes JSON.stringify throw, which would 500 every route that echoes it once T-4
+    // wires the filter into HTTP paths (QA-2 item 7).
+    const policyVersion = String(head?.version ?? 0n);
 
     if (!actor || !actor.type || !actor.id) return matchNoneFilter({ actor, policyVersion });
 
@@ -104,7 +107,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
       if (allowedDocumentIds.length > ALLOWED_DOCUMENT_ID_CAP) {
         // Never truncate: a short list would silently widen or narrow access.
         console.error(
-          `[authorization] allowedDocumentIds over cap (${allowedDocumentIds.length} > ${ALLOWED_DOCUMENT_ID_CAP}) — filter degraded to match-none`
+          `[authorization] allowedDocumentIds over cap (${allowedDocumentIds.length} > ${ALLOWED_DOCUMENT_ID_CAP}) for ${actor.type}:${actor.id} — filter degraded to match-none`
         );
         return matchNoneFilter({ actor, policyVersion });
       }
@@ -117,7 +120,7 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
     // Fail closed rather than ship a filter that silently omits exclusions (B3).
     if (deniedDocumentIds.size > DENIED_DOCUMENT_ID_CAP) {
       console.error(
-        `[authorization] deniedDocumentIds over cap (${deniedDocumentIds.size} > ${DENIED_DOCUMENT_ID_CAP}) — filter degraded to match-none`
+        `[authorization] deniedDocumentIds over cap (${deniedDocumentIds.size} > ${DENIED_DOCUMENT_ID_CAP}) for ${actor.type}:${actor.id} — filter degraded to match-none`
       );
       return matchNoneFilter({ actor, policyVersion });
     }

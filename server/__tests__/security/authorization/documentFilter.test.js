@@ -113,7 +113,7 @@ describe("T-3 documentFilter", () => {
     expect(filter.actorId).toBe("8002");
     expect(filter.workspaceIds).toContain(String(W1.id));
     const head = await repository.currentPolicyVersion(prisma);
-    expect(filter.policyVersion).toBe(head);
+    expect(filter.policyVersion).toBe(String(head));
   });
 
   test("visibility is a hard override: a hidden document is denied even with an explicit allow grant", async () => {
@@ -181,7 +181,31 @@ describe("T-3 documentFilter", () => {
     });
     const after = await buildDocumentFilter({ actor, action: READER, db: prisma });
     expect(after.deniedDocumentIds).toContain(String(docs.visible.id));
-    expect(after.policyVersion).toBeGreaterThan(before.policyVersion);
+    expect(BigInt(after.policyVersion)).toBeGreaterThan(BigInt(before.policyVersion));
+  });
+});
+
+describe("T-3 filter is serializable and scope cannot be forged", () => {
+  test("a forged workspace id on the Actor never reaches the filter (QA-2 scope injection)", async () => {
+    // Org-wide grant is the branch where actor-supplied ids used to be unioned in.
+    const forger = { type: "user", id: "8100", orgId: 1, workspaceIds: [String(W1.id), "424242"] };
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: "8100",
+      roleId: roles.member.id, workspaceId: null, db: prisma,
+    });
+    const filter = await buildDocumentFilter({ actor: forger, action: READER, db: prisma });
+    expect(filter.workspaceIds).not.toContain("424242");
+    // and a workspace the user is not a member of does not appear either
+    expect(filter.workspaceIds).not.toContain(String(W1.id));
+  });
+
+  test("the filter survives JSON.stringify — policyVersion is stamped as a string", async () => {
+    const actor = await userActor(8101, roles.viewer.id);
+    const filter = await buildDocumentFilter({ actor, action: READER, db: prisma });
+    expect(typeof filter.policyVersion).toBe("string");
+    expect(() => JSON.stringify(filter)).not.toThrow();
+    const matchNone = await buildDocumentFilter({ actor: null, action: READER, db: prisma });
+    expect(() => JSON.stringify(matchNone)).not.toThrow();
   });
 });
 
@@ -314,6 +338,29 @@ describe("T-3 filter cache", () => {
     );
     expect(ok.matchNone).toBe(false);
     expect(ok.allowedDocumentIds).toEqual(["5"]);
+  });
+
+  test("the version stamp is the backstop when an invalidation misses its scope key", async () => {
+    // A document-only scope key does not match an org/workspace-keyed entry, so eviction
+    // misses. The version check must still force a rebuild — this locks the backstop in
+    // place so nobody later swaps it for a pure TTL (QA-2 item 3).
+    const actor = await userActor(8102, roles.viewer.id);
+    const cache = new FilterCache();
+    let builds = 0;
+    const build = async () => {
+      builds += 1;
+      return buildDocumentFilter({ actor, action: READER, db: prisma });
+    };
+    await cache.get({ actor, action: READER, db: prisma }, build);
+    cache.invalidateScopes([`document:${docs.visible.id}`]); // deliberately misses
+    await cache.get({ actor, action: READER, db: prisma }, build);
+    expect(builds).toBe(1); // eviction missed, entry still fresh
+
+    await repository.setDocumentVisibility({
+      actor: SYS, documentId: docs.visible.id, hidden: true, db: prisma,
+    });
+    await cache.get({ actor, action: READER, db: prisma }, build);
+    expect(builds).toBe(2); // version moved, so the stale entry is rebuilt anyway
   });
 
   test("a disabled cache always rebuilds — stale is never served", async () => {
