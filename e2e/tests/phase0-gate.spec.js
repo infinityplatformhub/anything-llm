@@ -26,61 +26,65 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
 
 /** Login page has no <label> wiring — inputs are selected by name.
  * First login of a fresh admin shows a Recovery Codes modal (Download → Close). */
+// Login is rate-limited (5 attempts / window, from the P0-4 rate-limit work),
+// and this suite has more specs than that. Tokens are cached per user and
+// replayed into localStorage; a real form login happens only when there is no
+// cached token yet, which keeps specs 03 and 12 honest about the login UI.
+const sessionTokens = new Map();
+
 async function login(page, { username, password }) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    // A previous spec can leave the SPA mid-render; a hard reset of the tab
-    // guarantees the login form is freshly mounted before typing into it.
-    await page.goto("about:blank");
-    await page.goto("/login", { waitUntil: "networkidle" });
-    const userField = page.locator('input[name="username"]');
-    const passField = page.locator('input[name="password"]');
-    await userField.waitFor({ state: "visible", timeout: 30_000 });
-    await userField.fill(username);
-    await passField.click();
-    await passField.fill(password);
-    // The password field is a controlled component that can drop a
-    // programmatic fill on re-render; verify before submitting.
-    if ((await passField.inputValue()) !== password) {
-      await passField.fill("");
-      await passField.type(password, { delay: 30 });
-    }
-    const tokenResponse = page
-      .waitForResponse((r) => r.url().includes("/api/request-token"), {
-        timeout: 30_000,
-      })
-      .catch(() => null);
-    // The form submits on the button, which is type=submit inside the form.
-    await page.locator('input[name="password"]').press("Enter");
-    await tokenResponse;
-    await page.waitForTimeout(2_500);
-
-    // First login of a fresh account shows the Recovery Codes modal.
-    const recovery = page.getByRole("heading", { name: "Recovery Codes" });
-    if (await recovery.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      const dl = page.waitForEvent("download").catch(() => null);
-      await page
-        .getByRole("button", { name: /download/i })
-        .click({ force: true });
-      (await dl)?.cancel?.();
-      await page
-        .getByRole("button", { name: "Close" })
-        .click({ timeout: 15_000 })
-        .catch(() => {});
-      await page.waitForTimeout(1_500);
-    }
-
-    // Session established once the SPA stored the token and left /login.
-    const authed = await page
-      .evaluate(() => !!localStorage.getItem("approofworkspace_authToken"))
-      .catch(() => false);
-    if (authed && !page.url().includes("/login")) return;
+  const cached = sessionTokens.get(username);
+  if (cached) {
+    await page.goto("/login");
+    await page.evaluate(
+      ([token, user]) => {
+        localStorage.setItem("approofworkspace_authToken", token);
+        localStorage.setItem("approofworkspace_user", user);
+      },
+      [cached.token, cached.user]
+    );
+    await page.goto("/");
+    await page.waitForTimeout(1_500);
+    return;
   }
-  const diag = {
-    url: page.url(),
-    token: await page.evaluate(() => !!localStorage.getItem("approofworkspace_authToken")).catch(() => "n/a"),
-    body: ((await page.textContent("body").catch(() => "")) || "").replace(/\s+/g, " ").slice(0, 200),
-  };
-  throw new Error("login failed after 3 attempts: " + JSON.stringify(diag));
+
+  await page.goto("/login", { waitUntil: "networkidle" });
+  const userField = page.locator('input[name="username"]');
+  const passField = page.locator('input[name="password"]');
+  await userField.waitFor({ state: "visible", timeout: 30_000 });
+  await userField.fill(username);
+  await passField.click();
+  await passField.fill(password);
+
+  const tokenResponse = page
+    .waitForResponse((r) => r.url().includes("/api/request-token"), {
+      timeout: 30_000,
+    })
+    .catch(() => null);
+  await passField.press("Enter");
+  await tokenResponse;
+  await page.waitForTimeout(2_500);
+
+  // First login of a fresh account shows the Recovery Codes modal.
+  const recovery = page.getByRole("heading", { name: "Recovery Codes" });
+  if (await recovery.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    const dl = page.waitForEvent("download").catch(() => null);
+    await page.getByRole("button", { name: /download/i }).click({ force: true });
+    (await dl)?.cancel?.();
+    await page
+      .getByRole("button", { name: "Close" })
+      .click({ timeout: 15_000 })
+      .catch(() => {});
+    await page.waitForTimeout(1_500);
+  }
+
+  const stored = await page.evaluate(() => ({
+    token: localStorage.getItem("approofworkspace_authToken"),
+    user: localStorage.getItem("approofworkspace_user"),
+  }));
+  if (!stored.token)
+    throw new Error("login did not establish a session at " + page.url());
+  sessionTokens.set(username, stored);
 }
 
 /** The SPA keeps its JWT in localStorage — page.request only carries cookies,
