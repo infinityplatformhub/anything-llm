@@ -108,19 +108,22 @@ P0-7 (F5 de-brand)      — อิสระ ทำขนานได้ทัน
 
 **ขั้นตอน**
 1. ออกแบบ schema: `roles`, `permissions`, `role_permissions`, `workspace_members(role)`, `document_acl` — เสนอผ่าน design review ก่อนเขียน migration
-2. Permission engine: `can(user, action, resource)` จุดเดียว · route ทั้งหมดเรียกผ่านตัวนี้ (ไล่แทน `flexUserRoleValid` ~23 ไฟล์)
-3. Workspace roles + migration จาก 3 role เดิม (mapping ที่ประกาศชัด: admin→super-admin, manager→workspace owner ของ workspace ที่ตัวเองสร้าง, default→member)
+2. Permission engine: `can(user, action, resource)` จุดเดียว · route ทั้งหมดเรียกผ่านตัวนี้ — surface จริงที่นับใหม่แล้ว (2026-09-02): `flexUserRoleValid` **171 invocation ใน 24 ไฟล์** + `strictMultiUserRoleValid` **18 ใน 2 ไฟล์** + `ROLES.` **244 ใน 29 ไฟล์** (ตัวเลข "~23 ไฟล์" เดิมคือจำนวน *importer* ไม่ใช่ call site — ต่ำไปราวเท่าตัว) · **ถ้า engine slip ให้แตกงานนี้ตาม route group ห้ามอัดให้จบใน PR เดียว**
+3. Workspace roles + migration จาก 3 role เดิม (mapping ที่ประกาศชัด: admin→super-admin, manager→workspace owner ของ workspace ที่ตัวเองสร้าง, default→member) — **ต้องเพิ่ม `workspaces.created_by` ก่อน** เพราะ schema ปัจจุบันไม่มีคอลัมน์นี้ (ruling R1)
 4. Document ACL: ตาราง + enforcement ตอน list/read + **filter ใน vector query ทุก provider ที่ support** (LanceDB ก่อน — ตัว default) — ผลลัพธ์: user ไม่มีสิทธิ์เอกสาร → RAG ไม่ดึง chunk นั้นมาตอบเด็ดขาด
 5. Admin duties + privacy posture: สิทธิ์ "อ่านแชท user" / "bulk export" เป็น permission แยกที่ปิดได้
 6. "View as user" + document access diagnostics (หน้าที่ระบุใน spec)
-7. เทสละเอียดสุดในบรรดา P0: matrix ทุก role × action สำคัญ + เทสพิสูจน์ vector query ไม่รั่ว (สร้าง 2 user, เอกสาร ACL แยก, ถามคำถามที่ตอบได้จากเอกสารอีกคนเท่านั้น → ต้องตอบไม่ได้)
+7. **Frontend capability gates** — `frontend/src` ไม่ import `ROLES` เลย ใช้ literal `"admin"`/`"manager"`/`"default"` 105 ครั้งใน 36 ไฟล์ (`PrivateRoute/index.jsx:89` มี `|| !multiUserMode` แบบเดียวกับ bypass ฝั่ง server) — พวกนี้เป็น UI affordance ไม่ใช่ security boundary แต่จะ evaluate false ทั้งหมดพอ legacy role หาย = admin จริงมองไม่เห็น admin UI · **ต้อง ship พร้อม release เดียวกับข้อ 2**
+8. เทสละเอียดสุดในบรรดา P0: matrix ทุก role × action สำคัญ + เทสพิสูจน์ vector query ไม่รั่ว (สร้าง 2 user, เอกสาร ACL แยก, ถามคำถามที่ตอบได้จากเอกสารอีกคนเท่านั้น → ต้องตอบไม่ได้)
 
 **DoD**
 - [ ] design review (Opus) ผ่านก่อน migration ถูกเขียน
-- [ ] ไม่มี route ที่เช็ค role ตรง ๆ เหลือ (grep `ROLES.` นอก engine = 0)
-- [ ] เทส vector-leak ผ่าน (ข้อ 7) — นี่คือเทสที่สำคัญที่สุดของทั้ง Phase 0
+- [ ] ไม่มี route ที่เช็ค role ตรง ๆ เหลือ (grep `ROLES.` นอก engine = 0) **และ** literal grep `grep -rnE 'role (===|!==) "(admin|manager|default)"' server/` = 0 — จับ `endpoints/invite.js:55` กับ `utils/chats/commands/img.js:55` ที่ไม่ได้ import `ROLES` เลย `ROLES.` grep อย่างเดียวจึงมองไม่เห็น
+- [ ] เทส vector-leak ผ่าน (ข้อ 8) — นี่คือเทสที่สำคัญที่สุดของทั้ง Phase 0
 - [ ] `security-review` (Opus) ลองเจาะ: privilege escalation, IDOR ข้าม workspace, ACL bypass ผ่าน API เก่า
 - [ ] evidence: เทส authorization matrix + vector-leak เขียวทั้งชุด
+
+**Recon + task split**: `docs/superpowers/design/p0-5-authorization-recon.md` — audit finding, schema proposal, แตกเป็น 8 issue พร้อม merge order, security tests 20 เคส
 
 **Model**: Dev Sonnet · design + review **Opus บังคับ**
 
