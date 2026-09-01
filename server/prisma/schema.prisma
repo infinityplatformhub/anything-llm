@@ -487,19 +487,19 @@ model jobs {
   payload        String
   actor          String
   state          String    @default("pending")
-  runAt          DateTime  @default(now())
+  runAt          DateTime @db.Timestamptz(3)  @default(now())
   attempts       Int       @default(0)
   maxAttempts    Int       @default(3)
   idempotencyKey String
   traceId        String
   workerId       String?
-  leaseUntil     DateTime?
+  leaseUntil     DateTime? @db.Timestamptz(3)
   result         String?
   lastError      String?
   cancelReason   String?
   cancelledBy    String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime @db.Timestamptz(3)  @default(now())
+  updatedAt      DateTime @db.Timestamptz(3)  @updatedAt
 
   @@unique([type, idempotencyKey])
   @@index([state, runAt])
@@ -514,10 +514,10 @@ model job_schedules {
   payload   String
   actor     String
   enabled   Boolean   @default(true)
-  nextRunAt DateTime?
-  claimedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  nextRunAt DateTime? @db.Timestamptz(3)
+  claimedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3)  @default(now())
+  updatedAt DateTime @db.Timestamptz(3)  @updatedAt
 }
 
 model job_dead_letters {
@@ -529,21 +529,21 @@ model job_dead_letters {
   attempts       Int
   error          String
   traceId        String
-  deadLetteredAt DateTime @default(now())
+  deadLetteredAt DateTime @db.Timestamptz(3) @default(now())
 }
 
 model event_outbox {
   id          String             @id
   type        String
   version     Int
-  occurredAt  DateTime
+  occurredAt  DateTime @db.Timestamptz(3)
   actor       String
   resource    String
   traceId     String
   data        String
   sensitivity String
   payloadHash String
-  createdAt   DateTime           @default(now())
+  createdAt   DateTime @db.Timestamptz(3)           @default(now())
   deliveries  event_deliveries[]
 
   @@index([occurredAt])
@@ -557,12 +557,12 @@ model event_deliveries {
   state          String       @default("pending")
   attempts       Int          @default(0)
   lastError      String?
-  acknowledgedAt DateTime?
-  nextAttemptAt  DateTime?
-  claimedUntil   DateTime?
+  acknowledgedAt DateTime? @db.Timestamptz(3)
+  nextAttemptAt  DateTime? @db.Timestamptz(3)
+  claimedUntil   DateTime? @db.Timestamptz(3)
   claimedBy      String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime @db.Timestamptz(3)     @default(now())
+  updatedAt      DateTime @db.Timestamptz(3)     @updatedAt
   event          event_outbox @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([subscriberId, eventId])
