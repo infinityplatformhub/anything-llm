@@ -79,6 +79,46 @@ re-check the file when that issue closes.
 
 At `8c77e7bc`: 185 refs, 27 files, 2 files, 2 sites — unchanged, because T-4a has not merged yet.
 
+### 2.2a Every org-wide grant outside `super_admin` is justified in the seed
+
+An org-wide grant — `principal_role_grants.workspace_id IS NULL` — applies
+everywhere, to every workspace, forever. `super_admin` is meant to hold those.
+Nothing else should, without a sentence saying why.
+
+```sql
+SELECT r.name, r.scope, count(*) AS org_wide_grants
+FROM principal_role_grants g JOIN roles r ON r.id = g.role_id
+WHERE g.workspace_id IS NULL
+GROUP BY r.name, r.scope ORDER BY 3 DESC;
+```
+
+**Any role but `super_admin` in that output needs a comment in the seed file
+naming the reason.** No comment is a finding, not a style note.
+
+This is not theoretical. T-1 granted every legacy `manager` and `default` user an
+**org-wide `member` role** (`20260902020000_t1_authz_schema/migration.sql:405-410`),
+and org-scope `member` holds `workspace.read`, `workspace.write`, and six
+`document.*` actions (`:312-317`). The engine widens org-wide grants to every
+resource — `engine.js:119-120` matches `workspace_id: null` OR the resource's
+workspace — and it never reads `workspace_users`. So the moment T-4a removed the
+`getWithUser` role bypass, **every user could reach every workspace**, through the
+authorization system rather than around it.
+
+What made it survive review: the migration also backfills `workspace_users.role_id`
+correctly (step 6, `:425-443`, with a `policy_versions` guard and a careful
+editor-not-viewer ruling). It looks like membership was handled. **Nothing reads
+that column except `documentFilter.js:154`** — the engine's grant lookup does not,
+so the per-workspace roles the migration so carefully assigned had no effect on
+route authorization at all.
+
+The lesson generalizes past this bug: **a backfilled column with no reader is not
+a safeguard.** When a migration writes a column, the review question is "which
+code path reads it, today", and a `git grep` answers it. That check would have
+caught this at T-1 review.
+
+Fixed in T-4a's `044000` migration: org `member` narrows, and workspace-scoped
+grants derive from `workspace_users.role_id` — giving that column its reader.
+
 ### 2.3 Frontend capability gates
 
 ```bash
