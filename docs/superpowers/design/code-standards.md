@@ -650,6 +650,81 @@ worse than a review item: false negatives teach people it is covered, false
 positives teach people to bypass it. Rule 1 stays a review item; rule 2 is
 mechanical because it needs no inference at all.
 
+### 7.6 A migration that adds a model needs `prisma generate` before review
+
+The generated client lives in `node_modules`, which is untracked. Adding a model
+to `schema.prisma` does not create `prisma.<model>` for anyone who has not
+regenerated — including the reviewer, the gate run, and CI.
+
+What makes this worth a rule rather than a note is **how it fails**: not with
+"unknown model", but quietly, in whichever direction the calling code was written
+to be safe.
+
+Two cases, one week apart:
+
+- `reportLegacyWildcardGrants` reads `api_key_legacy_wildcard_grants` inside a
+  `try/catch`. Without generate the model is undefined, the throw is caught, and
+  the boot report prints **count 0** — which reads as "no legacy keys", the exact
+  opposite of the truth, at the one moment an operator is looking for them.
+- `credential_store`'s test died at import with an error that pointed at the test
+  rather than at the client.
+
+Neither says "run generate". The first says nothing at all.
+
+So: **an issue or ledger that ships a new model states that `prisma generate`
+must run before any gate or review**, and the reviewer runs it. `yarn test`
+already does (`server/package.json`, `"test": "prisma generate && jest"`), which
+is why this bites review and boot rather than the suite — the two paths that
+skip it.
+
+```bash
+cd server && ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
+```
+
+Not `npx prisma`: npx resolves to whatever the npm cache holds, which on at least
+one machine here is Prisma 8 against a Prisma 6 schema, and the failure reads like
+a schema error.
+
+Worktrees make it worse: they share the main checkout's `node_modules` by
+symlink, so whichever tree generated last wins, and a stale client in one tree
+produces `PrismaClientValidationError` in another that changed nothing.
+
+### 7.7 Test fixtures create membership through the model, never raw Prisma
+
+Since T-4a (`20260902044000`), workspace membership **is** workspace access: the
+org-wide `member` role no longer carries workspace actions, and the engine reads
+`principal_role_grants`. `WorkspaceUser.create` writes the row **and** calls
+`syncWorkspaceMembershipGrant`, which is what puts the grant there.
+
+A fixture doing `prisma.workspace_users.create(...)` writes the row and no grant.
+The user is a member by the table and a stranger to the engine — so an
+authorization test built that way asserts denial and passes for the wrong reason.
+It would pass with the feature deleted.
+
+```js
+// wrong — membership with no grant
+await prisma.workspace_users.create({ data: { user_id, workspace_id } });
+
+// right — the model moves the grant with it
+const { WorkspaceUser } = require("../models/workspaceUsers");
+await WorkspaceUser.create(userId, workspaceId);
+```
+
+Two exemptions, both narrow:
+
+- **The migration's own test.** `__tests__/prisma/t1-authz-migration.test.js:81`
+  writes rows raw on purpose — it is testing what the migration does to
+  pre-existing rows, and pre-existing rows had no grants. Using the model there
+  would test the model.
+- **A fixture that deliberately builds the inconsistent state** — membership
+  without a grant, to prove the engine denies it. Say so in a comment, or the
+  next reader fixes it into uselessness.
+
+Everything else goes through the model. The general form: **when a write has a
+side effect that another subsystem depends on, a fixture that skips the model
+skips the side effect**, and the test then measures a world the product never
+produces.
+
 ### 7.2 Definition of done for background services
 
 A scheduler, worker, or pump is not done because its tests pass. Before handing
