@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const prisma = require("../prisma");
+const { LeaseLostError, ImpersonatedMutationError } = require("./errors");
 
 const serialize = (value) => JSON.stringify(value ?? {});
 const parse = (value) => JSON.parse(value || "{}");
@@ -14,9 +15,6 @@ const asJob = (row) => ({
   idempotencyKey: row.idempotencyKey,
   traceId: row.traceId,
 });
-
-class LeaseLostError extends Error {}
-class ImpersonatedMutationError extends Error {}
 
 const isMutatingJob = (input) => input.mutating !== false;
 const denyImpersonatedMutation = (actor, mutating) => {
