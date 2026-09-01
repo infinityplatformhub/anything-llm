@@ -46,7 +46,11 @@ while IFS= read -r line; do
   fail=1
 # --untracked: a newly written test is exactly the case this gate exists to catch,
 # and plain git grep does not see it until someone stages the file.
-done < <(git grep -n --untracked -E '"db", *"push"|db push|db:push' -- 'server/__tests__' 2>/dev/null)
+# Match the CALL, not the words. `db push` as prose appears in comments explaining
+# why a suite stopped using it — T-4a's conversion comments tripped the loose form,
+# which is the gate crying wolf about the very fix it asked for.
+done < <(git grep -n --untracked -E '"db",[[:space:]]*"push"|prisma[[:space:]]+db[[:space:]]+push|db:push' \
+  -- 'server/__tests__' 2>/dev/null)
 
 if [ "$fail" -ne 0 ]; then
   echo
