@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import MobileConnection from "@/models/mobile";
 import PreLoader from "@/components/Preloader";
-import Logo from "@/media/logo/anything-llm-infinity.png";
+import Logo from "@/media/logo/approofworkspace-infinity.png";
 import paths from "@/utils/paths";
 import GetOnGooglePlay from "./gplay-badge.svg";
 

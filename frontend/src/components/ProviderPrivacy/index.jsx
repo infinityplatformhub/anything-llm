@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import System from "@/models/system";
 import { PROVIDER_PRIVACY_MAP } from "./constants";
 import { ArrowSquareOut } from "@phosphor-icons/react";
-import ApproofWorkspaceIcon from "@/media/logo/anything-llm-icon.png";
+import ApproofWorkspaceIcon from "@/media/logo/approofworkspace-icon.png";
 import { Link } from "react-router-dom";
 import { titleCase, sentenceCase } from "text-case";
 

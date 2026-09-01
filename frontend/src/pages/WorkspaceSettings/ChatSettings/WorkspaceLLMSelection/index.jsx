@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import ApproofWorkspaceIcon from "@/media/logo/anything-llm-icon.png";
+import ApproofWorkspaceIcon from "@/media/logo/approofworkspace-icon.png";
 import WorkspaceLLMItem from "./WorkspaceLLMItem";
 import { ALL_LLM_PROVIDERS } from "@/pages/GeneralSettings/LLMPreference";
 import { CaretUpDown, MagnifyingGlass, X } from "@phosphor-icons/react";
