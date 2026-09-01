@@ -248,6 +248,41 @@ string silently default-denies or, worse, silently matches nothing in a filter.
   Callers import from the seam directory, never from a driver file directly.
 - No cross-seam imports between drivers. Compose at `index.js` or at the caller.
 
+### 5.1 A file that calls a model must require it
+
+Node resolves `require` at load but resolves an identifier at *use*. A file that
+calls `EventLogs.count()` without requiring `EventLogs` therefore boots fine and
+throws `ReferenceError` only when that route is hit. Nothing in the test suite
+catches it unless a test exercises that exact handler.
+
+This is not hypothetical. Issue #24: the P0-6 audit sweep converted the write
+path in `server/endpoints/system.js` to `emitAuditEvent` and removed the now-
+unused-looking `EventLogs` import — but three read/delete call sites at lines
+1152, 1155 and 1171 still used it. The Event Logs admin page 500'd until a user
+reported it.
+
+The rule is one line: **if a file calls `Model.method(...)`, that file requires
+`Model`.** There is no ambient model object and no global.
+
+The trap is specifically a *sweep*. When you remove the last call of one kind
+from a file, the import can look dead while another kind of call still needs it.
+Grep the file for the identifier before deleting its import, not just for the
+pattern you were converting.
+
+Check:
+
+```bash
+./scripts/check-model-imports.sh
+```
+
+Run it via `./scripts/check-local.sh` with the rest of our checks. It flags any
+file calling `Model.method(` without a matching `require`, exempting the file
+that declares the model. It matches only calls, so a string literal like
+`"User.Read"` or a mention in a comment does not trip it.
+
+Add new models to `MODELS` in the script as they appear; the list is the gate's
+coverage, and a model absent from it is unchecked.
+
 ---
 
 ## 6. Naming
