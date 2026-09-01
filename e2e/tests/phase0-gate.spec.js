@@ -371,9 +371,9 @@ test("06 chat answers with a citation pointing at the upload", async ({
   // Assert the reply is non-empty and carries citations — never the answer's
   // content (the mock LLM is canned). Citations render as a collapsed
   // "Sources" control; expand it to reveal the citing document's name.
-  const sources = page.getByText(/^Sources$/i).first();
+  const sources = page.locator("button").filter({ hasText: /^Sources$/ }).first();
   await sources.waitFor({ state: "visible", timeout: 90_000 });
-  await sources.click();
+  await sources.click(); // opens the citations sidebar
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
     timeout: 30_000,
   });
