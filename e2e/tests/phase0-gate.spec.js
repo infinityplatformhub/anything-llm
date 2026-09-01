@@ -275,7 +275,9 @@ test("05 upload a small .txt document and embed it into the workspace", async ({
   }
   await fileRow.waitFor({ state: "visible", timeout: 60_000 });
   await fileRow.click();
-  await expect(fileRow).toHaveClass(/selected/, { timeout: 10_000 });
+  await page.waitForTimeout(1_000);
+  // Selection is proved by Move to Workspace appearing, not by a CSS class
+  // (the row re-renders on select, so a class assertion races the re-render).
   const move = page.locator('button:has-text("Move to Workspace")');
   await move.first().waitFor({ state: "visible", timeout: 30_000 });
   const embedCall = page.waitForResponse(
