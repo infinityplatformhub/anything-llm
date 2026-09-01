@@ -353,7 +353,7 @@ END $$;
 -- a data-modifying CTE is invisible to other sub-statements in the same statement) ----
 DO $$ DECLARE n INTEGER;
 BEGIN
-  SELECT count(*) INTO n FROM "workspace_documents" WHERE docpath IS NULL OR docpath = '';
+  SELECT count(*) INTO n FROM "workspace_documents" WHERE docpath = ''; -- column is NOT NULL; only '' is possible
   RAISE NOTICE 'T-1 pre-check [docpath_empty]: % rows with empty docpath — each becomes its own canonical document', n;
 END $$;
 
@@ -420,12 +420,21 @@ FROM pv
 ON CONFLICT DO NOTHING;
 
 -- ---- step 6: workspace_users.role_id (workspace-scope roles only) ----
+-- Guarded by a policy_versions marker: without it, a bare COALESCE re-run would resurrect
+-- any row an admin deliberately set back to NULL after the migration (QA-1 finding 3).
 UPDATE "workspace_users" wu
 SET "role_id" = (SELECT "id" FROM "roles" WHERE "name"='owner' AND "scope"='workspace')
-WHERE EXISTS (SELECT 1 FROM "workspaces" w WHERE w."id" = wu.workspace_id AND w."created_by" = wu.user_id);
+WHERE EXISTS (SELECT 1 FROM "workspaces" w WHERE w."id" = wu.workspace_id AND w."created_by" = wu.user_id)
+  AND NOT EXISTS (SELECT 1 FROM "policy_versions" WHERE change_type = 'workspace_role_backfill');
 
 -- Default members get workspace role 'editor', NOT 'viewer': legacy default users could upload,
 -- update and delete documents in workspaces they belong to — editor is the closest behavioral
 -- match; viewer (read+chat only) would silently revoke upload on migration day.
 UPDATE "workspace_users" wu
-SET "role_id" = COALESCE(wu."role_id", (SELECT "id" FROM "roles" WHERE "name"='editor' AND "scope"='workspace'));
+SET "role_id" = COALESCE(wu."role_id", (SELECT "id" FROM "roles" WHERE "name"='editor' AND "scope"='workspace'))
+WHERE wu."role_id" IS NULL
+  AND NOT EXISTS (SELECT 1 FROM "policy_versions" WHERE change_type = 'workspace_role_backfill');
+
+INSERT INTO "policy_versions" ("change_type", "scope_key")
+SELECT 'workspace_role_backfill', 'org:1'
+WHERE NOT EXISTS (SELECT 1 FROM "policy_versions" WHERE change_type = 'workspace_role_backfill');

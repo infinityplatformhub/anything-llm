@@ -184,6 +184,14 @@ describe("T-1 migration on real Postgres", () => {
     }).toEqual(before);
   });
 
+  test("step-6 marker guard: a role deliberately set back to NULL stays NULL on re-run (QA-1 finding 3)", async () => {
+    const victim = await prisma.workspace_users.findFirstOrThrow({ where: { roles: { name: "editor" } } });
+    await prisma.workspace_users.update({ where: { id: victim.id }, data: { role_id: null } });
+    await runBackfill(4);
+    const after = await prisma.workspace_users.findUniqueOrThrow({ where: { id: victim.id } });
+    expect(after.role_id).toBeNull(); // without the policy_versions marker this resurrects as editor
+  });
+
   test("prg unique index is NULLS NOT DISTINCT — duplicate org-wide grant is a violation, not a new row", async () => {
     const admin = await prisma.users.findUniqueOrThrow({ where: { username: "admin" } });
     const superAdmin = await prisma.roles.findFirstOrThrow({
