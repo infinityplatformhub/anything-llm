@@ -26,7 +26,10 @@ logs/server.log
 *.db-journal
 storage/lancedb
 public/
+# Downloaded model-metadata caches inside test fixtures (context-windows/pricing),
+# NOT the test sources in __tests__/models/.
 __tests__/**/models
+!__tests__/models
 
 # For legacy copies of repo
 documents
