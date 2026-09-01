@@ -23,6 +23,9 @@ jest.mock("../../models/workspace", () => ({
   Workspace: { _findMany: jest.fn(), new: jest.fn() },
 }));
 jest.mock("../../models/telemetry", () => ({ Telemetry: { sendTelemetry: jest.fn() } }));
+jest.mock("../../utils/files/purgeDocument", () => ({
+  purgeDocument: jest.fn().mockResolvedValue(true),
+}));
 
 const express = require("express");
 const request = require("supertest");
@@ -30,6 +33,8 @@ const { ApiKey } = require("../../models/apiKeys");
 const { Workspace } = require("../../models/workspace");
 const { apiWorkspaceEndpoints } = require("../../endpoints/api/workspace");
 const { apiDocumentEndpoints } = require("../../endpoints/api/document");
+const { apiSystemEndpoints } = require("../../endpoints/api/system");
+const { purgeDocument } = require("../../utils/files/purgeDocument");
 const prisma = require("../../utils/prisma");
 
 const key = (scopes, workspaceId = null) => ({
@@ -41,6 +46,7 @@ function app() {
   server.use(express.json());
   apiWorkspaceEndpoints(server);
   apiDocumentEndpoints(server);
+  apiSystemEndpoints(server);
   return server;
 }
 
@@ -146,5 +152,30 @@ describe("workspace-bound API keys", () => {
       expect(response.status).not.toBe(403);
       expect(prisma.workspaces.findMany).not.toHaveBeenCalled();
     });
+  });
+
+  // remove-documents purges by name across the whole deployment. There is no
+  // workspace anywhere in the request for the slug binding to catch.
+  test("a bound key cannot purge documents system-wide", async () => {
+    ApiKey.resolve.mockResolvedValueOnce(key(["document.delete"], 7));
+
+    const response = await auth(
+      request(app()).delete("/v1/system/remove-documents")
+    ).send({ names: ["custom-documents/theirs.json"] });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Insufficient scope." });
+    expect(purgeDocument).not.toHaveBeenCalled();
+  });
+
+  test("an unbound key with document.delete still purges", async () => {
+    ApiKey.resolve.mockResolvedValueOnce(key(["document.delete"]));
+
+    const response = await auth(
+      request(app()).delete("/v1/system/remove-documents")
+    ).send({ names: ["custom-documents/mine.json"] });
+
+    expect(response.status).toBe(200);
+    expect(purgeDocument).toHaveBeenCalledWith("custom-documents/mine.json");
   });
 });

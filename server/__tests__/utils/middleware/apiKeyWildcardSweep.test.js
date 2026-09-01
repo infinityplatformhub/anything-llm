@@ -7,7 +7,14 @@ const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
 // table, so its five routes leave this count by a different mechanism than the other
 // forty-seven -- the regex stops matching them at all. Both mechanisms are asserted
 // separately below so a future edit cannot hide one behind the other.
-const EXPECTED_WILDCARD_ROUTES = 11;
+const EXPECTED_WILDCARD_ROUTES = 0;
+
+// Reaching zero means no ROUTE still *asks* for the wildcard. It does not mean no KEY
+// still holds one: the schema default and the model's fallback both still mint
+// ["*"], so every existing key satisfies every scope this PR just introduced. That
+// burn-down is PR-4c's. The test below fails the day either default is removed, which
+// is the signal to delete it along with this comment — so the zero above can never be
+// read as "wildcards are gone".
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -38,4 +45,17 @@ test("the extension middleware grants a fixed scope set, never a wildcard", () =
   );
   expect(source).not.toContain('scopes: ["*"]');
   expect(source).not.toContain('includes("*")');
+});
+
+test("routes are burnt down but keys are not: the wildcard default survives, and PR-4c owns it", () => {
+  const schema = fs.readFileSync(
+    path.resolve(__dirname, "../../../prisma/schema.prisma"),
+    "utf8"
+  );
+  const model = fs.readFileSync(
+    path.resolve(__dirname, "../../../models/apiKeys.js"),
+    "utf8"
+  );
+  expect(schema).toContain('@default("[\\"*\\"]")');
+  expect(model).toContain('options.scopes || ["*"]');
 });

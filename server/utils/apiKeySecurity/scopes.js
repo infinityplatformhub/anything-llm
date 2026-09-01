@@ -66,6 +66,21 @@ const ROUTE_SCOPES = Object.freeze({
   "POST /v1/embed/new": "embed.create",
   "POST /v1/embed/:embedUuid": "embed.write",
   "DELETE /v1/embed/:embedUuid": "embed.delete",
+
+  // PR-4b(4) system
+  "GET /v1/system/env-dump": "system.env.read",
+  "GET /v1/system": "system.read",
+  "GET /v1/system/vector-count": "system.read",
+  "POST /v1/system/update-env": "system.write",
+  "GET /v1/system/export-chats": "document.bulk_export",
+  "DELETE /v1/system/remove-documents": "document.delete",
+
+  // PR-4b(4) openai compatibility
+  "GET /v1/openai/models": "system.read",
+  "POST /v1/openai/chat/completions": "chat.write",
+  "POST /v1/openai/images/generations": "image.generate",
+  "POST /v1/openai/embeddings": "embedding.compute",
+  "GET /v1/openai/vector_stores": "workspace.read",
 });
 
 const scopeFor = (method, path) => ROUTE_SCOPES[`${method} ${path}`];

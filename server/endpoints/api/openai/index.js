@@ -1,4 +1,4 @@
-const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
+const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { v4: uuidv4 } = require("uuid");
 const { Document } = require("../../../models/documents");
@@ -17,7 +17,7 @@ const { handleImageGenUpload } = require("../../../utils/files/multer");
 function apiOpenAICompatibleEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/openai/models", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], async (_, response) => {
+  app.get("/v1/openai/models", [validApiKey(scopeFor("GET", "/v1/openai/models"))], async (_, response) => {
     /*
     #swagger.tags = ['OpenAI Compatible Endpoints']
     #swagger.description = 'Get all available "models" which are workspaces you can use for chatting.'
@@ -76,7 +76,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/chat/completions",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/openai/chat/completions"))],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -193,7 +193,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/images/generations",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL), handleImageGenUpload],
+    [validApiKey(scopeFor("POST", "/v1/openai/images/generations")), handleImageGenUpload],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -288,7 +288,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.post(
     "/v1/openai/embeddings",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("POST", "/v1/openai/embeddings"))],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']
@@ -355,7 +355,7 @@ function apiOpenAICompatibleEndpoints(app) {
 
   app.get(
     "/v1/openai/vector_stores",
-    [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)],
+    [validApiKey(scopeFor("GET", "/v1/openai/vector_stores"))],
     async (request, response) => {
       /*
       #swagger.tags = ['OpenAI Compatible Endpoints']

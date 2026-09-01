@@ -46,9 +46,16 @@ const GRID = [
   ["document.read", "document.write"],
   ["document.folder.manage", "document.write"],
   ["system.read", "document.read"],
+  // PR-4b(4)
+  ["system.env.read", "system.read"],
+  ["system.write", "system.read"],
+  ["document.bulk_export", "chat.read"],
+  ["document.delete", "document.write"],
+  ["image.generate", "chat.write"],
+  ["embedding.compute", "chat.write"],
 ];
 
-describe("PR-4b workspace, thread and document scope enforcement", () => {
+describe("PR-4b route scope enforcement", () => {
   test.each(GRID)("a key holding only %s is refused where %s is required", async (required, owned) => {
     ApiKey.resolve.mockResolvedValueOnce(key([owned]));
     const response = await call(appFor(required));
@@ -77,11 +84,16 @@ describe("PR-4b workspace, thread and document scope enforcement", () => {
     expect(response.status).toBe(200);
   });
 
-  test("every workspace, thread and document route resolves to a scope, so none can boot unguarded", () => {
+  test("every scoped route resolves to a scope, so none can boot unguarded", () => {
     const routes = Object.keys(ROUTE_SCOPES).filter(
-      (entry) => entry.includes("/v1/workspace") || entry.includes("/v1/document")
+      (entry) =>
+        entry.includes("/v1/workspace") ||
+        entry.includes("/v1/document") ||
+        entry.includes("/v1/embed") ||
+        entry.includes("/v1/system") ||
+        entry.includes("/v1/openai")
     );
-    expect(routes).toHaveLength(30);
+    expect(routes).toHaveLength(47);
     for (const entry of routes) {
       const [method, ...rest] = entry.split(" ");
       const scope = scopeFor(method, rest.join(" "));

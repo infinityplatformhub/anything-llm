@@ -55,3 +55,15 @@ Ruling: an **unknown slug is refused, not ignored** — it is not this key's wor
 Ruling: one `findMany` with `slug: { in: slugs }` rather than a lookup per slug — a request naming twenty workspaces would otherwise cost twenty round trips, and the comparison is done in memory against the returned set. If wrong, the query returns at most as many rows as slugs named.
 
 Ruling: `addToWorkspaces` naming the key's own workspace **plus** another is refused entirely, not partially honoured — a partial success would embed the document in one workspace while reporting failure, and the caller could not tell which half happened. RED-proven as its own case.
+
+## PR-4b(4) system + openai (branch `approof/pr4b-system-openai`, base `911d5111`)
+
+Scope names follow PMO's 4b-4 ruling verbatim; grep confirmed the split it named (3 new, 5 already seeded).
+
+Ruling: `system.env.read` is granted to **`super_admin` only**, and `image.generate` / `embedding.compute` to no workspace role — env-dump reads the provider credentials, and the other two spend money per call. Inheriting either by being an editor is not a grant anyone made deliberately. If wrong, an operator must grant them explicitly, which is the point.
+
+Ruling: `DELETE /v1/system/remove-documents` refuses a workspace-bound key (403). It purges by document name across the whole deployment; there is no workspace in the path or body, so a bound key cannot express a purge limited to its own workspace and must not be allowed a system-wide one. Same shape as the three bound-key gaps in the previous PR. If wrong, a bound key must use an unbound key to purge.
+
+Ruling: **the counter reaching 0 is annotated, not celebrated.** `EXPECTED_WILDCARD_ROUTES = 0` means no *route* still asks for the wildcard; it does not mean no *key* holds one. `schema.prisma:15` still defaults `scopes` to `["*"]` and `models/apiKeys.js:26` still falls back to `["*"]`, so every existing key satisfies every scope this PR introduced. A new test asserts both defaults are still present, so the zero can never be read as "wildcards are gone", and that test fails the day PR-4c removes them — which is the signal to delete it. This is the failure mode raised during the earlier PR-4c review: a counter that reaches zero while every key still holds `*`. If wrong, one test must be deleted as part of PR-4c.
+
+Ruling: migration slot **043000** per PMO's slot ruling; it seeds only the three new actions. `document.bulk_export` (export-chats) and `document.delete` (remove-documents) were seeded by T-1's step-7a and are not re-inserted.
