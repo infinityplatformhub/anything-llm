@@ -219,7 +219,7 @@ Every returned principal carries the `policy_version` its row was stamped with. 
 
 ---
 
-## 3. Task split — 8 issues, each ≤1 week, disjoint file sets
+## 3. Task split — 9 issues after the §5c review (T-4 split into T-4a/T-4b), each ≤1 week, disjoint file sets
 
 Merge order is strict: **schema → engine → route migration → vector ACL → admin duties → diagnostics UI**. T-6 and T-7 may run parallel to each other.
 
@@ -265,7 +265,7 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 
 ---
 
-## 4. Security attack tests (the acceptance bar — these are the DoD, not extras)
+## 4. Security attack tests — 24 cases (the acceptance bar, not extras)
 
 Test file layout: `server/__tests__/security/authorization/*.test.js`. Every test must be shown **RED before green** (a P0-3 discipline), by reverting the specific guard.
 
@@ -292,6 +292,12 @@ Test file layout: `server/__tests__/security/authorization/*.test.js`. Every tes
 - **S-16** Revocation timing: revoke a `document_acl` row, then query → excluded. Asserts the T-3 invalidation path end-to-end.
 - **S-17** Cross-namespace merge: query 3 namespaces where the actor may read only 1; assert global `topN` semantics and that no forbidden candidate appears at any rank.
 
+### Second retrieval path (from §5c — these do not overlap S-10..S-17)
+- **S-21** User A pins a document A cannot read; user B asks a question answerable only from it → chunk absent from `contextTexts` **and** `sources`. Repeat for a parsed attachment via `WorkspaceParsedFiles.getContextFiles`. *Targets G17; S-10 cannot catch this because the pinned path never reaches the provider.*
+- **S-22** Ask a question, get a citation, revoke the document, ask a follow-up in the same thread → the revoked citation must not be rehydrated from history. *Targets G1 `fillSourceWindow`.*
+- **S-23** `DELETE /workspace/:slug/remove-and-unembed` with a `documentLocation` belonging to another workspace → denied, document still present. *Targets G11.*
+- **S-24** `GET`/`DELETE /embed/:embedId/:sessionId` with another visitor's session id → denied. *Targets G12.*
+
 ### Diagnostics / privacy posture
 - **S-18** `explainAccess` denied without `access.diagnose`; the denial does not reveal whether the document exists.
 - **S-19** `explainAccess` on a document whose grants changed mid-call (bump `policy_versions` between reads) → fails closed, never returns a partial principal list as complete.
@@ -316,6 +322,60 @@ P0-4 recon: `docs/superpowers/design/p0-4-security-recon.md @ 8b49f5c3` (207 lin
 - **One vocabulary.** P0-4's R3 (scope strings are seam-02 action names verbatim) is the same ruling as A-R2. P0-4's DoD greps `SCOPE_MAP|scopeAlias|translateScope` → 0; T-2 inherits that constraint rather than restating it.
 - **`validApiKey` is 62 call sites in 9 files**, not the 30 first reported — e5's original grep was truncated by `head`. Recounted here for the same reason (see A-1 table): trust a fresh grep over any number carried in a plan.
 - **Impersonation chain — CLOSED out-of-band, T-2 does not carry it.** The chain (any API key → temp token for an admin → session JWT) was split into hotfixes ahead of the P0-4 dependency chain: **issue #8 / PR-0** landed `ssoIssuanceLock` as the first middleware on `/v1/users/:id/issue-auth-token` (403 by default, reopened only via `SIMPLE_SSO_ISSUE_UNSAFE_ALLOW`) at `3bbbea76`, under QA by `anything-llm-5f`; **issue #10 / PR-0b** covers an unauthenticated `GET /v1/system/env-dump` plus a route-auth sweep of `api/`. Neither waits on P0-4 steps A/B or #4. T-2 therefore scopes to denying impersonated *mutations* per seam 02 and does not attempt to gate token issuance.
+
+## 5c. Adversarial review by `anything-llm-cc` — 17 gaps, architect triage (2026-09-02)
+
+`anything-llm-cc` ran three independent sweeps (auth surface / vector providers / attack paths) against this note and returned 17 gaps. Every one I spot-checked reproduced. Triage below; **G15 and the T-4 split need a PMO ruling before T-1 is written.**
+
+### Accepted into scope — verified against code
+
+| # | Gap | Verification | Lands in |
+|---|---|---|---|
+| **G17** | Pinned documents and parsed attachments are pushed straight into `contextTexts` **before** vector search runs (`utils/chats/stream.js:156-183`) | Confirmed. 9 entry points: `stream.js:155,170`, `embed.js:102`, `apiChatHandler.js:297,685`, `openaiCompatible.js:83,327`, `agents/index.js:799,804`, `agents/ephemeral.js:444,445`, `router/index.js:361`. **This is a second retrieval path that `queryAuthorized` does not sit on** — T-5 could close all 9 providers and this would still leak. | **T-5** (scope increase) |
+| **G1** | `fillSourceWindow` (`utils/helpers/chat/index.js:382-439`) rehydrates citations out of stored chat-history JSON with no ACL re-check | Confirmed — it filters on pins, `score`, `text`, and dedupe only. A revoked document's text returns from history. | **T-5** |
+| **G11** | `DELETE /workspace/:slug/remove-and-unembed` (`endpoints/workspaces.js:861-882`) passes caller-supplied `documentLocation` to the global `purgeDocument` after checking only workspace membership | Confirmed — path is never constrained to the workspace. Destructive cross-workspace IDOR, live today. | **T-4a** + S-test |
+| **G14** | `Workspace.updateUsers` (`models/workspace.js:501-509`) is delete-then-create with no transaction, and `workspaceUsers.js:26-43` swallows errors | Confirmed. A failed create after a successful delete silently empties a workspace's membership. | **T-1** (transactional replace + version bump) |
+| **G3** | Writes, deletes and jobs carry no actor. Worst case `jobs/sync-watched-documents.js:157-193`: on sync it **fans the new content out to every other workspace holding a file of the same name** | Confirmed — `Document.where({filename})` across all workspaces, then re-embeds each. Seam 02 requires explicit job actors. | **T-4b** |
+| **G12** | `GET`/`DELETE /embed/:embedId/:sessionId` (`endpoints/embed/index.js:69-105`) gate on `validEmbedConfig` only; `sessionId` comes from the URL | Confirmed — read and delete another visitor's chat by guessing a session id. | **T-4b** |
+| **G13** | JWT carries `{id, username}` only (`utils/http/index.js:25-28`), `validatedRequest` reloads the user (`middleware/validatedRequest.js:74-99`) — no `impersonatedBy`/`onBehalfOf` field exists anywhere | Confirmed. S-7 tests a property the substrate cannot yet express. | **T-2** (actor envelope at ingress) |
+| **G16** | Six live identity types need one resolver: JWT user, P0-4 service key, browser-extension key (`validBrowserExtensionApiKey.js:20-48`), mobile device token (`mobile/middleware/index.js:12-37`), embed anonymous, SSO temp token | Confirmed. Missing actor = deny. | **T-2** |
+| **G8** | `/v1` resolves resources unscoped: 18 `Workspace.get(` and 4 `WorkspaceThread.get(` across `endpoints/api/`, over **63 route definitions** | Confirmed by count. | **T-4b** |
+| **G7** | A-2's bypass list was incomplete: add `utils/chats/commands/img.js:55`, `utils/helpers/admin/index.js:10-44`, `endpoints/browserExtension.js:203-211`, `endpoints/admin.js:368,473` | Confirmed. | **T-4a** |
+| **G2** | Vector counts and namespace stats leak cardinality (`api/system/index.js:97-98`, `endpoints/system.js:449-452`, `api/workspace/index.js:970-972`) | Confirmed. Low severity, cheap to fix. | **T-5** DoD |
+| **G10** | Jobs, Telegram and agents resolve resources with no actor (`handle-telegram-chat.js:32,43`, `extract-memories.js:66,83`, `chat-history.js:178-182`, `agents/index.js:505`, `purgeDocument.js:18,61`, `helpers/search.js:36`) | Confirmed. | **T-4b** |
+| **G4** | Pre-backfill vector rows have undefined ACL semantics | Accepted as stated: **a row without ACL metadata is denied**, and backfill completion gates `queryAuthorized` going live. Fail-closed. | **T-5** |
+| **G5** | Namespace-slug stability | Accepted into **T-6** DoD as written. | T-6 |
+
+### G15 — canonical document identity: **agreed, but scope it narrowly** (PMO ruling)
+
+The defect is real and worse than "missing a table": `Documents.addDocuments` mints `docId = uuidv4()` **per workspace** (`models/documents.js:119`) while `docpath` is the shared identity. The same file in three workspaces is three `docId`s. An ACL keyed on `docId` therefore protects **one copy**; revoking access to a document does not revoke its siblings. Meanwhile `Documents.contentByDocPath` (`models/documents.js:297-301`) reads a bare path with no ownership check at all, and `viewLocalFiles` (`api/document/index.js:638-641`) walks the whole tree.
+
+Architect position: **accept the canonical `documents` table (orgId, stableId, ownerId).** The table is load-bearing — without a stable id, `document_acl` cannot express "this document", and `explainAccess` answers per-copy, which is exactly the support question it exists to answer. Concretely for T-1: `documents(id, orgId, stable_id, owner_id, docpath, filename, mime)`, `workspace_documents.document_id` FK, `document_acl.document_id` → `documents.stable_id`, backfilled by grouping existing rows on `docpath`.
+
+**I initially argued the CRUD vocabulary was scope creep and was wrong.** Judging it from the retrieval side only, `document.read`/`document.search` looked sufficient. G11 disproves that: `remove-and-unembed` is a *destructive* action, and if no action name exists for it, T-4a has nothing to pass to `assertAuthorized`. Agreed vocabulary is 9 actions — `document.create/read/search/update/delete/share/pin/watch/export`. Dropped from cc's proposal: `document.embed`/`document.unembed`, which are side effects of add/remove rather than separately grantable rights.
+
+**Dedupe key is `docpath`, and `checksum` does not ship in T-1.** `docpath` has no unique constraint (`schema.prisma:31`); only `docId` does (`:29`). `Documents.addDocuments` writes the same `docpath` with a fresh `uuidv4()` per workspace (`models/documents.js:119,124`), and `removeDocuments` queries on `{docpath, workspaceId}` together (`:208-211`) — it would not need the workspace if paths were unique. So duplicate `docpath` rows already exist; backfill must `GROUP BY docpath` and handle N rows per group rather than expecting one. A `checksum` column is rejected for Phase 0: hashing every file makes migration time unbounded in corpus size, nothing would read the column so it would rot silently on edit, and `watched` documents change content by design, so a hash is not their identity.
+
+**`pinned` and `watched` stay on `workspace_documents`.** They are genuine per-workspace state (`endpoints/workspaces.js:626` sets pin per document row); only `filename`/`mime`/`metadata` merge into the canonical row. Conflicts resolve to the lowest workspace id, with a printed report.
+
+**`inherited_workspace` backfill grants.** T-1 writes a `document_acl` row with `source="inherited_workspace"` per existing (workspace, document) pair so list/read does not break on day one. These use `principal_type="workspace"`, so they never collide with manual `user`/`group` grants under the existing unique constraint. **T-7's diagnostics must surface `source`** — otherwise `explainAccess` answers "this principal has a grant" when the truth is "the migration created one", which is a different answer for whoever is debugging the ticket.
+
+**`document_vectors` re-keying** runs as a batched job on the P0-6 queue, never as an inline migration. It and T-5's vector-metadata backfill must be the same job or explicitly ordered — not two jobs racing on one table. The G4 gate still holds: `queryAuthorized` does not go live until backfill completes, and any row without ACL metadata is denied.
+
+**Cost**: +1.5d on T-1 (4d → 5.5d, still inside one week; the canonical table and the 9-action vocabulary land together). Deferring it means `document_acl` is written against a per-copy key and rewritten later — a migration on the table the whole task is built on.
+
+### T-4 split — **agreed, evidence supports it**
+
+My own recount put T-4 at 189 middleware invocations + 244 `ROLES.` references. cc's sweep adds 63 `/v1` route definitions, the job/channel/agent actor work (G3, G10), and G11. That is not 5 days.
+
+**T-4a** — internal routes, models, bypasses (incl. G7, G11). Owns `server/endpoints/*.js`, `server/models/*.js`, `server/utils/middleware/multiUserProtected.js` (deleted). 5d.
+**T-4b** — `/v1` (G8), jobs (G3), channels (G12), agents (G10). Owns `server/endpoints/api/**`, `server/endpoints/embed/**`, `server/jobs/**`, `server/utils/telegramBot/**`, `server/utils/agents/**`. 5d.
+
+Order: **T-4a → T-4b → T-5.** File sets stay disjoint. T-5 still owns `server/utils/chats/**`.
+
+### Note on G17's severity
+
+G17 is the most important finding in this review. The recon note framed the vector ACL as *the* retrieval boundary; G17 shows there are **two** — pinned documents and parsed attachments enter context without passing retrieval at all. A T-5 that ships `queryAuthorized` on every provider and stops there would pass S-10 and still leak, because S-10 asks a question answered from an *embedded* chunk. **S-21 is therefore not optional**: pin a document as user A, ask as user B, assert the chunk is absent from `contextTexts` — and the same for a parsed attachment.
 
 ## 6. Residual risks resolved / carried
 
