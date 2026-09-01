@@ -52,3 +52,7 @@ Ruling: Ignore `frontend/src/locales/` for product-name gate — translated UI s
 Ruling: Complete repository-wide invented-domain sweep by routing remaining frontend documentation helpers through `VITE_BRAND_DOCS_URL` with repository fallback and deleting CTAs lacking real content — exact zero-domain evidence prevents another partial file-list fix — cost if wrong: generic repository fallback may not contain route-specific documentation until a docs deployment is configured.
 
 Ruling: Remove invented deployment domains from embed examples, comments, and Docker guidance — examples must not imply nonexistent services or create outbound references — cost if wrong: examples become less product-specific.
+
+Ruling: Use `BRAND_REPOSITORY_URL` in both generated embed snippet and visible CTA — gate rejects every literal repository URL in source even when destination is valid — cost if wrong: generated snippets follow deployment override rather than fixed project repository.
+
+Ruling: Narrow locale checkignore to `frontend/src/locales/es/common.js` — exact file matching is proven by gate while directory trailing-slash pattern was not — cost if wrong: other translated product-name files may need explicit entries when gate reports them.
