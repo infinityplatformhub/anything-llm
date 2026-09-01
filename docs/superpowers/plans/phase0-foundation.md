@@ -108,7 +108,7 @@ P0-7 (F5 de-brand)      — อิสระ ทำขนานได้ทัน
 
 **ขั้นตอน**
 1. ออกแบบ schema: `roles`, `permissions`, `role_permissions`, `workspace_members(role)`, `document_acl` — เสนอผ่าน design review ก่อนเขียน migration
-2. Permission engine: `can(user, action, resource)` จุดเดียว · route ทั้งหมดเรียกผ่านตัวนี้ — surface จริงที่นับใหม่แล้ว (2026-09-02): `flexUserRoleValid` **171 invocation ใน 24 ไฟล์** + `strictMultiUserRoleValid` **18 ใน 2 ไฟล์** + `ROLES.` **244 ใน 29 ไฟล์** (ตัวเลข "~23 ไฟล์" เดิมคือจำนวน *importer* ไม่ใช่ call site — ต่ำไปราวเท่าตัว) · **ถ้า engine slip ให้แตกงานนี้ตาม route group ห้ามอัดให้จบใน PR เดียว**
+2. Permission engine: `can(user, action, resource)` จุดเดียว · route ทั้งหมดเรียกผ่านตัวนี้ — surface จริง — ตัวเลขปัจจุบันและคำสั่งที่ใช้นับอยู่ใน `phase0-gate-checklist.md` §2.2 ซึ่งเป็นแหล่งอ้างอิงเดียว (ตัวเลขที่เคยเขียนไว้ตรงนี้นับก่อน P0-3/P0-4 เพิ่มไฟล์ route และนับคนละหน่วย — invocation ไม่ใช่ไฟล์ — จึงอ่านขัดกัน) · **ถ้า engine slip ให้แตกงานนี้ตาม route group ห้ามอัดให้จบใน PR เดียว**
 3. Workspace roles + migration จาก 3 role เดิม (mapping ที่ประกาศชัด: admin→super-admin, manager→workspace owner ของ workspace ที่ตัวเองสร้าง, default→member) — **ต้องเพิ่ม `workspaces.created_by` ก่อน** เพราะ schema ปัจจุบันไม่มีคอลัมน์นี้ (ruling R1)
 4. Document ACL: ตาราง + enforcement ตอน list/read + **filter ใน vector query ทุก provider ที่ support** (LanceDB ก่อน — ตัว default) — ผลลัพธ์: user ไม่มีสิทธิ์เอกสาร → RAG ไม่ดึง chunk นั้นมาตอบเด็ดขาด
 5. Admin duties + privacy posture: สิทธิ์ "อ่านแชท user" / "bulk export" เป็น permission แยกที่ปิดได้
