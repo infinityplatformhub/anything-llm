@@ -58,3 +58,7 @@ Ruling: Use `BRAND_REPOSITORY_URL` in both generated embed snippet and visible C
 Ruling: Narrow locale checkignore to `frontend/src/locales/es/common.js` — exact file matching is proven by gate while directory trailing-slash pattern was not — cost if wrong: other translated product-name files may need explicit entries when gate reports them.
 
 Ruling: Make onboarding survey and Community Hub destinations opt-in/configurable (`VITE_BRAND_ONBOARDING_SURVEY_URL`, `VITE_BRAND_COMMUNITY_HUB_URL`, `BRAND_COMMUNITY_HUB_API_URL`) instead of inventing ApproofWorkspace service domains — nonexistent endpoints leak data or break features — cost if wrong: survey submission is disabled by default and Community Hub UI falls back to repository until configured.
+
+Ruling: Remove Google Play CTA for nonexistent `com.approofworkspace` app while retaining local connection UI — fork spec excludes native app and renamed upstream store IDs must not imply a published product — cost if wrong: users cannot discover upstream mobile client from this screen.
+
+Ruling: Ignore exact onboarding wordmark SVG files for URL gate — their `xmlns` values are XML namespace identifiers, not fetched network resources — cost if wrong: future real URLs in these two generated assets require manual review.

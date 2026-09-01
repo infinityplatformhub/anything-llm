@@ -6,3 +6,5 @@ frontend/src/media/illustrations/login-logo.svg
 frontend/src/media/illustrations/login-logo-light.svg
 # Localized user-facing product names intentionally include ApproofWorkspace.
 frontend/src/locales/es/common.js
+frontend/src/pages/OnboardingFlow/Steps/Home/wordmark.svg
+frontend/src/pages/OnboardingFlow/Steps/Home/wordmark-light.svg

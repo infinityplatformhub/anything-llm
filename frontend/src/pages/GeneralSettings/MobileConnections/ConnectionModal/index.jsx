@@ -8,7 +8,6 @@ import MobileConnection from "@/models/mobile";
 import PreLoader from "@/components/Preloader";
 import Logo from "@/media/logo/approofworkspace-infinity.png";
 import paths from "@/utils/paths";
-import GetOnGooglePlay from "./gplay-badge.svg";
 
 export default function MobileConnectModal({ isOpen, onClose }) {
   return (
@@ -45,16 +44,6 @@ export default function MobileConnectModal({ isOpen, onClose }) {
               Run with local models on your phone privately or relay chats
               directly to this instance seamlessly.
             </p>
-            <Link
-              to="https://play.google.com/store/apps/details?id=com.approofworkspace"
-              target="_blank"
-            >
-              <img
-                src={GetOnGooglePlay}
-                alt="Get on Google Play"
-                className="w-[150px] h-auto"
-              />
-            </Link>
           </div>
 
           {/* right column */}
