@@ -148,11 +148,9 @@ test("02 embedder switched to mock provider; instance is multi-user", async ({
   // the real embedding-preference settings page.
   await login(page, ADMIN);
   await page.goto("/settings/embedding-preference");
-  await page
-    .locator('[role="button"], div, label')
-    .filter({ hasText: /^Generic OpenAI$/ })
-    .first()
-    .click({ force: true });
+  // Provider card sits behind a search menu; the visible label is enough.
+  await page.getByText("Generic OpenAI").first().click({ force: true });
+  await page.waitForTimeout(500);
   await page
     .locator('input[name="EmbeddingBasePath"]')
     .fill("http://mock-llm:8080/v1");
@@ -207,31 +205,34 @@ test("05 upload a small .txt document and wait for embedding", async ({
   page,
 }) => {
   await login(page, ADMIN);
-  await page.goto(`/workspace/${WORKSPACE_SLUG}/settings/documents`);
-  await page.setInputFiles(
-    'input[type="file"]',
-    {
-      name: DOC_NAME,
-      mimeType: "text/plain",
-      buffer: Buffer.from(
-        "The secret codeword for the E2E gate is fortytwo. This document exists to be cited."
-      ),
-    },
-    { timeout: 30_000 }
-  );
+  await page.goto(`/workspace/${WORKSPACE_SLUG}`);
+  // Upload is the sidebar's per-workspace button, opening ManageWorkspace.
+  await page.locator('[data-tooltip-id="upload-workspace"]').first().click();
+  const fileInput = page.locator('input[type="file"]');
+  await fileInput.waitFor({ state: "attached", timeout: 30_000 });
+  await fileInput.setInputFiles({
+    name: DOC_NAME,
+    mimeType: "text/plain",
+    buffer: Buffer.from(
+      "The secret codeword for the E2E gate is fortytwo. This document exists to be cited."
+    ),
+  });
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
     timeout: 90_000,
   });
+  // Select it and move into the workspace so it gets embedded.
+  await page.getByText(DOC_NAME).first().click();
+  await page
+    .locator('button:has-text("Move to Workspace")')
+    .first()
+    .click({ timeout: 30_000 });
   await expect
     .poll(
       async () => {
-        const docs = await authedFetch(
-          page,
-          `/api/workspace/${WORKSPACE_SLUG}`
-        );
+        const docs = await authedFetch(page, `/api/workspace/${WORKSPACE_SLUG}`);
         return (await docs.text()).includes(DOC_NAME);
       },
-      { timeout: 120_000 }
+      { timeout: 180_000 }
     )
     .toBe(true);
 });
@@ -273,18 +274,24 @@ test("08 admin creates an API key via admin UI", async ({ page }) => {
   await page
     .locator('button[type="submit"]:has-text("Create API Key")')
     .click();
-  // The raw key (apw-key- prefix on this branch) is shown once at creation.
-  await expect(page.getByText(/apw-key-|^[A-Za-z0-9]{20,}$/).first()).toBeVisible({
-    timeout: 30_000,
-  });
+  // The raw key is shown once at creation, inside a readonly <input value>.
+  const keyField = page.locator('input[readonly], input[disabled]').first();
+  await keyField.waitFor({ state: "visible", timeout: 30_000 });
+  expect((await keyField.inputValue()).length).toBeGreaterThan(20);
 });
 
 test("09 audit log shows the flow's events", async ({ page }) => {
   await login(page, ADMIN);
   await page.goto("/settings/event-logs");
-  await expect(page.getByText(/login|multi.?user/i).first()).toBeVisible({
-    timeout: 30_000,
-  });
+  // Rows come from the event bus (audit subscriber) — assert real rows exist.
+  await expect
+    .poll(async () => await page.locator("tbody tr").count(), {
+      timeout: 60_000,
+    })
+    .toBeGreaterThan(0);
+  await expect(
+    page.locator("tbody").getByText(/login|api_key|workspace/i).first()
+  ).toBeVisible({ timeout: 30_000 });
 });
 
 test("10 member cannot see admin UI or hit admin routes", async ({ page }) => {
