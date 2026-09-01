@@ -77,6 +77,12 @@ function apiWorkspaceEndpoints(app) {
     }
     */
     try {
+      // A key issued for one workspace has no standing to mint another. Creation has
+      // no workspace in the path, so the binding middleware cannot refuse this one.
+      if (response.locals.apiKeyContext?.workspaceId) {
+        return response.status(403).json({ error: "Insufficient scope." });
+      }
+
       const { name = null, ...additionalFields } = reqBody(request);
       const { workspace, message } = await Workspace.new(
         name,
@@ -142,8 +148,12 @@ function apiWorkspaceEndpoints(app) {
     }
     */
     try {
+      // A workspace-bound key must not learn that the other workspaces exist. The
+      // scope check cannot do this one: there is no workspace in the path to bind
+      // against, so the narrowing has to happen where the query is built.
+      const boundWorkspaceId = response.locals.apiKeyContext?.workspaceId;
       const workspaces = await Workspace._findMany({
-        where: {},
+        where: boundWorkspaceId ? { id: Number(boundWorkspaceId) } : {},
         include: {
           threads: {
             select: {
