@@ -49,3 +49,4 @@
 - [→ #33 part 3 prefix, fixing now] credentialStore: envKey/keyVersion not bound as GCM AAD → blob relocation across keys by a DB writer (no SIG_KEY needed). Table empty today; fix before first prod row. (QA-2 #33p2)
 - [→ #40 frontend-authz] UI reads users.role (lossy projection of grants): default user with workspace editor grants gets sidebar hidden today; T-7 permissions have no role-string equivalent. Fix = capabilities endpoint + can(). (Techlead recon)
 - [reference, not a risk] Ruling: DDL migrations need not be replay-safe (Prisma _prisma_migrations tracks); data migrations (04x000/045000) must be idempotent. (QA-1 #33p2)
+- [closed: #39 d4fbe651] routeWiring.test.js depended on developer server/.env (STORAGE_DIR) — red on fresh worktree/CI; suite now mints its own temp dir like its siblings. (Dev1 found, Dev2 fixed)
