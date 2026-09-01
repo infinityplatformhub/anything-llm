@@ -87,3 +87,46 @@ e2e/scripts/up.sh up
 npx playwright test --config e2e/playwright.config.js
 → 12 passed (12/12)
 ```
+
+## Addendum — verification on fixed main (a550dccf)
+
+**Dockerfile fix landed in two parts.** `450b19b1` changed only line 141
+(`frontend-build`); the `build-arm64` / `build-amd64` base stages still installed
+node 18 from nodesource, so `backend-build` (which is `FROM build-${TARGETARCH}`)
+still failed `yarn install` with the same engines error. Reported; main fixed
+lines 25 and 94 to `node_22.x`. Both arches must move together — patching one
+leaves the other failing only on a multi-arch build, where nobody looks.
+
+- **Ruling: `denyReason` restored to the audit allowlist.** The branch was
+  reverting main's T-6 addition of that key to `ALLOWED_KEYS` in
+  `server/utils/events/redaction.js` — a stale hunk carried through an earlier
+  rebase, not a decision. #15 contributes no server code; the diff against main
+  is now `e2e/` and docs only. *If wrong:* a deny reason would be silently
+  dropped from audit rows, and the gate would have shipped an unrelated
+  behaviour change under an E2E issue.
+
+**Running `server` tests locally needs four things CI supplies implicitly.**
+Without them the suite reports 22 failed suites that are all environment, not
+code — worth knowing before anyone reads a local red run as a regression:
+
+- `node@22` — the machine default is node 26, and `yarn` refuses on `engines`.
+- `API_KEY_PEPPER` (≥32 bytes) — R8's boot check fails 6 suites at import time.
+- `STORAGE_DIR` — `utils/files/index.js:10` resolves it outside development;
+  undefined throws `paths[0] must be of type string` and takes `routeWiring` out.
+- **A dedicated empty database.** `actorResolver`'s single-user row mocks
+  `isMultiUserMode` but `isConfirmedSingleUser` also counts real `users` rows
+  (deliberately — QA-2 FINDING-1), so pointing `DATABASE_URL` at a database that
+  has users makes a correct test fail. CI uses `approofworkspace_test`; locally,
+  create it and `prisma migrate deploy` before running.
+
+## Evidence (fixed main)
+
+```
+e2e/scripts/up.sh up && (cd e2e && ./node_modules/.bin/playwright test)
+→ 12 passed, three consecutive runs with down -v + storage wipe between
+  (45.8s / 45.0s / 44.7s)
+
+task.sh check --issue 15 --base faac5f24
+→ check ผ่านทุกด่าน
+→ Tests:       1052 passed, 1052 total
+```
