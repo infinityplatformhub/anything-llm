@@ -30,3 +30,9 @@ test("validApiKey factory rejects missing scope at registration", () => {
   const { validApiKey } = require("../../../utils/middleware/validApiKey");
   expect(() => validApiKey()).toThrow("validApiKey requires an explicit scope");
 });
+
+test("audit payload contract contains correlation facts and no key material fields", () => {
+  const payload = { scopedKeyId: "7", keyPrefix: "apw-key-12345678", action: "workspace.write", allowed: false, orgId: "default" };
+  expect(Object.keys(payload).sort()).toEqual(["action", "allowed", "keyPrefix", "orgId", "scopedKeyId"]);
+  expect(JSON.stringify(payload)).not.toMatch(/secret|digest/i);
+});

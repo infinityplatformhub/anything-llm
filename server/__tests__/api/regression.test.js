@@ -475,3 +475,33 @@ describe("multi-user mode", () => {
     await setMultiUserMode(true);
   });
 });
+
+describe("API key failure oracle", () => {
+  test.each([
+    ["missing", null],
+    ["wrong prefix", "Bearer wrong"],
+    ["wrong digest", "Bearer apw-key-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+  ])("returns identical response for %s", async (_name, authorization) => {
+    const call = request(app).get("/api/v1/auth");
+    if (authorization) call.set("Authorization", authorization);
+    const response = await call;
+    expect({ status: response.status, body: response.body }).toEqual({
+      status: 403,
+      body: { error: "No valid api key found." },
+    });
+  });
+});
+
+describe("API key lifecycle denial", () => {
+  test.each(["revokedAt", "expiresAt"])("rejects %s with generic response", async (field) => {
+    const secret = `apw-key-${field}-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+    const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
+    const record = await prisma.api_keys.create({ data: {
+      secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(["*"]),
+      [field]: new Date(field === "expiresAt" ? Date.now() - 1000 : Date.now()),
+    } });
+    const response = await request(app).get("/api/v1/auth").set("Authorization", `Bearer ${secret}`);
+    expect({ status: response.status, body: response.body }).toEqual({ status: 403, body: { error: "No valid api key found." } });
+    await prisma.api_keys.delete({ where: { id: record.id } });
+  });
+});
