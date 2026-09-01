@@ -6,7 +6,7 @@ const eventsErrors = require("../../../utils/events/errors");
 const jobQueue = require("../../../utils/jobs/PostgresJobQueue");
 const eventBus = require("../../../utils/events/PostgresEventBus");
 
-describe("seam error class identity (issue #14)", () => {
+describe("seam error class identity - issue 14", () => {
   test("PostgresJobQueue re-exports the exact classes from jobs/errors", () => {
     expect(jobQueue.LeaseLostError).toBe(jobsErrors.LeaseLostError);
     expect(jobQueue.ImpersonatedMutationError).toBe(jobsErrors.ImpersonatedMutationError);
