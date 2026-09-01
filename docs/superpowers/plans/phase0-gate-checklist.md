@@ -47,20 +47,60 @@ Zero here means no **route** still asks for the wildcard. It does not mean no **
 
 `API_KEY_SCOPES.TEMPORARY_ALL` stays in `scopes.js` until PR-4c; delete it and this whole test file together in that PR. A counter that can only ever read 0 is not a gate any more — but it is not zero-and-done until the key half lands.
 
-```sql
-SELECT count(*) FROM api_keys WHERE scopes::jsonb ? '*';
+This one needs a database with keys in it, so it has a setup. Run the whole
+block — the query alone against an empty table returns 0 and proves nothing.
+
+```bash
+export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
+export DATABASE_URL="postgresql://approof:approof@localhost:5432/gate_$$"
+export API_KEY_PEPPER="local-dev-api-key-pepper-32-bytes-min"
+psql "postgresql://approof:approof@localhost:5432/postgres" -c "CREATE DATABASE gate_$$;"
+
+cd server
+# Use the repo's own binary. `npx prisma` resolves to whatever npm's cache has --
+# on this machine that is Prisma 8 against a Prisma 6 schema, and the failure reads
+# like a schema error rather than a version mismatch.
+./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+
+# Mint through EVERY creation path. A key made one way proves one way.
+node -e '
+  const { ApiKey } = require("./models/apiKeys");
+  (async () => {
+    await ApiKey.create(null, "gate-admin",  { scopes: ["system.read"] });
+    await ApiKey.create(null, "gate-system", { scopes: ["system.read"] });
+    try { await ApiKey.create(null, "gate-bare"); console.log("REGRESSION: no-scope key was minted"); }
+    catch (e) { console.log("no-scope refused (correct):", e.message); }
+    process.exit(0);
+  })();
+'
+
+psql "$DATABASE_URL" -tAc "SELECT count(*) FROM api_keys WHERE scopes::jsonb @> '[\"*\"]'::jsonb;"
+psql "$DATABASE_URL" -tAc "SELECT count(*) FROM api_keys;"
+psql "postgresql://approof:approof@localhost:5432/postgres" -c "DROP DATABASE gate_$$;"
 ```
-**Must be 0** on a database that has run every migration and had a key minted through each creation path. Run it against a real Postgres — the DB default is the thing under test, and a fake db reports whatever the model sent (code-standards §7.1).
+
+**First count must be 0; second must not be.** Without the second, an empty table
+passes the gate. The bare `ApiKey.create` must refuse — if it succeeds, PR-4c's
+model guard has regressed even while the first count still reads 0.
+
+Seeding a pre-4c row (`scopes = '["*"]'`) before the query is the stronger form,
+and is how PR-4c's migration was actually verified: a fresh database has no
+legacy rows, so it exercises the new default but never the backfill.
 
 **This is the half that is still open.** #27 (PR-4c) removes the schema default, the model fallback, and the `scopes.includes("\*")` short-circuit in `validApiKey.js:34`. Until all three go, the route-side zero above buys nothing against a key minted today.
 
 ### 2.2 Role literals
 
 ```bash
-git grep -c 'ROLES\.' -- 'server/**/*.js' | awk -F: '{s+=$2} END {print s}'
-git grep -l 'flexUserRoleValid' -- 'server/**/*.js' | wc -l
-git grep -l 'strictMultiUserRoleValid' -- 'server/**/*.js' | wc -l
-git grep -nE 'role (===|!==) "(admin|manager|default)"' -- 'server/**/*.js' | grep -v __tests__
+# The exclusions are in the commands, not just the prose below — a command that
+# does not encode its own exemptions gets run without them by whoever runs it next.
+EXCL='server/utils/authorization/|server/utils/helpers/admin/index.js|server/utils/chats/commands/img.js'
+
+git grep -c 'ROLES\.' -- 'server/**/*.js' | grep -vE "^($EXCL)" | awk -F: '{s+=$2} END {print s+0}'
+git grep -l 'flexUserRoleValid'       -- 'server/**/*.js' | grep -vcE "^($EXCL)"
+git grep -l 'strictMultiUserRoleValid' -- 'server/**/*.js' | grep -vcE "^($EXCL)"
+git grep -nE 'role (===|!==) "(admin|manager|default)"' -- 'server/**/*.js' \
+  | grep -v __tests__ | grep -vE "^($EXCL)"
 ```
 
 **All four must be 0** outside `server/utils/authorization/` and the two exemptions below.
@@ -77,7 +117,7 @@ behind the engine or be deleted by the issue named. An exemption whose issue
 closes without touching the file is a bug in this table, not a permanent waiver —
 re-check the file when that issue closes.
 
-At `8c77e7bc`: 185 refs, 27 files, 2 files, 2 sites — unchanged, because T-4a has not merged yet.
+At `401c325e`, running the commands exactly as written above: **177 refs, 27 files, 2 files, 1 site**. The one literal is `utils/helpers/documentPurgeGuard.js:33`, which is *not* exempt and must reach 0. T-4a has not merged, so these are pre-sweep figures.
 
 ### 2.2a Every org-wide grant outside `super_admin` is justified in the seed
 
@@ -151,12 +191,12 @@ export API_KEY_PEPPER="…"              # ≥32 bytes
 cd server && yarn test
 ```
 
-**Three consecutive full runs, same pass count, zero flakes.** Three, not one — the known flakes in `.infi/residual-risks.md` are all intermittent and a single green run does not distinguish "fixed" from "lucky".
+**Three consecutive full runs, same pass count, zero flakes.** Three, not one — the known flakes in `docs/superpowers/residual-risks.md` are all intermittent and a single green run does not distinguish "fixed" from "lucky".
 
 One remains:
 - `modelPricing/index.test.js` etag `""` vs `"abc123"` — shared temp cacheDir across suites. Isolate the cacheDir per test when it recurs.
 
-The DROP DATABASE race is **fixed on main**: `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` all close their `afterAll` with `}, 60_000);`. Verified at `7587e74e`. The `.infi/residual-risks.md` line calling it unowned is stale.
+The DROP DATABASE race is **fixed on main**: `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` all close their `afterAll` with `}, 60_000);`. Verified at `7587e74e`. The `docs/superpowers/residual-risks.md` line calling it unowned is stale.
 
 Without both env vars, six suites fail at import time and are counted as *failed*, not skipped — the `Tests:` line silently shrinks. A reviewer who forgets them reads a smaller green number as success.
 
@@ -164,7 +204,8 @@ Without both env vars, six suites fail at import time and are counted as *failed
 
 ```bash
 ./scripts/check-local.sh
-bash <path-to>/task.sh check --base approof/main --issue <n>
+bash ~/.claude/plugins/cache/infi-skills/infi-skills/0.1.0/skills/infi-dev/scripts/task.sh \
+  check --base approof/main --issue <the issue number this branch closes>
 ```
 
 Both must pass on the merge candidate. `check-local.sh` runs the §5.1 model-import gate and the §7.1a `db push` gate; anything added later is picked up automatically.
@@ -174,7 +215,7 @@ Both must pass on the merge candidate. `check-local.sh` runs the §5.1 model-imp
 ### 2.7 Node version pinned
 
 ```bash
-git grep -A2 '"engines"' -- '**/package.json' | grep '"node"'
+git grep -A2 '"engines"' -- 'package.json' '*/package.json' | grep '"node"'
 ```
 
 Every package that runs Node must pin `">=22 <23"`. At `7587e74e` all four are pinned, `frontend/` included (`3caffef6`) — one rule everywhere beat writing down an exemption.
@@ -183,7 +224,22 @@ The pin is not cosmetic. `jsonwebtoken@9.0.2` fails to load on Node 26 (SlowBuff
 
 ### 2.8 Residual risks have owners
 
-Every line in `.infi/residual-risks.md` must carry either an issue number or an explicit "accepted, revisit at X" ruling. See §3.
+Every line in `docs/superpowers/residual-risks.md` must carry an issue reference
+`[→ #N]`, a `[closed …]` note, or be struck through. A line with none of those is
+a risk nobody owns.
+
+```bash
+grep -nE '^[-0-9]' docs/superpowers/residual-risks.md \
+  | grep -vE '\[→ #[0-9]+\]|\[closed|~~' | wc -l
+```
+
+**Must be 0.** At `dffad34f` it is **30** — the register predates the convention,
+so every line needs a marker added or the line struck. That is a pass of its own,
+not something to do at gate time.
+
+The register moved out of `.infi/` (gitignored — a fresh worktree had no copy at
+all, and a risk register that does not survive a clone is not a register) to
+`docs/superpowers/`, tracked.
 
 Lines that describe something since fixed must be struck, not left standing — a stale risk register costs the same review time as a live one and teaches readers to skim it. Stale lines were struck at `6a4307a8`; check again each time the gate runs.
 
@@ -191,13 +247,13 @@ Lines that describe something since fixed must be struck, not left standing — 
 
 ## 3. Open holes
 
-Read from `.infi/residual-risks.md`, verified against the tree at `6a4307a8`. Ordered by what happens if the gate opens without them.
+Read from `docs/superpowers/residual-risks.md`, verified against the tree at `6a4307a8`. Ordered by what happens if the gate opens without them.
 
 ### 3.1 Closed since this file was written
 
 All three of the original blockers were resolved by `6a4307a8`. Verified, not taken on report:
 
-**DROP DATABASE flake — fixed.** `}, 60_000);` closes the `afterAll` in all three suites (`engine.test.js:44`, `t1-authz-migration.test.js:99`, `documentFilter.test.js:43`). The `[flake, unowned]` line in `.infi/residual-risks.md` is stale and should be struck.
+**DROP DATABASE flake — fixed.** `}, 60_000);` closes the `afterAll` in all three suites (`engine.test.js:44`, `t1-authz-migration.test.js:99`, `documentFilter.test.js:43`). The `[flake, unowned]` line in `docs/superpowers/residual-risks.md` is stale and should be struck.
 
 **`document_acl` org-wide kill switch — assigned.** The `"*"` sentinel becomes `orgWide:true` in #29 (T-4b), which lands before T-5 wires drivers. The ordering is the point: if T-5 went first the sentinel would be baked into every provider.
 
