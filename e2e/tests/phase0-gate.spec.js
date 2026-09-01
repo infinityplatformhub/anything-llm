@@ -29,15 +29,6 @@ const UP_SCRIPT = path.resolve(__dirname, "../scripts/up.sh");
 async function login(page, { username, password }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.goto("/login");
-    // A previous spec may leave a stale token; a half-authed state makes the
-    // login form render but never submit.
-    await page
-      .evaluate(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-      })
-      .catch(() => {});
-    await page.reload();
     const userField = page.locator('input[name="username"]');
     const passField = page.locator('input[name="password"]');
     await userField.waitFor({ state: "visible", timeout: 30_000 });
@@ -75,14 +66,11 @@ async function login(page, { username, password }) {
       await page.waitForTimeout(1_500);
     }
 
-    // Session established once the login form is gone.
-    if (
-      await page
-        .locator('button:has-text("Login")')
-        .isHidden()
-        .catch(() => false)
-    )
-      return;
+    // Session established once the SPA stored the token and left /login.
+    const authed = await page
+      .evaluate(() => !!localStorage.getItem("approofworkspace_authToken"))
+      .catch(() => false);
+    if (authed && !page.url().includes("/login")) return;
   }
   throw new Error("login did not establish a session after 3 attempts");
 }
