@@ -216,6 +216,34 @@ test("S-3: a chat in a workspace the actor is not a member of cannot be mutated"
   expect(response.status).toBe(404);
 });
 
+test("G11 gate: purging a document addressed in another workspace is refused over HTTP", async () => {
+  // Real prisma, real engine, real route stack — the mock-prisma guard suites
+  // cannot prove this because they stub the gate away (PMO condition on the
+  // pass-through mock).
+  const docInB = await prisma.workspace_documents.create({
+    data: {
+      docId: `g11-${dbSuffix}`,
+      filename: "b.json",
+      docpath: `custom-documents/g11-${dbSuffix}.json`,
+      workspaceId: workspaceB.id,
+    },
+  });
+  // MANAGER is a member of A only, and holds no org-wide grant.
+  const response = await fetch(
+    `${baseUrl}/workspace/${workspaceA.slug}/remove-and-unembed`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentLocation: docInB.docpath }),
+    }
+  );
+  expect(response.status).toBe(404);
+  const survivor = await prisma.workspace_documents.findUnique({
+    where: { id: docInB.id },
+  });
+  expect(survivor).not.toBeNull();
+});
+
 test("S-9 ingress: API-key scope cannot exceed creator permission", async () => {
   const creator = { type: "user", id: "4201", orgId: 1 };
   await prisma.users.create({
