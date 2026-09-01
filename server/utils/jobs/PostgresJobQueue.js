@@ -65,6 +65,7 @@ class PostgresJobQueue {
         payload: serialize(input.payload),
         actor: serialize(input.actor),
         enabled: input.enabled,
+        nextRunAt: null,
       },
       update: {
         type: input.type,
@@ -73,6 +74,7 @@ class PostgresJobQueue {
         payload: serialize(input.payload),
         actor: serialize(input.actor),
         enabled: input.enabled,
+        nextRunAt: null,
       },
     });
   }
