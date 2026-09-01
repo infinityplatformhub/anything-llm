@@ -2,6 +2,7 @@ const { BrowserExtensionApiKey } = require("../../models/browserExtensionApiKey"
 const { SystemSettings } = require("../../models/systemSettings");
 const { User } = require("../../models/user");
 const { emitAuditEvent } = require("../events");
+const prisma = require("../prisma");
 
 async function validBrowserExtensionApiKey(request, response, next) {
   const multiUserMode = await SystemSettings.isMultiUserMode();
@@ -20,9 +21,11 @@ async function validBrowserExtensionApiKey(request, response, next) {
     scopedKeyId: String(apiKey.id), onBehalfOf: user ? { type: "user", id: String(user.id) } : undefined,
   };
   response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };
-  await BrowserExtensionApiKey.touch(apiKey.id);
-  await emitAuditEvent("browser_extension_api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
-    actor: response.locals.actor, resource: { type: "browser_extension_api_key", id: String(apiKey.id) },
+  await prisma.$transaction(async (transaction) => {
+    await transaction.browser_extension_api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
+    await emitAuditEvent("browser_extension_api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
+      actor: response.locals.actor, resource: { type: "browser_extension_api_key", id: String(apiKey.id) }, transaction,
+    });
   });
   next();
 }

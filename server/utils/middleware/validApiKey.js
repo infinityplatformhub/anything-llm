@@ -1,6 +1,7 @@
 const { ApiKey } = require("../../models/apiKeys");
 const { SystemSettings } = require("../../models/systemSettings");
 const { emitAuditEvent } = require("../events");
+const prisma = require("../prisma");
 
 async function validApiKey(request, response, next) {
   response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
@@ -15,9 +16,11 @@ async function validApiKey(request, response, next) {
     scopedKeyId: String(apiKey.id),
   };
   response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, workspaceId: apiKey.workspaceId };
-  await ApiKey.touch(apiKey.id);
-  await emitAuditEvent("api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
-    actor: response.locals.actor, resource: { type: "api_key", id: String(apiKey.id) },
+  await prisma.$transaction(async (transaction) => {
+    await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
+    await emitAuditEvent("api_key_authenticated", { scopedKeyId: apiKey.id, keyPrefix: apiKey.keyPrefix }, null, {
+      actor: response.locals.actor, resource: { type: "api_key", id: String(apiKey.id) }, transaction,
+    });
   });
   next();
 }
