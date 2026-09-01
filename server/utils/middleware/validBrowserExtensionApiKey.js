@@ -23,7 +23,7 @@ function validBrowserExtensionApiKey(action) {
     const allowed = context.scopes.includes("*") || context.scopes.includes(action);
     await prisma.$transaction(async (transaction) => {
       await emitAuditEvent("auth.key_used", {
-        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: "default",
+        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, orgId: 1,
       }, null, { resource: { type: "browser_extension_api_key", id: context.keyId }, transaction });
     });
     if (!allowed) return response.status(403).json({ error: "Insufficient scope." });
