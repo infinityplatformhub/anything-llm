@@ -43,7 +43,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (prisma) await prisma.$disconnect();
-  if (baseDatabaseUrl?.startsWith("postgresql://")) {
+  const stillPostgres = baseDatabaseUrl?.startsWith("postgresql://");
+  if (stillPostgres) {
     const admin = new PrismaClient({ datasources: { db: { url: baseDatabaseUrl } } });
     await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
     await admin.$disconnect();
