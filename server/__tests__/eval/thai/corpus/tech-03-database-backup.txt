@@ -1,0 +1,9 @@
+แนวปฏิบัติการสำรองข้อมูล database
+
+ระบบทำ full backup ของ database ทุกวันเวลาสองนาฬิกาตามเวลาประเทศไทย และทำ incremental backup ทุกหกชั่วโมง โดยเก็บ full backup ไว้สามสิบวันและ incremental backup ไว้เจ็ดวัน
+
+ไฟล์ backup ทั้งหมดต้องถูก encrypt ด้วย AES-256 ก่อนส่งขึ้น object storage และ key ที่ใช้ encrypt ต้องเก็บใน key management service แยกจาก storage ที่เก็บไฟล์ backup
+
+ทีม Platform ต้องทำ restore test อย่างน้อยเดือนละหนึ่งครั้งโดย restore backup ล่าสุดลงบน environment ที่แยกออกมา และตรวจสอบว่าจำนวน row ในตารางหลักตรงกับที่บันทึกไว้ ณ เวลาที่ทำ backup ผลการทดสอบต้องบันทึกไว้เป็นหลักฐาน
+
+ค่า recovery point objective ของระบบคือหกชั่วโมง และค่า recovery time objective คือสี่ชั่วโมง หากการกู้คืนจริงใช้เวลาเกินค่าที่กำหนดต้องทำรายงานวิเคราะห์สาเหตุภายในห้าวันทำการ

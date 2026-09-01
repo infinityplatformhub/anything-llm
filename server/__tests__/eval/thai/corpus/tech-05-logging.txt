@@ -1,0 +1,9 @@
+มาตรฐานการเก็บ log และ monitoring
+
+ทุก service ต้องส่ง log ในรูปแบบ structured JSON โดยมี field บังคับได้แก่ timestamp ในรูปแบบ ISO 8601 ระดับ log service name request id และ message ห้ามส่ง log ในรูปแบบข้อความอิสระที่ไม่มีโครงสร้าง
+
+ห้ามบันทึกข้อมูลส่วนบุคคลลงใน log ไม่ว่าจะเป็นเลขบัตรประจำตัวประชาชน เลขบัตรเครดิต password หรือ token ทุกชนิด หากจำเป็นต้องบันทึกเพื่อการ debug ให้ทำ masking โดยแสดงเฉพาะสี่ตัวอักษรสุดท้าย
+
+ระบบเก็บ log ระดับ info ไว้สิบสี่วัน ระดับ warning ไว้สามสิบวัน และระดับ error ไว้เก้าสิบวัน log ที่เกี่ยวข้องกับการ audit เช่นการเข้าสู่ระบบและการเปลี่ยนแปลงสิทธิ์ต้องเก็บไว้หนึ่งปี
+
+ทุก service ต้องมี dashboard ที่แสดง metric สี่ตัวเป็นอย่างน้อย ได้แก่ request rate error rate latency ที่ percentile ที่ห้าสิบและเก้าสิบเก้า และ resource utilization ของ CPU และ memory
