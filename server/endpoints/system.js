@@ -82,6 +82,17 @@ const { isReservedCommand } = require("../utils/chats");
 const { AgentSkillWhitelist } = require("../models/agentSkillWhitelist");
 const { Memory } = require("../models/memory");
 
+// Org-level capabilities the UI gates on. Kept short and explicit — see the
+// endpoint comment for why this is not "every seeded action".
+const ORG_CAPABILITIES = [
+  "chat.read_others",
+  "document.bulk_export",
+  "user.manage",
+  "settings.write",
+  "key.manage",
+  "access.diagnose",
+];
+
 function systemEndpoints(app) {
   if (!app) return;
 
@@ -1246,35 +1257,48 @@ function systemEndpoints(app) {
     }
   );
 
-  // T-7 (#31, D-1): what may THIS caller do. Replaces the instance-wide
-  // DisableViewChatHistory flag the UI used to read — a flag says what the
-  // instance forbids everyone, which cannot answer a per-principal question.
-  // Any authenticated principal may ask about themselves; asking about someone
-  // else is `access.diagnose`, which is the diagnostics feature, not this.
+  // T-7 (#31, D-1 + #40A): what may THIS caller do, org-wide.
+  //
+  // Replaces the instance-wide DisableViewChatHistory flag the UI used to read.
+  // A flag says what the instance forbids everyone, which cannot answer a
+  // per-principal question — and answering it per-principal is what lets the UI
+  // stop gating on role strings (T-8).
+  //
+  // This gates AFFORDANCES, never access: every route re-decides on its own, so
+  // a stale or forged answer here shows a menu item that then refuses.
   app.get(
     "/system/my-capabilities",
     [validatedRequest],
     async (request, response) => {
       try {
         const actor = await resolveActor(request, response);
+        // No actor is not an error — an anonymous caller simply has nothing.
         if (!actor) return response.status(200).json({ capabilities: {} });
 
         const engine = new DatabaseAuthorizationEngine();
         const org = { type: "org", id: "1", orgId: 1, workspaceId: null };
-        const decisions = await engine.authorizeMany({
-          actor,
-          action: "chat.read_others",
-          resources: [org],
-        });
+
+        // One decision per action, batched. ORG_CAPABILITIES is deliberately a
+        // fixed list rather than "every seeded action": the UI asks about what
+        // it actually gates, and an endpoint that enumerates the whole
+        // vocabulary would hand any caller a map of the permission model.
+        const decisions = await Promise.all(
+          ORG_CAPABILITIES.map(async (action) => {
+            const result = await engine.authorizeMany({
+              actor,
+              action,
+              resources: [org],
+            });
+            return [action, result.get(0)?.allowed === true];
+          })
+        );
 
         response.status(200).json({
-          capabilities: {
-            "chat.read_others": decisions.get(0)?.allowed === true,
-          },
+          capabilities: Object.fromEntries(decisions),
         });
       } catch (e) {
         console.error(e.message, e);
-        // Fail closed: a capability the UI cannot confirm is one it must not show.
+        // Fail closed: a capability we cannot confirm is one we do not offer.
         response.status(200).json({ capabilities: {} });
       }
     }

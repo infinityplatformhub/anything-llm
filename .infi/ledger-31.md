@@ -26,3 +26,9 @@ Ruling: the `DISABLE_VIEW_CHAT_HISTORY` read happens in **Node at boot**, not in
 Ruling: when the var WAS set, `chat.read_others` is withdrawn from every role except `super_admin`, who can grant it back deliberately — that ability is the entire point of it being a permission. An operator who never set it keeps today's behaviour untouched.
 Ruling: dropped the frontend's 24-hour `localStorage` cache of this capability. A flag that only moved when an operator edited the environment could be cached for a day; a grant an admin can revoke at any moment cannot, or the UI keeps offering a feature the server has already begun refusing. Session-only now, failing closed when the request fails. If wrong, the capability endpoint needs its own short TTL rather than none.
 Ruling: added `GET /system/my-capabilities` rather than extending `/system/keys`. `keys` answers "what is this instance configured for" and is the wrong shape for "what may this caller do" — reusing it is what made the old flag instance-wide in the first place.
+
+## #40A absorbed into T-7 (PMO ruling)
+
+Ruling: `GET /system/my-capabilities` is the capabilities endpoint #40A planned, so it generalises beyond `chat.read_others` to a fixed `ORG_CAPABILITIES` list. The list is deliberately NOT "every seeded action": an endpoint enumerating the whole vocabulary hands any caller a map of the permission model, and the UI only gates on a handful. If wrong, T-8 needs actions this list omits and adds them explicitly.
+Ruling: capabilities are reported present-and-false rather than omitted when denied, so a client can distinguish "denied" from "the server did not answer". Failure returns `{}` — fail closed, offer nothing.
+Note: this endpoint gates AFFORDANCES only. Every route re-decides independently, so a stale or forged answer shows a menu item that then refuses. Recorded because a capabilities endpoint invites being mistaken for a gate.
