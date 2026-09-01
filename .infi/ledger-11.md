@@ -45,6 +45,41 @@ New guard `canPurgeDocumentFromWorkspace` runs before the purge:
   `document.delete` scope in PR-3/PR-4x. Recorded here so closing the front door
   doesn't leave an undocumented back door.
 
+## QA-2 round 2 — membership hole (fixed)
+
+Exploit A1 (CONFIRMED by QA-2): manager who is a member ONLY of workspace A
+called `DELETE /api/workspace/ws-b/remove-and-unembed` for a doc embedded only
+in B → 200 + real purge. Root cause: `Workspace.getWithUser` (workspaces.js:885)
+bypasses for managers (workspace.js:298), so the route resolved ws-b for a
+non-member; my guard then only checked "embedded here" + "embedded elsewhere" —
+never the caller's membership of the addressed workspace.
+
+Fix: guard now requires `workspace_users.findFirst({user_id, workspace_id})` for
+every non-admin before anything else.
+
+### The lesson of this PR (recorded at PMO's direction)
+
+All six first-round tests were unit + regex — they passed the workspace object
+straight into the guard, skipping `getWithUser`, so no test could see the
+membership hole even though the PR header promised to close it. **New team rule,
+applied here:** every security fix ships at least one test that drives the real
+stack (HTTP request through the actual route module, or a real DB for job-level
+code) — direct-function tests alone don't count as exploit coverage.
+
+### HTTP-level suite added
+
+`removeAndUnembedHttp.test.js`: real express app, real
+`endpoints/workspaces.js` route module, real `Workspace.getWithUser` and guard,
+mocked prisma + purgeDocument. Cases: manager non-member → 403 + zero purges
+(the exploit, RED when the membership check is mutated off); manager member →
+200 + exactly one purge; admin non-member → 200 (positive control); member with
+cross-workspace doc → 403.
+
+### Evidence (round 2)
+
+- Full suite **627/627** (617 baseline + 6 unit + 4 HTTP).
+- Mutation `if (!membership) → if (false)`: HTTP suite 1 failed (exploit case).
+
 ## Files
 
 - `server/utils/helpers/documentPurgeGuard.js` (new)

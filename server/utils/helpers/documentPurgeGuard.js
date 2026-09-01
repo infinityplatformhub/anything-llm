@@ -32,6 +32,18 @@ async function canPurgeDocumentFromWorkspace({
 
   if (!user || user.role === "admin") return { allowed: true, reason: null };
 
+  // Membership check (QA-2 A1): Workspace.getWithUser bypasses for managers,
+  // so a manager could reach this guard for a workspace they are not a member
+  // of. Non-admins may only purge from workspaces they belong to.
+  const membership = await prisma.workspace_users.findFirst({
+    where: { user_id: user.id, workspace_id: workspace.id },
+  });
+  if (!membership)
+    return {
+      allowed: false,
+      reason: "You are not a member of this workspace.",
+    };
+
   const embeddings = await prisma.workspace_documents.findMany({
     where: { docpath: documentLocation },
     select: { workspaceId: true },

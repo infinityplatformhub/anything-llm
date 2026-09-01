@@ -11,6 +11,7 @@ process.env.STORAGE_DIR = process.env.STORAGE_DIR || require("os").tmpdir();
 
 jest.mock("../../utils/prisma", () => ({
   workspace_documents: { findFirst: jest.fn(), findMany: jest.fn() },
+  workspace_users: { findFirst: jest.fn() },
 }));
 jest.mock("../../utils/files/purgeDocument", () => ({
   purgeDocument: jest.fn().mockResolvedValue(undefined),
@@ -43,12 +44,13 @@ describe("remove-and-unembed purge guard (PR-0c / G11)", () => {
     expect(purgeDocument).not.toHaveBeenCalled();
   });
 
-  it("denies a non-admin when the document is also embedded in other workspaces", async () => {
+  it("denies a non-admin member when the document is also embedded in other workspaces", async () => {
     prisma.workspace_documents.findFirst.mockResolvedValue({
       id: 5,
       workspaceId: 1,
       docpath: "custom-documents/shared.json",
     });
+    prisma.workspace_users.findFirst.mockResolvedValue({ user_id: 11 });
     prisma.workspace_documents.findMany.mockResolvedValue([
       { workspaceId: 1 },
       { workspaceId: 2 },
@@ -63,12 +65,13 @@ describe("remove-and-unembed purge guard (PR-0c / G11)", () => {
     expect(result.allowed).toBe(false);
   });
 
-  it("allows a non-admin when the document lives only in their workspace", async () => {
+  it("allows a non-admin member when the document lives only in their workspace", async () => {
     prisma.workspace_documents.findFirst.mockResolvedValue({
       id: 5,
       workspaceId: 1,
       docpath: "custom-documents/own.json",
     });
+    prisma.workspace_users.findFirst.mockResolvedValue({ user_id: 11 });
     prisma.workspace_documents.findMany.mockResolvedValue([
       { workspaceId: 1 },
     ]);
