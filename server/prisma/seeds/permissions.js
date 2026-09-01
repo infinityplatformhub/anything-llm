@@ -1,0 +1,140 @@
+// T-1 seed — vocabulary + system roles + matrix. SINGLE SOURCE for the vocabulary:
+// the migration's step-7a INSERT block is generated from this file (regenerate, don't hand-edit).
+// Also consumed by __tests__/security/authorization/vocabulary-diff.test.js to diff against
+// live requireScope() call sites (P0-4 R3: one namespace, no translation layer).
+
+const DOCUMENT_ACTIONS = [
+  "document.create",
+  "document.read",
+  "document.search",
+  "document.update",
+  "document.delete",
+  "document.share",
+  "document.pin",
+  "document.watch",
+  "document.export",
+];
+
+// Engine actions (authorization engine vocabulary) + API scope strings (P0-4 PR-3/PR-4,
+// PMO-approved list 2026-09-02). One namespace per R3 — no translation layer.
+const ENGINE_ACTIONS = [
+  ...DOCUMENT_ACTIONS,
+  "workspace.members.manage",
+  "chat.read_others",
+  "chat.send",
+  "document.bulk_export",
+  "access.diagnose",
+  "role.grant",
+  "role.revoke",
+  "key.manage",
+  "settings.write",
+  "user.manage",
+];
+
+const API_ACTIONS = [
+  "workspace.read",
+  "workspace.write",
+  "workspace.delete",
+  "document.read",
+  "document.write",
+  "document.delete",
+  "chat.read",
+  "chat.write",
+  "user.read",
+  "user.write",
+  "system.read",
+  "system.write",
+  "sso.issue",
+  "invite.read",
+  "invite.create",
+  "invite.delete",
+  "embed.read",
+  "embed.write",
+  "embed.delete",
+  "agent-flow.read",
+  "agent-flow.write",
+  "mcp-server.read",
+  "mcp-server.write",
+  "memory.read",
+  "memory.write",
+  "telegram.read",
+  "telegram.write",
+  "scheduled-job.read",
+  "scheduled-job.write",
+  "browser-extension.read",
+  "browser-extension.write",
+  "model-router.read",
+  "model-router.write",
+];
+
+const ALL_ACTIONS = [
+  ...new Set([
+    ...ENGINE_ACTIONS,
+    ...API_ACTIONS,
+    "workspace.read",
+    "workspace.write",
+    "workspace.delete",
+    "sso.issue",
+  ]),
+].sort();
+
+const SYSTEM_ROLES = [
+  { name: "super_admin", scope: "org", permissions: ALL_ACTIONS },
+  {
+    name: "setup_admin",
+    scope: "org",
+    permissions: [
+      "settings.write", "user.manage", "key.manage", "sso.issue",
+      "workspace.read", "access.diagnose", "role.grant", "role.revoke",
+    ],
+  },
+  {
+    name: "content_moderator",
+    scope: "org",
+    permissions: [
+      "chat.read_others", "document.read", "document.search",
+      "document.update", "document.delete", "document.bulk_export", "access.diagnose",
+    ],
+  },
+  {
+    name: "member",
+    scope: "org",
+    permissions: [
+      "workspace.read", "workspace.write", "chat.send",
+      "document.create", "document.read", "document.search",
+      "document.update", "document.pin", "document.watch", "document.share",
+    ],
+  },
+  {
+    name: "owner",
+    scope: "workspace",
+    permissions: [
+      "workspace.read", "workspace.write", "workspace.delete", "workspace.members.manage",
+      "chat.send", ...DOCUMENT_ACTIONS,
+    ],
+  },
+  {
+    name: "editor",
+    scope: "workspace",
+    permissions: [
+      "workspace.read", "workspace.write", "chat.send",
+      "document.create", "document.read", "document.search",
+      "document.update", "document.delete", "document.pin", "document.watch",
+    ],
+  },
+  {
+    name: "viewer",
+    scope: "workspace",
+    permissions: ["workspace.read", "document.read", "document.search", "chat.send"],
+  },
+];
+
+// Seeded service principal for single-user deployments (T-2 resolver; architect ruling:
+// never an integer sentinel in the user-id namespace — string namespace only).
+const SINGLE_USER_PRINCIPAL = {
+  principal_type: "service",
+  principal_id: "single-user",
+  role: "super_admin",
+};
+
+module.exports = { DOCUMENT_ACTIONS, ALL_ACTIONS, SYSTEM_ROLES, SINGLE_USER_PRINCIPAL };

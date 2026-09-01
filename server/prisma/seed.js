@@ -1,5 +1,10 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const {
+  ALL_ACTIONS,
+  SYSTEM_ROLES,
+  SINGLE_USER_PRINCIPAL,
+} = require("./seeds/permissions");
 
 async function main() {
   const settings = [
@@ -18,6 +23,67 @@ async function main() {
         data: setting,
       });
     }
+  }
+
+  // T-1 vocabulary/roles/grants — idempotent upserts mirroring migration
+  // step 7a/5 (production gets them from the migration; this covers dev resets).
+  const cat = (a) => a.split(".")[0].replace(/-(.)/g, (_, c) => c.toUpperCase());
+  for (const action of ALL_ACTIONS) {
+    await prisma.permissions.upsert({
+      where: { action },
+      create: { action, description: action, category: cat(action) },
+      update: {},
+    });
+  }
+
+  const roleIdByName = {};
+  for (const role of SYSTEM_ROLES) {
+    const row = await prisma.roles.upsert({
+      where: { orgId_scope_name: { orgId: 1, scope: role.scope, name: role.name } },
+      create: { name: role.name, scope: role.scope, orgId: 1, isSystem: true },
+      update: {},
+    });
+    roleIdByName[role.name] = row.id;
+    for (const action of role.permissions) {
+      await prisma.role_permissions.upsert({
+        where: {
+          role_id_permission_id: {
+            role_id: row.id,
+            permission_id: (
+              await prisma.permissions.findUniqueOrThrow({ where: { action } })
+            ).id,
+          },
+        },
+        create: {
+          role_id: row.id,
+          permission_id: (
+            await prisma.permissions.findUniqueOrThrow({ where: { action } })
+          ).id,
+        },
+        update: {},
+      });
+    }
+  }
+
+  // compound-unique upsert cannot express workspace_id IS NULL in Prisma 5 — find-then-create
+  const existingPrincipal = await prisma.principal_role_grants.findFirst({
+    where: {
+      orgId: 1,
+      principal_type: SINGLE_USER_PRINCIPAL.principal_type,
+      principal_id: SINGLE_USER_PRINCIPAL.principal_id,
+      role_id: roleIdByName[SINGLE_USER_PRINCIPAL.role],
+      workspace_id: null,
+    },
+  });
+  if (!existingPrincipal) {
+    await prisma.principal_role_grants.create({
+      data: {
+        orgId: 1,
+        principal_type: SINGLE_USER_PRINCIPAL.principal_type,
+        principal_id: SINGLE_USER_PRINCIPAL.principal_id,
+        role_id: roleIdByName[SINGLE_USER_PRINCIPAL.role],
+      },
+    });
   }
 }
 
