@@ -1,3 +1,4 @@
+import { brandReleaseUrl } from "@/utils/branding";
 import React, { useEffect, useRef, useState } from "react";
 import paths from "@/utils/paths";
 import useLogo from "@/hooks/useLogo";
@@ -517,7 +518,7 @@ function AppVersion() {
   if (isLoading) return null;
   return (
     <Link
-      to={`https://github.com/infinityplatformhub/anything-llm/releases/tag/v${version}`}
+      to={brandReleaseUrl(version)}
       target="_blank"
       rel="noreferrer"
       className="text-theme-text-secondary light:opacity-80 opacity-50 text-xs mx-3"

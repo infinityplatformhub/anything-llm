@@ -1,3 +1,4 @@
+import { BRAND_REPOSITORY_URL } from "./branding";
 import { API_BASE } from "./constants";
 
 /**
@@ -55,7 +56,7 @@ export default {
     },
   },
   github: () => {
-    return "https://github.com/infinityplatformhub/anything-llm";
+    return BRAND_REPOSITORY_URL;
   },
   discord: () => {
     return "https://discord.com/invite/6UyHPeGZAC";
@@ -67,7 +68,7 @@ export default {
     return "https://docs.approofworkspace.com/features/chat-modes";
   },
   support: () => {
-    return "https://github.com/infinityplatformhub/anything-llm/issues";
+    return `${BRAND_REPOSITORY_URL}/issues`;
   },
   workspace: {
     chat: (slug, options = {}) => {
@@ -240,7 +241,7 @@ export default {
     },
   },
 
-  // TODO: Migrate all docs.approofworkspace.com links to the new docs.
+  // Legacy documentation routes remain until replacement content exists.
   documentation: {
     mobileIntroduction: () => {
       return "https://docs.approofworkspace.com/mobile/overview";

@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Info } from "@phosphor-icons/react";
+import { Info } from "@phosphor-icons/react";
 import { VERTEX_REGIONS } from "./regions";
 import { useState, useEffect } from "react";
 import System from "@/models/system";
@@ -24,16 +24,6 @@ export default function VertexLLMOptions({ settings }) {
             <p className="text-base">
               Connect to Google Cloud Vertex AI using its OpenAI-compatible
               endpoint and a Vertex AI API key.
-              <br />
-              <a
-                href="https://docs.approofworkspace.com/setup/llm-configuration/cloud/google-vertex"
-                target="_blank"
-                className="underline flex gap-x-1 items-center"
-                rel="noreferrer"
-              >
-                Read more on how to use Google Vertex AI in ApproofWorkspace
-                <ArrowSquareOut size={14} />
-              </a>
             </p>
           </div>
         </div>

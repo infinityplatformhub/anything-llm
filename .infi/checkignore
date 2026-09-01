@@ -1,3 +1,6 @@
 server/yarn.lock
 frontend/yarn.lock
 collector/yarn.lock
+# XML namespace identifiers in generated placeholder logos; not network destinations.
+frontend/src/media/illustrations/login-logo.svg
+frontend/src/media/illustrations/login-logo-light.svg

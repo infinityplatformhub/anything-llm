@@ -32,3 +32,13 @@ Ruling: Point embed documentation CTA at current Infinity Platform Hub repositor
 Ruling: Centralize server brand destinations in `server/utils/branding/constants.js` with `BRAND_HOMEPAGE_URL`, `BRAND_DOCS_URL`, and `BRAND_CDN_URL` overrides — task gate forbids scattered product URLs and deployments need working destinations before branded domains exist — cost if wrong: defaults route documentation/home links to repository and CDN fallback retains upstream host until operator configures replacement.
 
 Ruling: Restore vendored minified chat widget byte-for-byte and keep its legacy filename/global compatibility identity — source-less edits create unreviewable vendor drift and trigger URL gate on bundled library internals — cost if wrong: embedded API retains legacy technical identity until widget is rebuilt from maintained source.
+
+Ruling: Remove frontend social URL metadata and unsupported cloud-provider documentation CTAs — no real product website or documentation endpoint exists — cost if wrong: social shares omit canonical URL and users lose two contextual help links.
+
+Ruling: Centralize frontend repository/release destinations in `frontend/src/utils/branding.js` with `VITE_BRAND_REPOSITORY_URL` override — URL gate and deployments require one configurable source — cost if wrong: other legacy docs routes remain separate until replacement documentation exists.
+
+Ruling: Retain upstream ARM Chromium archive URL in Dockerfile — it is a required build-time binary dependency, not product branding, and invented replacement domain breaks ARM images — cost if wrong: upstream can remove archive and ARM builds fail.
+
+Ruling: Restore `anythingllm-router` provider value — it is a persisted configuration and routing compatibility ID, not user-facing branding — cost if wrong: internal legacy token remains visible to technical scans.
+
+Ruling: Ignore only generated login SVG files for URL gate — `xmlns` is an XML namespace identifier, not a fetched resource — cost if wrong: future real URLs added to those two tiny assets bypass generic URL gate and require review.

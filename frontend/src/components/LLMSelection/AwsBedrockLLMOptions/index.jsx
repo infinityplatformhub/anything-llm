@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Info } from "@phosphor-icons/react";
+import { Info } from "@phosphor-icons/react";
 import { AWS_REGIONS } from "./regions";
 import { useState, useEffect } from "react";
 import System from "@/models/system";
@@ -25,16 +25,6 @@ export default function AwsBedrockLLMOptions({ settings }) {
             <Info size={40} />
             <p className="text-base">
               Connect to AWS Bedrock using the OpenAI-compatible Mantle API.
-              <br />
-              <a
-                href="https://docs.approofworkspace.com/setup/llm-configuration/cloud/aws-bedrock"
-                target="_blank"
-                className="underline flex gap-x-1 items-center"
-                rel="noreferrer"
-              >
-                Read more on how to use AWS Bedrock in ApproofWorkspace
-                <ArrowSquareOut size={14} />
-              </a>
             </p>
           </div>
         </div>
