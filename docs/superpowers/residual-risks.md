@@ -8,17 +8,17 @@
 
 ## เพิ่มรอบ re-review P0-1 (2026-09-02)
 6. [→ backlog O1] Budget counters ผูกกับ license driver — เปลี่ยน license driver = migrate usage history ด้วย (มอบ O1)
-7. [closed: T-1 20260902020000 — policy tables are reverse-queryable] explainAccess ต้องการ policy store reverse-queryable — เป็น hard requirement ของ P0-5 schema ไม่ใช่ optimization
+7. [→ #31 T-7] explainAccess ต้องการ policy store reverse-queryable — เป็น hard requirement ของ P0-5 schema ไม่ใช่ optimization
 8. [→ backlog S10] consumeBudget ต่อ chunk ไวต่อ latency — implement จริงใช้ batched delta + bounded overspend window (มอบ S10)
 9. [→ backlog S4] Group→workspace/role onboarding mapping ของ S4 ยังไม่มี diagram ทดสอบ (listGroups รองรับแล้ว) — เพิ่ม diagram ตอน S4
-- [→ needs issue] server/utils/modelPricing/index.test.js "fetches the remote pricing data and writes the disk cache" — etag "" vs "abc123" once in full run, isolated 41/41 (QA-1, T-2 verify on f7038595). Likely shared temp cacheDir across suites. Not blocking; isolate cacheDir per test when it recurs.
+- [→ #38] server/utils/modelPricing/index.test.js "fetches the remote pricing data and writes the disk cache" — etag "" vs "abc123" once in full run, isolated 41/41 (QA-1, T-2 verify on f7038595). Likely shared temp cacheDir across suites. Not blocking; isolate cacheDir per test when it recurs.
 - [→ #31 T-7] chat.read_others + access.diagnose stay in READ_ACTIONS (impersonated allowed). Re-decide when content_moderator role splits: admin without chat.read_others impersonating a user who has it = privilege borrowing. (QA-2, #20 round 2)
 - [→ #25 T-4a, cap landed; /v1 half → #29] authorizeMany has no batch cap (0.176ms/resource linear). Cap 500 at any HTTP endpoint that exposes it.
 ~~[fold into #22] F-20d actorResolver checks revokedAt but not expiresAt on apiKeyContext; PR-3 filters upstream today. 1-line fix assigned to Dev4 in T-3.~~ (closed: T-3 f5bf914f)
 
 - [reference, not a risk] contract cmd for future task.sh start: `sh -c 'cd server && yarn test 2>&1 | grep -E "Tests:" | grep -v failed; exit 0'` (a failing run yields no "passed" match)
 ~~[flake] engine.test.js + t1-authz-migration.test.js afterAll DROP DATABASE under default 5000ms hook timeout (beforeAll has 300_000). One-line fix: pass timeout to afterAll. Seen by dev-7 (#7) and PMO (#23 FAIL header with all tests passing). Fold into next P0-5 branch (#22).~~ (closed: T-3 f5bf914f)
-- [→ needs issue, housekeeping] stale worktree .claude/worktrees/p0-4d on approof/p0-4d-env-hygiene @ b5146345 holds unrelated P0-7 work; #7 uses approof/p0-4d-env-hygiene-a. Reap after confirming nothing unmerged.
+- [closed: worktree reaped, 0 unmerged commits] stale worktree .claude/worktrees/p0-4d on approof/p0-4d-env-hygiene @ b5146345 holds unrelated P0-7 work; #7 uses approof/p0-4d-env-hygiene-a. Reap after confirming nothing unmerged.
 - [→ #33] maskSecretValues is a name heuristic (8 words, 90/212 env keys, 0 mismatch today). Add guard test: every KEY_MAPPING entry must declare secret:true/false; fold into CredentialStore D(c). (QA-2 #7 interim)
 - [→ #33] env keys outside protectedKeys are dropped on dumpENV — accepted pre-existing data loss; revisit at CredentialStore D(c).
 - [closed: accepted by design, #7] parent-dir symlink (link/.env → real/.env) writes through by design; guard covers the leaf only. Requires write access to parent anyway. (QA-2)
