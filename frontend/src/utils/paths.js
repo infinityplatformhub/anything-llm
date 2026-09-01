@@ -1,4 +1,8 @@
-import { BRAND_DOCS_URL, BRAND_REPOSITORY_URL } from "./branding";
+import {
+  BRAND_COMMUNITY_HUB_URL,
+  BRAND_DOCS_URL,
+  BRAND_REPOSITORY_URL,
+} from "./branding";
 import { API_BASE } from "./constants";
 
 /**
@@ -210,7 +214,7 @@ export default {
     website: () => {
       return import.meta.env.DEV
         ? `http://localhost:5173`
-        : `https://hub.approofworkspace.com`;
+        : BRAND_COMMUNITY_HUB_URL;
     },
     /**
      * View more items of a given type on the community hub.

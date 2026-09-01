@@ -1,3 +1,4 @@
+const { BRAND_COMMUNITY_HUB_API_URL } = require("../utils/branding/constants");
 const ImportedPlugin = require("../utils/agents/imported");
 
 /**
@@ -7,8 +8,8 @@ const CommunityHub = {
   importPrefix: "allm-community-id",
   apiBase:
     process.env.NODE_ENV === "development"
-      ? "http://127.0.0.1:5001/approofworkspace-hub/us-central1/external/v1"
-      : "https://hub.external.approofworkspace.com/v1",
+      ? process.env.BRAND_COMMUNITY_HUB_API_URL
+      : BRAND_COMMUNITY_HUB_API_URL,
   supportedStaticItemTypes: ["system-prompt", "agent-flow", "slash-command"],
 
   /**

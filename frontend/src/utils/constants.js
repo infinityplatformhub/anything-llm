@@ -1,5 +1,6 @@
+import { BRAND_ONBOARDING_SURVEY_URL } from "./branding";
 export const API_BASE = import.meta.env.VITE_API_BASE || "/api";
-export const ONBOARDING_SURVEY_URL = "https://onboarding.approofworkspace.com";
+export const ONBOARDING_SURVEY_URL = BRAND_ONBOARDING_SURVEY_URL;
 
 export const AUTH_USER = "approofworkspace_user";
 export const AUTH_TOKEN = "approofworkspace_authToken";

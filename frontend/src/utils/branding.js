@@ -7,3 +7,8 @@ export const brandReleaseUrl = (version) =>
 
 export const BRAND_DOCS_URL =
   import.meta.env.VITE_BRAND_DOCS_URL || BRAND_REPOSITORY_URL;
+
+export const BRAND_ONBOARDING_SURVEY_URL =
+  import.meta.env.VITE_BRAND_ONBOARDING_SURVEY_URL || null;
+export const BRAND_COMMUNITY_HUB_URL =
+  import.meta.env.VITE_BRAND_COMMUNITY_HUB_URL || BRAND_REPOSITORY_URL;

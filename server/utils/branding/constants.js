@@ -5,4 +5,13 @@ const BRAND_DOCS_URL = process.env.BRAND_DOCS_URL || BRAND_HOMEPAGE;
 const BRAND_CDN =
   process.env.BRAND_CDN_URL || "https://cdn.anythingllm.com/support/models/";
 
-module.exports = { BRAND_HOMEPAGE, BRAND_DOCS_URL, BRAND_CDN };
+const BRAND_COMMUNITY_HUB_API_URL =
+  process.env.BRAND_COMMUNITY_HUB_API_URL ||
+  "https://hub.external.anythingllm.com/v1";
+
+module.exports = {
+  BRAND_HOMEPAGE,
+  BRAND_DOCS_URL,
+  BRAND_CDN,
+  BRAND_COMMUNITY_HUB_API_URL,
+};
