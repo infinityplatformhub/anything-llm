@@ -3,6 +3,7 @@ const { VALID_CHAT_MODE } = require("../chats/stream");
 const { EmbedChats } = require("../../models/embedChats");
 const { EmbedConfig } = require("../../models/embedConfig");
 const { reqBody } = require("../http");
+const prisma = require("../prisma");
 
 // Finds or Aborts request for a /:embedId/ url. This should always
 // be the first middleware and the :embedID should be in the URL.
@@ -228,6 +229,28 @@ async function embedHistoryAccess(request, response, next) {
       (allowedHosts !== null && !allowedHosts.includes(host))
     ) {
       response.status(401).json({ error: "Invalid request." });
+      return;
+    }
+
+    // T-4b (#29) W-10 / S-24 (G12): the session must belong to THIS embed. The gates above
+    // prove the id is well-formed and the caller is on an allowed origin; none of them
+    // prove the session was issued here, so embed A could read embed B's history by naming
+    // B's session id under A's embedId — a tenant boundary, not just a visitor one.
+    //
+    // Last, on purpose: it is the only gate that queries, so a bad origin or a malformed
+    // id is refused without touching the database.
+    //
+    // This narrows the hole to "you must know a session id issued for this embed"; it does
+    // NOT make session ids unguessable. A signed cookie or an HMAC token minted at session
+    // start is the rest of G12 and is a separate issue (PMO ruling).
+    const ownsSession = await prisma.embed_chats.findFirst({
+      where: { embed_id: embed.id, session_id: sessionId },
+      select: { id: true },
+    });
+    // A session that belongs to another embed and one that exists nowhere get the same
+    // answer: distinguishing them would confirm that some other embed owns that id.
+    if (!ownsSession) {
+      response.status(404).json({ error: "Invalid session ID." });
       return;
     }
 

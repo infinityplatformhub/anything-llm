@@ -7,6 +7,13 @@
  */
 process.env.STORAGE_DIR = process.env.STORAGE_DIR || require("os").tmpdir();
 
+// T-4b W-10 added a session→embed ownership gate after the checks this suite covers.
+// These cases assert that PR-0d's gates PASS, so the session they name has to exist;
+// ownership itself is covered by embedSessionOwnership.test.js.
+jest.mock("../../../utils/prisma", () => ({
+  embed_chats: { findFirst: jest.fn().mockResolvedValue({ id: 1 }) },
+}));
+
 const {
   embedHistoryAccess,
 } = require("../../../utils/middleware/embedMiddleware");
