@@ -18,19 +18,28 @@ const path = require("path");
 const { Document } = require("../../../models/documents");
 const { purgeFolder } = require("../../../utils/files/purgeDocument");
 const createFilesLib = require("../../../utils/agents/aibitat/plugins/create-files/lib");
+const prisma = require("../../../utils/prisma");
 const documentsPath =
   process.env.NODE_ENV === "development"
     ? path.resolve(__dirname, "../../../storage/documents")
     : path.resolve(process.env.STORAGE_DIR, `documents`);
 
 /**
- * Runs a simple validation check on the addToWorkspaces query parameter to ensure it is a string of comma-separated workspace slugs.
+ * Validates the addToWorkspaces body field: it must be a string of comma-separated
+ * workspace slugs, and a workspace-bound API key may only name the workspace it was
+ * issued for.
+ *
+ * The scope middleware cannot make the second check: these four upload routes take
+ * their target workspaces from the body, not the path, so there is no slug for
+ * `workspaceSlugParam` to bind against. Without this a key scoped to workspace A
+ * embeds documents into workspace B by naming B here.
+ *
  * @param {*} request
  * @param {*} response
  * @param {*} next
  * @returns
  */
-function validateWorkspaceSlugQuery(request, response, next) {
+async function validateWorkspaceSlugQuery(request, response, next) {
   const { addToWorkspaces = "" } = reqBody(request);
   if (!addToWorkspaces) return next();
   if (typeof addToWorkspaces !== "string") {
@@ -42,6 +51,28 @@ function validateWorkspaceSlugQuery(request, response, next) {
       })
       .end();
   }
+
+  const boundWorkspaceId = response.locals.apiKeyContext?.workspaceId;
+  if (boundWorkspaceId) {
+    const slugs = addToWorkspaces
+      .split(",")
+      .map((slug) => slug.trim())
+      .filter(Boolean);
+    // One query, then compare: a per-slug lookup would let a request naming twenty
+    // workspaces cost twenty round trips.
+    const owned = await prisma.workspaces.findMany({
+      where: { slug: { in: slugs }, id: Number(boundWorkspaceId) },
+      select: { slug: true },
+    });
+    const ownedSlugs = new Set(owned.map((workspace) => workspace.slug));
+    // An unknown slug is refused too: it is not this key's workspace either, and
+    // saying which slugs exist would tell a bound key about the rest of the
+    // deployment.
+    if (slugs.some((slug) => !ownedSlugs.has(slug))) {
+      return response.status(403).json({ error: "Insufficient scope." });
+    }
+  }
+
   next();
 }
 

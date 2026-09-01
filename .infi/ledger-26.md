@@ -39,3 +39,19 @@ Ruling: added **`embed.chat.read`** separate from `embed.read` — embed chat tr
 Ruling: the sweep test now asserts the burn-down through **two independent mechanisms** and says so in a comment: the regex counts only `validApiKey(...)` (47 API-key routes), while two added tests assert the extension file carries no wildcard and that the middleware neither stores nor honours `"*"`. Narrowing the regex alone would have let the counter reach 11 while the extension still held a wildcard — the exact "counter reaches zero while every key still holds `*`" failure mode flagged during PR-4c review. RED-proven separately: reverting an embed route fails the counter, restoring the middleware's wildcard fails the middleware test, and reverting an extension route fails the extension-file test. If wrong, three assertions where one number would have read more simply.
 
 Ruling: migration slot **042000** per PMO's slot ruling; it seeds only the two embed actions, since the browser-extension actions were already seeded by T-1's step-7a.
+
+## PR-4b bound-key gaps (branch `approof/pr4b-bound-key`, base `6e0a2051`)
+
+Closes the three places a workspace-bound key still reached past its workspace. All three share one cause: the route takes its target workspace from somewhere the scope middleware's `workspaceSlugParam` binding cannot see, so the handler has to refuse.
+
+Ruling: `GET /v1/workspaces` narrows the query (`where: { id }`) rather than filtering the result after the fact — a post-filter still loads every workspace, and the response embeds each one's thread slugs and `user_id`s, so a filtering bug leaks cross-tenant identity rather than just extra rows. If wrong, an unbound key's listing is unchanged and a bound key sees exactly one workspace.
+
+Ruling: `POST /v1/workspace/new` refuses a bound key outright rather than creating the workspace and binding it — a key issued for one workspace has no standing to mint another, and silently scoping the new workspace to the key would create workspaces nobody asked for. If wrong, an integration that legitimately creates workspaces must use an unbound key.
+
+Ruling: the `addToWorkspaces` check (QA-2 E-1) went into **`validateWorkspaceSlugQuery`**, the middleware all four upload routes already share, not into the four `Document.api.uploadToWorkspace` call sites the brief named. One choke point cannot be half-applied, and a fifth upload route added later inherits the check by using the same middleware. The function became `async`; Express awaits an async middleware's returned promise, and the four call sites pass it positionally, so no call site changed. If wrong, the check runs slightly earlier than the upload itself, which is the intended order anyway.
+
+Ruling: an **unknown slug is refused, not ignored** — it is not this key's workspace either, and answering differently for "exists but not yours" versus "does not exist" would tell a bound key which workspaces the deployment has. If wrong, a typo in `addToWorkspaces` returns 403 instead of being silently dropped, which is the safer failure.
+
+Ruling: one `findMany` with `slug: { in: slugs }` rather than a lookup per slug — a request naming twenty workspaces would otherwise cost twenty round trips, and the comparison is done in memory against the returned set. If wrong, the query returns at most as many rows as slugs named.
+
+Ruling: `addToWorkspaces` naming the key's own workspace **plus** another is refused entirely, not partially honoured — a partial success would embed the document in one workspace while reporting failure, and the caller could not tell which half happened. RED-proven as its own case.
