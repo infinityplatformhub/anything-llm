@@ -13,6 +13,14 @@ const { AuthorizationContractError } = require("./errors");
 
 const SCOPE_KEY = (orgId) => `org:${orgId}`;
 
+// Hotfix #39 (QA-2): callers that already hold a transaction pass it as `db` —
+// a Prisma transaction client has no `$transaction`, so calling one on it would
+// throw. Run inside theirs when there is one, open our own when there is not,
+// so a grant and the membership it belongs to can commit or fail together.
+const inTransaction = (db, fn) =>
+  typeof db?.$transaction === "function" ? db.$transaction(fn) : fn(db);
+
+
 // Only these two named built-in principals skip the escalation guard: the single-user
 // deployment principal and the P0-6 job runtime, both seeded by migrations. Exempting
 // every `type:"service"` actor would let a scoped API key (also a service actor) grant
@@ -111,7 +119,7 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
       "grantRole requires an explicit actor — pass SERVICE_PRINCIPALS.singleUser/coreJobs for seed and migration writes"
     );
   }
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     if (!isExemptPrincipal(actor)) {
       const rolePerms = await permissionIdsForRole(tx, roleId);
       const held = await heldPermissionIds(tx, actor, workspaceId);
@@ -155,7 +163,7 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
 /** Revoke a grant — same gateway, same transactional version bump. */
 async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null, db = prisma }) {
   requireActor(actor, "revokeGrant");
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actorIdOf(actor), workspaceId ? [`workspace:${workspaceId}`] : []);
     const res = await tx.principal_role_grants.deleteMany({
       where: {
@@ -170,7 +178,7 @@ async function revokeGrant({ actor, principalType, principalId, roleId, workspac
 /** Set document visibility — T-3's documentFilter reads this as a hard override. */
 async function setDocumentVisibility({ actor, documentId, hidden, reason = null, db = prisma }) {
   requireActor(actor, "setDocumentVisibility");
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const version = await bumpVersion(tx, "visibility", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
     const row = await tx.document_visibility.upsert({
       where: { document_id: documentId },
@@ -194,7 +202,7 @@ async function setDocumentVisibility({ actor, documentId, hidden, reason = null,
  */
 async function grantDocumentAcl({ actor, documentId, principalType, principalId, action, effect = "allow", source = "manual", db = prisma }) {
   requireActor(actor, "grantDocumentAcl");
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const version = await bumpVersion(tx, "document_acl", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
     const row = await tx.document_acl.upsert({
       where: {
@@ -215,7 +223,7 @@ async function grantDocumentAcl({ actor, documentId, principalType, principalId,
 
 async function revokeDocumentAcl({ actor, documentId, principalType, principalId, action, db = prisma }) {
   requireActor(actor, "revokeDocumentAcl");
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const version = await bumpVersion(tx, "document_acl", `document:${documentId}`, actorIdOf(actor), [SCOPE_KEY(1)]);
     const res = await tx.document_acl.deleteMany({
       where: {

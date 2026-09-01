@@ -13,15 +13,14 @@ const WorkspaceUser = {
   createMany: async function (userId, workspaceIds = []) {
     if (workspaceIds.length === 0) return;
     try {
-      await prisma.$transaction(
-        workspaceIds.map((workspaceId) =>
-          prisma.workspace_users.create({
+      await prisma.$transaction(async (tx) => {
+        for (const workspaceId of workspaceIds) {
+          await tx.workspace_users.create({
             data: { user_id: userId, workspace_id: workspaceId },
-          })
-        )
-      );
-      for (const workspaceId of workspaceIds)
-        await syncWorkspaceMembershipGrant({ userId, workspaceId });
+          });
+          await syncWorkspaceMembershipGrant({ userId, workspaceId, db: tx });
+        }
+      });
     } catch (error) {
       console.error(error.message);
     }
@@ -37,21 +36,21 @@ const WorkspaceUser = {
   createManyUsers: async function (userIds = [], workspaceId) {
     if (userIds.length === 0) return;
     try {
-      await prisma.$transaction(
-        userIds.map((userId) =>
-          prisma.workspace_users.create({
+      await prisma.$transaction(async (tx) => {
+        for (const userId of userIds) {
+          await tx.workspace_users.create({
             data: {
               user_id: Number(userId),
               workspace_id: Number(workspaceId),
             },
-          })
-        )
-      );
-      for (const userId of userIds)
-        await syncWorkspaceMembershipGrant({
-          userId: Number(userId),
-          workspaceId: Number(workspaceId),
-        });
+          });
+          await syncWorkspaceMembershipGrant({
+            userId: Number(userId),
+            workspaceId: Number(workspaceId),
+            db: tx,
+          });
+        }
+      });
     } catch (error) {
       console.error(error.message);
     }
@@ -60,12 +59,20 @@ const WorkspaceUser = {
 
   create: async function (userId = 0, workspaceId = 0) {
     try {
-      await prisma.workspace_users.create({
-        data: { user_id: Number(userId), workspace_id: Number(workspaceId) },
-      });
-      await syncWorkspaceMembershipGrant({
-        userId: Number(userId),
-        workspaceId: Number(workspaceId),
+      // Hotfix #39 (QA-2): membership and grant in ONE transaction. Written
+      // separately, a failing grant left the membership row behind — the user
+      // shows as a member of the workspace and gets 404 from every route in it,
+      // silently, because the grant error was caught and logged. Membership IS
+      // workspace access now, so half of it is worse than none.
+      await prisma.$transaction(async (tx) => {
+        await tx.workspace_users.create({
+          data: { user_id: Number(userId), workspace_id: Number(workspaceId) },
+        });
+        await syncWorkspaceMembershipGrant({
+          userId: Number(userId),
+          workspaceId: Number(workspaceId),
+          db: tx,
+        });
       });
       return true;
     } catch (error) {
@@ -114,13 +121,19 @@ const WorkspaceUser = {
     try {
       // Read the rows BEFORE deleting: afterwards there is nothing left to say
       // whose grants to revoke.
-      const doomed = await prisma.workspace_users.findMany({ where: clause });
-      await prisma.workspace_users.deleteMany({ where: clause });
-      for (const row of doomed)
-        await revokeWorkspaceMembershipGrants({
-          userId: row.user_id,
-          workspaceId: row.workspace_id,
-        });
+      await prisma.$transaction(async (tx) => {
+        // Read before deleting: afterwards there is nothing left to say whose
+        // grants to revoke. Same transaction, so a failed revoke cannot leave
+        // someone holding access to a workspace they were removed from.
+        const doomed = await tx.workspace_users.findMany({ where: clause });
+        await tx.workspace_users.deleteMany({ where: clause });
+        for (const row of doomed)
+          await revokeWorkspaceMembershipGrants({
+            userId: row.user_id,
+            workspaceId: row.workspace_id,
+            db: tx,
+          });
+      });
     } catch (error) {
       console.error(error.message);
     }

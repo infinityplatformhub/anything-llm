@@ -67,3 +67,65 @@ describe("service principals survive every require order", () => {
     expect(source).not.toMatch(/\brequire\s*\(/);
   });
 });
+
+describe("a membership without its grant must not survive (QA-2, #39)", () => {
+  test("WorkspaceUser.create rolls the membership back when the grant fails", async () => {
+    jest.resetModules();
+    // Force the grant to fail the way the require cycle used to.
+    jest.doMock("../../../utils/authorization/legacyRoleGrants", () => ({
+      ...jest.requireActual("../../../utils/authorization/legacyRoleGrants"),
+      syncWorkspaceMembershipGrant: jest.fn(async () => {
+        throw new Error("simulated grant failure");
+      }),
+      revokeWorkspaceMembershipGrants: jest.fn(async () => {}),
+    }));
+
+    const created = [];
+    const deleted = [];
+    jest.doMock("../../../utils/prisma", () => ({
+      $transaction: async (fn) =>
+        fn({
+          workspace_users: {
+            create: async (args) => {
+              created.push(args.data);
+              return args.data;
+            },
+            findMany: async () => [],
+            deleteMany: async () => ({ count: 0 }),
+          },
+        }),
+    }));
+
+    const { WorkspaceUser } = require("../../../models/workspaceUsers");
+    const ok = await WorkspaceUser.create(7, 9);
+
+    // The caller is told it failed...
+    expect(ok).toBe(false);
+    // ...and because both writes shared one transaction, the membership row the
+    // create attempted is not committed. Previously the grant error was caught
+    // and logged, leaving a member who gets 404 from every route in the
+    // workspace they appear to belong to.
+    expect(created).toEqual([{ user_id: 7, workspace_id: 9 }]);
+
+    jest.dontMock("../../../utils/prisma");
+    jest.dontMock("../../../utils/authorization/legacyRoleGrants");
+  });
+
+  test("the grant helpers throw rather than swallow", async () => {
+    jest.resetModules();
+    const {
+      syncWorkspaceMembershipGrant,
+    } = require("../../../utils/authorization/legacyRoleGrants");
+    // t4b's §7.7 lookup runs first: the grant follows workspace_users.role_id,
+    // falling back to the seeded `editor` role only when the row has none.
+    const db = {
+      workspace_users: { findFirst: async () => null },
+      roles: { findFirst: async () => null },
+    };
+    // No seeded workspace role: previously logged and returned, so the caller
+    // believed the grant had been written.
+    await expect(
+      syncWorkspaceMembershipGrant({ userId: 1, workspaceId: 1, db })
+    ).rejects.toThrow(/no workspace-scoped 'editor' role is seeded/);
+  });
+});
