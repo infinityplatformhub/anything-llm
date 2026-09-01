@@ -20,6 +20,7 @@ run() {
 }
 
 run "model imports (§5.1)" ./scripts/check-model-imports.sh
+run "test db build (§7.1a)" ./scripts/check-db-push.sh
 
 if [ "$fail" -ne 0 ]; then
   echo "check-local: FAILED"

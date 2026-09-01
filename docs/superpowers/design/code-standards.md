@@ -490,6 +490,58 @@ Raw SQL specifically:
   disappear under a fake instead of failing loudly. If a statement is required
   for correctness, do not guard it — let the fake break, and fix the fake.
 
+### 7.1a A test database is built by `migrate deploy`, never `db push`
+
+`prisma db push` shapes the schema from `schema.prisma`. It does not run
+migration files, so **it skips every `INSERT` those files carry.** The schema is
+right and the data is missing, which is worse than a schema error: the tables all
+exist, so nothing throws — the rows are simply not there.
+
+The gap is real and was live for weeks. Five migrations carry seed data:
+
+| Migration | INSERT statements |
+|---|---|
+| `20260902020000_t1_authz_schema` | 21 (57 permission rows + roles + grants) |
+| `20260902040000_pr4b_workspace_thread_scopes` | 3 |
+| `20260902041000_pr4b_document_scopes` | 3 |
+| `20260902042000_pr4b_embed_scopes` | 2 |
+| `20260902043000_pr4b_system_openai_scopes` | 2 |
+
+Every HTTP suite built with `db push` therefore ran against a database with an
+**empty `permissions` table**. `engine.evaluate()` returns `unknown_action` for
+every action when that table is empty, so authorization tests in those suites
+were asserting against a system that denied everything for the wrong reason. They
+passed. They would have passed with the engine deleted.
+
+So: **any suite that boots the app or exercises authorization builds its database
+with `migrate deploy`.**
+
+```js
+// right
+spawnSync(prismaBin, ["migrate", "deploy", "--schema", testSchema], { env });
+
+// wrong — schema without seed data
+spawnSync(prismaBin, ["db", "push", "--skip-generate", "--schema", testSchema], { env });
+```
+
+`db push` is legitimate in exactly one place: a test whose subject is the schema
+shape itself and which seeds its own rows. Those go in the allowlist at the top
+of `scripts/check-db-push.sh`, with a comment saying why — the allowlist is the
+record of the decision, so an entry without a reason is a bug.
+
+Check:
+
+```bash
+./scripts/check-db-push.sh
+```
+
+Run via `./scripts/check-local.sh`.
+
+This is the same failure as §7.1 one layer down: there, a fake stood in for
+Postgres and hid a broken statement; here, a real Postgres stood in for a
+migrated one and hid missing data. Both pass every check that does not look at
+what the application actually reads.
+
 ### 7.2 Definition of done for background services
 
 A scheduler, worker, or pump is not done because its tests pass. Before handing

@@ -63,9 +63,21 @@ git grep -l 'strictMultiUserRoleValid' -- 'server/**/*.js' | wc -l
 git grep -nE 'role (===|!==) "(admin|manager|default)"' -- 'server/**/*.js' | grep -v __tests__
 ```
 
-**All four must be 0** outside `server/utils/authorization/`. At `7587e74e`: 185 refs, 27 files, 2 files, 2 sites — unchanged, because T-4a has not merged yet.
+**All four must be 0** outside `server/utils/authorization/` and the two exemptions below.
 
-The fourth grep is not redundant. `utils/chats/commands/img.js:55` and `utils/helpers/documentPurgeGuard.js:33` compare `user.role` to a string literal and never import `ROLES`, so the first grep cannot see them. Both are named in the P0-5 DoD and both are still present.
+### Exemptions (PMO ruling, 2026-09-02)
+
+| File | Why it keeps a role reference | Closed by |
+|---|---|---|
+| `server/utils/helpers/admin/index.js` | Role *hierarchy* for user management — who may act on whom. That is a property of the role model itself, not a route guard, so it does not become an `assertAuthorized` call. | #31 (T-7) D-1/D-4 |
+| `server/utils/chats/commands/img.js:55` | `user.role === "admin"` gating a chat command. Reached through the chat pipeline, which T-5 owns. | #30 (T-5) |
+
+Both are exemptions from the **grep**, not from the rule: each must still end up
+behind the engine or be deleted by the issue named. An exemption whose issue
+closes without touching the file is a bug in this table, not a permanent waiver —
+re-check the file when that issue closes.
+
+At `8c77e7bc`: 185 refs, 27 files, 2 files, 2 sites — unchanged, because T-4a has not merged yet.
 
 ### 2.3 Frontend capability gates
 
@@ -115,7 +127,9 @@ Without both env vars, six suites fail at import time and are counted as *failed
 bash <path-to>/task.sh check --base approof/main --issue <n>
 ```
 
-Both must pass on the merge candidate. `check-local.sh` currently runs the §5.1 model-import gate; anything added later is picked up automatically.
+Both must pass on the merge candidate. `check-local.sh` runs the §5.1 model-import gate and the §7.1a `db push` gate; anything added later is picked up automatically.
+
+`check-db-push.sh` reports a **pending count** for the five HTTP suites still on `db push` (code-standards §7.1a). Pending is not passing: the gate opens only when that count is 0 and the allowlist in the script is empty. Those five ran for weeks against an empty `permissions` table, so any authorization assertion they made proved nothing.
 
 ### 2.7 Node version pinned
 
