@@ -8,6 +8,7 @@ const schema = `regression_${process.pid}`;
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-at-least-12-chars";
 process.env.AUTH_TOKEN = "single-user-test-password";
+process.env.API_KEY_PEPPER = "regression-test-pepper-32-bytes-long";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
 const baseDatabaseUrl = process.env.DATABASE_URL;
 if (!baseDatabaseUrl?.startsWith("postgresql://")) {
@@ -162,8 +163,9 @@ beforeAll(async () => {
   await prisma.workspace_users.create({
     data: { user_id: member.id, workspace_id: assignedWorkspace.id },
   });
-  apiKey = "test-api-key-secret";
-  await prisma.api_keys.create({ data: { name: "test", secret: apiKey } });
+  apiKey = "apw-key-test-api-key-secret";
+  const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
+  await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]) } });
   await setMultiUserMode(true);
   global.fetch = jest.fn(async (url, options) => {
     if (!options) return { ok: true };
@@ -471,5 +473,35 @@ describe("multi-user mode", () => {
       (await request(app).get("/api/system/multi-user-mode")).body.multiUserMode
     ).toBe(false);
     await setMultiUserMode(true);
+  });
+});
+
+describe("API key failure oracle", () => {
+  test.each([
+    ["missing", null],
+    ["wrong prefix", "Bearer wrong"],
+    ["wrong digest", "Bearer apw-key-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+  ])("returns identical response for %s", async (_name, authorization) => {
+    const call = request(app).get("/api/v1/auth");
+    if (authorization) call.set("Authorization", authorization);
+    const response = await call;
+    expect({ status: response.status, body: response.body }).toEqual({
+      status: 403,
+      body: { error: "No valid api key found." },
+    });
+  });
+});
+
+describe("API key lifecycle denial", () => {
+  test.each(["revokedAt", "expiresAt"])("rejects %s with generic response", async (field) => {
+    const secret = `apw-key-${field}-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+    const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
+    const record = await prisma.api_keys.create({ data: {
+      secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(["*"]),
+      [field]: new Date(field === "expiresAt" ? Date.now() - 1000 : Date.now()),
+    } });
+    const response = await request(app).get("/api/v1/auth").set("Authorization", `Bearer ${secret}`);
+    expect({ status: response.status, body: response.body }).toEqual({ status: 403, body: { error: "No valid api key found." } });
+    await prisma.api_keys.delete({ where: { id: record.id } });
   });
 });

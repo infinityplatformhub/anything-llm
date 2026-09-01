@@ -1,99 +1,67 @@
 const prisma = require("../utils/prisma");
+const {
+  digestSecret,
+  keyPrefix,
+  matchesDigest,
+  parseScopes,
+} = require("../utils/apiKeySecurity");
 
 const ApiKey = {
   tablename: "api_keys",
   writable: ["name"],
-
   // 256 bits from crypto.randomBytes (R6/R7 floor); uuid-apikey was 122 bits.
   makeSecret: () => {
     const crypto = require("crypto");
     return `apw-key-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
-  create: async function (createdByUserId = null, name = null) {
+  create: async function (createdByUserId = null, name = null, options = {}) {
     try {
-      const normalizedName =
-        typeof name === "string" && name.trim().length > 0 ? name.trim() : null;
-      const apiKey = await prisma.api_keys.create({
+      const secret = this.makeSecret();
+      const record = await prisma.api_keys.create({
         data: {
-          name: normalizedName,
-          secret: this.makeSecret(),
+          name: typeof name === "string" && name.trim() ? name.trim() : null,
+          secretDigest: digestSecret(secret),
+          keyPrefix: keyPrefix(secret),
+          scopes: JSON.stringify(options.scopes || ["*"]),
+          workspaceId: options.workspaceId || null,
+          expiresAt: options.expiresAt || null,
           createdBy: createdByUserId,
         },
       });
-
-      return { apiKey, error: null };
+      return { apiKey: { ...record, secretDigest: undefined, secret }, error: null };
     } catch (error) {
       console.error("FAILED TO CREATE API KEY.", error.message);
       return { apiKey: null, error: error.message };
     }
   },
 
-  get: async function (clause = {}) {
+  resolve: async function (secret) {
+    if (typeof secret !== "string" || !secret.startsWith("apw-key-")) return null;
+    const record = await prisma.api_keys.findUnique({ where: { secretDigest: digestSecret(secret) } });
+    if (!record || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) return null;
     try {
-      const apiKey = await prisma.api_keys.findFirst({ where: clause });
-      return apiKey;
-    } catch (error) {
-      console.error("FAILED TO GET API KEY.", error.message);
+      if (!matchesDigest(secret, record.secretDigest)) return null;
+    } catch {
       return null;
     }
+    return { ...record, scopes: parseScopes(record.scopes) };
   },
 
-  count: async function (clause = {}) {
-    try {
-      const count = await prisma.api_keys.count({ where: clause });
-      return count;
-    } catch (error) {
-      console.error("FAILED TO COUNT API KEYS.", error.message);
-      return 0;
-    }
-  },
-
-  delete: async function (clause = {}) {
-    try {
-      await prisma.api_keys.deleteMany({ where: clause });
-      return true;
-    } catch (error) {
-      console.error("FAILED TO DELETE API KEY.", error.message);
-      return false;
-    }
-  },
-
-  where: async function (clause = {}, limit) {
-    try {
-      const apiKeys = await prisma.api_keys.findMany({
-        where: clause,
-        take: limit,
-      });
-      return apiKeys;
-    } catch (error) {
-      console.error("FAILED TO GET API KEYS.", error.message);
-      return [];
-    }
-  },
-
+  touch: (id) => prisma.api_keys.update({ where: { id }, data: { lastUsedAt: new Date() } }),
+  get: (clause = {}) => prisma.api_keys.findFirst({ where: clause }).then((row) => { if (!row) return null; const { secretDigest, ...safe } = row; return safe; }).catch(() => null),
+  count: (clause = {}) => prisma.api_keys.count({ where: clause }).catch(() => 0),
+  delete: async (clause = {}) => prisma.api_keys.deleteMany({ where: clause }).then(() => true).catch(() => false),
+  where: (clause = {}, limit) => prisma.api_keys.findMany({ where: clause, take: limit }).then((rows) => rows.map(({ secretDigest, ...row }) => row)).catch(() => []),
   whereWithUser: async function (clause = {}, limit) {
-    try {
-      const { User } = require("./user");
-      const apiKeys = await this.where(clause, limit);
-
-      for (const apiKey of apiKeys) {
-        if (!apiKey.createdBy) continue;
-        const user = await User.get({ id: apiKey.createdBy });
-        if (!user) continue;
-
-        apiKey.createdBy = {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-        };
-      }
-
-      return apiKeys;
-    } catch (error) {
-      console.error("FAILED TO GET API KEYS WITH USER.", error.message);
-      return [];
+    const { User } = require("./user");
+    const rows = await this.where(clause, limit);
+    for (const row of rows) {
+      if (!row.createdBy) continue;
+      const user = await User.get({ id: row.createdBy });
+      if (user) row.createdBy = { id: user.id, username: user.username, role: user.role };
     }
+    return rows;
   },
 };
 

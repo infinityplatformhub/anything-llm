@@ -1,9 +1,10 @@
+const { API_KEY_SCOPES } = require("../../../utils/apiKeySecurity/scopes");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
 
 function apiAuthEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/auth", [validApiKey], (_, response) => {
+  app.get("/v1/auth", [validApiKey(API_KEY_SCOPES.TEMPORARY_ALL)], (_, response) => {
     /* 
     #swagger.tags = ['Authentication']
     #swagger.description = 'Verify the attached Authentication header contains a valid API token.'
