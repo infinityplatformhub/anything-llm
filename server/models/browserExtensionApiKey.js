@@ -1,6 +1,6 @@
 const prisma = require("../utils/prisma");
 const { ROLES } = require("../utils/middleware/multiUserProtected");
-const { digestSecret, keyPrefix, matchesDigest, parseScopes } = require("../utils/apiKeySecurity");
+const { digestSecret, keyPrefix, matchesDigest } = require("../utils/apiKeySecurity");
 
 const BrowserExtensionApiKey = {
   /**
@@ -21,8 +21,7 @@ const BrowserExtensionApiKey = {
     try {
       const secret = this.makeSecret();
       const record = await prisma.browser_extension_api_keys.create({ data: {
-        secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(options.scopes || ["*"]),
-        workspaceId: options.workspaceId || null, expiresAt: options.expiresAt || null, user_id: userId,
+        secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), user_id: userId,
       } });
       return { apiKey: { ...record, secretDigest: undefined, secret }, error: null };
     } catch (error) {
@@ -33,11 +32,10 @@ const BrowserExtensionApiKey = {
   validate: async function (secret) {
     if (typeof secret !== "string" || !secret.startsWith("apw-brx-")) return false;
     const record = await prisma.browser_extension_api_keys.findUnique({ where: { secretDigest: digestSecret(secret) }, include: { user: true } });
-    if (!record || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) return false;
+    if (!record) return false;
     try { if (!matchesDigest(secret, record.secretDigest)) return false; } catch { return false; }
-    return { ...record, scopes: parseScopes(record.scopes) };
+    return record;
   },
-  touch: (id) => prisma.browser_extension_api_keys.update({ where: { id }, data: { lastUsedAt: new Date() } }),
   get: (clause = {}) => prisma.browser_extension_api_keys.findFirst({ where: clause }).then((row) => { if (!row) return null; const { secretDigest, ...safe } = row; return safe; }).catch(() => null),
   delete: async (id) => prisma.browser_extension_api_keys.delete({ where: { id: Number(id) } }).then(() => ({ success: true, error: null })).catch((error) => ({ success: false, error: error.message })),
   deleteAllForUser: async function (userId) {

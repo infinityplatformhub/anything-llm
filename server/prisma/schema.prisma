@@ -152,7 +152,6 @@ model workspaces {
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
   api_keys                     api_keys[]
-  browser_extension_api_keys   browser_extension_api_keys[]
 }
 
 model workspace_threads {
@@ -317,22 +316,15 @@ model document_sync_executions {
 }
 
 model browser_extension_api_keys {
-  id            Int         @id @default(autoincrement())
-  secretDigest  Bytes       @unique
+  id            Int      @id @default(autoincrement())
+  secretDigest  Bytes    @unique
   keyPrefix     String
-  scopes        String      @default("[\"*\"]")
-  workspaceId   Int?
-  expiresAt     DateTime?   @db.Timestamptz(3)
-  lastUsedAt    DateTime?   @db.Timestamptz(3)
-  revokedAt     DateTime?   @db.Timestamptz(3)
   user_id       Int?
-  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
-  lastUpdatedAt DateTime    @updatedAt @db.Timestamptz(3)
-  user          users?      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  workspace     workspaces? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastUpdatedAt DateTime @updatedAt @db.Timestamptz(3)
+  user          users?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([keyPrefix])
-  @@index([workspaceId])
   @@index([user_id])
 }
 

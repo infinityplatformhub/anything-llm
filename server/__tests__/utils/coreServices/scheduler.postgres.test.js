@@ -7,7 +7,11 @@ run("PostgresJobScheduler PostgreSQL integration", () => {
   beforeEach(async () => {
     await prisma.job_schedules.updateMany({ data: { enabled: false } });
   });
-  afterAll(() => prisma.$disconnect());
+  afterAll(async () => {
+    await prisma.jobs.deleteMany({ where: { type: { in: ["integration.scheduler", "integration.concurrent", "integration.catchup"] } } });
+    await prisma.job_schedules.deleteMany({ where: { id: { in: ["integration-bangkok", "integration-concurrent", "integration-catchup"] } } });
+    await prisma.$disconnect();
+  });
 
   test("takes advisory lock, materializes once, advances timezone schedule, and ticks cleanly", async () => {
     const now = new Date("2026-09-02T00:00:00.000Z");
