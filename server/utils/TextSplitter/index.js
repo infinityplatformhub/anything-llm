@@ -169,6 +169,22 @@ class TextSplitter {
   }
 }
 
+// Thai (and Lao/Khmer/Burmese) text has no spaces between words, so Langchain's
+// default separator list falls through to "" and cuts mid-word. We pre-mark word
+// boundaries found by ICU with a zero-width space, split on that, then strip it.
+const NO_WORD_SPACE_SCRIPT = /[\u0E00-\u0E7F]/;
+const WORD_BOUNDARY_MARK = "\u200B";
+
+// ponytail: Thai only. Lao/Khmer/Burmese have the same problem and the same fix
+// (swap the locale), but no eval corpus exists for them yet - add when one does.
+function markWordBoundaries(text) {
+  const segmenter = new Intl.Segmenter("th", { granularity: "word" });
+  let marked = "";
+  for (const { segment } of segmenter.segment(text))
+    marked += `${segment}${WORD_BOUNDARY_MARK}`;
+  return marked;
+}
+
 // Wrapper for Langchain default RecursiveCharacterTextSplitter class.
 class RecursiveSplitter {
   constructor({ chunkSize, chunkOverlap, chunkHeader = null }) {
@@ -185,6 +201,13 @@ class RecursiveSplitter {
       chunkSize,
       chunkOverlap,
     });
+    // Same limits, but allowed to break on an ICU word boundary before it
+    // resorts to a bare character count.
+    this.wordAwareEngine = new RecursiveCharacterTextSplitter({
+      chunkSize,
+      chunkOverlap,
+      separators: ["\n\n", "\n", " ", WORD_BOUNDARY_MARK, ""],
+    });
   }
 
   log(text, ...args) {
@@ -192,9 +215,19 @@ class RecursiveSplitter {
   }
 
   async _splitText(documentText) {
-    if (!this.chunkHeader) return this.engine.splitText(documentText);
-    const strings = await this.engine.splitText(documentText);
-    const documents = await this.engine.createDocuments(strings, [], {
+    const wordAware = NO_WORD_SPACE_SCRIPT.test(documentText);
+    const engine = wordAware ? this.wordAwareEngine : this.engine;
+    const text = wordAware ? markWordBoundaries(documentText) : documentText;
+    // ponytail: strips any zero-width space the source document already carried.
+    // Those are invisible formatting hints an embedder cannot use anyway.
+    const clean = (chunk) =>
+      wordAware ? chunk.split(WORD_BOUNDARY_MARK).join("") : chunk;
+
+    if (!this.chunkHeader)
+      return (await engine.splitText(text)).map(clean).filter((c) => !!c);
+
+    const strings = await engine.splitText(text);
+    const documents = await engine.createDocuments(strings.map(clean), [], {
       chunkHeader: this.chunkHeader,
     });
     return documents
