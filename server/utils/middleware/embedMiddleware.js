@@ -4,6 +4,10 @@ const { EmbedChats } = require("../../models/embedChats");
 const { EmbedConfig } = require("../../models/embedConfig");
 const { reqBody } = require("../http");
 const prisma = require("../prisma");
+const {
+  verifySessionToken,
+  tokenFromRequest,
+} = require("./embedSessionToken");
 
 // Finds or Aborts request for a /:embedId/ url. This should always
 // be the first middleware and the :embedID should be in the URL.
@@ -229,6 +233,27 @@ async function embedHistoryAccess(request, response, next) {
       (allowedHosts !== null && !allowedHosts.includes(host))
     ) {
       response.status(401).json({ error: "Invalid request." });
+      return;
+    }
+
+    // issue 32: the session id must be PROVEN, not merely known. W-10 below closes the
+    // cross-tenant half of G12 (embed A cannot name embed B's session); this closes the
+    // other half, where anyone who learns a visitor's UUID reads their conversation.
+    //
+    // Before the ownership query on purpose, for two reasons: an unsigned caller must not
+    // be able to make the database work, and that query must never become an oracle for
+    // which session ids exist.
+    const verdict = verifySessionToken({
+      token: tokenFromRequest(request),
+      embedUuid: String(embed.uuid),
+      sessionId,
+    });
+    if (!verdict.valid) {
+      // A token for a different session or embed is a real credential pointed at the wrong
+      // thing (403); no token, a malformed one, or an expired one is simply unproven (401).
+      // Neither answer says whether the session exists.
+      const status = verdict.reason === "mismatch" ? 403 : 401;
+      response.status(status).json({ error: "Invalid session credentials." });
       return;
     }
 

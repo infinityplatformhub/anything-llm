@@ -13,6 +13,10 @@ const {
   embedHistoryRateLimit,
 } = require("../../utils/middleware/requestControls");
 const {
+  mintSessionToken,
+  SESSION_TOKEN_HEADER,
+} = require("../../utils/middleware/embedSessionToken");
+const {
   convertToChatHistory,
   writeResponseChunk,
 } = require("../../utils/helpers/chat/responses");
@@ -35,6 +39,26 @@ function embeddedEndpoints(app) {
           temperature = null,
           username = null,
         } = reqBody(request);
+
+        // issue 32: this is where a session first reaches the server, so it is where its
+        // token is minted. The widget stores it and presents it on the history routes,
+        // which is what turns a known session id into a proven one.
+        //
+        // Sent as a header rather than only a cookie: an embed on a third-party origin
+        // cannot rely on cookies surviving SameSite, and the widget already keeps its
+        // session id in localStorage. Set before flushHeaders — an SSE response cannot
+        // add headers once the stream is open.
+        response.setHeader(
+          SESSION_TOKEN_HEADER,
+          mintSessionToken({
+            embedUuid: String(embed.uuid),
+            sessionId: String(sessionId),
+          })
+        );
+        response.setHeader(
+          "Access-Control-Expose-Headers",
+          SESSION_TOKEN_HEADER
+        );
 
         response.setHeader("Cache-Control", "no-cache");
         response.setHeader("Content-Type", "text/event-stream");

@@ -28,13 +28,29 @@ describe("embedHistoryAccess middleware (PR-0d / G12)", () => {
     sendStatus: jest.fn().mockReturnThis(),
     end: jest.fn(),
   });
+  // issue 32 put a token gate ahead of the gates this suite covers, so requests carry a
+  // valid token to reach them. The token is asserted on its own in
+  // embedSessionToken.test.js; here it is just the price of admission.
+  const {
+    mintSessionToken,
+    SESSION_TOKEN_HEADER,
+  } = require("../../../utils/middleware/embedSessionToken");
+  const EMBED_UUID = "emb-history-access";
+
   const makeRequest = (overrides = {}) => ({
     params: { sessionId: SESSION },
-    headers: { origin: "https://allowed.example" },
+    headers: {
+      origin: "https://allowed.example",
+      [SESSION_TOKEN_HEADER]: mintSessionToken({
+        embedUuid: EMBED_UUID,
+        sessionId: SESSION,
+      }),
+    },
     ...overrides,
   });
   const baseEmbed = {
     id: 1,
+    uuid: EMBED_UUID,
     enabled: true,
     allowlist_domains: JSON.stringify(["https://allowed.example"]),
   };
@@ -96,7 +112,15 @@ describe("embedHistoryAccess middleware (PR-0d / G12)", () => {
     await embedHistoryAccess(
       makeRequest({
         params: { sessionId: SESSION },
-        headers: { origin: "https://anywhere.example" },
+        // overriding headers wholesale drops the token, so re-add it: this test is about
+        // the origin gate, not about being unauthenticated.
+        headers: {
+          origin: "https://anywhere.example",
+          [SESSION_TOKEN_HEADER]: mintSessionToken({
+            embedUuid: EMBED_UUID,
+            sessionId: SESSION,
+          }),
+        },
       }),
       response,
       next
