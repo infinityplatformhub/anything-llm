@@ -34,6 +34,8 @@ function eventDb() {
       },
       event_deliveries: {
         findUnique: async ({ where }) => deliveries.get(key(where)),
+        create: async ({ data }) => { const k = `${data.subscriberId}:${data.eventId}`; if (deliveries.has(k)) throw { code: "P2002" }; deliveries.set(k, data); return data; },
+        updateMany: async () => ({ count: 1 }),
         upsert: async ({ where, create, update }) => { const k = key(where); const row = { ...(deliveries.get(k) || create), ...(deliveries.has(k) ? update : {}) }; deliveries.set(k, row); return row; },
         deleteMany: async ({ where }) => { deliveries.delete(`${where.subscriberId}:${where.eventId}`); },
       },

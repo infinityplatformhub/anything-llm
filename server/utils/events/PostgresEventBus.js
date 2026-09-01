@@ -44,19 +44,21 @@ class PostgresEventBus {
   async acknowledge({ subscriberId, eventId }) {
     await this.db.event_deliveries.upsert({
       where: { subscriberId_eventId: { subscriberId, eventId } },
-      create: { subscriberId, eventId, state: "acknowledged", acknowledgedAt: new Date() },
-      update: { state: "acknowledged", acknowledgedAt: new Date() },
+      create: { subscriberId, eventId, state: "acknowledged", acknowledgedAt: new Date(), claimedBy: null, claimedUntil: null },
+      update: { state: "acknowledged", acknowledgedAt: new Date(), claimedBy: null, claimedUntil: null },
     });
   }
 
   async deliver(limit = 100) {
     const now = this.now();
+    const subscriberIds = [...this.subscribers.keys()];
+    if (!subscriberIds.length) return;
     const due = await this.db.event_outbox.findMany({
       where: {
-        OR: [
-          { deliveries: { none: {} } },
-          { deliveries: { some: { state: "retrying", nextAttemptAt: { lte: now }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] } } },
-        ],
+        OR: subscriberIds.flatMap((subscriberId) => [
+          { deliveries: { none: { subscriberId } } },
+          { deliveries: { some: { subscriberId, state: { in: ["retrying", "delivering"] }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] } } },
+        ]),
       },
       orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
       take: limit,
@@ -66,6 +68,8 @@ class PostgresEventBus {
         if (!subscriber.eventTypes.has(row.type) && !subscriber.eventTypes.has("*")) continue;
         const delivery = await this.db.event_deliveries.findUnique({ where: { subscriberId_eventId: { subscriberId, eventId: row.id } } });
         if (delivery?.state === "acknowledged" || delivery?.state === "dead-lettered" || delivery?.state === "quarantined") continue;
+        const claimed = await this.claimDelivery(subscriberId, row.id, delivery);
+        if (!claimed) continue;
         if (!subscriber.versions.has(row.version)) {
           await this.recordFailure({ subscriberId, row, subscriber, delivery, error: new UnknownEventVersionError(`Unknown event version ${row.version}`), state: "quarantined" });
           continue;
@@ -81,6 +85,27 @@ class PostgresEventBus {
     }
   }
 
+  async claimDelivery(subscriberId, eventId, delivery) {
+    const now = this.now();
+    const claimedUntil = new Date(now.getTime() + 30_000);
+    if (!delivery) {
+      try {
+        await this.db.event_deliveries.create({
+          data: { subscriberId, eventId, state: "delivering", attempts: 0, claimedBy: this.workerId, claimedUntil },
+        });
+        return true;
+      } catch (error) {
+        if (error?.code === "P2002") return false;
+        throw error;
+      }
+    }
+    const claimed = await this.db.event_deliveries.updateMany({
+      where: { subscriberId, eventId, state: { in: ["retrying", "delivering"] }, OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }] },
+      data: { state: "delivering", claimedBy: this.workerId, claimedUntil },
+    });
+    return claimed.count === 1;
+  }
+
   toEvent(row) {
     return { eventId: row.id, type: row.type, version: row.version, occurredAt: row.occurredAt, actor: JSON.parse(row.actor), resource: JSON.parse(row.resource), traceId: row.traceId, data: JSON.parse(row.data), sensitivity: row.sensitivity };
   }
@@ -90,8 +115,8 @@ class PostgresEventBus {
     const finalState = state || (attempts >= subscriber.maxAttempts ? "dead-lettered" : "retrying");
     await this.db.event_deliveries.upsert({
       where: { subscriberId_eventId: { subscriberId, eventId: row.id } },
-      create: { subscriberId, eventId: row.id, attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null },
-      update: { attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null },
+      create: { subscriberId, eventId: row.id, attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null, claimedBy: null, claimedUntil: null },
+      update: { attempts, state: finalState, lastError: error.message, nextAttemptAt: finalState === "retrying" ? new Date(this.now().getTime() + 1000 * 2 ** attempts) : null, claimedBy: null, claimedUntil: null },
     });
     if ((finalState === "dead-lettered" || finalState === "quarantined") && row.type !== "event.delivery_failed") {
       const event = {
