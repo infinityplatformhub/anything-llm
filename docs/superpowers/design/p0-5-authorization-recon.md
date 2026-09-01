@@ -37,7 +37,17 @@ Sources: `docs/superpowers/plans/phase0-foundation.md` §P0-5 · spec §F3 · se
 - `strictMultiUserRoleValid` (`:29-48`) and `flexUserRoleValid` (`:56-81`) both reduce to `allowedRoles.includes(user?.role)`. No resource, no action, no reason, no audit.
 - **`flexUserRoleValid` bypasses everything when not in multi-user mode** (`:69-73`: `if (!multiUserMode) { next(); return; }`). Single-user deployments have no authorization at all on 23 route files.
 - `DEFAULT_ROLES = [ROLES.admin, ROLES.admin]` (`:9`) — duplicated entry, `manager` silently absent from the default. Cosmetic today, but it is the kind of bug an engine makes impossible.
-- 23 files import `flexUserRoleValid`; 2 import `strictMultiUserRoleValid`; **183 `ROLES.` references** across `server/` + `frontend/src`.
+- **Counts, recounted without truncation (2026-09-02, prompted by e5's `head`-truncation correction on P0-4):**
+
+| Symbol | Files | Occurrences |
+|---|---|---|
+| `flexUserRoleValid` | 24 | **171** |
+| `strictMultiUserRoleValid` | 2 | **18** |
+| `ROLES.` (server) | 29 | **244** |
+| `user.role` / `user?.role` (frontend) | 10 | 20 |
+| literal `"admin"`/`"manager"`/`"default"` (frontend) | 36 | 105 |
+
+  The plan's "~23 files" (`phase0-foundation.md:111`) counts *importers*, not *call sites*. The real T-4 surface is **189 middleware invocations across 24 files plus 244 `ROLES.` references across 29 files** — roughly 2× the figure the plan sizes against. T-4 stays inside one week only because the edits are mechanical and the engine (T-2) absorbs the logic; if T-2 slips, T-4 must be split by route group, not compressed.
 
 ### A-2 — Global admin/manager bypass sits inside the data layer (CRITICAL)
 Bypasses are not only in middleware; they are in models, so no route-level fix removes them:
@@ -70,6 +80,12 @@ Bypasses are not only in middleware; they are in models, so no route-level fix r
 
 ### A-7 — No `explainAccess` substrate exists (MEDIUM, blocks F3 diagnostics)
 - Nothing in the schema can answer "who can see document X and why". Answering it today means a manual join across `workspace_documents → workspace_users → users.role` plus reading middleware source. Residual risk #7 marks this a hard schema requirement, not an optimization.
+
+### A-9 — Frontend gates on raw role strings, not on server-supplied capabilities (MEDIUM)
+- `frontend/src` never imports a `ROLES` constant; it compares literals. `PrivateRoute/index.jsx:89` — `user?.role === "admin" || !multiUserMode`; `SettingsSidebar/MenuOption/index.jsx:50-51,58-59,186-187` — `roles.includes(user?.role)`; plus `ManageWorkspace`, `SettingsButton`, `Sidebar`, `SearchBox`, `QuickActions`, `keyboardShortcuts.js:129`.
+- `PrivateRoute:89` mirrors the exact A-1 defect on the client: `|| !multiUserMode` disables the gate in single-user mode.
+- These are **UI affordances, not security boundaries** — the server decides — so they cannot leak data once T-4 lands. But after the legacy roles are gone, every one of them silently evaluates false and the admin UI disappears for real admins. **The frontend must ship in the same release as T-4**, consuming a server-supplied capability list rather than a role string.
+- Server has 2 stragglers outside the middleware too: `endpoints/invite.js:55` (`role: "default"` literal) and `utils/chats/commands/img.js:55` (`user.role === "admin"`). Neither imports `ROLES`, so a `ROLES.`-only grep misses both — T-4's DoD grep must cover literals.
 
 ### A-8 — `policyVersion` and cache invalidation are undefined (MEDIUM — residual risks #2/#3)
 - Seam 02 requires `policyVersion` on every `DocumentAclFilter`; seam 07 requires rejecting a stale one. Neither doc defines *how* a driver learns staleness or what the TTL is. Nothing in the codebase emits ACL-change events. Resolution proposed in §3 T-2/T-3.
@@ -203,7 +219,7 @@ Every returned principal carries the `policy_version` its row was stamped with. 
 
 ---
 
-## 3. Task split — 7 issues, each ≤1 week, disjoint file sets
+## 3. Task split — 8 issues, each ≤1 week, disjoint file sets
 
 Merge order is strict: **schema → engine → route migration → vector ACL → admin duties → diagnostics UI**. T-6 and T-7 may run parallel to each other.
 
@@ -212,12 +228,13 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 | **T-1** | Schema + migration + seed vocabulary | `server/prisma/schema.prisma`, `server/prisma/migrations/*`, `server/prisma/seeds/permissions.js` | P0-2, P0-4 | 4d |
 | **T-2** | Authorization engine core (`authorize`/`assertAuthorized`/`authorizeMany`) + `policy_versions` clock | `server/utils/authorization/**` (new) | T-1 | 5d |
 | **T-3** | `documentFilter()` + cache + `policy.changed` bus subscriber | `server/utils/authorization/documentFilter.js`, `server/utils/authorization/cache.js` | T-2, P0-6 | 4d |
-| **T-4** | Route migration: delete `flexUserRoleValid`/`strictMultiUserRoleValid`, replace 183 `ROLES.` sites, remove model-layer bypasses | `server/utils/middleware/multiUserProtected.js` (deleted), `server/endpoints/**`, `server/models/{workspace,user,browserExtensionApiKey}.js` | T-2 | 5d |
+| **T-4** | Route migration: delete `flexUserRoleValid`/`strictMultiUserRoleValid` (189 invocations, 24 files), replace 244 `ROLES.` sites (29 files) + literals, remove model-layer bypasses | `server/utils/middleware/multiUserProtected.js` (deleted), `server/endpoints/**`, `server/models/{workspace,user,browserExtensionApiKey}.js`, `server/utils/chats/commands/img.js` | T-2 | 5d |
 | **T-5** | Vector ACL: `queryAuthorized` on base + LanceDB, metadata backfill, provider capability gate | `server/utils/vectorDbProviders/base.js`, `.../lance/**`, `server/utils/chats/**` call sites | T-3 | 5d |
 | **T-6** | Remaining 8 vector providers OR explicit `VectorAclUnsupportedError` gate — **does not block the Phase 0 gate (R3)** | `server/utils/vectorDbProviders/{astra,chroma,chromacloud,milvus,pgvector,pinecone,qdrant,weaviate,zilliz}/**` | T-5 | 5d |
 | **T-7** | Admin duties, privacy posture, view-as-user, document access diagnostics | `server/endpoints/admin/authorization.js` (new), `frontend/src/pages/Admin/Access/**` (new), `server/utils/middleware/chatHistoryViewable.js` (deleted) | T-2, T-3 | 5d |
+| **T-8** | Frontend: replace role-string gates with a server-supplied capability list | `frontend/src/**` | T-4 (**must ship in the same release**) | 3d |
 
-**File-collision check**: T-4 owns every `server/endpoints/*` file; T-7 creates only *new* endpoint files under `server/endpoints/admin/`. T-5 owns `server/utils/chats/**` (the search call sites); T-4 does not touch them. T-1 is the only issue that edits `schema.prisma`. No two issues write the same file.
+**File-collision check**: T-8 is the only issue touching `frontend/src/**`. T-4 owns every `server/endpoints/*` file; T-7 creates only *new* endpoint files under `server/endpoints/admin/`. T-5 owns `server/utils/chats/**` (the search call sites); T-4 does not touch them. T-1 is the only issue that edits `schema.prisma`. No two issues write the same file.
 
 ### Per-task detail
 
@@ -232,7 +249,7 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 *DoD*: revoking a grant makes the next search miss the document within one bus round-trip (timed test) · empty scope returns a valid match-none filter, never `null` · no code path returns an unfiltered fallback (assert by grepping for early-return on error).
 
 **T-4 — Route migration.** Delete both middlewares outright (R3). Every route gets `assertAuthorized({actor, action, resource})`. Remove the model-layer bypasses at `workspace.js:298`, `workspace.js:424`, `browserExtensionApiKey.js:148`, `user.js:366`, `websocket.js:22`. Close the single-user-mode hole: single-user gets a real `super_admin` actor, not a `next()`.
-*DoD*: `grep -rn "ROLES\." server/ --include="*.js" | grep -v "utils/authorization/"` → **0** · `flexUserRoleValid` and `strictMultiUserRoleValid` do not exist · every P0-3 route test still green.
+*DoD*: `grep -rn "ROLES\." server/ --include="*.js" | grep -v "utils/authorization/"` → **0** · the literal grep `grep -rnE 'role (===|!==) "(admin|manager|default)"' server/` → **0** (catches `img.js:55`, which imports no `ROLES`) · `flexUserRoleValid` and `strictMultiUserRoleValid` do not exist · every P0-3 route test still green.
 
 **T-5 — Vector ACL (LanceDB).** Add `queryAuthorized({namespaces, queryVector, topN, similarityThreshold, aclFilter, metadataFilters, signal})` to `base.js` — ACL filter **required, non-nullable**, throws `VectorAclRequiredError` when absent/malformed/stale. LanceDB implementation uses `.where(<sql predicate>)` with **prefilter enabled**, not post-filter — this is the load-bearing line of the whole task. Requires the metadata backfill from A-5: add `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads. Backfill runs as a **metadata-only rewrite job** (P0-6 queue) — no re-embedding, because `setDocumentVisibility` must take effect before the call returns per seam 07. Multi-namespace merge: per-namespace over-fetch, normalize to `[0,1]`, stable global sort by score desc then `namespace+chunkId`, global `topN` — not `topN` per namespace. Migrate all 8 call sites; delete `performSimilaritySearch` from the base class.
 *DoD*: **the vector-leak test (§4 S-3) is green** · `performSimilaritySearch` gone from `base.js` · a filter with a stale `policyVersion` throws before the provider is touched · `setDocumentVisibility` changes results on the very next query.
@@ -242,6 +259,9 @@ Merge order is strict: **schema → engine → route migration → vector ACL �
 
 **T-7 — Admin duties + diagnostics.** Split `super_admin` into `setup_admin` / `super_admin` / `content_moderator`. Replace `DISABLE_VIEW_CHAT_HISTORY` with the `chat.read_others` permission and `document.bulk_export` as separate grantable permissions (env var read once at migration to set the initial value, then deleted). "View as user" builds an `Actor` with `impersonatedBy` — read-only by construction, enforced in T-2, not in the UI. Document access diagnostics page calls `explainAccess`, gated on `access.diagnose`.
 *DoD*: an admin without `chat.read_others` gets 403 on other users' chats and the denial is audited · view-as-user session cannot mutate anything (test attempts one write of each type) · diagnostics page answers "who can see doc X and why" for a doc with user + group + workspace-inherited grants · `explainAccess` denied for a plain document reader.
+
+**T-8 — Frontend capability gates.** Replace every `user?.role === "admin"` / `roles.includes(user?.role)` with a capability list the server returns on session (derived from the engine, so the UI and the server can never disagree). Removes `PrivateRoute/index.jsx:89`'s `|| !multiUserMode` client-side twin of A-1. Ships in the **same release** as T-4 — separately, real admins lose the admin UI the moment legacy roles stop matching.
+*DoD*: no role-string literal gates a component (`grep -rE '"(admin|manager|default)"' frontend/src` → only in tests/fixtures) · single-user mode renders the admin UI via a granted capability, not via `!multiUserMode` · an admin whose `chat.read_others` is revoked loses the UI entry point as well as the route.
 
 ---
 
@@ -287,6 +307,15 @@ All four are closed; see §0. Recorded here for the audit trail:
 2. **Org scope** → R2: seed `orgId = 1`, no `organizations` model in Phase 0, column ships everywhere.
 3. **T-6 sequencing** → R3: off the gate critical path, but boot-refuse mandatory; LanceDB must land in T-5.
 4. **`users.role` drop** → R4: not in Phase 0. Frozen only; drop after fan-out.
+
+## 5b. P0-4 handoff points (confirmed with `anything-llm-e5`, 2026-09-02)
+
+P0-4 recon: `docs/superpowers/design/p0-4-security-recon.md @ 8b49f5c3` (207 lines).
+
+- **Actor hand-off is direct.** P0-4 Step 2 places a seam-02 `Actor` (`type:"service"`, `scopedKeyId`, `orgId`, `workspaceIds`) on `response.locals`. T-2's engine consumes it unchanged — no adapter, no second shape.
+- **One vocabulary.** P0-4's R3 (scope strings are seam-02 action names verbatim) is the same ruling as A-R2. P0-4's DoD greps `SCOPE_MAP|scopeAlias|translateScope` → 0; T-2 inherits that constraint rather than restating it.
+- **`validApiKey` is 62 call sites in 9 files**, not the 30 first reported — e5's original grep was truncated by `head`. Recounted here for the same reason (see A-1 table): trust a fresh grep over any number carried in a plan.
+- **Open, not ours to close:** the full-impersonation chain (any API key → temp token for an admin → session JWT) stays open through P0-2/P0-6 because P0-4's step D depends on B→A→#4. e5 has escalated whether to disable the endpoint in the interim; no PMO verdict yet. If it is still open when P0-5 dispatches, **T-2 must deny impersonated mutations from day one** (already in scope via seam 02) so the engine does not inherit the hole — but the engine cannot close the token-issuance side, which is P0-4's.
 
 ## 6. Residual risks resolved / carried
 
