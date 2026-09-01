@@ -138,7 +138,7 @@ WORKDIR /app
 # Use BUILDPLATFORM to run on the native host architecture (not emulated).
 # This avoids esbuild crashing under QEMU when cross-compiling.
 # The output (static HTML/CSS/JS) is platform-independent.
-FROM --platform=$BUILDPLATFORM node:18-slim AS frontend-build
+FROM --platform=$BUILDPLATFORM node:22-slim AS frontend-build
 WORKDIR /app/frontend
 COPY ./frontend/package.json ./frontend/yarn.lock ./
 RUN yarn install --network-timeout 100000 && yarn cache clean
