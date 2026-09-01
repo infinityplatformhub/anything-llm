@@ -140,29 +140,44 @@ async function forward(page) {
   await page.waitForTimeout(1_500);
 }
 
-test("02 embedder points at the mock provider; instance is multi-user", async ({
+test("02 embedder switched to the mock provider; instance is multi-user", async ({
   page,
   request,
 }) => {
   await login(page, ADMIN);
   await page.goto("/settings/embedding-preference");
-  // Generic OpenAI is already the selected provider card (set during the
-  // wizard's system update); fill its fields and save the change.
+  // The wizard leaves EmbeddingEngine=native, so the current-provider card
+  // shows the built-in embedder. Open the provider list and pick Generic
+  // OpenAI — only then do its fields render.
+  await page
+    .locator("button")
+    .filter({ hasText: /Embedder|Search all embedding providers/i })
+    .first()
+    .click({ force: true });
+  await page.waitForTimeout(1_000);
+  await page
+    .locator("button")
+    .filter({ hasText: "Generic OpenAI" })
+    .first()
+    .click({ force: true });
+  await page.waitForTimeout(1_000);
+
   await page
     .locator('input[name="EmbeddingBasePath"]')
     .fill("http://mock-llm:8080/v1");
   await page.locator('input[name="EmbeddingModelPref"]').fill("mock-embed");
   const apiKeyField = page.locator('input[name="GenericOpenAiEmbeddingApiKey"]');
   if (await apiKeyField.count()) await apiKeyField.fill("e2e-mock-key");
-  // Save button only renders once the form is dirty.
+
   const save = page.locator('button:has-text("Save")').last();
   await save.waitFor({ state: "visible", timeout: 30_000 });
   await save.click();
   await page.waitForTimeout(3_000);
 
-  const res = await request.get("/api/setup-complete");
-  expect(res.ok()).toBe(true);
-  expect((await res.json()).MultiUserMode).toBe(true);
+  // Prove it stuck: the settings API reports the new engine.
+  const keys = await (await request.get("/api/setup-complete")).json();
+  expect(keys.results.EmbeddingEngine).toBe("generic-openai");
+  expect(keys.results.MultiUserMode).toBe(true);
 });
 
 let WORKSPACE_SLUG = "e2e-gate-docs";
@@ -200,15 +215,27 @@ test("04 create workspace", async ({ page }) => {
   ).toBeVisible({ timeout: 30_000 });
 });
 
-test("05 upload a small .txt document and wait for embedding", async ({
+test("05 upload a small .txt document and embed it into the workspace", async ({
   page,
 }) => {
   await login(page, ADMIN);
   await page.goto(`/workspace/${WORKSPACE_SLUG}`);
-  // Upload is the sidebar's per-workspace button, opening ManageWorkspace.
+  // Sidebar upload button opens the ManageWorkspace documents modal.
   await page.locator('[data-tooltip-id="upload-workspace"]').first().click();
-  const fileInput = page.locator('input[type="file"]').last();
-  await fileInput.waitFor({ state: "attached", timeout: 30_000 });
+  const modal = page.locator('div:has-text("My Documents")').last();
+  await expect(modal.getByText("My Documents").first()).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The modal's dropzone input — NOT the chat attachment input, which also
+  // matches input[type=file] on the page behind the modal.
+  const dropzoneInput = page
+    .locator('input[type="file"]')
+    .filter({ has: page.locator("xpath=ancestor::*[contains(@class,'border-dashed')]") })
+    .first();
+  const fileInput = (await dropzoneInput.count())
+    ? dropzoneInput
+    : page.locator('input[type="file"]').first();
   await fileInput.setInputFiles({
     name: DOC_NAME,
     mimeType: "text/plain",
@@ -216,19 +243,18 @@ test("05 upload a small .txt document and wait for embedding", async ({
       "The secret codeword for the E2E gate is fortytwo. This document exists to be cited."
     ),
   });
+
+  // Wait for the collector to finish parsing and the file to appear in the
+  // My Documents directory listing.
   await expect(page.getByText(DOC_NAME).first()).toBeVisible({
-    timeout: 90_000,
+    timeout: 120_000,
   });
-  // The parsed file lands in the "My Documents" directory list; select that
-  // row (not the upload-queue entry) to reveal Move to Workspace.
-  const docRow = page
-    .locator('[class*="grid"], li, tr')
-    .filter({ hasText: DOC_NAME })
-    .last();
-  await docRow.click({ force: true });
+  await page.getByText(DOC_NAME).first().click({ force: true });
   const move = page.locator('button:has-text("Move to Workspace")');
   await move.first().waitFor({ state: "visible", timeout: 30_000 });
   await move.first().click();
+
+  // Embedding finished when the workspace reports the document.
   await expect
     .poll(
       async () => {
