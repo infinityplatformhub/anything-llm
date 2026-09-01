@@ -186,19 +186,9 @@ beforeAll(async () => {
   await WorkspaceUser.create(member.id, assignedWorkspace.id);
   apiKey = "apw-key-test-api-key-secret";
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");
-  // T-4b: /v1 checks the grant half too, so the key needs a creator holding grants for the
-  // routes below. T-1's migration backfills super_admin for every `role: "admin"` user,
-  // but it runs before this suite creates its users, so the same grant is written here.
-  await prisma.principal_role_grants.create({
-    data: {
-      orgId: 1,
-      principal_type: "user",
-      principal_id: String(admin.id),
-      role_id: (
-        await prisma.roles.findFirstOrThrow({ where: { name: "super_admin", scope: "org" } })
-      ).id,
-    },
-  });
+  // T-4b: /v1 checks the grant half too, so the key needs a creator who holds grants for
+  // the routes below — `createdBy` is what the resolver reads. The grant itself comes from
+  // grantLegacyRole(admin) above (T-4a); writing it again here is a duplicate key.
   await prisma.api_keys.create({ data: { name: "test", secretDigest: digestSecret(apiKey), keyPrefix: keyPrefix(apiKey), scopes: JSON.stringify(["*"]), createdBy: admin.id } });
   await setMultiUserMode(true);
   global.fetch = jest.fn(async (url, options) => {

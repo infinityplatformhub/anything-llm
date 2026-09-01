@@ -96,8 +96,29 @@ async function syncWorkspaceMembershipGrant({
 }) {
   if (!userId || !workspaceId) return;
   try {
-    const resolvedRoleId =
+    // T-4b (#29), Techlead §7.7: the grant follows `workspace_users.role_id`. Defaulting
+    // straight to `editor` made the engine disagree with the membership row that granted
+    // access in the first place — T-1 backfills `role_id` to `owner` for a workspace's
+    // creator, so an owner re-added through the model silently lost every owner-only
+    // action, and a viewer silently gained document write. Nothing errors either way; the
+    // engine just answers from the weaker (or stronger) of two disagreeing sources.
+    //
+    // An explicitly passed roleId still wins: callers that already know the role (invite
+    // acceptance, admin assignment) must not pay for a read or be overridden by it.
+    const membershipRoleId =
       roleId ??
+      (
+        await db.workspace_users.findFirst({
+          where: { user_id: Number(userId), workspace_id: Number(workspaceId) },
+          select: { role_id: true },
+        })
+      )?.role_id;
+
+    // Only the DEFAULT stays `editor`, and deliberately so: legacy default users could
+    // upload and delete in their workspaces, so viewer would have revoked that on
+    // migration day (T-1 step 6 comment).
+    const resolvedRoleId =
+      membershipRoleId ??
       (
         await db.roles.findFirst({
           where: { name: "editor", scope: "workspace" },

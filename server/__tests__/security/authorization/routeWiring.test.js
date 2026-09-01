@@ -97,6 +97,24 @@ beforeAll(async () => {
       role_id: ownerRole.id,
     },
   });
+  // T-4b (#29), Techlead §7.7: a raw membership insert leaves the row without its grant,
+  // so MANAGER is a member by the table and invisible to the engine — every assertion
+  // below that expects a DENY would then pass for the wrong reason, and the ones that
+  // expect an ALLOW would be the only thing catching it. Grant it the way production
+  // does (WorkspaceUser.create → syncWorkspaceMembershipGrant), with this suite's own
+  // client injected since the model binds the global one.
+  const {
+    syncWorkspaceMembershipGrant,
+  } = require("../../../utils/authorization/legacyRoleGrants");
+  const {
+    SERVICE_PRINCIPALS,
+  } = require("../../../utils/authorization/actorResolver");
+  await syncWorkspaceMembershipGrant({
+    userId: MANAGER.id,
+    workspaceId: workspaceA.id,
+    actor: SERVICE_PRINCIPALS.singleUser,
+    db: prisma,
+  });
   threadA = await prisma.workspace_threads.create({
     data: {
       name: "A thread",

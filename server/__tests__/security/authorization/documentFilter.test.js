@@ -63,9 +63,20 @@ let roles = {};
 let docs = {};
 
 beforeAll(async () => {
-  for (const name of ["member", "owner", "viewer"]) {
+  // T-4a (#25) narrowed the org-scoped `member` role: it no longer carries document.*,
+  // because an org-wide member grant meant every user could read every workspace once the
+  // getWithUser bypass came out. Document access is workspace-scoped now.
+  //
+  // `super_admin` is the org-scoped role that still holds document.read, so it is what the
+  // genuinely org-wide cases below (service principals — single-user deployments) must use.
+  // Those cases are not stylistic: they cover B1, where a non-numeric principal id crashed
+  // the membership lookup and took single-user deployments offline entirely.
+  for (const name of ["member", "owner", "viewer", "super_admin"]) {
     roles[name] = await prisma.roles.findFirstOrThrow({
-      where: { name, scope: name === "member" ? "org" : "workspace" },
+      where: {
+        name,
+        scope: name === "member" || name === "super_admin" ? "org" : "workspace",
+      },
     });
   }
   W1 = await prisma.workspaces.create({ data: { name: "w1", slug: `t3-w1-${dbSuffix}` } });
@@ -278,7 +289,9 @@ describe("T-4b org-wide scope is a field, not a sentinel in workspaceIds", () =>
     const svc = { type: "service", id: `orgwide-${dbSuffix}`, orgId: 1 };
     await repository.grantRole({
       actor: SYS, principalType: "service", principalId: svc.id,
-      roleId: roles.member.id, workspaceId: null, db: prisma,
+      // super_admin, not member: T-4a stripped document.* from the org-scoped member role,
+      // and a service principal holding a genuinely org-wide grant is exactly this case.
+      roleId: roles.super_admin.id, workspaceId: null, db: prisma,
     });
     const filter = await buildDocumentFilter({ actor: svc, action: READER, db: prisma });
     expect(filter.orgWide).toBe(true);
@@ -294,7 +307,9 @@ describe("T-4b org-wide scope is a field, not a sentinel in workspaceIds", () =>
     const svc = { type: "service", id: `orgwide-scope-${dbSuffix}`, orgId: 1 };
     await repository.grantRole({
       actor: SYS, principalType: "service", principalId: svc.id,
-      roleId: roles.member.id, workspaceId: null, db: prisma,
+      // super_admin, not member: T-4a stripped document.* from the org-scoped member role,
+      // and a service principal holding a genuinely org-wide grant is exactly this case.
+      roleId: roles.super_admin.id, workspaceId: null, db: prisma,
     });
     const filter = await buildDocumentFilter({ actor: svc, action: READER, db: prisma });
     expect(filter.matchNone).toBe(false);
@@ -351,21 +366,25 @@ describe("T-4b B-1 in the document filter", () => {
     const other = await prisma.workspaces.create({
       data: { name: "w2", slug: `t4b-w2-${dbSuffix}` },
     });
-    await repository.grantRole({
-      actor: SYS, principalType: "user", principalId: "8302",
-      roleId: roles.member.id, workspaceId: null, db: prisma,
-    });
     const creatorUser = await prisma.users.create({
       data: { username: `bound-${dbSuffix}`, password: "x", role: "default" },
     });
+    // T-4a: membership IS workspace access, and the grant moves with it. WorkspaceUser
+    // binds the global prisma client, so this suite (which runs against a throwaway DB)
+    // calls the same grant helper that model calls, with its own client injected.
+    const { syncWorkspaceMembershipGrant } = require("../../../utils/authorization/legacyRoleGrants");
     for (const ws of [W1.id, other.id]) {
       await prisma.workspace_users.create({
         data: { user_id: creatorUser.id, workspace_id: ws },
       });
+      await syncWorkspaceMembershipGrant({ userId: creatorUser.id, workspaceId: ws, actor: SYS, db: prisma });
     }
+    // super_admin rather than member: after T-4a the org-scoped member role no longer
+    // carries document.*, and this test needs a creator whose reach genuinely spans both
+    // workspaces so that the binding has something to narrow.
     await repository.grantRole({
       actor: SYS, principalType: "user", principalId: String(creatorUser.id),
-      roleId: roles.member.id, workspaceId: null, db: prisma,
+      roleId: roles.super_admin.id, workspaceId: null, db: prisma,
     });
 
     const boundKey = {
@@ -386,12 +405,18 @@ describe("T-4b B-1 in the document filter", () => {
     const creatorUser = await prisma.users.create({
       data: { username: `orgw-${dbSuffix}`, password: "x", role: "default" },
     });
+    const { syncWorkspaceMembershipGrant } = require("../../../utils/authorization/legacyRoleGrants");
     await prisma.workspace_users.create({
       data: { user_id: creatorUser.id, workspace_id: W1.id },
     });
+    await syncWorkspaceMembershipGrant({ userId: creatorUser.id, workspaceId: W1.id, actor: SYS, db: prisma });
+    // super_admin is the org-scoped role that still holds document.read after T-4a, so
+    // this is a user who genuinely does hold an org-wide grant — which is the only way to
+    // prove the key acting for them still resolves to their memberships rather than to
+    // the whole org.
     await repository.grantRole({
       actor: SYS, principalType: "user", principalId: String(creatorUser.id),
-      roleId: roles.member.id, workspaceId: null, db: prisma,
+      roleId: roles.super_admin.id, workspaceId: null, db: prisma,
     });
     const keyActor = {
       type: "service",
@@ -508,7 +533,9 @@ describe("T-3 filter cache", () => {
     const svc = { type: "service", id: `orgwide-cache-${dbSuffix}`, orgId: 1 };
     await repository.grantRole({
       actor: SYS, principalType: "service", principalId: svc.id,
-      roleId: roles.member.id, workspaceId: null, db: prisma,
+      // super_admin, not member: T-4a stripped document.* from the org-scoped member role,
+      // and a service principal holding a genuinely org-wide grant is exactly this case.
+      roleId: roles.super_admin.id, workspaceId: null, db: prisma,
     });
     const cache = new FilterCache();
     let builds = 0;
