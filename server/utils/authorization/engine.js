@@ -38,6 +38,17 @@ const READ_ACTIONS = new Set([
   "access.diagnose",
 ]);
 
+// T-4a (W-6): batch ceiling for authorizeMany.
+const MAX_BATCH_RESOURCES = 500;
+
+// T-4a (W-4/B-1): a scoped API key is not a principal in its own right. The
+// resolver mints `api-key:<keyId>` so the two id spaces cannot collide, and the
+// engine resolves the key back to its creator here. Effective permission is
+// grants(creator) INTERSECT scopes(key): the key can only ever narrow what the
+// person who made it already holds, so revoking that person's grant revokes
+// every key they issued, with no second place to remember.
+const API_KEY_PRINCIPAL = /^api-key:(\d+)$/;
+
 const asDenied = (reason, matchedPolicyIds = []) => ({
   allowed: false,
   reason,
@@ -92,6 +103,14 @@ class DatabaseAuthorizationEngine {
     if (!Array.isArray(resources) || resources.length === 0) {
       throw new AuthorizationContractError("resources must be a non-empty array");
     }
+    // T-4a (W-6): each resource costs 3 queries, so an unbounded batch is a
+    // self-inflicted denial of service. Refuse rather than truncate — a short
+    // answer would read as "denied" for the resources that fell off the end.
+    if (resources.length > MAX_BATCH_RESOURCES) {
+      throw new AuthorizationContractError(
+        `authorizeMany accepts at most ${MAX_BATCH_RESOURCES} resources, got ${resources.length}`
+      );
+    }
     const decisions = await Promise.all(
       resources.map((resource) => this.authorize({ actor, action, resource }))
     );
@@ -104,12 +123,62 @@ class DatabaseAuthorizationEngine {
     const permission = await this.db.permissions.findUnique({ where: { action } });
     if (!permission) return asDenied("unknown_action");
 
+    // Scoped API keys evaluate as their creator, capped by the key's own scopes.
+    const keyMatch = actor.type === "service" && API_KEY_PRINCIPAL.exec(String(actor.id));
+    if (keyMatch) {
+      const scopeDecision = this.scopeAllows(actor, action);
+      if (!scopeDecision.allowed) return scopeDecision;
+      const creator = await this.creatorPrincipal(Number(keyMatch[1]));
+      if (!creator) return asDenied("api_key_without_creator");
+      return this.evaluateGrants(creator, permission, resource);
+    }
+
+    return this.evaluateGrants(
+      { type: actor.type, id: String(actor.id), orgId: actor.orgId ?? 1 },
+      permission,
+      resource
+    );
+  }
+
+  /**
+   * The key half of grants(creator) INTERSECT scopes(key). `*` is P0-4's wildcard
+   * scope; anything else must name the action exactly — one namespace, no mapping
+   * layer (A-R2).
+   */
+  scopeAllows(actor, action) {
+    const scopes = actor.attributes?.scopes;
+    if (!Array.isArray(scopes)) return asDenied("api_key_without_scopes");
+    if (scopes.includes("*") || scopes.includes(action)) {
+      return { allowed: true, reason: "scope_permits", matchedPolicyIds: [] };
+    }
+    return asDenied("outside_key_scope");
+  }
+
+  /**
+   * Resolve a key to the principal whose grants it borrows. A revoked or expired
+   * key grants nothing; a key with no creator (issued before the column existed)
+   * is denied rather than silently promoted — surfaced by the startup report so
+   * an operator re-issues it instead of discovering a dead key in production.
+   */
+  async creatorPrincipal(keyId) {
+    const key = await this.db.api_keys.findUnique({
+      where: { id: keyId },
+      select: { createdBy: true, revokedAt: true, expiresAt: true },
+    });
+    if (!key || key.createdBy == null) return null;
+    if (key.revokedAt) return null;
+    if (key.expiresAt && key.expiresAt <= new Date()) return null;
+    return { type: "user", id: String(key.createdBy), orgId: 1 };
+  }
+
+  async evaluateGrants(principal, permission, resource) {
+
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
     const grantWhere = {
-      orgId: actor.orgId ?? 1,
-      principal_type: actor.type,
-      principal_id: String(actor.id),
+      orgId: principal.orgId,
+      principal_type: principal.type,
+      principal_id: principal.id,
       OR: [
         { expires_at: null },
         { expires_at: { gt: new Date() } },
@@ -141,4 +210,4 @@ class DatabaseAuthorizationEngine {
   }
 }
 
-module.exports = { DatabaseAuthorizationEngine, READ_ACTIONS };
+module.exports = { DatabaseAuthorizationEngine, READ_ACTIONS, MAX_BATCH_RESOURCES };
