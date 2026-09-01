@@ -54,3 +54,4 @@
 - [→ #41] 7 /v1/document routes give bound keys cross-tenant disk storage access; carve-out comment overclaims. (QA-1 T-4b)
 - [→ #40 frontend-authz / UX] Login form shows nothing on 429 from /api/request-token (rate limit #6, 5/window) — user just stays on /login. Found by E2E #15. (Dev3)
 - [→ #45] apiKeyContext without keyKind defaults to api_keys branch (latent; only ingress today is tagged). Make keyKind required, resolver fails closed. (QA-2 T-4b)
+- [→ #46 hotfix] validatedRequest.js:9-24 same fail-open class as T-4b FINDING-1 (isMultiUserMode false on DB error → single-user → next() in dev/no AUTH_TOKEN). Pre-existing. Use isConfirmedSingleUser. (QA-1)
