@@ -27,6 +27,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://approof:approof@localhost:5432/approofworkspace_test
+      API_KEY_PEPPER: ci-only-api-key-pepper-32-bytes-minimum
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
