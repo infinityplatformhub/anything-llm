@@ -24,6 +24,7 @@ function validBrowserExtensionApiKey(action) {
       workspaceId: null, expiresAt: null, revokedAt: null,
     };
     response.locals.apiKeyContext = context;
+    response.locals.apiKey = { id: apiKey.id, keyPrefix: apiKey.keyPrefix };
     const allowed = context.scopes.includes(action);
     await prisma.$transaction(async (transaction) => {
       await emitAuditEvent("auth.key_used", {
