@@ -32,3 +32,11 @@ Ruling: added `GET /system/my-capabilities` rather than extending `/system/keys`
 Ruling: `GET /system/my-capabilities` is the capabilities endpoint #40A planned, so it generalises beyond `chat.read_others` to a fixed `ORG_CAPABILITIES` list. The list is deliberately NOT "every seeded action": an endpoint enumerating the whole vocabulary hands any caller a map of the permission model, and the UI only gates on a handful. If wrong, T-8 needs actions this list omits and adds them explicitly.
 Ruling: capabilities are reported present-and-false rather than omitted when denied, so a client can distinguish "denied" from "the server did not answer". Failure returns `{}` — fail closed, offer nothing.
 Note: this endpoint gates AFFORDANCES only. Every route re-decides independently, so a stale or forged answer shows a menu item that then refuses. Recorded because a capabilities endpoint invites being mistaken for a gate.
+
+## D-3 done
+
+Ruling: impersonation provenance lives IN the signed JWT (`impersonatedBy` claim), not beside it. A claim the holder could drop would let them upgrade a read-only view-as-user session into a real one — the token is the only part of the session they cannot edit. `validatedRequest` copies it to `locals.impersonatedBy`, which `actorResolver` has read since T-2 while nothing wrote it.
+Ruling: read-only is NOT re-enforced in the route or the UI. The engine denies every non-read action for an impersonated actor before any policy lookup (T-2), so a route that forgets is still safe; a second enforcement point could disagree with the first, and then the question is which one is right.
+Ruling: an impersonated session cannot impersonate again, and nobody can view as themselves or as a suspended user. Chaining would lose the head of the provenance chain — the second hop would record the first target as the impersonator.
+Ruling: the token expires in 30 minutes, against the normal 30 days. This is a support tool, not a login.
+Note: the S-tests drive the REAL middleware with the REAL signed token. A test that hands `{impersonatedBy}` to `authorize()` proves the engine, which T-2 already did — it cannot prove the feature exists.

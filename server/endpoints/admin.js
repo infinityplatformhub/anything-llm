@@ -18,7 +18,12 @@ const {
   canModifyAdmin,
   validCanModify,
 } = require("../utils/helpers/admin");
-const { reqBody, userFromSession, safeJsonParse } = require("../utils/http");
+const {
+  reqBody,
+  userFromSession,
+  safeJsonParse,
+  makeJWT,
+} = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { requirePermission } = require("../utils/middleware/requirePermission");
 const {
@@ -160,6 +165,72 @@ function adminEndpoints(app) {
         response.status(200).json({ success: true, error: null });
       } catch (e) {
         console.error(e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // T-7 (#31, D-3): view-as-user. Issues a session that reads AS the target user
+  // while remaining, provably, the admin's session.
+  //
+  // Until now `actorResolver` read `locals.impersonatedBy` and NOTHING wrote it,
+  // so the engine's blanket mutation deny was correct, tested, and unreachable.
+  // This is the write side.
+  //
+  // Read-only is NOT enforced here. The engine denies every non-read action for
+  // an impersonated actor before any policy lookup (T-2), so a route that
+  // forgets to check is still safe. Enforcing it here as well would create a
+  // second answer that can disagree with the first.
+  app.post(
+    "/admin/view-as-user/:id",
+    [validatedRequest, requirePermission("user.manage", orgResource)],
+    async (request, response) => {
+      try {
+        const admin = await userFromSession(request, response);
+        const targetId = Number(request.params.id);
+        if (!Number.isInteger(targetId))
+          return response.status(400).json({ error: "Invalid user id." });
+
+        // No impersonating yourself, and no chaining: an already-impersonated
+        // session must not mint another, or the provenance chain loses its head.
+        if (response.locals.impersonatedBy)
+          return response
+            .status(403)
+            .json({ error: "An impersonated session cannot impersonate." });
+        if (targetId === admin?.id)
+          return response
+            .status(400)
+            .json({ error: "You are already yourself." });
+
+        const target = await User.get({ id: targetId });
+        if (!target) return response.sendStatus(404);
+        if (target.suspended)
+          return response
+            .status(400)
+            .json({ error: "Cannot view as a suspended user." });
+
+        // The provenance is IN the token, not alongside it: a claim the holder
+        // could drop would let them upgrade a read-only session to a real one.
+        // Short-lived by design — this is a support tool, not a login.
+        const token = makeJWT(
+          { id: target.id, username: target.username, impersonatedBy: admin.id },
+          "30m"
+        );
+
+        await emitAuditEvent(
+          "admin_view_as_user",
+          { targetUserId: target.id, targetUsername: target.username },
+          admin?.id
+        );
+
+        response.status(200).json({
+          token,
+          user: User.filterFields(target),
+          impersonatedBy: admin.id,
+          readOnly: true,
+        });
+      } catch (e) {
+        console.error(e.message, e);
         response.sendStatus(500).end();
       }
     }
