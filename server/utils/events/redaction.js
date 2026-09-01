@@ -40,7 +40,7 @@ const ALLOWED_KEYS = new Set([
   // invites, embeds, community hub
   "inviteCode", "embedId", "itemId", "itemType",
   // auth and keys
-  "ip", "multiUserMode", "scopedKeyId", "keyPrefix", "action", "allowed", "orgId",
+  "ip", "multiUserMode", "scopedKeyId", "keyPrefix", "action", "allowed", "denyReason", "orgId",
   // integrations
   "bot_username", "chatId", "feature", "reason",
 ]);
