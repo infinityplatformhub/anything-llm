@@ -559,3 +559,89 @@ describe("O5b bundle — no allowlisted key is a declared secret (TL-1 NIT-1)", 
     expect(offenders).toEqual([]);
   });
 });
+
+describe("O5b bundle — invisible characters do not smuggle PII out (#131)", () => {
+  // RF-4. The bundle is the artifact deliberately handed to outsiders, so the
+  // strip has to hold on THIS path, not only on the audit sink.
+  //
+  // Measured before the fix, through `scrubText` itself:
+  //
+  //   "note id 123456<ZWSP>7890123"            unchanged, no hits
+  //   "code apw-inv-ABCDEFGH<ZWSP>IJKLMNOP"    unchanged, no hits
+  //   "postgresql://ap<ZWSP>puser:s3cret@h/db" already stripped — the bundle's
+  //   'failed for user "ap<ZWSP>puser"'        own two regexes match on
+  //                                            STRUCTURE, so they survived
+  //
+  // So the gap was exactly the shared pattern scan, which `scrubText` reaches
+  // through `scrubValue`. That means the bundle INHERITS the fix — a fact about
+  // today's call graph, not a contract. If someone later gives `scrubText` its
+  // own scan, the bundle starts leaking again with every audit-side test still
+  // green. These tests are what makes that impossible.
+  const INVISIBLE = ["​", "­", "͏", "﻿", "⁠"];
+
+  test.each(INVISIBLE)(
+    "a Thai national id split by %j is redacted in the bundle",
+    (mark) => {
+      const hits = new Set();
+      const out = scrubText(`note id 1234567${mark}890123 end`, hits);
+      expect(out).not.toContain("890123");
+      expect(hits.has("thai_national_id")).toBe(true);
+    }
+  );
+
+  test.each(INVISIBLE)(
+    "a credential split by %j is redacted in the bundle",
+    (mark) => {
+      const hits = new Set();
+      const out = scrubText(`code apw-inv-ABCDEFGH${mark}IJKLMNOP`, hits);
+      expect(out).not.toContain("IJKLMNOP");
+      expect(hits.has("credential")).toBe(true);
+    }
+  );
+
+  test("the bundle's OWN regexes were never the gap — they match on structure", () => {
+    // Asserted so the recon stays true rather than being remembered. A
+    // zero-width character inside the username does not stop either of them,
+    // because neither matches on the username's characters.
+    const hits = new Set();
+    expect(
+      scrubText("postgresql://ap​puser:s3cret@localhost/db", hits)
+    ).not.toContain("s3cret");
+    expect(scrubText('failed for user "ap​puser"', hits)).not.toContain(
+      "puser"
+    );
+  });
+
+  test("TL-2 (2): the shape that fools a filter — hits non-empty, PII still there", () => {
+    // Worse than `redactions: []`, and the reason this case is separate.
+    // Measured before the fix, on one string carrying an email, a credential and
+    // a card, each split by a ZWSP:
+    //
+    //   hits:   ["email"]
+    //   stored: "vic<ZWSP>[redacted:email] apw-inv-ABCDEFGHIJ<ZWSP>KLMNOP12
+    //            4111 1111 <ZWSP>1111 1111"
+    //
+    // One hit means NOT empty, so any tool filtering for "rows where nothing was
+    // redacted" skips this row entirely — while it holds a live credential and a
+    // full card number. A test asserting `hits.size > 0` is green on exactly
+    // that output, which is why every assertion below is about the VALUE.
+    const hits = new Set();
+    const out = scrubText(
+      "vic​tim@example.com apw-inv-ABCDEFGHIJ​KLMNOP12 4111 1111 ​1111 1111",
+      hits
+    );
+    expect(out).not.toMatch(/vic/);
+    expect(out).not.toContain("KLMNOP12");
+    expect(out).not.toContain("1111 1111");
+    expect(hits.has("email")).toBe(true);
+    expect(hits.has("credential")).toBe(true);
+    expect(hits.has("credit_card")).toBe(true);
+  });
+
+  test("legitimate text carrying U+200B still reaches the bundle intact", () => {
+    // The bundle is a diagnostic: over-redacting it costs an operator the
+    // information they opened it for.
+    const text = "workspace​name";
+    expect(scrubText(text, new Set())).toBe(text);
+  });
+});

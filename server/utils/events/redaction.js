@@ -262,15 +262,161 @@ const PII_CHANGE_FIELDS = new Set([
 const MAX_DEPTH = 8;
 
 /** Replace every pattern hit in a string with its class marker. */
+/**
+ * #131: characters that are invisible in a value and defeat every pattern above.
+ *
+ * Measured on `da2cb0cd8`: one of these anywhere inside a value made it invisible
+ * to EVERY pattern here — national id, phone, card, credential, email,
+ * long_digit_run — and the row then recorded `redactions: []`. That is positive
+ * evidence of cleanliness that is false, where a mangled value would at least
+ * look wrong. It is not a per-pattern bug: it is a property of every pattern that
+ * matches adjacent characters.
+ *
+ * THE CLASS IS A UNION OF TWO PROPERTIES, and both halves were measured to be
+ * necessary — no hand-list, because #71 already shipped the lesson that an
+ * enumeration misses its next member (`apw-tat-` escaped a three-prefix
+ * alternation):
+ *
+ *   `\p{Cf}` alone misses U+034F COMBINING GRAPHEME JOINER and U+17B4/U+17B5
+ *   (Khmer inherent vowels). All three are `Mn`, all three defeat every pattern.
+ *
+ *   `\p{Default_Ignorable_Code_Point}` alone misses 32 `Cf` codepoints that
+ *   defeat the patterns too — U+0600-U+0605, U+06DD, U+070F, U+0890, U+0891,
+ *   U+08E2, U+FFF9-U+FFFB, U+110BD, U+110CD and the Egyptian-hieroglyph format
+ *   controls U+13430-U+1343F.
+ *
+ * Deliberately NOT `\p{Mn}` at large: 1818 `Mn` codepoints defeat a pattern, but
+ * they include every Thai and Vietnamese diacritic. Stripping those would mangle
+ * ordinary text — measured, `สวัสดีครับ` becomes `สวสดครบ`. Default_Ignorable is
+ * exactly the property that says "this is not meant to be seen", which is the
+ * class actually at issue; verified that Thai and NFD Vietnamese pass through the
+ * union untouched.
+ *
+ * NOT NFKC, and now for two reasons. The first is the one this file already gives
+ * one screen up: normalisation changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so
+ * scrub-then-map-offsets-back is unsound. The second is that NFKC folds `１２３４`
+ * to `1234` and `－` to `-`, which would make the fullwidth digit class (#118) and
+ * the separator class (#120) dead code. Stripping is different in kind — every
+ * codepoint in this union is length-reducing by exactly one and nothing is
+ * substituted.
+ */
+// NOT `/g`. Every use here is `.test`, and `.test` on a global regex advances
+// `lastIndex` between calls — the loop below tests one codepoint at a time, so
+// a global flag would make it walk the string instead of examining the
+// character it was handed.
+//
+// NO TEST PINS THIS, and that is measured rather than assumed: flipping the
+// flag to `/g` leaves all 355 green. Every string that reaches the loop is
+// tested against single characters, where `lastIndex` resets to 0 on each
+// failure and the alternating answers happen to land the same way. It is a
+// latent trap for the next caller, not a live defect — so it is written
+// correctly and labelled, instead of being claimed as covered.
+const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
+
+/**
+ * Replace every pattern hit in a string with its class marker.
+ *
+ * When the value carries invisible characters the scan runs on a STRIPPED copy,
+ * so a disguised value is still found — but only the spans the patterns actually
+ * claimed are rewritten. Every invisible character outside a match stays exactly
+ * where it was.
+ *
+ * That per-match rule is the whole design, and the case that forces it is not
+ * Thai. U+FE0F VARIATION SELECTOR-16 is Default_Ignorable, so a whole-string
+ * strip turns `❤️` into `❤` and `1️⃣` into `1` — a field is silently re-rendered
+ * because something ELSE in it was PII. `TextSplitter` word marks (U+200B at ICU
+ * boundaries) are the same failure with a less visible symptom.
+ *
+ * Keeping the stripped text INSIDE a match is deliberate: there, the invisible
+ * character was the disguise, and preserving it next to `[redacted:…]` keeps the
+ * evasion attempt in the log for no benefit.
+ *
+ * The offset map is an ARRAY, never arithmetic. `origin[i]` records which index
+ * of the original produced `stripped[i]`; strip is deletion only, so each
+ * surviving unit knows its own source. Sliding by a running count instead is
+ * wrong by one per codepoint removed before that point — TL-2 measured it
+ * cutting a character short.
+ *
+ * Everything here is indexed in CODE UNITS, because that is what `RegExp.exec`
+ * and `String.slice` use. `U+13430` is a `Cf` codepoint above U+FFFF and
+ * therefore two units: a map built by iterating codepoints while slicing by
+ * units slides by one per astral character and cuts into the middle of a
+ * surrogate pair, which yields a lone surrogate rather than an error and so
+ * corrupts silently.
+ */
 function scrubString(value, hits) {
-  let out = value;
-  for (const { name, re } of PATTERNS) {
-    out = out.replace(re(), () => {
-      hits.add(name);
-      return `[redacted:${name}]`;
-    });
+  const scan = (text) => {
+    let out = text;
+    let matched = false;
+    for (const { name, re } of PATTERNS) {
+      out = out.replace(re(), () => {
+        hits.add(name);
+        matched = true;
+        return `[redacted:${name}]`;
+      });
+    }
+    return { out, matched };
+  };
+
+  if (!INVISIBLE.test(value)) return scan(value).out;
+
+  // Strip to FIND, keeping a map back to the original. Iterating by code POINT
+  // is what makes an astral character a single decision; pushing one entry per
+  // code UNIT is what keeps the map usable with `exec` and `slice`.
+  let stripped = "";
+  const origin = [];
+  for (let index = 0; index < value.length; ) {
+    const point = String.fromCodePoint(value.codePointAt(index));
+    if (!INVISIBLE.test(point)) {
+      stripped += point;
+      for (let unit = 0; unit < point.length; unit += 1) origin.push(index + unit);
+    }
+    index += point.length;
   }
-  return out;
+
+  // Collect the spans each pattern claims, on the stripped text.
+  const spans = [];
+  for (const { name, re } of PATTERNS) {
+    const pattern = re();
+    let match;
+    while ((match = pattern.exec(stripped)) !== null) {
+      if (match[0].length === 0) {
+        pattern.lastIndex += 1;
+        continue;
+      }
+      spans.push({ start: match.index, end: match.index + match[0].length, name });
+    }
+  }
+  if (spans.length === 0) {
+    // Nothing matched even undisguised: the value is ordinary text and is
+    // returned byte-identical, invisible characters and all.
+    return value;
+  }
+
+  // Earliest first; on a tie the longer span wins, and an overlap is resolved in
+  // favour of whichever pattern comes first in PATTERNS — the same precedence
+  // the sequential replace already had, which is why `1234567890123` stays a
+  // `thai_national_id` rather than becoming a `credit_card`.
+  spans.sort((left, right) =>
+    left.start - right.start ||
+    right.end - left.end ||
+    PATTERNS.findIndex((p) => p.name === left.name) -
+      PATTERNS.findIndex((p) => p.name === right.name)
+  );
+
+  let out = "";
+  let cursor = 0;
+  let consumed = -1;
+  for (const span of spans) {
+    if (span.start < consumed) continue;
+    const from = origin[span.start];
+    const to = origin[span.end - 1] + 1;
+    out += value.slice(cursor, from) + `[redacted:${span.name}]`;
+    hits.add(span.name);
+    cursor = to;
+    consumed = span.end;
+  }
+  return out + value.slice(cursor);
 }
 
 function scrubValue(value, hits, depth) {

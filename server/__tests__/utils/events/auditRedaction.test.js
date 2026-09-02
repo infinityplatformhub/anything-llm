@@ -435,6 +435,318 @@ describe("issue 71: invite codes never reach the audit log", () => {
       });
     });
 
+    describe("#131 — one invisible character defeated every pattern", () => {
+      // A single format character inside a value made it invisible to every
+      // pattern here, and the row then recorded `redactions: []` — positive
+      // evidence of cleanliness that was false. Twelve codepoints were measured
+      // leaking before the fix; each is named so a regression says WHICH one.
+      //
+      // Not NFKC. `redaction.js` rejects normalisation for a reason that still
+      // holds: NFKC changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so mapping a
+      // scrubbed offset back is unsound. Stripping these is different in kind —
+      // measured, every one is length-reducing by exactly 1 and nothing is
+      // substituted.
+      const INVISIBLE = [
+        ["U+200B zero-width space", "\u200B"],
+        ["U+200C zero-width non-joiner", "\u200C"],
+        ["U+200D zero-width joiner", "\u200D"],
+        ["U+2060 word joiner", "\u2060"],
+        ["U+FEFF byte-order mark", "\uFEFF"],
+        ["U+00AD soft hyphen", "\u00AD"],
+        ["U+180E Mongolian vowel separator", "\u180E"],
+        ["U+034F combining grapheme joiner", "\u034F"],
+        ["U+200E left-to-right mark", "\u200E"],
+        ["U+061C Arabic letter mark", "\u061C"],
+        ["U+2066 left-to-right isolate", "\u2066"],
+        ["U+FFF9 interlinear annotation anchor", "\uFFF9"],
+        // TL-2: `Mn`, so `\p{Cf}` alone walks past all three.
+        ["U+17B4 Khmer inherent vowel AQ", "\u17B4"],
+        ["U+17B5 Khmer inherent vowel AA", "\u17B5"],
+        // TL-2: `Cf` but NOT Default_Ignorable, so that property alone misses it.
+        ["U+0600 Arabic number sign", "\u0600"],
+        ["U+13430 Egyptian hieroglyph vertical joiner", "\u{13430}"],
+      ];
+
+      // The secret half of each value — what must not survive. Split at the
+      // point the character is inserted, so the assertion is about the VALUE
+      // rather than about the redaction marker.
+      const SECRETS = [
+        ["national id", "1234567", "890123", "thai_national_id"],
+        ["phone", "08123", "45678", "phone_th"],
+        ["card", "4111111111", "111111", "credit_card"],
+        ["credential", "apw-inv-ABCDEFGH", "IJKLMNOP", "credential"],
+      ];
+
+      describe.each(INVISIBLE)("%s", (_label, mark) => {
+        test.each(SECRETS)(
+          "a %s carrying it is redacted, and the digits are GONE",
+          async (_kind, head, tail, klass) => {
+            const row = await scrubbed(`${head}${mark}${tail}`);
+            // RF-2, as strengthened: `redactions` being non-empty is NOT the
+            // assertion. Measured on the unfixed code,
+            // `vic<ZWSP>tim@example.com` redacted the domain and left `vic`
+            // behind — the array was populated and the row looked handled while
+            // the value leaked. So the value is what gets asserted.
+            expect(row).not.toContain(head + mark + tail);
+            expect(row).not.toContain(tail);
+            expect(row).toContain(`[redacted:${klass}]`);
+          }
+        );
+
+        test("an email carrying it is redacted in BOTH halves", async () => {
+          // Split-local and split-domain are different failures and only one of
+          // them was in the original report. Measured before the fix:
+          // `vic<ZWSP>tim@example.com` -> `vic<ZWSP>[redacted:email]` (partial,
+          // and it LOOKS handled); `victim@exa<ZWSP>mple.com` -> untouched.
+          for (const value of [
+            `vic${mark}tim@example.com`,
+            `victim@exa${mark}mple.com`,
+          ]) {
+            const row = await scrubbed(value);
+            expect(row).not.toContain("victim");
+            // TL-2 (1): `vic` is the fragment that survived, and it survived
+            // alongside `redactions: ["email"]`. Matched rather than
+            // contained, so a `vic` anywhere in the row fails.
+            expect(row).not.toMatch(/vic/);
+            expect(row).toContain("[redacted:email]");
+          }
+        });
+      });
+
+      test("TL-2 (1): the leaked TAIL is gone, not merely relabelled", async () => {
+        // Measured before the fix: a 20-digit run split by a ZWSP came back as
+        // `[redacted:credit_card]<ZWSP>67890` — the WRONG class, with the tail
+        // still in the row. A test asserting `redactions` contains something,
+        // or that the row contains a marker, is green on exactly that output.
+        const row = await scrubbed("12345678901234567890".slice(0, 15) + "\u200B67890");
+        expect(row).not.toContain("67890");
+        expect(row).toContain("[redacted:long_digit_run]");
+        expect(row).not.toContain("[redacted:credit_card]");
+      });
+
+      test("TL-2 (4): several classes in ONE string are each cut in the right place", async () => {
+        // Where an offset bug would show. The patterns replace one after another
+        // on a string whose length changes as they go, so a later `optimise this`
+        // that reintroduces offset arithmetic against the ORIGINAL cuts in the
+        // wrong place — measured by TL-2: a stripped offset applied to the
+        // original slices one character short per stripped codepoint.
+        const row = await scrubbed(
+          "id 1234567\u200B890123 phone 08123\u200B45678 card 4111111111\u200B111111 code apw-inv-ABCDEFGH\u200BIJKLMNOP"
+        );
+        for (const secret of [
+          "890123",
+          "45678",
+          "111111",
+          "IJKLMNOP",
+          "1234567",
+          "08123",
+        ])
+          expect(row).not.toContain(secret);
+        for (const klass of [
+          "thai_national_id",
+          "phone_th",
+          "credit_card",
+          "credential",
+        ])
+          expect(row).toContain(`[redacted:${klass}]`);
+        // and the surrounding words survive — over-redaction is a real cost
+        for (const word of ["id", "phone", "card", "code"])
+          expect(row).toContain(word);
+      });
+
+      test("TL-2 (5): the strip reaches a string nested three arrays deep", async () => {
+        // It lives in `scrubString`, not in `redactEventData`. `scrubValue`
+        // walks every depth and `scrubChanges` has its own path, so a strip at
+        // the top level would miss everything below it.
+        const { redactEventData } = require("../../../utils/events/redaction");
+        // `embeddedFiles` rather than an invented key: an allowlisted key is
+        // required or the value is DROPPED before any scrub runs, and a test
+        // that passes because the whole branch was discarded proves nothing
+        // about the strip.
+        const { data, redactions } = redactEventData({
+          embeddedFiles: [[["note 1234567\u200B890123"]]],
+        });
+        expect(JSON.stringify(data)).toContain("[[["); // the branch survived
+        expect(JSON.stringify(data)).not.toContain("890123");
+        expect(redactions).toContain("thai_national_id");
+      });
+
+      test("TL-2 (5): the strip reaches a non-PII field inside `changes`", async () => {
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const { data } = redactEventData({
+          changes: { name: "note 1234567\u200B890123" },
+        });
+        expect(JSON.stringify(data)).not.toContain("890123");
+      });
+
+      test("TL-2 (6): CONTROL — `dropped` counts a key with an invisible character exactly as before", async () => {
+        // Key names deliberately do not go through `scrubString` (#71: echoing a
+        // name back walks PII past both guards, so only the COUNT is kept). A
+        // strip that leaked onto the key path would change behaviour nobody
+        // asked for.
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const before = redactEventData({ notAnAllowedKey: 1 });
+        const after = redactEventData({ "notAnAllowed\u200BKey": 1 });
+        expect(after.dropped.length).toBe(before.dropped.length);
+        expect(after.data._droppedKeyCount).toBe(before.data._droppedKeyCount);
+        expect(JSON.stringify(after.data)).not.toContain("notAnAllowed");
+      });
+
+      test("the nested `changes` path #71 exists to close is covered too", async () => {
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const { data, redactions } = redactEventData({
+          changes: { code: "apw-inv-ABCDEFGH\u200BIJKLMNOP" },
+        });
+        expect(JSON.stringify(data)).not.toContain("IJKLMNOP");
+        expect(redactions).toContain("credential");
+      });
+
+      describe("per-match: only the matched span is rewritten (QA-2 F1)", () => {
+        const { scrubValue } = require("../../../utils/events/redaction");
+        const scrub = (value) => scrubValue(value, new Set(), 0);
+
+        test("invisible characters OUTSIDE the match survive a redaction", async () => {
+          // A whole-string strip loses them all: one hit anywhere rewrote the
+          // entire value. Measured — a field holding Thai text plus a national
+          // id came back with all four ICU word-boundary marks gone.
+          const value =
+            "สวัสดี\u200Bครับ\u200Bยินดี\u200Bต้อนรับ id 1234567\u200B890123";
+          const out = scrub(value);
+          // THREE, not four. The fourth is INSIDE the national id, where the
+          // character was the disguise rather than content — it goes with the
+          // value it was hiding. The three word marks outside the match are the
+          // ones that must survive.
+          expect(out.match(/\u200B/g) ?? []).toHaveLength(3);
+          expect(out).toContain("สวัสดี\u200Bครับ\u200Bยินดี\u200Bต้อนรับ");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("890123");
+        });
+
+        test("a variation selector next to PII keeps its emoji intact", async () => {
+          // The reason this ruling is not about Thai. U+FE0F is
+          // Default_Ignorable, so a whole-string strip turns ❤️ into ❤ and 1️⃣
+          // into 1 — a field is silently re-rendered because something else in
+          // it was PII.
+          const out = scrub("❤️ 1️⃣ ok id 1234567\u200B890123");
+          expect(out).toContain("❤️");
+          expect(out).toContain("1️⃣");
+          expect(out).toContain("[redacted:thai_national_id]");
+        });
+
+        test("an invisible character immediately BEFORE and AFTER a match survives", async () => {
+          const out = scrub("a\u200B0812345678\u200Bb");
+          expect(out).toBe("a\u200B[redacted:phone_th]\u200Bb");
+        });
+
+        test("a RUN of invisible characters on both sides survives", async () => {
+          const out = scrub("\u200B\u200C0812345678\u200D\uFEFF");
+          expect(out).toBe("\u200B\u200C[redacted:phone_th]\u200D\uFEFF");
+        });
+
+        test("three classes in one string are each cut in the right place", async () => {
+          const out = scrub(
+            "id 1234567\u200B890123 | phone 08123\u200B45678 | code apw-inv-ABCDEFGH\u200BIJKLMNOP"
+          );
+          expect(out).toBe(
+            "id [redacted:thai_national_id] | phone [redacted:phone_th] | code [redacted:credential]"
+          );
+        });
+
+        test("NON-BMP: a separator outside the BMP does not corrupt the span", async () => {
+          // TL-2 condition 4. U+13430 is a Cf codepoint above U+FFFF, so it is
+          // TWO code units. An origin map that counts codepoints while the
+          // string is indexed in code units slides by one per astral character
+          // and slices into the middle of a surrogate pair — which produces a
+          // lone surrogate rather than an error, so it corrupts silently.
+          const out = scrub("x\u{13430}1234567\u{13430}890123x");
+          expect(out).toBe("x\u{13430}[redacted:thai_national_id]x");
+
+          // An astral separator alone does NOT distinguish the two maps —
+          // measured, a codepoint-counted map produces the same answer here,
+          // because the only astral characters are the ones being removed.
+          // What separates them is astral CONTENT that SURVIVES before the
+          // match: each one costs the map a unit, so the cut slides left.
+          // Measured on that mutant: "😀😀 id 12[redacted:…]ail".
+          const withContent = scrub(
+            "\u{1F600}\u{1F600} id 1234567\u200B890123 tail"
+          );
+          expect(withContent).toBe(
+            "\u{1F600}\u{1F600} id [redacted:thai_national_id] tail"
+          );
+          // no lone surrogate anywhere in the output
+          expect(out).toBe(out.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "!"));
+        });
+
+        test("OVERLAP: the first pattern in the list claims the span, and the label says so", async () => {
+          // `thai_national_id` precedes `credit_card`, and 13 digits satisfy
+          // both (`credit_card` reads them as 4+4+4+1). The order is what
+          // decides, so the label is asserted rather than merely the fact that
+          // something was redacted.
+          const out = scrub("1234567\u200B890123");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("[redacted:credit_card]");
+        });
+      });
+
+      describe("what must NOT change", () => {
+        test("Thai text carrying U+200B from TextSplitter is byte-identical", async () => {
+          // `utils/TextSplitter/index.js:176` inserts U+200B at ICU word
+          // boundaries on purpose, because Thai has no spaces between words. A
+          // strip that rewrote every value would corrupt our own output, so the
+          // stripped copy is used to MATCH and the original is what survives
+          // when nothing matches.
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const thai = "สวัสดี\u200Bครับ\u200Bยินดีต้อนรับ";
+          expect(scrubValue(thai, new Set(), 0)).toBe(thai);
+        });
+
+        test("a value with an invisible character but no PII is untouched", async () => {
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const value = "workspace\u200Bname\u00ADhere";
+          expect(scrubValue(value, new Set(), 0)).toBe(value);
+        });
+
+        test("a value with no invisible character at all is untouched", async () => {
+          const { scrubValue } = require("../../../utils/events/redaction");
+          expect(scrubValue("ordinary name", new Set(), 0)).toBe(
+            "ordinary name"
+          );
+        });
+
+        test("Thai and Vietnamese DIACRITICS are not stripped, even beside PII", async () => {
+          // The class is a union of two properties and deliberately not
+          // `\p{Mn}` at large. Measured: 1818 `Mn` codepoints defeat a pattern,
+          // but they include every Thai and Vietnamese mark — stripping those
+          // turns `สวัสดีครับ` into `สวสดครบ`.
+          //
+          // This is the test that separates "invisible" from "combining". It has
+          // to sit beside a real redaction, because a value with no hit is
+          // returned untouched anyway and would pass whatever the class does.
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const hits = new Set();
+          const out = scrubValue(
+            "สวัสดีครับ Tiếng Việt id 1234567\u200B890123",
+            hits
+          , 0);
+          expect(out).toContain("สวัสดีครับ");
+          expect(out).toContain("Tiếng Việt");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("890123");
+        });
+
+        test("nothing is flagged merely for containing an invisible character", async () => {
+          // Proposed and declined. TextSplitter produces these legitimately, so
+          // the flag would fire on our own output — and #94's lesson is that a
+          // signal firing on correct input gets ignored. Recorded as a decision.
+          const { redactEventData } = require("../../../utils/events/redaction");
+          const { redactions } = redactEventData({
+            name: "สวัสดี\u200Bครับ",
+          });
+          expect(redactions).toEqual([]);
+        });
+      });
+    });
+
     describe("no checksum validation, deliberately", () => {
       // Thai mod-11 removes only ~9% of timestamp false positives (measured:
       // 18,184 of 200,000), and Luhn does not remove the migration-id one at
