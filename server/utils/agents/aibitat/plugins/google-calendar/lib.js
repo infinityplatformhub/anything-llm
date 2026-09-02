@@ -43,10 +43,10 @@ class GoogleCalendarBridge {
    */
   static async updateConfig(updates) {
     try {
-      await SystemSettings.updateSettings({
+      const { success, error } = await SystemSettings.updateSettings({
         google_calendar_agent_config: JSON.stringify(updates),
       });
-      return { success: true };
+      return { success, ...(error && { error }) };
     } catch (error) {
       return { success: false, error: error.message };
     }

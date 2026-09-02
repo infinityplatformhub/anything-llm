@@ -1013,7 +1013,7 @@ function systemEndpoints(app) {
         });
         if (!success)
           throw new Error(
-            error.message || "Failed to update default system prompt."
+            error || "Failed to update default system prompt."
           );
         response.status(200).json({
           success: true,

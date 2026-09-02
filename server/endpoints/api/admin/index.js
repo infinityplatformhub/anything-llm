@@ -779,8 +779,8 @@ function apiAdminEndpoints(app) {
         }
 
         const updates = reqBody(request);
-        await SystemSettings.updateSettings(updates);
-        response.status(200).json({ success: true, error: null });
+        const { success, error } = await SystemSettings.updateSettings(updates);
+        response.status(success ? 200 : 500).json({ success, error });
       } catch (e) {
         console.error(e);
         response.sendStatus(500).end();
