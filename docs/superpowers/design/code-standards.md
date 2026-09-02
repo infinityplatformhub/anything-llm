@@ -886,3 +886,6 @@ A forged element planted for an XSW test must sit at the exact path the verifier
 
 ### §7.6a probes run on a pinned SHA in QA's own detached worktree
 Probing a developer's live worktree is void: uncommitted edits change results (QA-2 on #43). QA never writes into a dev worktree (QA-1 on #48).
+
+### §7.3b JS private members trip the commented-code gate
+`this.#method(` on a line ending in `{` is read as commented code by task.sh. Not a rule violation; add the file to `.infi/checkignore` (lance/index.js, #30 b35c73eb).
