@@ -79,6 +79,14 @@ const {
   generateRecoveryCodes,
 } = require("../utils/PasswordRecovery");
 const { SlashCommandPresets } = require("../models/slashCommandsPresets");
+// #114: /setup-complete narrows its body for callers without a session.
+const {
+  publicSettingsFor,
+  callerHasSession,
+} = require("../utils/helpers/publicSettings");
+const {
+  isConfirmedSingleUser,
+} = require("../utils/authorization/actorResolver");
 const { EncryptionManager } = require("../utils/EncryptionManager");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { MobileDevice } = require("../models/mobileDevice");
@@ -291,9 +299,23 @@ function systemEndpoints(app) {
     }
   );
 
-  app.get("/setup-complete", async (_, response) => {
+  // #114: what this answers depends on who is asking.
+  //
+  // It carried no middleware and returned every settings field to anyone. Credentials
+  // were already booleanised, but endpoints, base paths and connection strings went out
+  // raw — on a self-hosted install, the operator's internal network.
+  //
+  // `validatedRequest` is not used as a gate here: the route must still answer an
+  // unauthenticated browser, just with less. It runs to find out whether the caller has
+  // a session, and the response is narrowed when it does not. See utils/helpers/publicSettings.
+  app.get("/setup-complete", async (request, response) => {
     try {
-      const results = await SystemSettings.currentSettings();
+      const settings = await SystemSettings.currentSettings();
+      const [authenticated, preUser] = await Promise.all([
+        callerHasSession(request),
+        isConfirmedSingleUser(),
+      ]);
+      const results = publicSettingsFor(settings, { authenticated, preUser });
       response.status(200).json({ results });
     } catch (e) {
       console.error(e.message, e);
