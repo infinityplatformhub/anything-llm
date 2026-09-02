@@ -55,7 +55,7 @@ The test of each item is: *would its absence mean a second round-trip with the o
 | section | source | notes |
 |---|---|---|
 | versions | `package.json`, `process.version`, `process.platform/arch` | |
-| doctor checklist | `utils/doctor` `runChecks()` | already redacted by construction — no user text in it |
+| doctor checklist | `utils/doctor` `runChecks()` | scrubbed like every other section — see the `updated` note below |
 | migration state | `_prisma_migrations` — name, `applied_steps_count`, `finished_at`, `rolled_back_at` | the failed-migration state §7.13 exists for is invisible without this |
 | configuration shape | env allowlist, below | which provider, never which key |
 | counts | `event_logs` grouped by `event`, user/workspace/document totals | **counts, never rows** |
@@ -71,6 +71,15 @@ Two things pulled deliberately **out**:
   can carry a query string with a token, a filename with a customer's name, or a prompt fragment.
   If a later ruling wants them, they go through `scrubValue` like everything else — but the honest
   default is out.
+
+> **updated (TL-1 finding F4):** "already redacted by construction" was wrong, and is corrected in
+> the table above. A check's `detail` string quotes what it FOUND — a connection string, a
+> filesystem path, a locale name — so it is built from exactly the environment every other section
+> is redacted for. `runChecks()` output goes through `scrubValue` like everything else. Relatedly,
+> `collectDatabase` builds its own connection line from `stripUrlCredentials` rather than reusing
+> the doctor's `maskUrl`, which keeps the username: right for a checklist on the operator's own
+> terminal, wrong for a file headed to a public issue, where a database username and an internal
+> hostname match no pattern and nothing downstream would catch them.
 
 ## 3. Environment: an allowlist, and why `maskSecretValues` alone is not enough
 

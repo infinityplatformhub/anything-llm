@@ -15,13 +15,74 @@ const { runChecks, exitCodeFor } = require("../utils/doctor");
 
 const MARK = { ok: "PASS", block: "FAIL", warn: "WARN" };
 
-async function main() {
+/**
+ * O5b (#94): `--bundle` emits the diagnostic bundle as JSON on STDOUT and
+ * NOTHING ELSE, so `doctor --bundle > bundle.json` produces a file that parses.
+ * The checklist an operator normally reads, and any complaint about assembling
+ * the bundle, go to stderr — where the operator still sees them on a terminal
+ * and the redirect does not capture them.
+ */
+async function emitBundle(results) {
+  const { Client } = require("pg");
+  const { buildBundle } = require("../utils/diagnostics");
+
+  // A SECOND connection, opened here rather than borrowed from runChecks:
+  // runChecks owns and closes its own client, and a doctor whose checks
+  // depend on the bundle's connection would report a different database state
+  // than the one it just described. If this connection fails, the bundle still
+  // ships — collectDatabase records that the database was unreachable, which
+  // is itself the answer to most of the questions that produce a bundle.
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  let connected = false;
+  try {
+    await client.connect();
+    connected = true;
+  } catch (error) {
+    console.error(`[doctor] Database unreachable while bundling: ${error.message}`);
+  }
+
+  try {
+    const { bundle, redactions } = await buildBundle({
+      client: connected ? client : null,
+      checks: results,
+    });
+    // The ONLY write to stdout on this path.
+    process.stdout.write(`${JSON.stringify(bundle, null, 2)}\n`);
+    console.error(
+      redactions.length
+        ? `[doctor] Bundle written. Redacted: ${redactions.join(", ")}. Read it before you share it.`
+        : "[doctor] Bundle written. Read it before you share it."
+    );
+  } finally {
+    if (connected) await client.end().catch(() => {});
+  }
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const bundleMode = argv.includes("--bundle");
+  const unknown = argv.filter((arg) => arg !== "--bundle");
+  if (unknown.length) {
+    console.error(`unknown option: ${unknown[0]} (expected '--bundle')`);
+    return 64;
+  }
+
   const results = await runChecks();
 
+  // In bundle mode the checklist goes to stderr: it is still worth reading, but
+  // it is not JSON and must not reach the redirected file.
+  const say = bundleMode ? console.error : console.log;
   for (const check of results) {
     const mark = check.ok ? MARK.ok : MARK[check.level];
-    console.log(`[${mark}] ${check.id} — ${check.detail}`);
-    if (!check.ok) console.log(`        fix: ${check.remedy}`);
+    say(`[${mark}] ${check.id} — ${check.detail}`);
+    if (!check.ok) say(`        fix: ${check.remedy}`);
+  }
+
+  if (bundleMode) {
+    await emitBundle(results);
+    // The exit code still reports the checks. A bundle assembled from a broken
+    // install is a successful bundling of a failing install, and the operator
+    // needs the failure, not the bundling, in `$?`.
+    return exitCodeFor(results);
   }
 
   const code = exitCodeFor(results);

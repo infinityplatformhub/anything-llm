@@ -2159,4 +2159,9 @@ module.exports = {
   updateENV,
   writeEnvFileAtomic,
   maskSecretValues,
+  // O5b (#94): the diagnostic bundle reports DATABASE_URL's host and database
+  // and must drop its password. That transformation already exists here, down
+  // to the full mask when the value does not parse; a second copy would be a
+  // second place to get it wrong.
+  stripUrlCredentials,
 };

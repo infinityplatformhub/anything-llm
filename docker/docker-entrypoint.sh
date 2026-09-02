@@ -19,9 +19,14 @@ APP_ROOT="${APP_ROOT:-/app}"
 # Before the STORAGE_DIR banner (ruling 5), so a doctor run answers the question
 # asked instead of leading with 14 lines of warning about a container that is
 # not going to serve anything.
+# O5b (#94): the doctor's own flags are forwarded. `shift` drops the command
+# word, `"$@"` passes the rest, so `doctor --bundle` reaches the script instead
+# of running the plain checklist and silently ignoring the flag — the same
+# failure the dispatch above exists to fix, one argument further along.
 case "${1:-serve}" in
   doctor)
-    exec node "$APP_ROOT/server/scripts/doctor.js"
+    shift
+    exec node "$APP_ROOT/server/scripts/doctor.js" "$@"
     ;;
   serve|"")
     ;;
