@@ -229,6 +229,35 @@ describe("issue 84 update environment authorization gate", () => {
     await expect(CredentialStore.get(secretEnvKey)).resolves.toBeNull();
   });
 
+  // The two routes must ask for the SAME permission, whatever that permission is:
+  // writing a credential and destroying one are the same authority, and the bug this
+  // issue fixes was the pair disagreeing. Asserting the relation rather than the name
+  // means moving both together still passes -- moving one does not.
+  //
+  // Read from source because `requirePermission` returns a fresh closure per call, so
+  // the mounted router cannot be asked which action a layer carries. The comparison is
+  // between the two extracted values, never against a literal, so it cannot go stale
+  // the way a hardcoded expectation would.
+  it("gates credential clearing exactly as it gates credential writing", () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, "../../endpoints/system.js"),
+      "utf8"
+    );
+    const actionFor = (route) => {
+      const at = source.indexOf(`"${route}"`);
+      expect(at).toBeGreaterThan(-1);
+      const match = source
+        .slice(at)
+        .match(/requirePermission\(\s*"([\w.]+)"/);
+      expect(match).not.toBeNull();
+      return match[1];
+    };
+
+    expect(actionFor("/system/credential/:envKey")).toBe(
+      actionFor("/system/update-env")
+    );
+  });
+
   it("agrees with the API key surface scope", () => {
     expect(ROUTE_SCOPES["POST /v1/system/update-env"]).toBe("system.write");
   });
