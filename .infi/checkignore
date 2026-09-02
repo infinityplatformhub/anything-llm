@@ -8,3 +8,4 @@ server/__tests__/ssoIssuanceLockHttp.test.js
 server/utils/middleware/embedSessionToken.js
 server/__tests__/utils/middleware/embedSessionToken.test.js
 server/index.js
+server/utils/vectorDbProviders/lance/index.js
