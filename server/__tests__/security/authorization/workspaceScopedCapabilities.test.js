@@ -221,6 +221,11 @@ describe("#40 task 2: workspace-scoped capabilities", () => {
     for (const value of Object.values(body.workspace.capabilities)) {
       expect(typeof value).toBe("boolean");
     }
+    // QA-1 NIT: at least one capability must come back TRUE, or every
+    // assertion above is satisfied by an all-false map — which is also what a
+    // silently broken lookup returns. chat.send is the one an org member holds
+    // in a workspace they belong to.
+    expect(body.workspace.capabilities["chat.send"]).toBe(true);
   });
 
   test("the org half is unchanged by asking about a workspace", async () => {

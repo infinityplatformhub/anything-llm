@@ -297,3 +297,27 @@ Residual (task 2):
 - **0-vs-1 query timing** — id ที่ไม่ใช่ตัวเลข/ไม่ใช่ string ไม่ query เลย ส่วน id ที่มองไม่เห็น query 1 ครั้ง ต่างกันที่เวลาตอบ = **non-goal** ไม่ปิด
 - **cross-tenant** ยังพึ่ง membership เพราะ `workspaces` ไม่มี orgId (ดู F3)
 - **api-key/embed actor** ตอบ null เสมอ → #103
+
+## task 3 (base f4bae86ef, tier plain)
+
+Ruling (QA-1 NIT มีค่ามากกว่าที่เห็น): เพิ่ม `expect(caps["chat.send"]).toBe(true)` ในเทส member · **แมพจริงคือ chat.send true ตัวเดียว อีก 6 ตัว false** แปลว่าถ้าไม่มี assert นี้ เทสทั้งข้อผ่านบนแมพที่ false หมด ซึ่งเป็นสิ่งเดียวกับที่ lookup พังเงียบ ๆ คืน · เป็น NIT ที่ปิดรูจริง ไม่ใช่ความสวยงาม — ถ้าผิด: เทส "ตอบ vocabulary ครบ" ผ่านได้แม้ endpoint ตอบ deny ทุกอย่าง
+
+Ruling: หลักฐาน "UI bypass แล้ว backend ยัง 403" เขียน **server-side ทั้งหมด** ไม่รอ harness #111 — เพราะประโยคที่ต้องพิสูจน์เป็นข้อความเกี่ยวกับ**เซิร์ฟเวอร์** ไม่ใช่เกี่ยวกับ DOM · `uiBypassStillRefused.test.js` ยิง 9 route จริง (settings.write ×3, user.manage ×4, workspace.create ×2) ด้วย principal ที่ถือแค่ org member · mutation: ลบ gate จาก `/workspace/new` → แดง 1, ลบจาก `/env-dump` → แดง 1 — ถ้าผิด: task 4 แก้ 21 จุดโดยไม่มีอะไรพิสูจน์ว่าตอบผิดแล้วไม่เสียหาย
+
+Ruling: เทส bypass ต้องมี **สองเทสคุมตัวมันเอง** (1) principal resolve ได้จริงและตอบ org map ครบ — ไม่งั้นทุก assert ข้างบนอาจผ่านเพราะ actor เป็น null = สวีทที่พิสูจน์ว่า route ปฏิเสธ**ทุกคน** ซึ่งจริงแม้ลบ gate ทิ้ง (2) พอ grant super_admin แล้ว route เดียวกันต้อง**ผ่าน** — ไม่งั้นสวีทผ่านบนเซิร์ฟเวอร์ที่ปฏิเสธทุกอย่าง — ถ้าผิด: ด่านที่เขียวเสมอโดยไม่ตรวจอะไร (คลาสเดียวกับ `Tests: 0 total`)
+
+Ruling: `can()` คืน `false` ตอน loading ตาม plan **แต่ hook ต้องบังคับให้อ่าน `loading` ได้** — mockup มี view `loading` แยก (`:106,:241`) ไม่ใช่เรนเดอร์ทุกอย่าง false · คอมเมนต์ระบุตรง ๆ ว่าสองค่านี้ใช้แทนกันไม่ได้ · `useWorkspaceCapabilities` แยก `visible` ออกจาก `can()===false` ด้วยเหตุผลเดียวกัน — ถ้าผิด: component เรนเดอร์ตรงจาก `can()` แล้วผู้ใช้เห็น UI กระพริบจากซ่อนเป็นแสดง
+
+Ruling: probe แบบ scan source ของผมเอง**ให้ผลบวกปลอมทันทีที่เขียน** — มันจับคำว่า `localStorage` ใน**คอมเมนต์ที่อธิบายว่าทำไมไม่ใช้** · แก้ด้วยการ strip comment ก่อนตรวจ · คลาสเดียวกับบทเรียนใหญ่ของ task 1: **scan ข้อความไม่ใช่ scan ของจริง** — ถ้าผิด: เชื่อ probe ที่แดงเพราะอ่านคอมเมนต์ผิด แล้วไปแก้โค้ดที่ถูกอยู่แล้ว
+
+Residual (task 3):
+- **ไม่มี DOM test** — frontend ยังไม่มี test runner (#111 ยังไม่ merge) · สิ่งที่พิสูจน์ได้ตอนนี้คือ (ก) สัญญาระดับ source ของสองไฟล์ ผ่าน static probe 9 ข้อ (ข) พฤติกรรมเซิร์ฟเวอร์ · **ยังไม่มีอะไรพิสูจน์ว่า component อ่าน `loading` จริง** — รอ #111
+- `useWorkspaceCapabilities` ไม่ cache ตั้งใจ (คำตอบต่อ workspace, แมพค้างจะ gate ผิด workspace)
+
+Ruling (TL-1 F1 — บั๊กจริงในโค้ดผม): `loadCapabilities()` cache promise ที่ reject ไว้ตลอด → fetch ล้มครั้งเดียว `can()` false ทั้ง tab จน reload · **network blip หน้าตาเหมือน grant ถูกเพิกถอนเป๊ะ** · แก้: `capabilitiesPromise.catch(() => { capabilitiesPromise = null; })` + `.catch` ในฮุกทั้งสองตัว (ไม่งั้น `loading` ค้าง true ตลอด = skeleton ที่ไม่มีวันจบ แย่กว่าโดนปฏิเสธซึ่งอย่างน้อยก็เรนเดอร์) — ถ้าผิด: ผู้ใช้เสีย UI ทั้ง tab จาก request ที่ล้มครั้งเดียว
+
+Ruling (TL-1 F2 — บั๊กจริงในโค้ดผม): `resetCapabilities()` ไม่มีใครเรียก → sign-out แล้ว login คนอื่นใน tab เดิมได้ map ของคนก่อน · เรียกจาก `unsetUser` **และ** branch `!success` ของ `refreshUser` (ทั้งคู่คือ logout) — ถ้าผิด: cache ที่ผมทำเพื่อกัน request storm กลายเป็นช่องรั่ว capability ข้ามผู้ใช้
+
+Ruling: เทสสองข้อข้างบนเขียนเป็น **สคริปต์ที่รันจริง** `frontend/scripts/capabilities-cache-check.mjs` + `yarn check:capabilities` ไม่ใช่ source scan · **จงใจไม่ scan ข้อความ** เพราะ probe รอบก่อนของผมแดงด้วยผลบวกปลอมจากคำว่า `localStorage` ในคอมเมนต์ · สคริปต์รันตรรกะ cache กับ stub fetcher แล้ว assert จำนวนครั้งที่ fetch จริง + สิ่งที่ reader เห็น · mutation: คืนบั๊ก F1 → แดง, ถอด reset ออกจาก logout path เดียว → แดง — ถ้าผิด: หลักฐานที่รันครั้งเดียวแล้วไม่ commit = ไม่มีใครรันซ้ำได้
+
+Residual (แก้ตามจริงตาม TL-1): positive control ใน `uiBypassStillRefused` มีแค่ `workspace.create` แถวเดียว (grant super_admin แล้ว `/workspace/new` ผ่าน) — อีก 8 route พิสูจน์แค่ว่า "ปฏิเสธ" ไม่ได้พิสูจน์ว่า "ปฏิเสธเพราะ gate" ต่อแถว · ปิดครบต้อง positive control ทุกแถวซึ่งต้องสร้าง state ต่อ route (user จริง, workspace จริง) = งานคนละก้อน

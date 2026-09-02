@@ -838,16 +838,49 @@ const System = {
    * @returns {Promise<{viewable: boolean, error: string | null}>}
    */
   fetchCanViewChatHistory: async function () {
-    const res = await fetch(`${API_BASE}/system/my-capabilities`, {
+    const { capabilities } = await this.fetchMyCapabilities();
+    // Fail closed: a capability we could not confirm is one we do not show.
+    return { viewable: capabilities["chat.read_others"] === true, error: null };
+  },
+
+  /**
+   * What THIS caller may do — the whole map, rather than one question at a time.
+   *
+   * #40 task 3. Pass `workspaceId` to additionally ask about one workspace;
+   * `workspace` is null whenever the caller cannot see it, which covers a
+   * workspace that does not exist and one belonging to someone else alike (the
+   * server answers those identically on purpose).
+   *
+   * Fails closed on every path — network error, unparseable body, a 200 with no
+   * capabilities — because the alternative is throwing into a component that
+   * would then render as though nothing were gated. There is no fail-open
+   * branch here by design: this gates affordances, and the server re-decides
+   * every route regardless of what the menu shows.
+   *
+   * @param {{workspaceId?: string|number}} [options]
+   * @returns {Promise<{capabilities: Object, workspace: {id: number, capabilities: Object}|null, error: string|null}>}
+   */
+  fetchMyCapabilities: async function ({ workspaceId } = {}) {
+    const query =
+      workspaceId === undefined || workspaceId === null
+        ? ""
+        : `?workspaceId=${encodeURIComponent(String(workspaceId))}`;
+    return await fetch(`${API_BASE}/system/my-capabilities${query}`, {
       method: "GET",
       headers: baseHeaders(),
     })
       .then((r) => r.json())
-      .catch(() => ({ capabilities: {} }));
-
-    // Fail closed: a capability we could not confirm is one we do not show.
-    const isViewable = res?.capabilities?.["chat.read_others"] === true;
-    return { viewable: isViewable, error: null };
+      .then((data) => ({
+        // An object, always: `can()` reads this with a plain index, and a null
+        // here would throw at the call site rather than answer "no".
+        capabilities: data?.capabilities ?? {},
+        workspace: data?.workspace ?? null,
+        error: null,
+      }))
+      .catch((e) => {
+        console.error(e);
+        return { capabilities: {}, workspace: null, error: e.message };
+      });
   },
 
   /**
