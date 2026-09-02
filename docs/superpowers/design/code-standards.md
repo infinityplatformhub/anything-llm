@@ -971,3 +971,6 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 ### 7.6e mutation backup ต้องเก็บ path เต็ม ไม่ใช่ basename
 #87: backup 4 ไฟล์ลง /tmp ด้วย basename — `utils/helpers/index.js` กับ `utils/doctor/index.js` ชนกัน restore เขียน doctor ทับ helpers source edit หายทั้งหมด (โผล่เป็น 27 แดง โชคดีที่ไม่เงียบ) · ใช้ `git stash` / `git diff > patch` / path เต็ม (`tr / _`) เท่านั้น · restore ที่ "ดูเหมือนสำเร็จ" คือ failure mode
+
+#### 7.9f evidence — #78 follow-up 034243d1: drift test ที่เทียบตัวเอง
+`forbidden = recognized − allowed; expect(allowed ∪ forbidden).toEqual(recognized)` จริงโดยนิยาม ไม่เคยถาม runtime — ลบ `multi_user_mode` จาก protectedFields ยังเขียว · แก้เป็นเรียก `narrowManagerSystemPreferences` จริงด้วย actor ที่ถูกปฏิเสธ ทีละ key แล้ว mutation ถอด union จาก helper → แดง · กฎ: เทส drift/relation ต้องมีอย่างน้อยหนึ่งฝั่งที่มาจากการ**รันของจริง** ไม่ใช่สูตรเดียวกันสองครั้ง

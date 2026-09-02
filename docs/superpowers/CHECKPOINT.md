@@ -228,3 +228,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 ## 2026-09-02 — #30 T-5 slice 3 merged (68/88) — T-5 complete
 - fc182d413: gate PASS (102/102 bound), QA-1/QA-2/QA-3/TL-1/TL-2 PASS. Post-merge main after #78: see postmerge-78.log. Residual: scope-before-store not asserted by spy. Follow-up (Dev4): resolveActor arity throw, response.locals.actor, move buildVectorSearchResponse, namespaceCount spy. Then #49 #54 #56 #81.
 - Local engine version must match ci.yml pin (Dev4 chroma 0.5.20→1.0.0 on 8003).
+- #80 e1bf4adb8: QA-2 PASS (limiter lane 21/21) → verdicts 4/5, waiting QA-1 (SETTING_KEYS + mutations; mask length = domain-only). Then close/merge.
+- #78 follow-up 034243d1 (drift test asks runtime; 4 NIT/#72 items; 82/82): gate-78f2 running; TL-1 quick read requested → merge (no issue close; note on #78).
+- #88 36976c14c: waiting TL-2. #40 a2bbb0de8: gate-40c bootstrapping (yarn install); TL-1/QA-2/TL-2 reviewing. Post-merge #30 suite running.
