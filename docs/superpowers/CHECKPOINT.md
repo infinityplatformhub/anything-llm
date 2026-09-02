@@ -660,3 +660,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #133 62fcc66e6 (Dev3: F1 membership guard w/ separate constants, F2 quarantine keep, NIT-1 30/100, NIT-2, 21/21) regating /tmp/wt-133; TL-1 + QA-1 dispatched. Dev3 pattern (3× fixture never reaches the claimed guard) already in §7.17.
 - #133 62fcc66e6 gate GREEN: check-local pass, directoryDiff 21/21, sweeps 63/63, ledger 9; MEMBERSHIP_FLOOR=25/RATIO=0.5 named rulings. Result written (run-id gate-133-62fcc66e6). Awaiting TL-1 + QA-1 → close/merge.
 - #133 62fcc66e6 TL-1 PASS (320db6674): F1/F2 closed by original repros; floor boundary > strict; refused clears both lists. Slice-2 ruling needed: refused plan applies nothing (residual logged). Awaiting QA-1 → close/merge.
+- #131 58433f7bb MERGED (2c35487b5): TL-2 PASS (9e96f737d, X1-X4) + QA-2 PASS; 354/354, sweeps 63/63; closed gate-131-58433f7bb. Post-merge to run. Dev5 free → next: S12 offboarding recon or #130-class residuals.
