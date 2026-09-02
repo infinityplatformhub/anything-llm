@@ -14,7 +14,7 @@ async function resetAllVectorStores({ vectorDbKey }) {
   const { DocumentVectors } = require("../../models/vectors");
 const { emitAuditEvent } = require("../../utils/events");
   const { purgeEntireVectorCache } = require("../files");
-  const { getVectorDbClass } = require("../helpers");
+  const { getVectorDbClass, normalizeVectorDbKey } = require("../helpers");
   try {
     const workspaces = await Workspace.where();
     purgeEntireVectorCache(); // Purges the entire vector-cache folder.
@@ -30,7 +30,12 @@ const { emitAuditEvent } = require("../../utils/events");
     );
     const VectorDb = getVectorDbClass(vectorDbKey);
 
-    if (vectorDbKey === "pgvector") {
+    // #87: normalised, like every other comparison of a VECTOR_DB value.
+    // getVectorDbClass normalises internally, so a misspelled key used to hand
+    // this branch the RIGHT provider with the WRONG reset strategy: pgvector
+    // would take the per-namespace path, leaving its embedding table in place
+    // with a vector dimension that can no longer be changed.
+    if (normalizeVectorDbKey(vectorDbKey) === "pgvector") {
       /*
       pgvector has a reset method that drops the entire embedding table
       which is required since if this function is called we will need to

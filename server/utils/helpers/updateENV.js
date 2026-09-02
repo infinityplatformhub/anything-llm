@@ -1430,21 +1430,14 @@ function supportedEmbeddingModel(input = "") {
 }
 
 function supportedVectorDB(input = "") {
-  const supported = [
-    "chroma",
-    "chromacloud",
-    "pinecone",
-    "lancedb",
-    "weaviate",
-    "qdrant",
-    "milvus",
-    "zilliz",
-    "astra",
-    "pgvector",
-  ];
-  return supported.includes(input)
+  // #87: same normaliser and same list as the resolver. Two validators
+  // disagreeing about one field is how `.env` came to accept spellings the
+  // settings UI rejected — and the resolver is the one that decides where
+  // embeddings actually go, so it is the one this must agree with.
+  const { normalizeVectorDbKey, SUPPORTED_VECTOR_DBS } = require("./index");
+  return SUPPORTED_VECTOR_DBS.includes(normalizeVectorDbKey(input))
     ? null
-    : `Invalid VectorDB type. Must be one of ${supported.join(", ")}.`;
+    : `Invalid VectorDB type. Must be one of ${SUPPORTED_VECTOR_DBS.join(", ")}.`;
 }
 
 function supportedImageGenerationProvider(input = "") {
@@ -2113,6 +2106,7 @@ function writeEnvFileAtomic(envPath, contents) {
 }
 
 module.exports = {
+  supportedVectorDB,
   KEY_MAPPING,
   loadStoredCredentials,
   clearStoredCredential,

@@ -79,13 +79,65 @@
  * @property {Function} embedChunks - Embeds multiple chunks of text.
  */
 
+/** #87: the ten names `getVectorDbClass` dispatches on, and the default. */
+const SUPPORTED_VECTOR_DBS = [
+  "pinecone",
+  "chroma",
+  "chromacloud",
+  "lancedb",
+  "weaviate",
+  "qdrant",
+  "milvus",
+  "zilliz",
+  "astra",
+  "pgvector",
+];
+const DEFAULT_VECTOR_DB = "lancedb";
+
+/**
+ * #87: one normaliser, used everywhere a VECTOR_DB value is compared.
+ *
+ * The selection used to be switched on raw, so `PGVECTOR`, `PgVector`, or a
+ * value with a stray trailing space matched no case, fell through to the
+ * default arm, and quietly returned LanceDB. The server started, nothing threw,
+ * and the operator's vectors went somewhere they had not chosen.
+ *
+ * Exported because the defect is not one wrong comparison — four places compare
+ * this value (here, resetAllVectorStores, supportedVectorDB, and the
+ * installer's preflight) and fixing one leaves the others disagreeing about the
+ * same setting.
+ *
+ * An unrecognised value comes back unchanged rather than mapped to the default,
+ * so the caller can quote what the operator actually wrote.
+ *
+ * @param {string|null|undefined} value
+ * @returns {string}
+ */
+function normalizeVectorDbKey(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "" ? DEFAULT_VECTOR_DB : normalized;
+}
+
+// Which unrecognised values we have already complained about. This runs on
+// every document upload and every chat, and a per-call log buries everything
+// else the operator is reading. Keyed by value, not a single flag: two
+// different typos are two different problems.
+const warnedVectorDbKeys = new Set();
+
+/** Test seam: forget what has been warned about. */
+function __resetVectorDbWarning() {
+  warnedVectorDbKeys.clear();
+}
+
 /**
  * Gets the systems current vector database provider.
- * @param {('pinecone' | 'chroma' | 'chromacloud' | 'lancedb' | 'weaviate' | 'qdrant' | 'milvus' | 'zilliz' | 'astra') | null} getExactly - If provided, this will return an explit provider.
+ * @param {('pinecone' | 'chroma' | 'chromacloud' | 'lancedb' | 'weaviate' | 'qdrant' | 'milvus' | 'zilliz' | 'astra' | 'pgvector') | null} getExactly - If provided, this will return an explit provider.
  * @returns { BaseVectorDatabaseProvider}
  */
 function getVectorDbClass(getExactly = null) {
-  const vectorSelection = getExactly ?? process.env.VECTOR_DB ?? "lancedb";
+  const vectorSelection = normalizeVectorDbKey(
+    getExactly ?? process.env.VECTOR_DB
+  );
   switch (vectorSelection) {
     case "pinecone":
       const { Pinecone } = require("../vectorDbProviders/pinecone");
@@ -118,9 +170,16 @@ function getVectorDbClass(getExactly = null) {
       const { PGVector } = require("../vectorDbProviders/pgvector");
       return new PGVector();
     default:
-      console.error(
-        `\x1b[31m[ENV ERROR]\x1b[0m No VECTOR_DB value found in environment! Falling back to LanceDB`
-      );
+      // The old message read "No VECTOR_DB value found in environment!", which
+      // was wrong about the cause: the value was found, it just matched
+      // nothing. An operator grepping for their own typo found a message
+      // telling them the variable was unset.
+      if (!warnedVectorDbKeys.has(vectorSelection)) {
+        warnedVectorDbKeys.add(vectorSelection);
+        console.error(
+          `\x1b[31m[ENV ERROR]\x1b[0m VECTOR_DB is "${vectorSelection}", which is not one of ${SUPPORTED_VECTOR_DBS.join(", ")}. Using ${DEFAULT_VECTOR_DB} instead — embeddings will be stored there, not where you configured.`
+        );
+      }
       const { LanceDb: DefaultLanceDb } = require("../vectorDbProviders/lance");
       return new DefaultLanceDb();
   }
@@ -757,6 +816,10 @@ function stripThinkingFromText(text = "") {
 }
 
 module.exports = {
+  normalizeVectorDbKey,
+  SUPPORTED_VECTOR_DBS,
+  DEFAULT_VECTOR_DB,
+  __resetVectorDbWarning,
   getEmbeddingEngineSelection,
   getImageGeneratorProvider,
   maximumChunkLength,
