@@ -433,3 +433,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #112 + #98: server 2967/2967 green (idle backends cleared first — zero #106-class reds). Frontend line pending.
 - #118 c16a1ee27 merged 1f159385f, closed (infi-run:gate-118-c16a1ee27); QA-2 PASS M3 equivalent exhaustive. #99 #101 closed. 86/120. wt-118/g118 reaped.
 - #115 4f7d4aeb9 (Dev2, before deadline — no reassign): 18/18, R2/R5 red by timing, bootHTTP returns server + {credentialStore} param, real SSL boot with self-signed cert, --forceExit residual, #117 = memoize issue. Gate running; TL-2 + QA-1 dispatched.
+- #115 4f7d4aeb9: gate PASS at wt-115 (g115) — check-local, credentialsBeforeListen 8 + credentialPersistence 10 = 18/18, sweeps 63/63, ledger normalized /tmp/ledger-115.norm.md. Waiting TL-2 R1–R6 + QA-1 (auth).
+- #113 S4a slice 1 c2b3e2723 (RF-3 seed-before-migrate, 5/5, 3 mutants) — TL-1 early read; Dev3 → RF-1/2 → RF-4 → RF-5; gate on combined SHA. Q4 still user's.
+- Post-merge after #118 queued (/tmp/postmerge-118.log).
