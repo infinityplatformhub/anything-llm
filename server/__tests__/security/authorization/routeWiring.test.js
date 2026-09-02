@@ -1,3 +1,12 @@
+// Test-owned STORAGE_DIR: every other HTTP suite sets its own, and this one
+// relied on a developer .env being present — so it passed locally and failed on
+// any checkout without one (endpoints/workspaces.js loads utils/files at import
+// time, which path.resolve()s STORAGE_DIR).
+process.env.STORAGE_DIR =
+  process.env.STORAGE_DIR ||
+  require("fs").mkdtempSync(
+    require("path").join(require("os").tmpdir(), "t4a-routewiring-")
+  );
 const { execSync } = require("child_process");
 const crypto = require("crypto");
 const path = require("path");

@@ -5,10 +5,12 @@ const { handlers, registerCoreSchedules } = require("./handlers");
 // T-2 (#20): service Actor literals live only in utils/authorization/actorResolver.js
 // T-4b (#29) W-5: and so does Actor construction — resolveActorRef replaced the local
 // ActorIdentityStore, so a job and an HTTP request resolve the same user identically.
-const {
-  SERVICE_PRINCIPALS,
-  resolveActorRef,
-} = require("../authorization/actorResolver");
+// Hotfix #39: but the CONSTANTS come from the leaf module. actorResolver sits inside a
+// require cycle, so importing SERVICE_PRINCIPALS through it yields undefined depending
+// on load order — see utils/authorization/principals.js. Two imports on purpose:
+// taking either side alone loses a working feature.
+const { SERVICE_PRINCIPALS } = require("../authorization/principals");
+const { resolveActorRef } = require("../authorization/actorResolver");
 
 const systemActor = SERVICE_PRINCIPALS.coreJobs;
 
