@@ -22,6 +22,7 @@ import showToast from "@/utils/toast";
 import { safeJsonParse } from "@/utils/request";
 import QuickActions from "@/components/lib/QuickActions";
 import SuggestedMessages from "@/components/lib/SuggestedMessages";
+import useCapabilities from "@/hooks/useCapabilities";
 import useUser from "@/hooks/useUser";
 import ChatSettingsMenu from "@/components/WorkspaceChat/ChatContainer/ChatSettingsMenu";
 import WorkspaceModelPicker from "@/components/WorkspaceChat/ChatContainer/WorkspaceModelPicker";
@@ -57,6 +58,7 @@ async function createDefaultWorkspace(workspaceName = "My Workspace") {
 export default function Home() {
   const { t } = useTranslation();
   const { user } = useUser();
+  const { can, loading } = useCapabilities();
   const [workspace, setWorkspace] = useState(null);
   const [threadSlug, setThreadSlug] = useState(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
@@ -143,7 +145,13 @@ export default function Home() {
     );
   }
 
-  if (!workspace && user?.role === "default") {
+  // #40 task 4: "no workspace AND cannot make one" is the dead end. `!workspace`
+  // is unchanged — only the second half moves off the role string, because a
+  // `default` user holding workspace.create is not stranded, they just have not
+  // created one yet. `loading ||` is redundant against can() as written today
+  // (an empty map answers false) and kept as an independent defence; the hook's
+  // side of that contract lives in hooks/useCapabilities.test.jsx.
+  if (!workspace && user && (loading || !can("workspace.create"))) {
     return <NoWorkspacesAssigned />;
   }
 
