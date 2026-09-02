@@ -275,3 +275,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #84 4a02b678 (FINDING-1: DELETE credential → system.write): gate PASS (check-local, contract 9/9; sweep red = updateSettingsReturns because branch base predates hotfix merge — not #84). Waiting QA-2 (17 cases) + TL-1 delta → close/merge. Gate-equality test (QA-2 case 3) asked of Dev1.
 - O5b recon merged; rulings: CLI-only, no migration/slot in this issue; --bundle JSON on stdout only.
 - #49 contract posted (EXPECT measured-at-close). Dev2 on 40-task1-rebased (inventory: 8 new routes, ldap login/enabled → allowlist ruling).
+- Post-merge main after #80 hotfix: **2587/2587** (runInBand, fresh STORAGE_DIR, real-store env) — main fully green.
