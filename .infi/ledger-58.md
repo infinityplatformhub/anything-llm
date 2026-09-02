@@ -23,17 +23,21 @@ Note: correcting my own recon. I first wrote that `enable-multi-user`'s two writ
 
 Ruling: the reason C is not a predicate swap is that the two branches authenticate against DIFFERENT credentials — multi-user compares a password against the `users` row, single-user compares against `process.env.AUTH_TOKEN`. Flipping the predicate on a legacy instance does not tighten a check, it routes the request to another authentication mechanism. Needs its own ruling on the migration path (boot-time repair vs refuse-to-boot); I recommend refusing to boot with a message naming the fix, because silently flipping an instance into multi-user mode is a larger surprise than a startup error.
 
-## Ruling C implemented — refuse to boot (PMO ruling)
+## Ruling C implemented — repair, not refuse (revised PMO/Techlead ruling)
 
-Ruling: `utils/boot/assertDeploymentShape.js` refuses to boot when `multi_user_mode = false` AND `users.count() > 0`, with a message naming both remedies (set the setting true, or delete the leftover accounts). Refusing rather than repairing: flipping the setting on the operator's behalf silently changes what the instance IS — who may log in, and how — as a side effect of an upgrade.
+Ruling: superseded my own first implementation. I built refuse-to-boot; Techlead's objection is correct and I did not see it — refusing turns a survivable inconsistency into an OUTAGE, and the instance it strands is one that just survived a SIGKILL mid-`enable-multi-user` or a partial restore. That is the worst possible moment to require a DBA before the server will start. Recorded because the reasoning I gave for refusing ("silently flipping the mode is a bigger surprise than a startup error") weighed the surprise and ignored the downtime.
 
-Ruling: the check runs BEFORE `listen()`, not in the boot callbacks. Those callbacks execute after the socket is open, so a check there would be refusing while already serving requests — which is the state it exists to prevent.
+Ruling: `repairDeploymentShape` sets `multi_user_mode = true` when the setting is false AND user rows exist. Not a guess: no code path creates a user row in genuine single-user mode, so accounts present means the instance IS multi-user and the setting is what is stale.
 
-Ruling: `bootHTTP`/`bootSSL` became async, so `index.js` attaches `.catch(refuseBoot)` at both call sites. Without it a rejection is an unhandled promise rejection and the operator-facing message is buried in a stack trace — the message IS the deliverable of a refuse-to-boot.
+Ruling: the repair is loud — `console.error` on EVERY boot until an operator sets `MODE_REPAIR_ACKNOWLEDGED=1`. Silently rewriting a setting that decides who may log in is not a once-and-forget action. The message carries the user count and the SQL to undo it if the operator disagrees. A test asserts the acknowledgement silences the LOG but not the REPAIR — an env var that quietly disabled the fix it describes would be worse than no message.
 
-Ruling: an unreadable database does NOT refuse. A database outage is a different failure, and this check is not entitled to relabel it as "your deployment is misconfigured" and send the operator to edit `system_settings`. It logs and returns, letting the boot fail where it actually fails. Tested with an injected throwing client.
+Ruling: the runtime guard at `POST /request-token` is the half the boot repair cannot cover — shape (b) arising while the server RUNS (a restore into a live instance, a hand-edited settings row). `User.count() > 0` forbids the `AUTH_TOKEN` branch whatever the setting says, because that branch authenticates against an environment variable rather than any account, and taking it on an instance with accounts mints a session nobody's credentials were checked for.
 
-Ruling: `isMultiUserSetup` (deploymentMode.js:20) moved to the confirmed helper in the same commit. In shape (b) it failed CLOSED — refusing an instance that is effectively multi-user, an admin lockout rather than a bypass — so it was never a hole. Fixed anyway: one half of a file on the confirmed helper and the other on the raw setting reads as a deliberate distinction to whoever edits it next.
+Ruling: that refusal returns the ordinary `[003] Invalid password provided` 401. Which branch refused is not something an unauthenticated caller gets to learn.
+
+Ruling: the three structural decisions from the refuse version survive unchanged — the check runs BEFORE `listen()` (the boot callbacks run after the socket is open, so the repair must land before the first request is authorized); `bootHTTP`/`bootSSL` are async and `index.js` catches at both call sites; and an unreadable database is not repaired and not relabelled (an outage is a different failure, and this code may not write to a database it could not read).
+
+Ruling: `isMultiUserSetup` (deploymentMode.js:20) moved to the confirmed helper in the same commit. It failed CLOSED in shape (b) — refusing an instance that is effectively multi-user, an admin lockout rather than a bypass — so it was never a hole. Fixed anyway: half a file on one predicate and half on the other reads as a deliberate distinction to whoever edits it next.
 
 ## Ruling D
 
@@ -67,4 +71,4 @@ Note: the mobile test also passed, by calling `MobileDevice.createTempToken` —
 ## Evidence
 
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
-`Test Suites: 123 passed, 123 total` · `Tests: 1247 passed, 1247 total`
+`Test Suites: 124 passed, 124 total` · `Tests: 1250 passed, 1250 total`

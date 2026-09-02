@@ -1,79 +1,70 @@
-// issue 58 (ruling C): refuse to boot in shape (b).
+// issue 58 (ruling C, revised): repair shape (b) at boot, loudly.
 //
-// `multi_user_mode = false` WITH user rows is a state the code cannot produce
-// deliberately: `enable-multi-user` writes the first user and the setting
-// together (and rolls back if the settings write throws). It is reachable
-// anyway — the process not surviving between those two writes (SIGKILL, OOM,
-// container eviction), a `users` dump restored against a fresh
-// `system_settings`, or a settings row deleted by hand.
+// Shape (b) is `multi_user_mode = false` WITH user rows. The code cannot
+// produce it deliberately — `enable-multi-user` writes the first user and the
+// setting together, and rolls back if the settings write throws — but it is
+// reachable: the process not surviving between those two commits (SIGKILL, OOM,
+// container eviction), or a `users` dump restored against a fresh
+// `system_settings`.
 //
-// Every guard that asks "which mode is this" then disagrees with
-// `validatedRequest`, which is issues 52 and 58 in one line. Rather than teach
-// each site to survive the state, refuse to run in it.
+// In that state every guard asking "which mode is this" disagrees with
+// `validatedRequest`, which is issues 52 and 58 in one line.
 //
-// Refusing rather than repairing is deliberate. Flipping `multi_user_mode` to
-// true on the operator's behalf would silently change what an instance IS —
-// who can log in, and how — as a side effect of an upgrade. A startup error
-// naming both fixes is louder and leaves the decision where it belongs.
+// REPAIR, not refuse. Refusing to boot turns a survivable inconsistency into an
+// outage, and the instance it strands is one that just survived a crash or a
+// restore — the worst moment to require a DBA. The repair is also not a guess:
+// no code path creates a user row in genuine single-user mode, so user rows
+// present means the instance IS multi-user and the setting is what is stale.
 //
-// `/request-token` is the reason this is not a predicate change: its two
-// branches authenticate against DIFFERENT credentials (a password against the
-// `users` row, versus `process.env.AUTH_TOKEN`). Swapping the predicate would
-// reroute authentication on a legacy instance rather than tighten it.
+// It is deliberately loud. Silently rewriting a setting that decides who may
+// log in is not something to do once and forget, so it logs at error level on
+// EVERY boot until an operator sets MODE_REPAIR_ACKNOWLEDGED=1.
 
 const prisma = require("../prisma");
 const { SystemSettings } = require("../../models/systemSettings");
 
-class DeploymentShapeError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "DeploymentShapeError";
-  }
-}
-
-/**
- * @throws {DeploymentShapeError} when the instance is in shape (b)
- * @returns {Promise<void>}
- */
-async function assertDeploymentShape({ db = prisma } = {}) {
+async function repairDeploymentShape({ db = prisma } = {}) {
   let multiUserMode;
   let userCount;
   try {
     multiUserMode = await SystemSettings.isMultiUserMode();
     userCount = await db.users.count();
   } catch (error) {
-    // An unreadable database is a different failure, and not one this check is
-    // entitled to turn into "your deployment is misconfigured". Let the boot
-    // continue and fail where it actually fails.
+    // A database outage is a different failure, and this check is not entitled
+    // to relabel it or to write to a database it cannot read.
     console.error(
       `[deployment-shape] could not read deployment shape: ${error.message}`
     );
-    return;
+    return { repaired: false, reason: "unreadable" };
   }
 
-  if (multiUserMode || userCount === 0) return;
+  if (multiUserMode || userCount === 0)
+    return { repaired: false, reason: "consistent" };
 
-  throw new DeploymentShapeError(
-    [
-      "Refusing to boot: this instance has user accounts but multi-user mode is off.",
-      "",
-      `  users: ${userCount}`,
-      "  multi_user_mode: false",
-      "",
-      "Authorization guards disagree in this state — some read the setting and",
-      "treat the instance as single-user (skipping identity checks) while session",
-      "validation treats it as multi-user. Fix it one of two ways:",
-      "",
-      "  1. If this instance IS multi-user (the usual case — an interrupted",
-      "     upgrade, or a restore), set the setting to match:",
-      "       UPDATE system_settings SET value = 'true' WHERE label = 'multi_user_mode';",
-      "",
-      "  2. If this instance should be single-user, remove the leftover accounts:",
-      "       DELETE FROM users;",
-      "",
-      "Back up before either. See issue 58.",
-    ].join("\n")
-  );
+  await SystemSettings._updateSettings({ multi_user_mode: true });
+
+  if (process.env.MODE_REPAIR_ACKNOWLEDGED !== "1") {
+    console.error(
+      [
+        "\x1b[31m[DEPLOYMENT SHAPE REPAIRED]\x1b[0m This instance had",
+        `${userCount} user account(s) but multi_user_mode was false — a state`,
+        "reachable from an interrupted upgrade or a partial restore. Left alone,",
+        "authorization guards disagree: some treat the instance as single-user and",
+        "skip identity checks while session validation treats it as multi-user.",
+        "",
+        "multi_user_mode has been set to true, which matches the accounts present.",
+        "",
+        "If that is WRONG — this instance should be single-user and those accounts",
+        "are leftovers — stop the server, remove them, and set the flag back:",
+        "  DELETE FROM users; UPDATE system_settings SET value = 'false'",
+        "    WHERE label = 'multi_user_mode';",
+        "",
+        "Set MODE_REPAIR_ACKNOWLEDGED=1 to silence this message. See issue 58.",
+      ].join(" ")
+    );
+  }
+
+  return { repaired: true, userCount };
 }
 
-module.exports = { assertDeploymentShape, DeploymentShapeError };
+module.exports = { repairDeploymentShape };

@@ -22,6 +22,7 @@ const crypto = require("crypto");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
+let SystemSettings;
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const SERVER_DIR = path.join(__dirname, "../../..");
@@ -31,8 +32,7 @@ const testDb = `h58_boot_${dbSuffix}`;
 const testUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 
 let prisma;
-let assertDeploymentShape;
-let DeploymentShapeError;
+let repairDeploymentShape;
 
 const setMode = (value) =>
   prisma.system_settings.upsert({
@@ -64,9 +64,9 @@ beforeAll(async () => {
 
   jest.resetModules();
   prisma = require("../../../utils/prisma");
+  ({ SystemSettings } = require("../../../models/systemSettings"));
   ({
-    assertDeploymentShape,
-    DeploymentShapeError,
+    repairDeploymentShape,
   } = require("../../../utils/boot/assertDeploymentShape"));
 }, 300_000);
 
@@ -86,43 +86,76 @@ afterEach(async () => {
   await prisma.users.deleteMany({});
 });
 
-describe("issue 58: the deployment-shape check", () => {
-  test("a genuine single-user instance boots (setting false, no users)", async () => {
+describe("issue 58: the deployment-shape repair", () => {
+  test("a genuine single-user instance is left alone (setting false, no users)", async () => {
     await setMode(false);
     expect(await prisma.users.count()).toBe(0);
-    await expect(assertDeploymentShape()).resolves.toBeUndefined();
+    const result = await repairDeploymentShape();
+    expect(result.repaired).toBe(false);
+    // And the setting is untouched — a repair that "fixes" a correct instance
+    // would turn every fresh install into multi-user mode.
+    expect(await SystemSettings.isMultiUserMode()).toBe(false);
   });
 
-  test("a genuine multi-user instance boots (setting true, users present)", async () => {
+  test("a genuine multi-user instance is left alone (setting true, users present)", async () => {
     await setMode(true);
     await prisma.users.create({
       data: { username: `boot-ok-${dbSuffix}`, password: "x" },
     });
-    await expect(assertDeploymentShape()).resolves.toBeUndefined();
+    const result = await repairDeploymentShape();
+    expect(result.repaired).toBe(false);
+    expect(await SystemSettings.isMultiUserMode()).toBe(true);
   });
 
-  test("shape (b) refuses, and the message names BOTH fixes", async () => {
+  test("shape (b) is repaired, loudly, with the count in the message", async () => {
     await setMode(false);
     await prisma.users.create({
       data: { username: `boot-bad-${dbSuffix}`, password: "x" },
     });
+    delete process.env.MODE_REPAIR_ACKNOWLEDGED;
+    const logged = [];
+    const realError = console.error;
+    console.error = (...args) => logged.push(args.join(" "));
 
-    await expect(assertDeploymentShape()).rejects.toBeInstanceOf(
-      DeploymentShapeError
-    );
+    const result = await repairDeploymentShape();
 
-    // The message is the whole deliverable of a refuse-to-boot: an operator
-    // staring at a stopped server needs to know which way out to take.
-    const error = await assertDeploymentShape().catch((e) => e);
-    expect(error.message).toMatch(/multi_user_mode/);
-    expect(error.message).toMatch(/UPDATE system_settings/);
-    expect(error.message).toMatch(/DELETE FROM users/);
+    console.error = realError;
+    expect(result.repaired).toBe(true);
+    expect(result.userCount).toBe(1);
+    // The repair actually landed, not just reported.
+    expect(await SystemSettings.isMultiUserMode()).toBe(true);
+
+    // Loud: silently rewriting a setting that decides who may log in is not a
+    // thing to do quietly, and the message has to say how to undo it.
+    const message = logged.join("\n");
+    expect(message).toMatch(/DEPLOYMENT SHAPE REPAIRED/);
+    expect(message).toMatch(/1 user account/);
+    expect(message).toMatch(/DELETE FROM users/);
   });
 
-  test("an unreadable database does not become 'misconfigured deployment'", async () => {
-    // A database outage is a different failure and this check is not entitled
-    // to relabel it. It should let the boot proceed and fail where it really
-    // fails, rather than telling the operator to edit their settings table.
+  test("MODE_REPAIR_ACKNOWLEDGED silences the log but not the repair", async () => {
+    await setMode(false);
+    await prisma.users.create({
+      data: { username: `boot-ack-${dbSuffix}`, password: "x" },
+    });
+    process.env.MODE_REPAIR_ACKNOWLEDGED = "1";
+    const logged = [];
+    const realError = console.error;
+    console.error = (...args) => logged.push(args.join(" "));
+
+    const result = await repairDeploymentShape();
+
+    console.error = realError;
+    delete process.env.MODE_REPAIR_ACKNOWLEDGED;
+    // Acknowledging the message must not disable the fix it describes.
+    expect(result.repaired).toBe(true);
+    expect(await SystemSettings.isMultiUserMode()).toBe(true);
+    expect(logged.join("\n")).not.toMatch(/DEPLOYMENT SHAPE REPAIRED/);
+  });
+
+  test("an unreadable database is not repaired and not relabelled", async () => {
+    // An outage is a different failure. This check may not write to a database
+    // it could not read, nor tell the operator their deployment is misconfigured.
     await setMode(false);
     const brokenDb = {
       users: {
@@ -131,8 +164,7 @@ describe("issue 58: the deployment-shape check", () => {
         },
       },
     };
-    await expect(
-      assertDeploymentShape({ db: brokenDb })
-    ).resolves.toBeUndefined();
+    const result = await repairDeploymentShape({ db: brokenDb });
+    expect(result).toEqual({ repaired: false, reason: "unreadable" });
   });
 });

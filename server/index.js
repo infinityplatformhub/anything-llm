@@ -83,10 +83,10 @@ app.use(
 );
 
 const refuseBoot = (error) => {
-  // issue 58: the deployment-shape check rejects with an operator-facing
-  // message. Printing it and exiting non-zero is the whole point — an
-  // unhandled rejection would bury it in a stack trace.
-  console.error(`\x1b[31m[BOOT REFUSED]\x1b[0m ${error.message}`);
+  // issue 58: boot is async (the deployment-shape repair runs before listen).
+  // A rejection here means the server never started, so it must be reported and
+  // exit non-zero rather than surface as an unhandled promise rejection.
+  console.error(`\x1b[31m[BOOT FAILED]\x1b[0m ${error.message}`);
   process.exit(1);
 };
 
