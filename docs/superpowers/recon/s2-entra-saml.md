@@ -213,3 +213,4 @@ the first driver to use it, but the pattern belongs to whoever writes the interf
 - Ruling: store-side username is not normalized because the `^[a-z][a-z0-9._@-]*$` regex + Prisma insensitive already bound it; comment marks this as load-bearing.
 - Ruling: `identity_links.email` NFC backfill goes into migration slot 082000 (no new slot).
 - Ruling: exhausting 5 suffix candidates raises `IdentityUnavailableError`, not `IdentityConflictError`.
+- Ruling: `AssertionReplay.claim` runs only after signature verify, ID-match and Conditions/Audience/InResponseTo all pass. Three tests count rows for signature-fail / expired / wrong-audience (no row); mutant moving claim to method head must kill all three.

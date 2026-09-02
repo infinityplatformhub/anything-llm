@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">bbdb0fba</span> · 2026-09-02 11:45</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">cdb6a212</span> · 2026-09-02 12:05</div>
   <h1>ApproofWorkspace — งานถึงไหน (7 เดือน)</h1>
 </header>
 
@@ -132,18 +132,18 @@ td.mono{white-space:nowrap}
     <h2>รอ review / merge <span class="mono">3</span></h2>
     <div class="card">
       <div class="top"><span class="id">#30 T-5 slice 1a</span><span class="who">Dev4 · 05e18e79</span></div>
-      <p>ACL filter ทุก retrieval path. รอบก่อน QA-2 จับ LanceDB throw (identifier ไม่ backtick) แก้แล้ว + เทสบน table จริง</p>
-      <div class="chips"><span class="chip ok">gate 1310/1310</span><span class="chip wait">QA-2 6 ข้อ</span><span class="chip wait">Techlead</span></div>
+      <p>ACL filter ทุก retrieval path. LanceDB ผ่าน 6/6 แล้ว แต่รอบนี้เจอ pgvector placeholder ผิดทั้ง provider (QA-2) + ตาราง pre-T-5 ไม่มี ACL column ทำ escape hatch throw (Techlead) ruling ส่งแล้ว รอ SHA รอบ 3</p>
+      <div class="chips"><span class="chip ok">gate 1310/1310</span><span class="chip no">QA-2 FAIL pgvector</span><span class="chip no">Techlead FAIL schema</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 950544d6</span></div>
-      <p>DELETE /system/credential/:envKey — ลบ row ก่อน unset env, secret-key guard, audit. gate ติด §7.3a (describe title ขึ้นต้น #) + ไม่มี task-48.env รอ SHA ใหม่</p>
+      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · b166b2b0</span></div>
+      <p>DELETE /system/credential/:envKey — ลบ row ก่อน unset env, secret-key guard, audit. gate ติดไฟล์ probe ของ QA-1 ที่หลุดเข้า commit รอ Dev1 ลบแล้วส่ง SHA</p>
       <div class="chips"><span class="chip no">gate tool-fail</span><span class="chip wait">QA-1</span><span class="chip wait">Techlead</span></div>
     </div>
     <div class="card">
       <div class="top"><span class="id">#43 S2 Entra SAML</span><span class="who">Dev3 · 79448c01</span></div>
-      <p>XSW fixtures + xml-crypto + deriveUsername (101/101). Techlead PASS แต่มี FINDING-1: NameID อ่านจาก doc root ไม่ใช่ assertion ที่ verify → 6 ruling ส่งแล้ว รอ commit แก้ก่อนทำ driver</p>
-      <div class="chips"><span class="chip ok">Techlead PASS+finding</span><span class="chip wait">fix FINDING-1</span><span class="chip dim">slot 082000 ต่อ</span></div>
+      <p>XSW fixtures + xml-crypto + deriveUsername. FINDING-1 (NameID อ่านจาก doc root) แก้ใน dab75e1a พร้อม slot 082000 (assertion replay + identity_providers) 128/128 รอ Techlead ยืนยัน แล้วต่อ SamlIdentityProvider</p>
+      <div class="chips"><span class="chip ok">FINDING-1 fixed</span><span class="chip wait">Techlead confirm</span><span class="chip dim">driver ต่อ</span></div>
     </div>
   </div>
 

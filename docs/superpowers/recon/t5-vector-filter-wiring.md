@@ -103,3 +103,9 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Ruling: chroma + flag → rendered predicate must equal strict exactly (test), boot log present (RED when removed).
 - Ruling: weaviate deny-list = `And[NotEqual docId …]`; the `Not` operator does not exist in its enum and must never be emitted (test on every path).
 - Ruling: weaviate OR-unlabelled = `Or[And[IsNull×3], strict]`.
+
+### PMO rulings — slice 1a round 3 (05e18e79 FAIL, 2026-09-02)
+- Ruling A: `toJsonbSql` uses one `bind()` that reserves-before-push for every clause; RED test executes the SQL on real pg for orgWide / +deny / +allow / all four (QA-2 blocker: placeholder numbering broke every pgvector query).
+- Ruling B (Techlead FINDING-1, option ข): read path checks `table.schema()`; no `orgId` column → flag unset = matchNone + logged reason "table predates T-5"; flag set = serve as unlabelled through isRowAllowed. Option (ก) rejected: loosens the predicate for the wrong reason. RED test creates a table WITHOUT ACL columns, both states.
+- Ruling C (FINDING-2): `retrievalSupport` countRows uses backticked identifier; schema without `orgId` counts as 100% unlabelled, not null.
+- Ruling D: LanceDB `table.add()` silently drops fields absent from the Arrow schema → not a 1a concern; residual → #56 (backfill must migrate schema).
