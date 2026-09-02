@@ -7,7 +7,7 @@ process.env.STORAGE_DIR =
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { buildRouter } = require("./routeGateSweepHelper");
+const { buildRouter } = require("./routeGateSweepHelper.cjs");
 const {
   ORG_CAPABILITIES,
   WORKSPACE_CAPABILITIES,
@@ -22,7 +22,10 @@ const MOCKUP_FILE = path.join(
   REPO_DIR,
   "docs/superpowers/mockups/frontend-authz-capabilities.html"
 );
-const TASK_ENV_FILE = path.join(REPO_DIR, ".infi/task-40.env");
+const PLAN_FILE = path.join(
+  REPO_DIR,
+  "docs/superpowers/plans/40-frontend-authz.md"
+);
 
 const { app } = buildRouter();
 const mountedRoutes = app._router.stack.filter((layer) => layer.route);
@@ -32,16 +35,27 @@ const mountedGates = mountedRoutes.flatMap((layer) =>
     .filter((handler) => handler?.action && handler.resolveResource)
 );
 
+// These document mutations also have deliberate org-level routes: extensions
+// ingest files before any workspace attachment, and system deletes unattached
+// documents. Assertion 6 still requires a separate workspace-bearing gate.
+const DUAL_SCOPE_WORKSPACE_ACTIONS = new Set([
+  "document.create",
+  "document.delete",
+]);
+
 async function scopeOf(resolveResource) {
   try {
     const resource = await resolveResource({}, {});
-    return resource && resource.workspaceId == null ? "org" : "workspace";
+    if (resource) return resource.workspaceId == null ? "org" : "workspace";
   } catch {
-    // Workspace resolvers need route input and may consult stored rows. With an
-    // empty request they return null or throw; unlike orgResource, they cannot
-    // positively resolve the org and therefore cannot satisfy an org gate.
-    return "workspace";
+    // Continue to resolver metadata: workspace resolvers need route input and
+    // may consult stored rows, so an empty request can throw.
   }
+
+  const resolverName = resolveResource.resolverName || resolveResource.name;
+  return ["orgResource", "grantScopeFromBody"].includes(resolverName)
+    ? "org"
+    : "workspace";
 }
 
 describe("capability vocabulary by resource scope", () => {
@@ -96,6 +110,15 @@ describe("capability vocabulary by resource scope", () => {
     );
     expect(capabilityGates.length).toBeGreaterThan(0);
 
+    for (const action of DUAL_SCOPE_WORKSPACE_ACTIONS) {
+      const scopes = await Promise.all(
+        capabilityGates
+          .filter((gate) => gate.action === action)
+          .map((gate) => scopeOf(gate.resolveResource))
+      );
+      expect(scopes).toContain("org");
+    }
+
     for (const action of WORKSPACE_CAPABILITIES) {
       const scopes = await Promise.all(
         capabilityGates
@@ -106,10 +129,16 @@ describe("capability vocabulary by resource scope", () => {
     }
   });
 
-  test("workspace capabilities match the approved mockup", () => {
-    const taskEnv = fs.readFileSync(TASK_ENV_FILE, "utf8");
-    const approvedSha = /^MOCKUP_SHA=(\S+)$/m.exec(taskEnv)?.[1];
-    if (!approvedSha) throw new Error(`Missing MOCKUP_SHA in ${TASK_ENV_FILE}`);
+  test("capability lists match the approved mockup", () => {
+    const plan = fs.readFileSync(PLAN_FILE, "utf8");
+    const approvedSha = /^Approved mockup blob SHA: `([0-9a-f]{40})`$/m.exec(
+      plan
+    )?.[1];
+    if (!approvedSha) {
+      throw new Error(
+        `Missing or malformed approved mockup blob SHA in ${PLAN_FILE}`
+      );
+    }
 
     const mockup = fs.readFileSync(MOCKUP_FILE);
     const actualSha = crypto
@@ -119,25 +148,29 @@ describe("capability vocabulary by resource scope", () => {
       .digest("hex");
     if (actualSha !== approvedSha) {
       throw new Error(
-        "The mockup changed after approval — re-approval required, or update MOCKUP_SHA if the change was approved"
+        "The mockup changed after approval — re-approve, or update the approved SHA if the change was approved"
       );
     }
 
-    const match = /const\s+WS_CAPS\s*=\s*(\[[^;]*\]);/.exec(
-      mockup.toString("utf8")
-    );
-    if (!match) throw new Error(`Could not parse WS_CAPS from ${MOCKUP_FILE}`);
-    const approved = JSON.parse(match[1]);
-
-    // Capability order has no meaning to authorizeMany or UI lookups. Sorting
-    // both full arrays ignores order while still exposing omissions, additions,
-    // and duplicates.
-    const actual = [...WORKSPACE_CAPABILITIES].sort();
-    const expected = [...approved].sort();
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      throw new Error(
-        "WORKSPACE_CAPABILITIES drifted from the approved mockup WS_CAPS"
+    const source = mockup.toString("utf8");
+    for (const [name, capabilities] of [
+      ["ORG_CAPS", ORG_CAPABILITIES],
+      ["WS_CAPS", WORKSPACE_CAPABILITIES],
+    ]) {
+      const match = new RegExp(`const\\s+${name}\\s*=\\s*(\\[[^;]*\\]);`).exec(
+        source
       );
+      if (!match)
+        throw new Error(`Could not parse ${name} from ${MOCKUP_FILE}`);
+      const approved = JSON.parse(match[1]);
+
+      // Capability order has no meaning to authorizeMany or UI lookups. Sorting
+      // full arrays ignores order while still exposing omissions and duplicates.
+      const actual = [...capabilities].sort();
+      const expected = [...approved].sort();
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(`${name} code list drifted from the approved mockup`);
+      }
     }
   });
 });

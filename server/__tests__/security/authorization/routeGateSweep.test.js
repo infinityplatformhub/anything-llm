@@ -27,7 +27,7 @@ process.env.JWT_SECRET =
 
 const fs = require("fs");
 const path = require("path");
-const { buildRouter } = require("./routeGateSweepHelper");
+const { buildRouter } = require("./routeGateSweepHelper.cjs");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
 
@@ -68,7 +68,11 @@ const SELF_SERVICE_ROUTES = new Set([
   "POST /web-push/subscribe",
 ]);
 
-module.exports = { SINGLE_USER_ONLY_ROUTES, SELF_SERVICE_ROUTES };
+module.exports = {
+  SINGLE_USER_ONLY_ROUTES,
+  SELF_SERVICE_ROUTES,
+  buildRouter,
+};
 
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
