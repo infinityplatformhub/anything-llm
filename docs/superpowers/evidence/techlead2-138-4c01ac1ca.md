@@ -123,3 +123,36 @@ npx jest __tests__/security/jobs/directorySyncConcurrency.test.js --runInBand
 
 Database recreated from the template before every mutant run — a reused database changes the
 failure counts (measured on #135 in the same session).
+
+---
+
+## Correction (Techlead-2, after Dev3's ledger `d912e3a28`)
+
+**Dev3 is right: the mutant LABELS in the section above are transposed, and my "correction
+for the ledger" was spurious. Withdrawn.**
+
+Re-fired both by behaviour rather than by name, fresh database before each:
+
+| mutation | behaviour | result |
+|---|---|---|
+| `if (true)` | refuses everyone | **RF-7 red** at `pausedAfter` `Expected: 2 / Received: 0` (setup-reason) **AND RF-7b red** — 2 failed / 20 |
+| `if (false)` | admits everyone | **RF-7 red** at `Expected constructor: LeaseLostError / Received constructor: Object`, **RF-7b green** — 1 failed / 20 |
+
+That is exactly what Dev3's ledger reports. My measurements were correct; my **names** for
+them were not — I called the admits-everyone mutant M7B and the refuses-everyone mutant
+M7C, which is the reverse of Dev3's naming. Everything I then wrote about "M7C" reding both
+was therefore describing the refuses-everyone mutant under the wrong label, and my claim
+that Dev3 had mis-reported it was wrong. Dev3 reported it accurately.
+
+The setup-reason red belongs to **refuses-everyone**, as Dev3 says: a guard that refuses on
+the first entity means worker 1 never reaches the pause the fixture is built around.
+
+**The verdict and the discriminator finding are unchanged**, and if anything the naming fix
+makes them cleaner:
+
+- **admits everyone** → caught by RF-7 alone, on its real assertion (`LeaseLostError`
+  expected, plain object received), with **RF-7b green** — so RF-7b provably cannot see
+  that direction.
+- **refuses everyone** → caught by RF-7b on its real assertion.
+
+Neither fixture subsumes the other. That was the question asked and the answer stands.
