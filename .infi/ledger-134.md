@@ -45,6 +45,20 @@ writing anyway resolves to Number(undefined) = NaN — cost if wrong: a genuinel
 plan applies its resolvable half quietly instead of failing loudly, which the checkpoint
 counts make visible (membershipsAdded < plan.addMembership.length).`
 
+`Ruling: TL-1's F1 premise is FALSE and its prescribed RF-2 witness cannot exist —
+passing a tx to addGroupMember does NOT collapse policy_versions bumps (measured: two
+changes produce two rows either way, both mutant shapes survive the whole suite), so
+the pass-prisma ruling is kept on rollback scope and lock duration instead, which a row
+count cannot observe — cost if wrong: none to the code, which passes prisma either way;
+the cost of NOT recording it is a later reviewer writing the prescribed witness, watching
+it pass, and concluding the rule is enforced when nothing checks it.`
+
+`Ruling: M2 and M3 are recorded as UNKILLABLE survivors with their reachability rather
+than left as gaps — a conflict fixture, not a row count, is what would observe the real
+difference, and that belongs with slice 3's concurrency work — cost if wrong: a reader
+takes two survivors as untested guards and writes a redundant test, versus the §7.9
+requirement that every survivor be recorded with whether it was reachable.`
+
 ---
 
 ## Correction: TL-1's F1 premise is false, measured
