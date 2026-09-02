@@ -195,12 +195,30 @@ $("next1").addEventListener("click", () => {
   verified = false;
   drawSteps();
 });
-$("back2").addEventListener("click", () => { step = 1; drawSteps(); });
+// Same treatment as `reconf` below, and for the same reason: going back to the
+// connection form means the settings may change, so any test result on screen —
+// and the `verified` flag behind it — belongs to a configuration that no longer
+// necessarily exists. Found while fixing `reconf`; the two buttons differ only
+// in where they sit.
+$("back2").addEventListener("click", () => {
+  step = 1;
+  verified = false;
+  $("result").innerHTML = "";
+  drawSteps();
+});
 // QA-3 (3): reconfiguring INVALIDATES the previous test. A passing test belongs
 // to the configuration it ran against, not to the session — otherwise someone
 // verifies one host, goes back, types another, and saves on the first one's
 // evidence.
-$("reconf").addEventListener("click", () => { step = 1; verified = false; drawSteps(); });
+// The result box goes with it: leaving the green "Accepted" up while `verified`
+// is false puts two contradictory answers on screen at once, and the stale one
+// is the reassuring one.
+$("reconf").addEventListener("click", () => {
+  step = 1;
+  verified = false;
+  $("result").innerHTML = "";
+  drawSteps();
+});
 
 $("run").addEventListener("click", () => {
   $("result").innerHTML = '<p class="text-sm text-slate-500">Connecting…</p>';

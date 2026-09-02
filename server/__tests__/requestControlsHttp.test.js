@@ -17,8 +17,13 @@ function appWith(...middleware) {
 }
 
 afterEach(() => {
+  // Every variable any test here sets, cleared after EVERY test — not at the end
+  // of the last one. A test that throws part-way leaves its value behind
+  // otherwise, and since issue 77 the limit is read per request, so a leftover
+  // value is one the next test's limiters would actually read.
   for (const name of [
     "IP_ALLOWLIST",
+    "INVITE_RATE_LIMIT_MAX",
     "LOGIN_ACCOUNT_RATE_LIMIT_MAX",
     "LOGIN_IP_RATE_LIMIT_MAX",
     "LOGIN_RATE_LIMIT_WINDOW_MS",
@@ -119,9 +124,16 @@ describe("issue 77: the rate limit follows the environment", () => {
     const { inviteRateLimit } = loadControls({ INVITE_RATE_LIMIT_MAX: "10" });
     const app = appWith(inviteRateLimit);
 
-    process.env.INVITE_RATE_LIMIT_MAX = "not-a-number";
-    // 30 is the built-in default for this limiter; one request must pass.
-    expect((await request(app).post("/api/request-token")).status).toBe(200);
+    // Each of these must fall back to the built-in 30, so a single request
+    // passes. `"0"` is the one that matters most and the one a `Number.isFinite`
+    // check would let through: `parseInt("0")` IS a safe integer, and a limit of
+    // 0 refuses every request — the guard failing open here would be a
+    // self-inflicted outage rather than an open door. `"-5"` is the same shape
+    // from the other side.
+    for (const value of ["not-a-number", "0", "-5", ""]) {
+      process.env.INVITE_RATE_LIMIT_MAX = value;
+      expect((await request(app).post("/api/request-token")).status).toBe(200);
+    }
 
     delete process.env.INVITE_RATE_LIMIT_MAX;
     expect((await request(app).post("/api/request-token")).status).toBe(200);
@@ -136,26 +148,39 @@ describe("issue 77: the rate limit follows the environment", () => {
     //
     // Their measured failure before the fix: 200,200,429,429,429 — refused on
     // the third, honouring the frozen 2 while the environment already said 5.
-    jest.resetModules();
-    process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = "2";
-    const {
-      loginAccountRateLimit,
-    } = require("../utils/middleware/requestControls");
+    //
+    // Cleans up after ITSELF rather than leaning on the shared `afterEach`: a
+    // test whose correctness depends on a hook defined 130 lines away breaks
+    // silently when someone edits that hook, and this one sets its variable
+    // twice, mid-test, which no hook can see.
+    const previous = process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX;
+    try {
+      jest.resetModules();
+      process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = "2";
+      const {
+        loginAccountRateLimit,
+      } = require("../utils/middleware/requestControls");
 
-    process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = "5";
+      process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = "5";
 
-    const app = appWith(loginAccountRateLimit);
-    const statuses = [];
-    for (let attempt = 0; attempt < 5; attempt++)
-      statuses.push(
-        (
-          await request(app)
-            .post("/api/request-token")
-            .send({ username: "victim", password: "x" })
-        ).status
-      );
+      const app = appWith(loginAccountRateLimit);
+      const statuses = [];
+      for (let attempt = 0; attempt < 5; attempt++)
+        statuses.push(
+          (
+            await request(app)
+              .post("/api/request-token")
+              .send({ username: "victim", password: "x" })
+          ).status
+        );
 
-    // All five pass under the raised ceiling; a refusal would be the sixth.
-    expect(statuses).toEqual([200, 200, 200, 200, 200]);
+      // All five pass under the raised ceiling; a refusal would be the sixth.
+      expect(statuses).toEqual([200, 200, 200, 200, 200]);
+    } finally {
+      // `finally`, so a failing assertion still restores the environment.
+      if (previous === undefined)
+        delete process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX;
+      else process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = previous;
+    }
   });
 });
