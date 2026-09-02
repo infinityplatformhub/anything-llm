@@ -1,0 +1,3 @@
+# QA-2 #52 final — b1dbd4e5 (2026-09-02) — PASS 13/13
+1219/1219 fresh DB. 3 previously-open routes (telegram/disconnect, scheduled-jobs delete, outlook/revoke) → 401 on shape (b); all 17 SINGLE_USER_ONLY_ROUTES 401, none 404 (all mounted). (a) true single-user 0 users: 401 all without token. 4 scoped routes still 403, victim password intact, 2 audit rows, real admin 200/201, impersonated GET 200. deploymentMode.js:46 uses isConfirmedSingleUser.
+#41 3d37ae81 pre-HOLD probe 10/10 PASS (7 routes, 404 body {} identical across 4 cases, strict join live, duplicate-name cross-folder hidden, raw-text attach to A, role-revoke 403).
