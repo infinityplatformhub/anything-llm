@@ -898,3 +898,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - gate-136s2 step 4/8 red = PMO env error: contract named offboardUser.test.js (slice 1) but approof/offboard-user branched from 0d5306d3d before slice 1 merged. Env corrected to the slice-2 file; Dev5 to rebase onto main (brings slice 1 in) with F12, then contract runs both.
 - #139 MERGED (7c733f79d; plain: gate PASS, TL-2 confirm, QA-2 PASS 16/0, M3 survives by design). Closed via task.sh (read back).
 - #138 QA-1 extended harness dry-fire: RF-3c RED (exact-key lookup; provider-qualified → 30001ms); RF-2b policy_versions disproved as witness → group_members end state; RF-5 tightened (off-boundary freeze, key shape, nextRunAt); RF-3d green until handler registers; RF-6 pending route. All to Dev3.
+- #136 s2 final 02778b133 (rebased on dfbbb543f, +F12; 36/36). Gate-136s2b (fresh DB, corrected contract), TL-2 F12 confirm, QA-2 rerun dispatched. Dev5 → #135 RED on approof/135-callsites.
