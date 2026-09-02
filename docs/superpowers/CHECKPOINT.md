@@ -394,3 +394,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - scrypt memoize issue (Dev2 to open): TL-2 pre-ruling cache keyed by SIG_KEY material, module-scope let, RF (ก)-(ง).
 - Post-merge after #40 t3: 2898/2903, 5 red routeWiring + keyScopeCeiling → 21/21 ×2 alone, untouched → logged #106 (concurrent gates, DB pool pressure suspected). Frontend lines not captured (rerun with next post-merge). Main effectively green.
 - #108 ledger SHA 560e084b0 (ledger-only over 5992b34b9); wt-108 moved, result rebound. Waiting QA-1 + TL-2 → close/merge.
+- Frontend on main after #40 t3: vitest 8/8 + capabilities-cache-check 9/9 green. Main fully green (server 2898/2903 with 5 #106-class flakes green alone).
+- #104: QA-3 interim RF-1..3 all closed vs main baseline (RF-2 rollback verified by rows users=0/mode=false + control); mutations N1–N4 rerun after probe harness fix (python heredoc, asserts added). Verdict ~10 min.
