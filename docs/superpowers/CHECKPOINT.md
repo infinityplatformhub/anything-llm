@@ -241,3 +241,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #88 suite running.
 - #78 follow-up 034243d1 merged 96ea07382 (TL-1 PASS). #84 ruling: whole route → system.write (option ข).
 - #40 a2bbb0de8: QA-3 FAIL — singleUserRouteShapeB mounts via app.use → URLs without /api hit SPA catch-all 200 html; ruling add /api + content-type assert. TL-1 PASS. NIT-2 (re-run gate-check after setImmediate) = immediate follow-up. §7.9k added.
+
+## 2026-09-02 — #80 S11a merged (70/88)
+- #80 e1bf4adb8: gate PASS (122/122 exact), QA-1/QA-2/QA-3/TL-1/TL-2 PASS. Follow-up (Dev3): smtp_verified_hash → protectedFields, mailerTest 429 test, 3 comments. S11b UI awaits user A/B.
+- Post-merge main after #88: 2447/2447.
+- #40 a2bbb0de8: QA-2 PASS (37/37, lane excludes singleUserRouteShapeB), TL-1 PASS, QA-3 FAIL (SPA fallback), gate confirms 2 red in that suite. Waiting new SHA + TL-2.
