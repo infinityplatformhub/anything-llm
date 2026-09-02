@@ -25,6 +25,7 @@ const {
   ADMIN_DEFAULT_SCOPES,
   SINGLE_USER_KEY_SCOPES,
   KNOWN_SCOPES,
+  ROUTE_SCOPES,
 } = require("../../utils/apiKeySecurity/scopes");
 
 beforeEach(() => {
@@ -72,6 +73,39 @@ describe("the scope presets the mint sites use", () => {
     expect(ADMIN_DEFAULT_SCOPES).not.toContain("*");
     expect(SINGLE_USER_KEY_SCOPES).not.toContain("*");
     expect(KNOWN_SCOPES).not.toContain("*");
+  });
+
+  test("a retired scope says what replaced it, not that it is unknown (issue 64)", async () => {
+    // `Unknown scope(s): chat.read` is true and useless — it reads as a typo, so the
+    // caller's next move is to check their spelling rather than to grant the right
+    // thing. A name that WAS valid should say so.
+    const { apiKey, error } = await ApiKey.create(1, "retired", {
+      scopes: ["chat.read"],
+    });
+
+    expect(apiKey).toBeNull();
+    expect(error).toMatch(/retired in #64/);
+    expect(error).toMatch(/chat\.read_others/);
+    expect(error).not.toMatch(/Unknown scope/);
+  });
+
+  test("no all-users chat route has drifted back to chat.read (issue 64)", () => {
+    // #64 NIT-2. The three routes that return EVERY user's chats declare
+    // `chat.read_others`; `chat.read` would let a key read other people's chats with a
+    // grant that does not say so, which is how it was before #64.
+    //
+    // Asserted per-route, not as `KNOWN_SCOPES` lacking `chat.read` entirely: a genuinely
+    // self-only /v1 chat route would legitimately want `chat.read`, and a blanket ban
+    // would fail the day someone adds one — pointing at the wrong thing. What must not
+    // come back is these three declaring it.
+    const ALL_USERS_CHAT_ROUTES = [
+      "POST /v1/admin/workspace-chats",
+      "GET /v1/workspace/:slug/chats",
+      "GET /v1/workspace/:slug/thread/:threadSlug/chats",
+    ];
+    for (const route of ALL_USERS_CHAT_ROUTES) {
+      expect(ROUTE_SCOPES[route]).toBe("chat.read_others");
+    }
   });
 
   test("every preset entry is a scope some route actually asks for", () => {
