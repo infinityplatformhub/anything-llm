@@ -450,3 +450,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #116: QA-3 PASS (A/B/C + restart, RF-2b, D/D2, M1–M4 both sides; stub failOnce fix self-caught). Store-read priors make #115 ordering moot. Waiting TL-1 only.
 - #115 final SHA ccc7a78c3 (NIT-1 rename, test-only); result rebound. Waiting TL-2 → close/merge.
 - #40 t4: SettingsButton site GREEN 4/4 (RED first). #121 = 14 unmapped sites (MenuOption ×6 roles-array hardest; SupportEmail maybe not authz; 3 delegated-admin). Dev4 joins: LLMSelector:92 + WorkspaceModelPicker:96 + ToolsMenu:26 (settings.write group); Dev2 keeps workspace.create/PrivateRoute/Memories group. Template = SettingsButton/capabilityGate.test.jsx (mock @/models/system, not the hook).
+- #116 5d1cabfa4 merged b9a8962dd, closed. #115 ccc7a78c3 merged 432456b2b, closed (infi-run:gate-115-ccc7a78c3); TL-2 PASS M1–M6. 88/121. wt-115/g115, wt-116/g116 reaped.
+- #114 fdb32d825: gate PASS at wt-114 (g114) — check-local, setupCompleteExposureHttp 14/14, sweeps 63/63, frontend 15/15. QA-3 interim 6/6 (pre-user 159 masked, unauth 6, R9 closed, operator token sees values); mutations M1–M4 running. Waiting TL-2 + QA-3.

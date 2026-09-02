@@ -216,3 +216,8 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - mentionsInstanceCredential is a substring match on error text (harmless today: priors equal stored).
 - Compensation window (updateENV return → restore) is not atomic; ms-scale.
 - Restore-to-absent = pre-password passthrough state (known, ensure-secrets.js:22-26).
+
+## #115 residuals (hydrate before listen)
+- Boot ~2.5s slower on 97 secret rows until #117 memoize lands (not a hang; try/catch kept).
+- credentialsBeforeListen suite needs --forceExit (background services hold handles).
+- Fallback path passes {credentialStore} redundantly (bootSSL hydrates before try).
