@@ -4,13 +4,20 @@ Reclassified to `auth` tier by PMO — a guard on the surface that mounts routes
 
 ## What made this closeable, measured
 
-Ruling: a ROUTER is distinguishable from ordinary middleware at mount time, measured on express
-4.22.1 rather than assumed:
+Ruling: a ROUTER is distinguishable from ordinary middleware at mount time — but NOT by `.stack`.
+TL-2's pre-read said `.stack` is wrong in both directions; re-measured here on express 4.22.1
+rather than taken on trust:
 
-    app.use(express.json())     → function, no .stack   → middleware
-    app.use("/api", subRouter)  → function, has .stack  → router
+    object                        .stack     has a SEALED_METHOD
+    express.Router()              true       true
+    express() sub-app             FALSE      true    <- false negative
+    express.json() / static / fn  false      false
+    Object.assign(fn,{stack:[]})  TRUE       false   <- false positive
 
-That is the whole basis for the fix. #98 left `use` open because sealing it outright refuses the
+A sub-app keeps its layers under `._router`, which does not exist at all until its first route
+mounts. So the discriminator is `SEALED_METHODS.some(m => typeof value[m] === "function")` —
+the question the seal actually needs answered, since sealing IS replacing those methods, and it
+needs to know nothing about where express stores layers. #98 left `use` open because sealing it outright refuses the
 static handler, the body parsers and the SPA catch-all — correct code — and a guard that fires on
 correct code is removed within a week. The rule is therefore narrow: refuse a router, pass
 everything else through untouched. — ถ้าผิด: guard ที่ยิงใส่โค้ดที่ถูกต้อง แล้วโดนถอดทิ้งใน
@@ -21,15 +28,26 @@ rather than a class, and a router created by a different copy of express in a ne
 would fail an identity check while behaving identically. — ถ้าผิด: bypass ที่เปิดขึ้นเองเมื่อมี
 express สองชุดในทรี
 
-Ruling: a router is REFUSED, not sealed-and-mounted. Its routes already exist by the time it is
-handed over — nobody mounts an empty router — and those routes never crossed a sealed method, so
-`routeGateSweep` cannot see them. Sealing it and letting it mount would leave exactly the
-invisibility this closes.
+Ruling: the argument is BOTH sealed AND refused. TL-2 ruled "seal the argument, then call the
+original"; measured, that alone is not enough — seal a router that was populated BEFORE the mount,
+mount it, and `POST /api/x/deep` answers **200**, because its routes never crossed a sealed method
+and `routeGateSweep` cannot see them. Refusing alone is not enough either: TL-2 drove an EMPTY
+router, mounted then filled, to 200 on the #98 SHA, and recursion cannot help because the stack it
+would walk is empty at the moment it is read. Both halves are load-bearing and each has a mutation
+that names its test. — ถ้าผิด: ปิดได้สองในสามรูปทรง แล้วอธิบาย residual ที่เหลือไม่ได้
 
-Ruling: the seal is ALSO applied to the refused router, recursively. A caller that keeps the
-reference and writes to it afterwards is refused, and so is a router mounted into it. One level
-would leave `outer.use("/in", inner)` as the next bypass — one line longer than the one being
-closed. — ถ้าผิด: ปิดรูหนึ่งแล้วเปิดรูที่ยาวกว่าเดิมหนึ่งบรรทัด
+Ruling: the seal walks nested routers, reading `.stack` OR `._router.stack`, defensively. One level
+would leave `outer.use("/in", inner)` as the next bypass. Here `.stack` is legitimate — it is not
+being used to decide WHAT something is, only to find children of something already known to be
+sealable.
+
+Ruling: the sealed sub-router gets `.route` as well as `SEALED_METHODS`. #98 closed
+`.route(p).post()` because `.route()` hands out a fresh Route the seal never wrapped; a sub-router
+without it is the identical hole one level down (TL-2's F9).
+
+Ruling: `ROUTE_MOUNT_GUARD=off` disables the recursion too. An escape hatch that switches off only
+the top layer leaves a deployment that set the flag to get moving still throwing from a sealed
+sub-router, in a way nothing in the message explains.
 
 Ruling: `get`/`head` stay unsealed, unchanged from #98. `index.js` legitimately mounts
 `app.get("/robots.txt")`, `app.get("/manifest.json")` and `app.use("/")` after the seal point.
@@ -45,26 +63,48 @@ the inversion is the record of the decision. The other stays.
 
 ## Residual, still open and still asserted as such
 
-**A sub-router captured BEFORE the seal keeps an unsealed handle.** The seal holds references; a
-router grabbed earlier is outside it, and #119 does not close it because such a router is never
-handed to `use` while the seal is armed — there is no moment at which to seal it. Closing it means
-sealing at CONSTRUCTION, which is a different change. No module in the tree does this. Its test
-still asserts the current behaviour, so it too inverts if anyone closes it.
+**A router captured BEFORE the seal, and never handed to `use` again, keeps an unsealed handle.**
+The seal holds references; a router grabbed earlier is outside it, and there is no moment at which
+to seal it. Closing it means sealing at CONSTRUCTION, a different change. It takes two deliberate
+steps — hold a reference across boot, then add a route — and no module in the tree does either,
+unlike the three shapes above, which ordinary code reaches by accident. Its test still asserts the
+current behaviour, so it inverts too if anyone closes it.
+
+TL-2 flagged a LARGER residual than the one #98 recorded — the empty-router-filled-afterwards
+shape, which is neither "captured before seal" (it is created after) nor reachable by recursion.
+That one is CLOSED here, by sealing the object rather than walking its stack. F3 is its fixture.
 
 ## Evidence
 
-`routeMountGuard.test.js` **32 passed** (29 before + 3 net; two rewritten). With
-`routeGateSweep.test.js`: **65 passed**.
+`routeMountGuard.test.js` **38 passed**. With `routeGateSweep.test.js`: **71 passed**.
 
-RED before implementation: 3 failed — the sub-router refusal, the depth case, and the prebuilt
-router. The middleware tests passed BEFORE the change too, which is the point: they pin behaviour
-that must not change.
+RED against the seal as #98 shipped it: **8 failed**, each named —
+`a sub-router use()d after boot is refused`, `DEPTH: a router mounted onto a router mounted after
+boot is sealed too`, `a router built and populated BEFORE being use()d is refused as a whole`,
+`F2: an express() SUB-APP is refused too, though it has no .stack`, `F3: a router mounted EMPTY and
+filled afterwards is refused at both moments`, `F9: .route() on a refused sub-router is sealed too`,
+`F7: nesting is sealed at depth, through a router that was ALREADY populated`, `F4: none of the
+refused shapes ANSWERS over HTTP`. The first three are #98's own "these DO mount" assertions,
+inverted in this commit (TL-2's F8). The middleware tests passed before the change too, which is the
+point: they pin behaviour that must not change.
+
+**F4's first oracle was wrong and was replaced.** It asserted `status !== 200`; measured,
+`POST /api/never-mounted-at-all/deep` also answers 200, because `index.js` mounts a terminal
+`app.all("*")` before the seal — so the assertion passed for a route that does not exist and for one
+that does. It now asserts on a marker only each handler can produce, plus a control proving the
+marker discriminates.
 
 Real app boots under `NODE_ENV=production` with 16 top-level layers.
 
 ### Mutations — each named at the test it takes red (§7.9f)
 
-| mutation | test that goes red |
+| mutation | tests that go red |
 |---|---|
-| seal `use` unconditionally (drop the `isRouter` filter) | `ordinary middleware still mounts after boot`, `index.js's own post-boot mounts still work on the real app`, `read methods still mount — index.js mounts app.get AFTER the seal point`, `a READ route added after boot still works, on the real app` |
-| drop the recursive seal | `DEPTH: a router mounted onto a router mounted after boot is sealed too` |
+| discriminate by `Array.isArray(value.stack)` again (the version TL-2 rejected) | `F2: an express() SUB-APP is refused too, though it has no .stack`, `F4: none of the refused shapes ANSWERS over HTTP` |
+| seal the argument but do NOT refuse the mount (TL-2's ruling taken literally) | 8 red, incl. `F3`, `F4`, `F7`, `F9` and all three inverted #98 assertions |
+| refuse the mount but do NOT seal the argument | 6 red, incl. `F3: a router mounted EMPTY and filled afterwards is refused at both moments`, `F9`, `F7`, `F4` |
+| drop the nested walk (seal only the argument handed to `use`) | `F7: nesting is sealed at depth, through a router that was ALREADY populated` |
+| leave the recursion armed when `ROUTE_MOUNT_GUARD=off` | `ROUTE_MOUNT_GUARD=off leaves a use()d sub-router mountable AND writable` |
+
+Two of these — seal-only and refuse-only — are the halves of TL-2's proposal and of my first
+attempt respectively. Neither is sufficient alone, which is the finding.

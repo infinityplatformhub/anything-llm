@@ -402,6 +402,148 @@ describe("#119: use(subRouter) is sealed recursively; middleware is not", () => 
     const { app } = loadReal();
     expect(() => app.get("/manifest.json", (_, r) => r.json({}))).not.toThrow();
   });
+
+  test("F2: an express() SUB-APP is refused too, though it has no .stack", () => {
+    // The fixture that kills the discriminator I first shipped. Measured on
+    // express 4.22.1: a sub-app keeps its layers under `._router`, which does
+    // not exist at all until its first route mounts, so `Array.isArray(.stack)`
+    // reports FALSE for a sub-app and lets it straight through. A sub-app
+    // mounts routes exactly like a Router does.
+    const express = require("express");
+    const { app } = loadReal();
+    const apiRouter = apiRouterOf(app);
+
+    const subApp = express();
+    expect(Array.isArray(subApp.stack)).toBe(false); // why .stack cannot be the test
+    subApp.post("/inside", (_, response) => response.sendStatus(200));
+
+    expect(() => apiRouter.use("/late-subapp", subApp)).toThrow(/after boot/i);
+    expect(() => subApp.post("/after", () => {})).toThrow(/after boot/i);
+  });
+
+  test("F3: a router mounted EMPTY and filled afterwards is refused at both moments", () => {
+    // The shape that recursion alone cannot catch, and the reason the argument
+    // is SEALED as well as refused: walking `.stack` at mount time reads an
+    // empty array and finds nothing, while the object is still held and its
+    // `.post()` still works. TL-2 drove this to 200 over HTTP on the #98 SHA.
+    const express = require("express");
+    const { app } = loadReal();
+    const apiRouter = apiRouterOf(app);
+
+    const empty = express.Router();
+    expect(empty.stack.length).toBe(0); // nothing to recurse into
+
+    expect(() => apiRouter.use("/late-empty", empty)).toThrow(/after boot/i);
+    expect(() => empty.post("/deep", () => {})).toThrow(/after boot/i);
+    expect(() => empty.all("/deep-all", () => {})).toThrow(/after boot/i);
+  });
+
+  test("F9: .route() on a refused sub-router is sealed too", () => {
+    // #98 closed `.route(path).post()` on app and apiRouter because `.route()`
+    // hands out a FRESH Route whose methods this seal never wrapped. A
+    // sub-router that only got SEALED_METHODS would leave the identical hole
+    // one level down.
+    const express = require("express");
+    const { app } = loadReal();
+
+    const sub = express.Router();
+    expect(() => app.use("/late-route", sub)).toThrow(/after boot/i);
+    expect(() => sub.route("/x")).toThrow(/after boot/i);
+  });
+
+  test("F7: nesting is sealed at depth, through a router that was ALREADY populated", () => {
+    // Two levels, built before the mount so the recursion has something real to
+    // walk: use(A) where A already carries B, and B carries a POST. Sealing only
+    // the argument would leave B writable.
+    const express = require("express");
+    const { app } = loadReal();
+
+    const outer = express.Router();
+    const inner = express.Router();
+    inner.post("/deep", (_, response) => response.sendStatus(200));
+    outer.use("/in", inner); // built before boot's seal is applied to them
+
+    expect(() => app.use("/outer2", outer)).toThrow(/after boot/i);
+    expect(() => inner.post("/deeper", () => {})).toThrow(/after boot/i);
+    expect(() => inner.route("/deeper")).toThrow(/after boot/i);
+  });
+
+  test("F4: none of the refused shapes ANSWERS over HTTP", async () => {
+    // #98's lesson, restated: "it threw" and "it is not reachable" are
+    // different questions, and only the second one is the security claim. A
+    // throw that happened AFTER express had already pushed the layer would pass
+    // every assertion above and still serve the route.
+    //
+    // The oracle is the HANDLER'''S OWN RESPONSE, not the status code. Measured:
+    // `POST /api/never-mounted-at-all/deep` answers 200 on this app, because
+    // index.js mounts a terminal `app.all("*")` before the seal — so
+    // `expect(status).not.toBe(200)` passes for a route that does not exist AND
+    // for one that does, which is no assertion at all. Each handler below
+    // therefore returns a marker only it can produce.
+    const express = require("express");
+    const request = require("supertest");
+    const { app } = loadReal();
+    const apiRouter = apiRouterOf(app);
+
+    const populated = express.Router();
+    populated.post("/deep", (_, response) => response.json({ pwned: "router" }));
+    const subApp = express();
+    subApp.post("/deep", (_, response) => response.json({ pwned: "sub-app" }));
+    const empty = express.Router();
+
+    for (const [path, handler] of [
+      ["/sub-router", populated],
+      ["/sub-app", subApp],
+      ["/late-empty", empty],
+    ])
+      expect(() => apiRouter.use(path, handler)).toThrow(/after boot/i);
+    // the empty one is filled after its refused mount — the shape that served
+    // 200 on the #98 SHA
+    expect(() =>
+      empty.post("/deep", (_, response) => response.json({ pwned: "late" }))
+    ).toThrow(/after boot/i);
+
+    // Control: the marker really is distinguishing. A route mounted BEFORE the
+    // seal would return its own body, so the assertion below can fail.
+    const unmounted = await request(app).post("/api/never-mounted-at-all/deep");
+    expect(unmounted.text ?? "").not.toContain("pwned");
+
+    for (const path of ["/sub-router", "/sub-app", "/late-empty"]) {
+      const response = await request(app).post(`/api${path}/deep`);
+      expect(response.text ?? "").not.toContain("pwned");
+      expect(response.body?.pwned).toBeUndefined();
+    }
+  });
+});
+
+describe("#119: the escape hatch turns the recursion off too", () => {
+  // An escape hatch that disables only the top layer leaves a deployment that
+  // set the flag to get moving still throwing from a sealed sub-router, in a way
+  // nothing in the message explains.
+  let previous;
+  beforeEach(() => {
+    previous = process.env.ROUTE_MOUNT_GUARD;
+    process.env.ROUTE_MOUNT_GUARD = "off";
+  });
+  afterEach(() => {
+    if (previous === undefined) delete process.env.ROUTE_MOUNT_GUARD;
+    else process.env.ROUTE_MOUNT_GUARD = previous;
+  });
+
+  test("ROUTE_MOUNT_GUARD=off leaves a use()d sub-router mountable AND writable", () => {
+    const express = require("express");
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const app = express();
+      const sub = express.Router();
+      sealRoutes(app);
+      expect(() => app.use("/sub", sub)).not.toThrow();
+      expect(() => sub.post("/deep", () => {})).not.toThrow();
+      expect(() => sub.route("/other")).not.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("#119: what remains uncovered — recorded, not implied", () => {

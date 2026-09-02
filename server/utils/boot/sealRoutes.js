@@ -21,20 +21,22 @@
 //   CAUGHT  .route(path).post(...)       — `.route()` hands out a FRESH Route whose
 //                                           methods this seal never wrapped
 //   CAUGHT  apiRouter.post / app.post …  — the plain case
-//   NOT     use(subRouter)               — `use` is how all middleware mounts, so
-//                                           sealing it refuses the static handler,
-//                                           body parsers, and every legitimate late
-//                                           `use`. A sub-router brings its own stack
-//                                           and nothing in it crossed a sealed
-//                                           method. Closing this means sealing
-//                                           recursively at mount time, which changes
-//                                           what `use` means — issue #119.
-//   NOT     a sub-router captured earlier — the seal holds two references; anything
-//                                           that grabbed a router before it keeps an
-//                                           unsealed handle. No module does this today.
+//   CAUGHT  use(subRouter) / use(subApp)  — #119. A router or sub-app handed to
+//   (#119)                                  `use` after boot is SEALED and then the
+//                                           mount is REFUSED. Ordinary middleware is
+//                                           untouched, which is why `use` could not
+//                                           simply be sealed outright.
+//   NOT     a sub-router captured earlier — the seal holds references; anything that
+//                                           grabbed a router BEFORE the seal and
+//                                           never hands it to `use` again keeps an
+//                                           unsealed handle. Closing it means sealing
+//                                           at construction, a different change. It
+//                                           takes two deliberate steps (hold a
+//                                           reference across boot, then add a route)
+//                                           and no module in the tree does either.
 //
-// Both uncovered cases have tests that assert they DO mount, so closing either one
-// turns those red and forces a deliberate decision rather than leaving a stale claim.
+// The uncovered case has a test that asserts it DOES mount, so closing it turns that
+// red and forces a deliberate decision rather than leaving a stale claim.
 
 /**
  * Mutating methods only.
@@ -76,25 +78,58 @@ const SEALED_METHODS = Object.freeze([
  * empty value all leave the guard armed.
  */
 /**
- * Is this argument to `use` a router rather than ordinary middleware?
+ * Is this argument to `use` something the seal can act on?
  *
- * Measured on express 4.22.1 rather than assumed: `express.json()` and a bare
- * `(req, res, next) => {}` are functions with no `.stack`; `express.Router()` is
- * a function that carries a `.stack` array and the same `use`/`post` methods an
- * app has. That structural difference is the whole basis for sealing one and not
- * the other.
+ * Discriminated by THE METHODS THIS MODULE SEALS, not by internal shape. TL-2
+ * measured `.stack` wrong in both directions on express 4.22.1, and re-measured
+ * here:
+ *
+ *   express.Router()              stack: true   sealable: true
+ *   express() sub-app             stack: FALSE  sealable: true   <- false negative
+ *   express.json() / static / fn  stack: false  sealable: false
+ *   Object.assign(fn,{stack:[]})  stack: TRUE   sealable: false  <- false positive
+ *
+ * A sub-app keeps its layers under `._router`, which does not exist at all until
+ * its first route is mounted, so `.stack` cannot see one. Asking instead whether
+ * the object has the methods the seal would replace matches what the seal
+ * actually does, and needs to know nothing about where express stores layers.
  *
  * Deliberately structural and not `instanceof`: express's Router is a function
- * with a prototype rather than a class, and a router created by a different copy
- * of express in a nested `node_modules` would fail an identity check while
- * behaving identically.
+ * with a prototype rather than a class, and a router from a second copy of
+ * express in a nested `node_modules` would fail an identity check while behaving
+ * identically.
  */
-function isRouter(value) {
-  return (
-    typeof value === "function" &&
-    Array.isArray(value.stack) &&
-    typeof value.use === "function"
-  );
+function isSealable(value) {
+  if (
+    value === null ||
+    (typeof value !== "function" && typeof value !== "object")
+  )
+    return false;
+  return SEALED_METHODS.some((method) => typeof value[method] === "function");
+}
+
+/**
+ * Routers reachable from a mounted one, at any depth.
+ *
+ * A Router keeps its layers on `.stack`; a sub-app keeps them on
+ * `._router.stack`, absent until its first route. Both are read defensively —
+ * this walks express internals, and a shape it does not recognise must yield
+ * nothing rather than throw during boot.
+ */
+function nestedSealables(value, seen = new Set()) {
+  const found = [];
+  const stack = Array.isArray(value?.stack)
+    ? value.stack
+    : Array.isArray(value?._router?.stack)
+      ? value._router.stack
+      : [];
+  for (const layer of stack) {
+    const handle = layer?.handle;
+    if (!isSealable(handle) || seen.has(handle)) continue;
+    seen.add(handle);
+    found.push(handle, ...nestedSealables(handle, seen));
+  }
+  return found;
 }
 
 function guardDisabled(env = process.env) {
@@ -149,35 +184,39 @@ function sealRoutes(...targets) {
     // fact of being called.
     //
     // #98 left this open because `use` is how every middleware mounts: the
-    // express static handler, the body parsers, the SPA catch-all. Sealing it
-    // outright refuses correct code, and a guard that fires on correct code is
-    // removed within a week.
+    // static handler, the body parsers, the SPA catch-all. Sealing it outright
+    // refuses correct code, and a guard that fires on correct code is removed
+    // within a week. What makes it closeable is that a router is
+    // distinguishable from middleware at mount time — see `isSealable`.
     //
-    // What makes it closeable is that a ROUTER is distinguishable from
-    // middleware at mount time — measured on express 4.22.1: `express.json()`
-    // is a function with no `.stack`, while a `Router` is a function that
-    // carries one. So the rule is narrow: refuse a router, pass everything else
-    // through untouched.
+    // The argument is BOTH sealed AND refused, and both halves were measured to
+    // be necessary:
     //
-    // A router is refused rather than sealed-and-mounted because its routes
-    // already exist by the time it is handed over — nobody mounts an empty
-    // router — and those routes never crossed a sealed method, so
-    // `routeGateSweep` cannot see them. The seal is also APPLIED to it, so a
-    // caller that keeps the reference and writes to it afterwards is refused
-    // too, and so is a router mounted into it. One level would leave
-    // `outer.use("/in", inner)` as the next bypass, one line longer than the
-    // one being closed.
+    //   sealing alone is not enough — a router populated BEFORE the mount keeps
+    //   serving. Measured: seal the object, then `api.use("/x", sub)` where
+    //   `sub` already carried `POST /deep`, and that route answers 200 over
+    //   HTTP. Its routes never crossed a sealed method, so `routeGateSweep`
+    //   cannot see them; that invisibility is the whole hole.
+    //
+    //   refusing alone is not enough — a router mounted EMPTY and filled
+    //   afterwards has nothing to refuse at mount time, and its later `.post()`
+    //   still works. TL-2 drove exactly that shape to 200 over HTTP on the #98
+    //   SHA. Recursing into `.stack` at mount time cannot catch it either: the
+    //   stack is empty at the moment it is read.
+    //
+    // So the argument is sealed first — closing every later write to it, at any
+    // depth — and then the mount itself is refused.
     if (typeof target.use === "function") {
       const originalUse = target.use.bind(target);
       target.use = function refuseLateRouterMount(...args) {
-        const routers = args.filter(isRouter);
-        if (routers.length === 0) return originalUse(...args);
+        const sealables = args.filter(isSealable);
+        if (sealables.length === 0) return originalUse(...args);
 
-        // Seal on the way out, so the refused router cannot be quietly reused.
-        for (const router of routers) sealRoutes(router);
+        for (const sealable of sealables)
+          sealRoutes(sealable, ...nestedSealables(sealable));
         throw new Error(
-          `[route mount guard] a sub-router was mounted with use() after boot ` +
-            `completed. A router carries its own stack, so nothing inside it ` +
+          `[route mount guard] a router or sub-app was mounted with use() after ` +
+            `boot completed. It carries its own stack, so nothing inside it ` +
             `passes through the sealed methods and its routes are invisible to ` +
             `the authorization sweep (routeGateSweep.test.js) — the same hole a ` +
             `late direct mount leaves. Register it in ENDPOINT_REGISTRATIONS ` +
@@ -209,4 +248,10 @@ function sealRoutes(...targets) {
   return { sealed: true, reason: "sealed" };
 }
 
-module.exports = { sealRoutes, guardDisabled, isRouter, SEALED_METHODS };
+module.exports = {
+  sealRoutes,
+  guardDisabled,
+  isSealable,
+  nestedSealables,
+  SEALED_METHODS,
+};
