@@ -709,7 +709,7 @@ function systemEndpoints(app) {
       try {
         // Cannot update password in multi - user mode.
         if (multiUserMode(response)) {
-          response.sendStatus(401).end();
+          response.status(401).json({ error: "Single-user mode required." });
           return;
         }
 
@@ -1179,7 +1179,9 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         if (response.locals.multiUserMode) {
-          return response.sendStatus(401).end();
+          return response
+            .status(401)
+            .json({ error: "Single-user mode required." });
         }
 
         const { name = null, scopes = null } = reqBody(request);
@@ -1222,7 +1224,9 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         if (response.locals.multiUserMode)
-          return response.sendStatus(401).end();
+          return response
+            .status(401)
+            .json({ error: "Single-user mode required." });
         const { id } = request.params;
         if (!id || isNaN(Number(id))) return response.sendStatus(400).end();
 

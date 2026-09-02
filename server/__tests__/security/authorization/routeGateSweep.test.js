@@ -449,13 +449,15 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     expect(ungated).toEqual([]);
     for (const [signature, reason] of INTENTIONAL_NON_PERMISSION_MUTATIONS) {
       expect(reason.length).toBeGreaterThan(10);
-      expect(
-        routesAtAssertion.some(
-          (layer) =>
-            `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}` ===
-            signature
+      const matches = routesAtAssertion.filter((layer) =>
+        Object.keys(layer.route.methods).some(
+          (method) =>
+            `${method.toUpperCase()} ${layer.route.path}` === signature
         )
-      ).toBe(true);
+      );
+      // One signature exempts exactly one mounted layer; collisions never inherit
+      // another route's reason.
+      expect(matches).toHaveLength(1);
     }
   });
 

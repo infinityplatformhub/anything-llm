@@ -163,7 +163,7 @@ describe("issue 52: single-user-only routes refuse an impersonated session in sh
       const [method, routePath] = signature.split(" ");
       // Params filled with a value that no row will match: a 404 is a fine
       // answer, a 2xx is not.
-      const url = routePath.replace(/:[A-Za-z]+/g, "999999");
+      const url = `/api${routePath.replace(/:[A-Za-z]+/g, "999999")}`;
       const response = await fetch(`${baseUrl}${url}`, {
         method,
         headers: {
@@ -172,6 +172,13 @@ describe("issue 52: single-user-only routes refuse an impersonated session in sh
         },
         ...(method === "GET" ? {} : { body: JSON.stringify({}) }),
       });
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        reached.push(
+          `${signature} → ${response.status} ${contentType || "no content-type"}`
+        );
+        continue;
+      }
       if (response.status >= 200 && response.status < 300)
         reached.push(`${signature} → ${response.status}`);
     }
