@@ -61,3 +61,48 @@ single-user จะเสีย UI ของตัวเอง `QuickActions` ก
   `setupMultiUser` (`system.write`) และ `updateSystemPassword` (ไม่มี `requirePermission` เลย)
   ต้องตัดสินว่า capability ของเมนูควรเป็นตัวที่เข้มกว่าหรือตัวที่ทำให้เมนูมีประโยชน์
 - RF-4 ของ Dev4 (แปลง `EditUserModal` เป็น `can("user.manage")` ต้องแดง) — รอ #123 merge
+
+---
+
+# addendum — TL-1 pre-read + QA-3 oracle รับมาแล้ว
+
+## R1 ยืนยันด้วยการรัน: `ManageWorkspace` switcher เปิดสอง tab คนละ permission
+
+`endpoints/extensions/index.js` มี 8 route และ **ทั้ง 8 ใช้ `requirePermission("document.create")`**
+ขณะที่ tab `documents` เรียก `Workspace.modifyEmbeddings` → `workspace.embeddings.manage`
+
+แปลว่า recon รอบแรกของผม (บอกว่าทั้ง `:83` และ `:140` เป็น `workspace.embeddings.manage`)
+**ยังหยาบไป** — `:83` เป็น tab switcher ที่เปิดได้สองทาง ผมดูแค่ tab แรก
+
+ตาม R1: gate ปุ่มแต่ละ tab ด้วย capability ของตัวเอง switcher เป็น OR
+
+## F1 ยืนยัน: `roles` ของ security entry เป็น dead code อยู่แล้ว
+
+`SettingsSidebar/index.jsx:459` `hidden={user?.role}` — `user?.role` เป็น string ที่ไม่ว่าง
+สำหรับผู้ใช้ทุกคนใน multi-user (`"admin"`/`"manager"`/`"default"`) จึง truthy เสมอ
+entry นี้จึงถูกซ่อนใน multi-user **ก่อน** จะถึงการเช็ค `roles` ด้วยซ้ำ
+
+`roles={["admin","manager"]}` บรรทัดนั้นไม่เคยมีผล — ต้องคง `hidden` ไว้เป๊ะ ๆ
+พร้อมคอมเมนต์ว่า load-bearing ไม่ใช่ของเหลือ
+
+## `system.read` — ทำไมต้องเข้า `ORG_CAPABILITIES`
+
+รันบน seed จริง:
+```
+permission system.read -> heldBy: ["super_admin/org"]
+```
+`ORG_CAPABILITIES` วันนี้ไม่มี `system.read` ถ้า map เมนู mobile-app ไปหามันโดยไม่เพิ่ม
+`can("system.read")` จะอ่าน key ที่ไม่มีใน response → `undefined` → falsy → **เมนูหายทุกคน
+รวมทั้ง super_admin** ไม่ใช่แค่ manager
+
+guard `ManagerRoute` → `AdminRoute` แยกเป็น **#127** ตาม ruling พร้อมคำถามที่แท้จริงว่า
+`system.read` ควรกว้างกว่า super_admin หรือไม่ (เป็น seed migration ไม่ใช่ guard)
+
+## F2/F3 ที่ต้องระวังตอนเขียน
+
+- `flex && !!user && !roles.includes(...)` — `!!user` คือ disjunct ที่ทำให้ single-user
+  (ไม่มี user row) เห็นเมนู ต้องคงไว้ทุก entry ไม่งั้น single-user เสีย UI ตัวเอง
+- `hasVisibleOptions:186-187` ใช้ตรรกะเดียวกันซ้ำ — แยกเป็นฟังก์ชันเดียวเรียกสองที่
+  ไม่งั้น parent กับ child ตัดสินคนละแบบ
+- sidebar ไม่มี loading state วันนี้ → render เฉพาะเมื่อ `loading === false`
+  ไม่ render อะไรระหว่างโหลด (ไม่ใช่ skeleton — sidebar ไม่มีที่ให้วาง)
