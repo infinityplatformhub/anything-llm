@@ -141,3 +141,24 @@ RED: เปลี่ยน `ssoEnabledProviders()` ให้คืน `{id, issu
 ตัวที่แดงรวม "carries no issuer" ตัวที่เขียวคือ provider ที่ปิดอยู่ (ยังไม่ควรโผล่)
 
 GREEN: `Tests: 1355 passed, 1355 total` / `Test Suites: 134 passed, 134 total`
+
+## Gate fixes (§7.3a + §5.1)
+
+Ruling: §7.3a — describe/test title ขึ้นต้น `#` เปลี่ยนเป็น "issue 50:" 6 จุด
+(5 ไฟล์) commented-code gate อ่าน `#` บนบรรทัดที่ลงท้าย `{` เป็นคอมเมนต์
+เหลือ 3 จุดใน tree ที่ขึ้นต้นด้วยข้อความอื่นแล้วมี `#` กลางประโยค
+(`hypervisor.test.js:99`, `MCP/index.test.js:125`, `chat/index.test.js:321`)
+ไฟล์เก่าที่ผมไม่ได้แตะ ไม่อยู่ใน diff นี้ ไม่แก้
+
+Ruling: §5.1 model imports — สาเหตุจริงไม่ใช่ "ไม่มี require" อย่างที่ report บอก
+`check-model-imports.sh:30` grep หาชื่อ model **บนบรรทัดเดียวกับ** `require(`
+destructure หลายบรรทัดทำให้ `= require(...)` อยู่คนละบรรทัดกับ `SystemSettings`
+gate เลยมองไม่เห็น แก้เป็น single-line require 2 ไฟล์ (`noLoginShapeB.test.js`,
+`ssoProvidersPayload.test.js` — ตัวหลัง report ไม่ได้ระบุ เจอตอนรัน gate เอง)
+**ไม่ย้ายไป top-level** เพราะ §7.10: `jest.resetModules()` รันใน beforeAll
+top-level require จะ bind prisma singleton กับ database ผิดก่อน test DB จะมีตัวตน
+ใส่ comment ที่ require บอกทั้งสองเหตุผล ถ้าผิด: ย้ายขึ้น top-level = suite เขียว
+แต่เขียนลง database ที่ใช้ร่วมกัน (บั๊กเดียวกับที่ QA-1 เจอใน #31)
+
+GREEN: `bash scripts/check-local.sh` → all checks passed
+`Tests: 1355 passed, 1355 total` / `Test Suites: 134 passed, 134 total`

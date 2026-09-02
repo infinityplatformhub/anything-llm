@@ -60,7 +60,7 @@ afterAll(async () => {
   await root.$disconnect();
 }, 60_000);
 
-describe("#50: sso.issue is retired from the vocabulary", () => {
+describe("issue 50: sso.issue is retired from the vocabulary", () => {
   test("the permission row is gone", async () => {
     const row = await prisma.permissions.findFirst({
       where: { action: "sso.issue" },
@@ -85,7 +85,7 @@ describe("#50: sso.issue is retired from the vocabulary", () => {
   });
 });
 
-describe("#50: existing keys survive the retirement", () => {
+describe("issue 50: existing keys survive the retirement", () => {
   const seedKey = async (name, scopes) =>
     prisma.api_keys.create({
       data: {

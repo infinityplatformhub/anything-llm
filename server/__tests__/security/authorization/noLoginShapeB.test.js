@@ -104,14 +104,15 @@ afterEach(() => {
   delete process.env.SIMPLE_SSO_NO_LOGIN;
 });
 
-describe("#50: NO_LOGIN blocks in shape (b)", () => {
+describe("issue 50: NO_LOGIN blocks in shape (b)", () => {
   test("the fixture really is shape (b), or nothing below means anything", async () => {
-    const {
-      SystemSettings,
-    } = require("../../../models/systemSettings");
-    const {
-      isConfirmedSingleUser,
-    } = require("../../../utils/authorization/actorResolver");
+    // Single-line requires: check-model-imports.sh (§5.1) looks for the model
+    // name on the same line as require(), and a multi-line destructure hides it.
+    // Required HERE rather than at the top of the file because §7.10's
+    // jest.resetModules() runs in beforeAll — a top-level require would bind the
+    // prisma singleton to the wrong database before the test DB exists.
+    const { SystemSettings } = require("../../../models/systemSettings");
+    const { isConfirmedSingleUser } = require("../../../utils/authorization/actorResolver");
     expect(await SystemSettings.isMultiUserMode()).toBe(false);
     expect(await isConfirmedSingleUser()).toBe(false);
     expect(await prisma.users.count()).toBeGreaterThan(0);

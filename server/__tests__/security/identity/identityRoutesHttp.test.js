@@ -195,7 +195,7 @@ describe("GET /api/sso/:provider/callback", () => {
     expect(grants[0].roles.name).toBe("member");
   });
 
-  test("#50: the temporary auth token a login mints is single-use", async () => {
+  test("issue 50: the temporary auth token a login mints is single-use", async () => {
     // Inherited from ssoIssuanceLockHttp.test.js, deleted with simple-SSO. That
     // file held the ONLY HTTP proof that TemporaryAuthToken is consumed on use.
     // OIDC now depends on the same property (identity.js issues and validates

@@ -16,9 +16,7 @@ process.env.STORAGE_DIR =
     require("path").join(require("os").tmpdir(), "s50-ssoproviders-")
   );
 
-const {
-  SystemSettings,
-} = require("../../models/systemSettings");
+const { SystemSettings } = require("../../models/systemSettings");
 
 const OIDC_ENV = [
   "SSO_OIDC_ENABLED",
@@ -27,7 +25,7 @@ const OIDC_ENV = [
   "SSO_OIDC_CLIENT_SECRET",
 ];
 
-describe("#50: SSOProviders exposes ids only", () => {
+describe("issue 50: SSOProviders exposes ids only", () => {
   afterEach(() => {
     for (const key of OIDC_ENV) delete process.env[key];
   });

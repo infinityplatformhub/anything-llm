@@ -25,7 +25,7 @@ const {
 } = require("../../endpoints/api/userManagement");
 const { ROUTE_SCOPES, scopeFor } = require("../../utils/apiKeySecurity/scopes");
 
-describe("issue-auth-token is gone (#50)", () => {
+describe("issue 50: issue-auth-token is gone", () => {
   const routes = {};
   const fakeApp = {
     get: (path, middlewares, handler) => {
