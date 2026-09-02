@@ -87,3 +87,4 @@
 - [reference, not a risk] worktrees share server/node_modules via symlink (h52→t7, pr41/pr4d→pr4b); run ./node_modules/.bin/prisma generate before direct jest/node in any worktree (§7.6)
 - [→ #43 follow-up] usernameFromEmail collapses distinct emails into one username; collisions hit users.username unique instead of R1 → unrelated user locked out with opaque 401; also strips leading non-ASCII/digits. Fix: R1 compares derived username too, or suffix retry (QA-1 S1 NIT-1). S2 inherits the helper.
 - [→ backlog] suites relying on users.count()===0 (apiKeys.postgres, actorResolver R5) break on any shared-DB user row; give them their own DB like other integration suites (QA-1, seen 3×)
+- [→ #50] simpleSSOEnabled.js fails open on shape (b); resolved when #50 removes issuance half and the remainder uses isConfirmedSingleUser (#58 ledger E)
