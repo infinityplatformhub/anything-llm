@@ -164,3 +164,10 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge main after #74: 2219/2222 full run; 3 red = C-1 docIdVariants (providerDocIdCallSites) → pass 20/20 with fresh STORAGE_DIR. Cause: shared main storage dir holds stale LanceDB state. §7.14a: post-merge suite must use fresh STORAGE_DIR. Other 3 red suites pass isolated (load).
 - #40 dccaba8: first gate run invalid (wt-bootstrap.sh absent on branch fork d69a9382c, 31 failed = no DB); manual bootstrap + regate running. Dev2 posted `updated` on #40 (13 bypasses, all found by running). #52 retro comment added.
 - #78: impl78 reported a nonexistent SHA (3rd false report); ruling: one final dispatch with raw git output, else Dev1 writes (Opus) with a fresh Sonnet reviewer. 4th route enable-multi-user → system.write at ingress.
+
+## 2026-09-02 — #40 ruling → router-walk (§7.9j); #80 route lane 719b7eee; #87 opened
+- #40: string-literal ruling superseded after TL-1 X1–X6 (inline route / registrar outside endpoints / list mutated post-declare all GREEN under any source scan). Final ruling: freeze ENDPOINT_REGISTRATIONS + router-walk of assembled router with WeakSet identity as primary gate + AST as diagnostic (string-literal, ESM throw, drop `exported`, `32`→relation) + helper uses real apiRouter. QA-2 PASS on dccaba8 recorded as superseded. Dev2 waiting single SHA; TL-2 holds M-1..M-9.
+- #80 719b7eee route lane: contract 7 suites 85/85; `/v1`+email → 400 (scope vocab lacks user.manage; new scope = separate issue); OBS-1/2 done; quoted-printable decode + invite.create-only role rulings. Gate running; QA-1/QA-3/TL-1/TL-2 dispatched. Step 6 (save/test route, SMTP_PASSWORD secret, dumpENV) = final SHA.
+- #87 opened: VECTOR_DB normaliser (Dev5, option ข).
+- #78: waiting impl78 final dispatch / Dev1 self-write.
+- #30 slice 3: HTTP test written, hangs ~590s; Dev4 diagnosing (hints: /api/v1 path §7.15, separate DB per run).
