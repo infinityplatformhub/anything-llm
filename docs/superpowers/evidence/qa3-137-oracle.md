@@ -116,3 +116,43 @@ SHA rather than by set arithmetic, which is how the recon produced its own table
 
 `qa3_137` is a throwaway copy and can be dropped on your word; `qa3_121` is untouched.
 Probe test file deleted, `/tmp/qa3-127` `git status --porcelain` clean. No commits.
+
+---
+
+## 8. Addendum — R5 ruling (`audit.purge` split), measured
+
+PMO ruled §7 by **splitting a new action `audit.purge`, super_admin only**, rather than
+accepting the asymmetry. Checked what that ruling has to move, on `qa3_137`:
+
+**`audit.purge` does not exist yet.** `SELECT action FROM permissions WHERE action LIKE 'audit%'`
+returns `audit.read` alone. So the ruling is not a re-grant — it adds a permission row, and
+the migration must seed it *and* leave it granted to `super_admin` only.
+
+**The route it has to move** (`server/endpoints/system.js:1777`):
+
+```js
+app.delete(
+  "/system/event-logs",
+  [validatedRequest, requirePermission("system.write", orgResource)],   // → audit.purge
+```
+
+Note the sibling immediately above it at `:1757` is `app.post("/system/event-logs")` gated
+on `system.read` — the *reading* half, which `setup_admin` is meant to gain. So the two
+handlers share a path and differ by method, and only the DELETE moves. A mutation that
+re-gates the wrong one leaves the same string in the file and passes a careless grep.
+
+### Extra mutants this ruling adds to my list
+
+| # | mutation | must |
+|---|---|---|
+| A-a | `DELETE /system/event-logs` left on `system.write` (ruling not applied) | red — `setup_admin` must be **denied** the purge |
+| A-b | `audit.purge` granted to `setup_admin` in the migration | red — deny-assertion |
+| A-c | `audit.purge` row added to `permissions` but granted to **nobody** | must **not** silently pass: `super_admin` must still be allowed it, or the action is dead like `chat.read` was in #63 |
+| A-d | re-gate `POST /system/event-logs` (the read) to `audit.purge` by mistake | red — `setup_admin` must still **reach** the log list; this is the shared-path trap |
+| A-e | `emitAuditEvent("event_logs_cleared", …)` still fires under the new gate | the audit event on purge must not be lost when the permission changes |
+
+A-c is the #63 lesson restated: a seeded action granted to no role is invisible until
+someone needs it. A-d is the one a text-based check would miss.
+
+The rest of §5's list is unchanged. `user.read` confirmed intended per PMO, so §6's first
+question is closed; §6's second is superseded by this ruling.

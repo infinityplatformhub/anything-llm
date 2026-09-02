@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">04c34a697</span> · 2026-09-03 00:05</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">2b0c61757</span> · 2026-09-03 00:25</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -111,7 +111,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="card">
       <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · 49f7a0cd9</span></div>
-      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository · SHA แล้ว: revokedAt ใน tx เดียวกับ suspend, endpoint ถอดสมาชิกกลุ่ม, 5 mutants ตาย · blocker (QA-2): User._update / re-suspend ทิ้ง key ที่ยังใช้ได้ · TL-2 ตัดสิน: อ่าน suspended ที่ reader (keyGrantPrincipal) + sweep แบบ level-triggered · Dev5 กำลังแก้ 5 fixtures</p>
+      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน fix กำลังจะเสร็จ (ETA ~20 นาที): reader check ใน keyGrantPrincipal + sweep level-triggered + 14 fixtures · revokedAt ถาวรหลัง un-suspend (TL-2) · collateral 7 suite แก้แล้ว 5</p>
     </div>
     <div class="card">
       <div class="top"><span class="id">V8 mobile</span><span class="who">Dev4 · หลัง #132</span></div>
@@ -125,7 +125,7 @@ td.mono{white-space:nowrap}
     <div class="card"><div class="top"><span class="id">#132 SystemReadRoute</span><span class="who">Dev4 · contract พร้อม รอ #121 merge</span></div><p>TL-2: ย้ายเฉพาะ mobile-connections (อีก 2 หน้าเขียนด้วย action อื่น) · เก็บ hideUserMenu · เทส assert ที่ capability ไม่ใช่ role</p></div>
     <div class="card"><div class="top"><span class="id">#130 connectionBudget</span><span class="who">Dev1 · กำลังทำ</span></div><p>TL-2 ruling: เทส capture-and-invoke จับ M4 ใน process เดียว 0.3 วิ · timeout item ปิด stale</p></div>
     <div class="card"><div class="top"><span class="id">S4b slice 2–3</span><span class="who">Dev3 · หลัง #133</span></div><p>apply + checkpoint · job + lock (session lock vs row+heartbeat = ruling) · slice 4 รอ Q4</p></div>
-    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · contract</span></div><p>recon วัดผ่าน engine: setup_admin ถือ 8/62 · เสนอ grant system.write + system.read + user.read (ไม่ให้ system.env.read) · รอ TL-1 ตัดสิน DELETE event-logs</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
+    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · RED</span></div><p>TL-1: แยก audit.purge (super_admin เท่านั้น) + grant system.write/system.read/user.read ให้ setup_admin · QA-3 oracle: เมนูคืน 12 ตัว · ช่อง Model Router รอ TL-1 · merge หลัง #121</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
   </div>
 </section>
 
