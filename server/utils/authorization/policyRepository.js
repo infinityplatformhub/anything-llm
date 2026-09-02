@@ -676,6 +676,115 @@ async function removeGroupMember({ actor, groupId, userId, db = prisma }) {
   });
 }
 
+/**
+ * Remove every trace of a user's ACCESS: group memberships, role grants, document ACLs.
+ *
+ * Slice 1 (#136) revoked the user's KEYS and stopped their session. It deliberately
+ * did not claim to revoke their access — the grants and ACLs stayed, safe only
+ * because `actorResolver.keyGrantPrincipal` returns null for a suspended user before
+ * any of them is read. That is one guard away from a residual, and it stops being
+ * true the moment anything answers an ACL question without going through the
+ * resolver. This is the slice that removes the rows.
+ *
+ * WHY EVERY WRITE GOES THROUGH A PRIMITIVE (TL-1, 6aabd6b7d). Not layering
+ * tidiness — each primitive carries something a raw statement destroys:
+ *
+ *   removeGroupMember    `refuseGroupEscalation`, and scope keys derived from the
+ *                        GROUP ROW's orgId. A raw `group_members.deleteMany` skips
+ *                        both, so the removal succeeds and publishes either no
+ *                        invalidation or one under the wrong `org:` key — and the
+ *                        stale filter keeps serving.
+ *   revokeGrant          reads the doomed rows BEFORE deleting so it can write
+ *                        `grant_revocations` with the role name as it stood. A raw
+ *                        delete destroys the only record the grant ever existed.
+ *   revokeDocumentAcl    the version bump under `document:<id>`, which a bulk ACL
+ *                        delete cannot express per document.
+ *
+ * WHY N VERSION ROWS, NOT ONE. Measured by TL-1: `inTransaction` INLINES when handed
+ * a `tx`, so one outer transaction around three primitives still runs three
+ * `bumpVersion` calls, and collapsing them would need `bumpVersion` exported —
+ * barred. N is correct rather than tolerated: the intermediate versions are written
+ * inside an uncommitted transaction, so no reader ever observes one (`cache.js`
+ * compares `entry.policyVersion === head`, and `head` does not move for anyone else
+ * until commit). After commit the head jumps to the last version and every stale
+ * entry misses. What the transaction buys is ROLLBACK SCOPE — if the ACL removal
+ * fails, the memberships and grants already removed come back — which is a different
+ * property from a tidy row count, and the one worth having.
+ *
+ * WHY IT ENUMERATES FIRST. `removeGroupMember` bumps the version even when its
+ * `deleteMany` matches nothing, by design: a caller that asked for a removal is
+ * entitled to know the cache reflects reality. Correct for a direct caller, wrong
+ * for a second offboard — calling the primitives blindly makes a re-run write one
+ * `policy_versions` row per membership the user USED TO have, and every "the user
+ * has no access afterwards" assertion stays green while it happens. Reading the rows
+ * inside the transaction and driving the primitives from that list makes a second
+ * offboard write nothing, with no change to the primitives.
+ *
+ * `document_acl.principal_id` is TEXT with no foreign key (schema.prisma), so
+ * enumerating a user's ACL rows is a string match — the recycling surface #135
+ * exists to close. Noted rather than fixed here: giving that column an FK is a
+ * schema change and a different issue.
+ *
+ * @returns {Promise<{memberships: number, grants: number, acls: number}>} counts of
+ *   rows actually removed — real counts from the enumeration, not derived totals, so
+ *   a caller can tell a no-op re-run from a first offboard.
+ */
+async function offboardUser({ actor, userId, reason = null, db = prisma }) {
+  requireActor(actor, "offboardUser");
+  const principalId = String(Number(userId));
+
+  return inTransaction(db, async (tx) => {
+    // Enumerate everything BEFORE removing anything: the primitives are driven from
+    // these lists, so a row that does not exist produces no call and therefore no
+    // version bump.
+    const memberships = await tx.group_members.findMany({
+      where: { user_id: Number(userId) },
+      select: { group_id: true },
+    });
+    const grants = await tx.principal_role_grants.findMany({
+      where: { principal_type: "user", principal_id: principalId },
+      select: { role_id: true, workspace_id: true },
+    });
+    const acls = await tx.document_acl.findMany({
+      where: { principal_type: "user", principal_id: principalId },
+      select: { document_id: true, action: true },
+    });
+
+    for (const { group_id } of memberships)
+      await removeGroupMember({ actor, groupId: group_id, userId, db: tx });
+
+    // One call per (role, workspace) pair: `revokeGrant` filters on both, so a
+    // single call cannot stand in for two grants of different roles, and the
+    // `grant_revocations` row it writes names the role that was actually taken.
+    for (const { role_id, workspace_id } of grants)
+      await revokeGrant({
+        actor,
+        principalType: "user",
+        principalId,
+        roleId: role_id,
+        workspaceId: workspace_id,
+        reason: reason ?? "user offboarded",
+        db: tx,
+      });
+
+    for (const { document_id, action } of acls)
+      await revokeDocumentAcl({
+        actor,
+        documentId: document_id,
+        principalType: "user",
+        principalId,
+        action,
+        db: tx,
+      });
+
+    return {
+      memberships: memberships.length,
+      grants: grants.length,
+      acls: acls.length,
+    };
+  });
+}
+
 module.exports = {
   grantRole,
   canAssignLegacyRole,
@@ -691,4 +800,5 @@ module.exports = {
   currentPolicyVersion,
   addGroupMember,
   removeGroupMember,
+  offboardUser,
 };

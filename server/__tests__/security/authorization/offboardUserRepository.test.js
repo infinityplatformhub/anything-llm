@@ -13,6 +13,17 @@
  * fixture drives a REAL `FilterCache` instance and requires the access to be gone
  * through it, exactly as S4a RF-5 does for membership.
  *
+ * TL-1's pre-read (6aabd6b7d) replaced the original "exactly one policy_versions
+ * row for N removals" fixture. Measured there: `inTransaction(db, fn)` INLINES when
+ * handed a `tx`, so one outer transaction around three primitives still produces
+ * three bumps, and collapsing them needs the `bumpVersion` export TL-2 barred. N is
+ * correct rather than tolerated — the intermediate versions are written inside an
+ * uncommitted transaction, so no reader observes one (`cache.js:97` compares against
+ * a head that does not move until commit). What the transaction buys is ROLLBACK
+ * SCOPE, not a row count, so that is what F2 asserts now. A bump COUNT is never the
+ * contract here: it would pin an implementation detail that changes the day the
+ * primitives batch.
+ *
  * Written RED before `offboardUser` exists.
  */
 
@@ -50,6 +61,7 @@ beforeAll(async () => {
     stdio: "pipe",
   });
   prisma = new PrismaClient({ datasources: { db: { url: testUrl } } });
+  ACTOR = await makeActor("super_admin");
 }, 300_000);
 
 afterAll(async () => {
@@ -72,12 +84,41 @@ const {
   buildDocumentFilter,
 } = require("../../../utils/authorization/documentFilter");
 
-// PLACEHOLDER ACTOR — TL-2's ruling on the #135 actor shape is pending. Every
-// call below goes through this one binding, so when the shape is settled it
-// changes in one place rather than in nine.
-const ACTOR = SERVICE_PRINCIPALS.singleUser;
+// SETUP actor: the exempt single-user principal, used only to BUILD each world.
+// It skips `refuseGroupEscalation` and `revokeGrant`'s `role.revoke` check, which is
+// exactly why it must not be the actor the offboard itself runs as — a fixture that
+// exercises the code under test with the one principal that bypasses both guards
+// proves nothing about either.
+const SETUP = SERVICE_PRINCIPALS.singleUser;
 
+// The actor `offboardUser` actually runs as, per TL-2's #135 ruling: a REAL user
+// holding super_admin, which is what `response.locals.actor` resolves to at the
+// admin.js call site. It holds `role.revoke`, so `revokeGrant`'s guard admits it,
+// and it is not exempt, so `refuseGroupEscalation` genuinely runs.
+let ACTOR;
 let seq = 0;
+
+async function makeActor(roleName) {
+  const role = await prisma.roles.findFirstOrThrow({
+    where: { name: roleName, scope: "org" },
+  });
+  const user = await prisma.users.create({
+    data: {
+      username: `${roleName}-${seq++}-${dbSuffix}@example.com`,
+      password: "x",
+      role: "admin",
+    },
+  });
+  await repository.grantRole({
+    actor: SETUP,
+    principalType: "user",
+    principalId: String(user.id),
+    roleId: role.id,
+    db: prisma,
+  });
+  return { type: "user", id: String(user.id), orgId: 1 };
+}
+
 /**
  * A user who holds access three different ways: a group membership carrying a
  * workspace grant, a direct org grant, and a document ACL.
@@ -94,7 +135,7 @@ async function world(label) {
     data: { orgId: 1, name: tag, source: "lark", externalId: `od-${tag}` },
   });
   await repository.addGroupMember({
-    actor: ACTOR,
+    actor: SETUP,
     groupId: group.id,
     userId: user.id,
     db: prisma,
@@ -104,7 +145,7 @@ async function world(label) {
     where: { name: "viewer", scope: "workspace" },
   });
   await repository.grantRole({
-    actor: ACTOR,
+    actor: SETUP,
     principalType: "group",
     principalId: String(group.id),
     roleId: viewer.id,
@@ -117,22 +158,44 @@ async function world(label) {
     where: { name: "member", scope: "org" },
   });
   await repository.grantRole({
-    actor: ACTOR,
+    actor: SETUP,
     principalType: "user",
     principalId: String(user.id),
     roleId: member.id,
     db: prisma,
   });
 
-  const document = await prisma.documents.create({
-    data: { filename: tag, dedupe_key: tag, orgId: 1 },
-  });
-  await repository.grantDocumentAcl({
-    actor: ACTOR,
-    documentId: document.id,
+  // TWO documents, deliberately. `document_acl.principal_id` is TEXT with no FK
+  // (`schema.prisma:911`), so enumerating a user's ACL rows is a string match — the
+  // recycling surface #135 exists to close. One row cannot tell "removed the rows I
+  // enumerated" from "removed the one row I happened to know about".
+  const documents = [];
+  for (const suffix of ["a", "b"]) {
+    const document = await prisma.documents.create({
+      data: { filename: `${tag}-${suffix}`, dedupe_key: `${tag}-${suffix}`, orgId: 1 },
+    });
+    await repository.grantDocumentAcl({
+      actor: SETUP,
+      documentId: document.id,
+      principalType: "user",
+      principalId: String(user.id),
+      action: "document.read",
+      db: prisma,
+    });
+    documents.push(document);
+  }
+  const document = documents[0];
+
+  // ...and a WORKSPACE-SCOPED grant naming the user. `revokeGrant` filters on
+  // `workspace_id`, so a call that passes null matches nothing and this grant
+  // survives silently — a mutation that dropped the workspace id passed every
+  // fixture until this row existed.
+  await repository.grantRole({
+    actor: SETUP,
     principalType: "user",
     principalId: String(user.id),
-    action: "document.read",
+    roleId: viewer.id,
+    workspaceId: workspace.id,
     db: prisma,
   });
 
@@ -142,7 +205,7 @@ async function world(label) {
     orgId: 1,
     workspaceIds: [workspace.id],
   };
-  return { workspace, user, group, document, actor };
+  return { workspace, user, group, document, documents, actor };
 }
 
 const buildThrough = (cache, actor) =>
@@ -172,17 +235,46 @@ describe("S12 slice 2: offboardUser", () => {
     expect(after.workspaceIds ?? []).not.toContain(String(workspace.id));
   });
 
-  test("F2: exactly ONE policy_versions row for N removals", async () => {
-    // Every repository function bumps its own version, so composing them
-    // naively writes one row per removal — N cache flushes for one offboarding,
-    // each publishing under `org:1` and dropping every entry in the instance.
-    // One user, one policy change.
-    const { user } = await world("one-bump");
-    const before = await prisma.policy_versions.count();
+  test("F2: a mid-run failure rolls the WHOLE offboard back", async () => {
+    // Replaces the original "exactly one policy_versions row" fixture, per TL-1's
+    // measurement above: N bumps is the correct shape, and a bump count is not this
+    // function's contract. The property that actually matters is the one an outer
+    // transaction buys — if the ACL removal fails, the membership and the grants
+    // that were already removed come back.
+    //
+    // The failure is injected through `prisma.$use`, not `jest.spyOn`: middleware
+    // fires for transaction clients and a spy on `prisma.document_acl` does not.
+    const { user, group } = await world("rollback");
+    const grantsBefore = await prisma.principal_role_grants.count({
+      where: { principal_type: "user", principal_id: String(user.id) },
+    });
+    const versionsBefore = await prisma.policy_versions.count();
+    const revocationsBefore = await prisma.grant_revocations.count();
 
-    await offboard(user);
+    let armed = true;
+    prisma.$use(async (params, next) => {
+      if (armed && params.model === "document_acl" && params.action === "deleteMany")
+        throw new Error("injected: document_acl delete failed mid-offboard");
+      return next(params);
+    });
 
-    expect(await prisma.policy_versions.count()).toBe(before + 1);
+    await expect(offboard(user)).rejects.toThrow(/injected/);
+    armed = false;
+
+    // everything the offboard had already done is back
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(1);
+    expect(
+      await prisma.principal_role_grants.count({
+        where: { principal_type: "user", principal_id: String(user.id) },
+      })
+    ).toBe(grantsBefore);
+    // ...including the audit rows and the versions, which are the two things a
+    // partial commit would leave describing a removal that did not happen
+    expect(await prisma.grant_revocations.count()).toBe(revocationsBefore);
+    expect(await prisma.policy_versions.count()).toBe(versionsBefore);
+    expect(await prisma.groups.findUnique({ where: { id: group.id } })).not.toBeNull();
   });
 
   test("F3: a revocation row per revoked grant", async () => {
@@ -217,12 +309,12 @@ describe("S12 slice 2: offboardUser", () => {
     // `actorResolver` refuses a suspended user before any ACL is read — which
     // stops being true the moment anything answers an ACL question without the
     // resolver.
-    const { user, document } = await world("acl");
+    const { user, documents } = await world("acl");
     expect(
       await prisma.document_acl.count({
         where: { principal_type: "user", principal_id: String(user.id) },
       })
-    ).toBeGreaterThan(0);
+    ).toBe(documents.length);
 
     await offboard(user);
 
@@ -231,10 +323,11 @@ describe("S12 slice 2: offboardUser", () => {
         where: { principal_type: "user", principal_id: String(user.id) },
       })
     ).toBe(0);
-    // and the document itself survives — this removes access, not content
-    expect(
-      await prisma.documents.findUnique({ where: { id: document.id } })
-    ).not.toBeNull();
+    // and the documents themselves survive — this removes access, not content
+    for (const document of documents)
+      expect(
+        await prisma.documents.findUnique({ where: { id: document.id } })
+      ).not.toBeNull();
   });
 
   test("F5: CONTROL — another user's grants, ACL and membership are untouched", async () => {
@@ -293,5 +386,158 @@ describe("S12 slice 2: offboardUser", () => {
     expect(
       await prisma.groups.findUnique({ where: { id: group.id } })
     ).not.toBeNull();
+  });
+
+  test("F7: a SECOND offboard writes nothing at all", async () => {
+    // TL-1's RF-I, and the reason it needs exact counts rather than `>=`.
+    //
+    // `removeGroupMember` bumps the version even when its `deleteMany` matches
+    // nothing — correct for a direct caller, who is entitled to know the cache
+    // reflects reality, and wrong for a re-run. Call the primitives blindly and a
+    // no-op offboard writes one policy_versions row per membership the user USED TO
+    // have. Every "the user has no access afterwards" assertion in F1/F3/F4/F6 is
+    // green under that mutation, because the user is already offboarded — only a
+    // row count separates a no-op from a re-run, so the fix is to enumerate the
+    // rows inside the transaction and call a primitive only for one that exists.
+    const { user } = await world("idempotent");
+    await offboard(user);
+
+    // the baseline is taken AFTER the first offboard, which is what makes ">= 0"
+    // useless here and an exact equality the only assertion with teeth
+    const versions = await prisma.policy_versions.count();
+    const revocations = await prisma.grant_revocations.count();
+    const memberships = await prisma.group_members.count();
+
+    await offboard(user);
+
+    expect(await prisma.policy_versions.count()).toBe(versions);
+    expect(await prisma.grant_revocations.count()).toBe(revocations);
+    expect(await prisma.group_members.count()).toBe(memberships);
+  });
+
+  test("F8: a content_moderator actor is REFUSED — the guards run for real", async () => {
+    // TL-2's required control, and the reason the fixture actor is a real
+    // super_admin rather than the exempt single-user principal. `content_moderator`
+    // does not hold `role.revoke`, so `revokeGrant` refuses it; it also cannot carry
+    // the group's authority, so `refuseGroupEscalation` refuses it. Under an exempt
+    // actor BOTH guards are skipped, and a mutation replacing either primitive with
+    // a raw `deleteMany` passes every other fixture in this file.
+    const { user } = await world("moderator");
+    const weakActor = await makeActor("content_moderator");
+
+    await expect(
+      repository.offboardUser({ actor: weakActor, userId: user.id, db: prisma })
+    ).rejects.toThrow(/refused/i);
+
+    // and nothing was removed on the way to the refusal — the transaction rolled back
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(1);
+    expect(
+      await prisma.principal_role_grants.count({
+        where: { principal_type: "user", principal_id: String(user.id) },
+      })
+    ).toBeGreaterThan(0);
+  });
+
+  test("F9: MEMBERSHIP-ONLY offboard still runs the group escalation guard", async () => {
+    // F8 is not enough on its own, measured: with `removeGroupMember` replaced by a
+    // raw `tx.group_members.deleteMany`, F8 still passes — the content_moderator is
+    // refused by `revokeGrant` before the missing membership guard could matter, so
+    // the suite never notices that `refuseGroupEscalation` stopped running.
+    //
+    // This user holds NO role grants and NO ACL rows, so `removeGroupMember` is the
+    // ONLY primitive the offboard calls and its guard is the only thing standing
+    // between a moderator and stripping a super_admin group's membership. That is
+    // the escalation TL-1's ruling (1) bars raw writes to prevent.
+    const tag = `bare-${seq++}-${dbSuffix}`;
+    const user = await prisma.users.create({
+      data: { username: `${tag}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId: 1, name: tag, source: "lark", externalId: `od-${tag}` },
+    });
+    await repository.addGroupMember({
+      actor: SETUP,
+      groupId: group.id,
+      userId: user.id,
+      db: prisma,
+    });
+    // the group carries authority the moderator does not hold
+    const superAdmin = await prisma.roles.findFirstOrThrow({
+      where: { name: "super_admin", scope: "org" },
+    });
+    await repository.grantRole({
+      actor: SETUP,
+      principalType: "group",
+      principalId: String(group.id),
+      roleId: superAdmin.id,
+      db: prisma,
+    });
+
+    const moderator = await makeActor("content_moderator");
+    await expect(
+      repository.offboardUser({ actor: moderator, userId: user.id, db: prisma })
+    ).rejects.toThrow(/refused/i);
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(1);
+
+    // ...and the legitimate actor still gets through, so this is a guard and not a
+    // wall: a fixture that only proves "it throws" is satisfied by throwing always.
+    await repository.offboardUser({ actor: ACTOR, userId: user.id, db: prisma });
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(0);
+  });
+
+  test("F10: each ACL removal is published under its own document: scope key", async () => {
+    // `revokeDocumentAcl` bumps under `document:<id>`. A raw
+    // `document_acl.deleteMany` removes the same rows and publishes NOTHING — every
+    // "the rows are gone" assertion in F4 stays green while a document-scoped
+    // consumer never learns its ACL changed. Measured: that mutation passed the
+    // whole file until this fixture existed.
+    //
+    // This asserts the KEYS, not a count. TL-1's ruling stands — a bump count would
+    // pin an implementation detail that changes the day the primitives batch — but
+    // WHICH key a bump is published under is the difference between an invalidation
+    // and a row nobody reads, which is the RF-5 lesson.
+    const { user, documents } = await world("acl-scope");
+    const baseline = await prisma.policy_versions.findFirst({
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+
+    await offboard(user);
+
+    const written = await prisma.policy_versions.findMany({
+      where: { version: { gt: baseline?.version ?? 0 } },
+      select: { scope_key: true, change_type: true },
+    });
+    const keys = new Set(written.map((row) => row.scope_key));
+    for (const document of documents)
+      expect([...keys]).toContain(`document:${document.id}`);
+    expect(written.some((row) => row.change_type === "document_acl")).toBe(true);
+  });
+
+  test("F11: offboardUser refuses a missing actor — for a user with rows", async () => {
+    // Symmetric with every other gateway entry point: no default free pass, and the
+    // audit rows the primitives write name `revoked_by_id` — an offboard with no
+    // actor would write rows describing a removal nobody performed.
+    //
+    // The user must HAVE rows. Measured: with `requireActor` deleted and a userId
+    // holding nothing, the enumeration finds nothing, no primitive is called, and
+    // the function returns cleanly — the mutation survived a version of this fixture
+    // that used a bare id. The refusal has to come from THIS function, before any
+    // work, not incidentally from the first primitive that happens to run.
+    const { user } = await world("no-actor");
+
+    await expect(
+      repository.offboardUser({ userId: user.id, db: prisma })
+    ).rejects.toThrow(/offboardUser requires an explicit actor/);
+
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(1);
   });
 });
