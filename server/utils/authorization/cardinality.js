@@ -126,49 +126,9 @@ async function scopedTotalVectors({ VectorDb, aclFilter, countFor }) {
   };
 }
 
-/**
- * The vector-search response body — ONE shape for every outcome.
- *
- * The bug this closes is not in the data, it is in the shape of the refusal. The route used
- * to early-return `{results: [], message: "No embeddings found for this workspace."}` when
- * `namespaceCount === 0`, while an ACL-filtered search that matched nothing returned
- * `{results: []}`. So a caller could distinguish "this workspace has content you may not
- * read" from "this workspace is empty" — an existence oracle over workspace content, the
- * same class as #32's mint oracle.
- *
- * No `message` key in any case, so the two bodies are byte-identical rather than merely
- * similar. Comparing parsed fields would let a stray key through; the assertion is on the
- * serialized body for that reason.
- */
-function buildVectorSearchResponse({ sources = [] } = {}) {
-  return {
-    results: sources.map((source) => ({
-      id: source.id,
-      text: source.text,
-      metadata: {
-        url: source.url,
-        title: source.title,
-        author: source.docAuthor,
-        description: source.description,
-        docSource: source.docSource,
-        chunkSource: source.chunkSource,
-        published: source.published,
-        wordCount: source.wordCount,
-        tokenCount: source.token_count_estimate,
-      },
-      // `_distance`, matching the route this was extracted from. Writing `score` here
-      // instead would have been a silent behaviour change smuggled in under a security
-      // fix — the field is undefined on providers that do not set it, and callers read it.
-      distance: source._distance,
-      score: source.score,
-    })),
-  };
-}
-
 module.exports = {
   scopedNamespaceCount,
   scopedTotalVectors,
-  buildVectorSearchResponse,
   CardinalityScopeTooLargeError,
   WORKSPACE_COUNT_CAP,
 };

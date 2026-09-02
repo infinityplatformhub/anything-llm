@@ -57,7 +57,9 @@ describe("T-5 slice 3 (S-25): the three empty states are indistinguishable", () 
   // also be indistinguishable from a genuinely missing workspace, or the refusal itself
   // becomes the oracle it was meant to close — the rule `requirePermission` already applies
   // via NON_DISCLOSING.
-  const { buildVectorSearchResponse } = require("../../../utils/authorization/cardinality");
+  const {
+    buildVectorSearchResponse,
+  } = require("../../../utils/helpers/vectorSearchResponse");
 
   test("unreadable and empty produce the same body", () => {
     const unreadable = buildVectorSearchResponse({ sources: [] });
@@ -153,6 +155,82 @@ describe("T-5 slice 3 (S-25): counts are bounded by the actor's scope", () => {
         resolveSlug,
       })
     ).resolves.toBeNull();
+  });
+
+  describe("TL-2 GAP: a refusal never reaches the vector store", () => {
+    // Timing, not only cost. If the refusal path queries the store and the not-found path
+    // does not, the two are distinguishable by how long they take even when their bodies
+    // are byte-identical — the oracle survives the fix that was supposed to close it.
+    //
+    // Three refusals, asserted separately: out-of-scope, absent, and match-none. Asserting
+    // one and assuming the others is how the second and third drift apart later.
+    const spyingDb = () => {
+      const calls = [];
+      return {
+        calls,
+        db: {
+          namespaceCount: async (ns) => {
+            calls.push(ns);
+            return 42;
+          },
+          totalVectors: async () => 1000,
+        },
+      };
+    };
+
+    test("out of scope: not called", async () => {
+      const { calls, db } = spyingDb();
+      await expect(
+        scopedNamespaceCount({
+          VectorDb: db,
+          slug: "ws9",
+          aclFilter: filter(),
+          resolveSlug,
+        })
+      ).resolves.toBeNull();
+      expect(calls).toEqual([]);
+    });
+
+    test("absent workspace: not called", async () => {
+      const { calls, db } = spyingDb();
+      await expect(
+        scopedNamespaceCount({
+          VectorDb: db,
+          slug: "nope",
+          aclFilter: filter(),
+          resolveSlug,
+        })
+      ).resolves.toBeNull();
+      expect(calls).toEqual([]);
+    });
+
+    test("match-none actor: not called", async () => {
+      const { calls, db } = spyingDb();
+      await expect(
+        scopedNamespaceCount({
+          VectorDb: db,
+          slug: "ws3",
+          aclFilter: filter({ matchNone: true }),
+          resolveSlug,
+        })
+      ).resolves.toBeNull();
+      expect(calls).toEqual([]);
+    });
+
+    test("control: an ALLOWED count does reach the store", async () => {
+      // Without this, a scopedNamespaceCount that never called the store would satisfy all
+      // three assertions above and return null to everyone.
+      const { calls, db } = spyingDb();
+      await expect(
+        scopedNamespaceCount({
+          VectorDb: db,
+          slug: "ws3",
+          aclFilter: filter(),
+          resolveSlug,
+        })
+      ).resolves.toBe(42);
+      expect(calls).toEqual(["ws3"]);
+    });
   });
 
   test("an orgWide actor may count any workspace in its own org", async () => {

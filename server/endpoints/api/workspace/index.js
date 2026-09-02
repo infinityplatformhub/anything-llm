@@ -14,7 +14,7 @@ const {
 } = require("../../../utils/authorization/retrievalFilter");
 const {
   buildVectorSearchResponse,
-} = require("../../../utils/authorization/cardinality");
+} = require("../../../utils/helpers/vectorSearchResponse");
 const {
   getVectorDbClass,
   resolveProviderConnector,

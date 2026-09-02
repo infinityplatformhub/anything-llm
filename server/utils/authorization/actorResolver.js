@@ -51,6 +51,22 @@ const { SINGLE_USER_ACTOR, SERVICE_PRINCIPALS } = require("./principals");
  * @returns {Promise<Object|null>} Actor or null when NO ingress authenticated anything.
  */
 async function resolveActor(request, response, { db = prisma } = {}) {
+  // #30 slice 3 follow-up (Techlead-1 NIT-1): a forgotten `response` must THROW.
+  //
+  // `response?.locals ?? {}` made the second argument optional in effect: omit it and every
+  // branch below misses, so the caller silently receives SINGLE_USER_ACTOR — the widest
+  // actor there is. That is the same shape this issue closed three times over (an optional
+  // security argument that fails toward MORE access), and it is worse here because the
+  // failure produces a valid-looking Actor rather than an error.
+  //
+  // `arguments.length` rather than a null check, deliberately: an explicit
+  // `resolveActor(request, null)` is a caller stating it has no response, which the branches
+  // below already handle. Only FORGETTING the argument is the bug.
+  if (arguments.length < 2) {
+    throw new AuthorizationContractError(
+      "resolveActor requires a response — omitting it silently resolves to the single-user actor, which is the widest actor in the system"
+    );
+  }
   const locals = response?.locals ?? {};
 
   // Row 3 (P0-4 PR-3): scoped API key — RAW context only; this is where it becomes an Actor.
