@@ -243,3 +243,9 @@ Guard-below-cache equivalence depends on cache key being exactly the material; a
 
 ## #124 (Dev4)
 `LLMSelector/action.jsx:100` hardcoded English `aria-label` left as-is (component is dead code per #40 t4; fix when it is rendered again).
+
+## #124 (TL-1 nits)
+`workspace-model-picker-btn` id has no referrer (remove or document). Button opens a panel with no `aria-expanded` (repo already uses it in ChainOfThought). `LLMSelector/action.jsx:100` is two defects: hardcoded English label AND label on a role-less `<div>`.
+
+## #119 (TL-2)
+`nestedSealables` walks express internals (`.stack`, `._router.stack`) for nested discovery only; discriminator is `SEALED_METHODS`. Express layout change → F7 red (fail-visible). No cycle guard on `sealRoutes(sealable, ...nested)` beyond nestedSealables' `seen`. Residual: router captured before seal and never re-`use`d stays writable (deliberate two-step, no module does it).

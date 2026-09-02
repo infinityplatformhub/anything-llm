@@ -564,3 +564,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #124 ledger-only SHA ab11d35a8 accepted (delta = .infi/ledger-124.md only, 3 rulings). Close target = ab11d35a8, run-id gate-124-ab11d35a8. Residual LLMSelector aria-label logged.
 - Assignments 19:45: Dev5 starts #120 recon/contract (redaction lane) while #119 in review. #127 reassigned Dev1 → Dev4 (main.jsx guard, TL-2 ruling in evidence; Dev1 asked to flag if #121 touches main.jsx). Dev1 = hotfix then #121 only. wt-40t4 reaped.
 - In review: #119 c44b059d3 (TL-2+QA-2), #124 ab11d35a8 (TL-1+QA-3), #126 s1 2286a997e (TL-1+QA-3 after #124). Waiting SHA: #113 (Dev3, role.grant + aclCount), hotfix (Dev1).
+- #124 ab11d35a8 TL-1 PASS (754b7011d), 2 nits → residual. Awaiting QA-3 → close/merge.
+- #119 c44b059d3 TL-2 PASS (M1-M6 all caught; seal+throw both required; F4 marker oracle). Awaiting QA-2 → close/merge.
+- Hotfix 52a802fa4 gating (/tmp/wt-hf). #121 lane = SettingsSidebar/ only; #127 (Dev4) main.jsx clear.
