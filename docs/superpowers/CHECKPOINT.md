@@ -661,3 +661,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #133 62fcc66e6 gate GREEN: check-local pass, directoryDiff 21/21, sweeps 63/63, ledger 9; MEMBERSHIP_FLOOR=25/RATIO=0.5 named rulings. Result written (run-id gate-133-62fcc66e6). Awaiting TL-1 + QA-1 → close/merge.
 - #133 62fcc66e6 TL-1 PASS (320db6674): F1/F2 closed by original repros; floor boundary > strict; refused clears both lists. Slice-2 ruling needed: refused plan applies nothing (residual logged). Awaiting QA-1 → close/merge.
 - #131 58433f7bb MERGED (2c35487b5): TL-2 PASS (9e96f737d, X1-X4) + QA-2 PASS; 354/354, sweeps 63/63; closed gate-131-58433f7bb. Post-merge to run. Dev5 free → next: S12 offboarding recon or #130-class residuals.
+- #133 62fcc66e6 MERGED (6e9f2d376): TL-1 + QA-1 PASS; 21/21, sweeps 63/63; closed gate-133-62fcc66e6. QA-1 NITs (cross-clear, deactivation 11/100) → Dev3 test-only plain SHA. Post-merge after #131's finishes.

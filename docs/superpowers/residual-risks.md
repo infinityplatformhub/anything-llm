@@ -279,3 +279,6 @@ Call-site guard strips only `//` comments; a `/* */` block containing the condit
 
 ## #133 (TL-1, for slice 2 contract)
 A refused plan still carries its additive lists (create/addMembership). Slice 2 apply must rule explicitly: TL-1 recommends **apply nothing** from a refused plan (a snapshot suspected wrong on the destructive side is not trusted on the additive side). Must be a Ruling in the slice-2 contract, not implied by plan shape.
+
+## #133 (QA-1 NITs, test-only follow-up)
+Cross-clear unpinned: `deactivate: refused ? []` vs `refusedDeactivations ? []` both green (no fixture with deactivate non-empty under a membership refuse). Deactivation ratio arm unpinned (no fixture above DEACTIVATION_FLOOR and below ratio; 11/100). R6 source grep breakable by dynamic require. All fail-safe; Dev3 test-only SHA.
