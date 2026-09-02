@@ -636,3 +636,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - S4b slice-1 TL-1 pre-read (a072c96a3) relayed to Dev3: completeness as type, plan-level scale guard with floor, lock kind ruling, RF-5 mandatory.
 - #133 opened (Dev3, S4b slice 1 pure diff, auth): R1-R6 + T1-T7 contract; Dev3 to post `updated` folding TL-1 pre-read (type-level completeness, plan-level scale guard with FLOOR+THRESHOLD rulings, RF-5, N-4 note) then RED. Q4 out of scope.
 - Post-merge after #120/#127/aaed2b475/14a4df287: server 223 suites / 3136 passed / 0 failed (--forceExit), frontend 107/107 exit 0, capabilities PASS. Main fully green at f4cabc072.
+- #131 217343aba TL-2 PASS (4a8551365): 18/20 codepoints closed, Z1/Z3/Z4/Z5 dead, no over-strip. Residual U+17B4/U+17B5 (Mn, deprecated Khmer) still leak → ruling (ก): add to list + JSDoc fix + split /g regex → Dev5 delta SHA. QA-2 verdict pending.
