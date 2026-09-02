@@ -862,5 +862,7 @@ enforces this; do not register a route as `app.get(path, handler)` with no array
 ### 7.9 RED must fail for the right reason
 - A RED run where every test fails identically regardless of code (missing env, DB refused, import crash) is not evidence. Read the failure cause before counting reds.
 - A `404` assertion alone never proves a route exists or is guarded: Express answers 404 for an unmounted route. Assert the body/shape too.
+- A RED that hits a route with the wrong HTTP method is a 404 for the wrong reason (T-7 S-20). Assert the method matches the mount before trusting the red.
+- A negative test for an AND rule must use a principal holding exactly one half; a principal seeded with both halves cannot prove the AND (T-7 D-2).
 - Mint/issue endpoints are part of the threat model: a credential that any caller can mint for any subject proves nothing (#32 stream-chat oracle, QA-1).
 (Source: T-7 #31 ledger, #32 review, 2026-09-02.)
