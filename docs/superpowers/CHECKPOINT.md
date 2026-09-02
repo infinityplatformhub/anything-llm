@@ -311,3 +311,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #102 O5a-wire recon merged 6ed3f647d; rulings: try/catch + warn-once log without values, delete operations_total, providerLabel 41→7 with drift test, no passthrough.
 - #94 cefab9864: QA-2 FAIL (evidence b2f900e34) — F1 confirmed (dotless host password via safeQuery error), F2 new: DB username + host via checks[].detail (doctor maskUrl keeps user) and pg `for user "x"` text. Ruled: scrubText on all checks detail + `for user` regex, env.DATABASE_URL seam; one new SHA. Mutations M1–M4 all caught.
 - #91 9040dffb7: QA-3 probe P1–P8 green, mutations M1–M6 in progress; TL-2 pinged.
+- #91 9040dffb7: QA-3 PASS (M2 durable-state caught only by row read; P6c–e mutate code not test). Residual → #104 (enable-multi-user drops updateENV return). Waiting TL-2 only.

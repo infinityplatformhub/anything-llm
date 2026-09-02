@@ -154,3 +154,7 @@ All 5 counters are declared with an enforced vocabulary but no call site calls `
 
 ## flake: liveSyncWriteFailure (#97)
 Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering dependency unknown. Owner: Dev1 after #91.
+
+## #91 residuals
+- credentialClearHttp premise guard now pins #91 status mapping (500); a revert of #91 shows as a #48 test failure.
+- enable-multi-user drops updateENV return → #104.
