@@ -84,3 +84,4 @@
 - [→ #52] isSingleUserMode (deploymentMode.js) read raw setting, diverging from isConfirmedSingleUser; on multi_user_mode=false + user rows 3 config routes were writable by impersonated sessions (QA-2). Fixed in #52 addendum 7; pattern: every 'which mode am I in' question must go through isConfirmedSingleUser
 - [→ #52] telegram.js and scheduledJobs.js have no requirePermission at all; isSingleUserMode is their only gate (23 sites). After #52 they follow isConfirmedSingleUser; a proper action gate is still owed (QA-1)
 - [→ #58] raw isMultiUserMode readers in auth paths: extension suspended bypass on shape (b), validApiKey locals, request-token mints dead token, websocket tool toggle (QA-2 sweep 121 sites)
+- [reference, not a risk] worktrees share server/node_modules via symlink (h52→t7, pr41/pr4d→pr4b); run ./node_modules/.bin/prisma generate before direct jest/node in any worktree (§7.6)
