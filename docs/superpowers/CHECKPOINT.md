@@ -1003,3 +1003,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - TL-2 95c115d4b: transposition confirmed, correction withdrawn; Dev3 ledger d912e3a28 accurate. #138 queue final d912e3a28, no further conditions.
 - gate-135 a864a6121 mutants VALID on rerun: M1 (both routes) red 3 = "deleting a user through the admin route removes their authorization rows", "deleting through the API route removes their authorization rows", S12 F5; MK1 (admin only) red 2 = admin-route test + S12 F5. RF-K discriminates per route. MK2 pending. gate-138q-2 f1662b808: task check red = prose-describe false positive only (checkignore not applied in worktree); agent told to add + rerun, then scratch merge.
 - gate-135 a864a6121 COMPLETE PASS: MK2 red exactly 1 = "deleting through the API route removes their authorization rows". #135 has every gate + verdict (TL-1 fdeb740e1, TL-2 703fdfa06, QA-2 35d266660) and does not depend on #121. MERGE NOW: `sh /tmp/merge-135.sh`.
+
+- #135 MERGED a864a6121 (auth): TL-1/TL-2 PASS, QA-2 PASS 35d266660.

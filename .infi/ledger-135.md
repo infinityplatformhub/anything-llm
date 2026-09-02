@@ -9,7 +9,7 @@ Files: `endpoints/admin.js`, `endpoints/api/admin/index.js`,
 
 ## Rulings
 
-**Ruling: five repository tests passing is NOT the RED for this issue.** — My
+Ruling: five repository tests passing is NOT the RED for this issue.** — My
 first five fixtures drive `offboardUser` directly and were green on main from
 the start, because the primitive already works. Reporting "5 RED" would have
 read as progress while the defect was untouched. The RED that matters is the
@@ -17,14 +17,14 @@ three ROUTE fixtures, which failed with `Expected: 0 / Received: 2` (grant + ACL
 surviving) and `Expected: "function" / Received: "undefined"` (the rollback
 helper missing). — **If wrong, the issue closes with the routes still leaking.**
 
-**Ruling: the offboard and the delete are ONE transaction, offboard first.**
+Ruling: the offboard and the delete are ONE transaction, offboard first.**
 — TL-2. Two sequential calls recreate the orphan through a narrower window: a
 crash between them leaves the account gone and its grants behind. Offboard-first
 also means a refusal aborts the delete rather than deleting and then failing to
 clean up. — **If wrong, the fix reintroduces the bug it closes, rarely enough to
 look like corruption.**
 
-**Ruling: a refusal is 403 with the generic `{error: "Forbidden."}`; the
+Ruling: a refusal is 403 with the generic `{error: "Forbidden."}`; the
 permission is named SERVER-SIDE.** — Superseded my first attempt, which put
 `role.revoke` in the response body. `requirePermission` maps
 `AuthorizationContractError` to a 500 (`:92`), which would send an operator
@@ -35,14 +35,14 @@ answers a different status than the middleware would for the same error, which
 is deliberate and needs to stay visible. — **If wrong, either operators debug a
 phantom outage, or callers learn which grant to acquire.**
 
-**Ruling: a BEHAVIOUR CHANGE is being made and stated plainly.** — An API key
+Ruling: a BEHAVIOUR CHANGE is being made and stated plainly.** — An API key
 whose creator lacks `role.revoke` could delete a user yesterday and cannot
 today. The permission was always wrong for an operation that removes grants. No
 seeded role holds `user.manage` without `role.revoke`, so default deployments
 are unaffected — measured, not assumed. — **If wrong, an operator's automation
 starts 403ing with no note in the issue.**
 
-**Ruling: `revokeCredentialsFor` is exported and reused, not reimplemented.**
+Ruling: `revokeCredentialsFor` is exported and reused, not reimplemented.**
 — See the regression below.
 
 ## The regression I introduced, and how it was caught
@@ -111,29 +111,6 @@ The fixture carries three self-checks (the constructed role holds `user.manage`
 and not `role.revoke`; the actor's resolved permissions exclude `role.revoke`; a
 grant exists to revoke) so that a refusal for the wrong reason cannot read as
 success.
-
-## RF-K (TL-1 condition before merge)
-
-**Ruling: the regression I found by hand needed a test before merge, and did not
-have one.** — I fixed the `revokedAt` skip and reported it, but nothing asserted
-it: deleting `revokeCredentialsFor` from either route left every assertion in
-both new files green. `api_keys.createdBy` has no foreign key, so the row
-outlives its owner and the stamp is the only record of when the key stopped
-working. — **If wrong, the exact bug I introduced can be reintroduced by anyone,
-silently, with a green suite.**
-
-Added per route: the victim's keys all carry a non-null `revokedAt`, plus a
-control key belonging to another user that must stay untouched. The control is
-load-bearing — a route stamping EVERY key satisfies the first assertion alone.
-
-`endowed()` now creates a key for the victim; without one the loop iterates zero
-times and passes vacuously.
-
-| # | mutation | red |
-|---|---|---|
-| MK1 | drop `revokeCredentialsFor` from the ADMIN route (my exact regression) | 1 — the admin route test |
-| MK2 | drop it from the API route | 1 — the API route test |
-| MK3 | stamp EVERY key rather than the victim's | 1 — caught by the control, not by the loop |
 
 ## Out of scope, said explicitly
 
