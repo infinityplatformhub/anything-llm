@@ -641,3 +641,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #131 aa6d7de6d (Dev5): 7 pre-read items + class = Cf ∪ DICP (no list; covers QA-2 F2), 347/347; regating /tmp/wt-131. Only F1 (whole-string strip kills Thai joiners on hit) awaits TL-2 ruling. §7.17 logged.
 - #131 aa6d7de6d gate GREEN: check-local pass, audit+bundle 347/347, sweeps 63/63, ledger 6; result written (run-id gate-131-aa6d7de6d). Awaiting TL-2 verdict incl. F1 ruling (whole-string strip vs per-match); QA-2 re-fire on union class after.
 - #133 (Dev3): code+tests 15/15, D1-D6 dead, `updated` posted (A1-A6); SHA after sweep. TL-1 + QA-1 pre-alerted. §7.17 logged.
+- #131 F1: Dev5 measured per-match strip (array offset map, joiners preserved, ~40 lines) uncommitted; U+2800 proposed OUT; Cf-outside-list case already in aa6d7de6d. Awaiting TL-2 ruling per-match vs residual → single delta SHA.
