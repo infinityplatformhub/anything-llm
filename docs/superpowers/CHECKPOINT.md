@@ -569,3 +569,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Hotfix 52a802fa4 gating (/tmp/wt-hf). #121 lane = SettingsSidebar/ only; #127 (Dev4) main.jsx clear.
 - #113 next SHA (after 6e0c17d73) pending push: aclCount allow+deny, bar role.grant (Dev3 corrected the reason: member does NOT hold document.share post-044000; workspace owner does → org-wide scope leak), RF-9 6 cases + 2 controls, D4/D5/D6/C dead, 20/20. TL-1 informed; QA-1 fires on arrival.
 - #119 c44b059d3 QA-2 FAIL: app._router unsealed → HTTP mount live. TL-2 ruling requested (seal app._router vs residual); Dev5 prepping option 1. Also: router.get/head throw via sealed .route (comment fix), router.param unsealed (observed). TL-2 PASS superseded.
+- Hotfix 52a802fa4 MERGED (plain, test-only move → __testHelpers__/authorization; authorization dir 53 suites 0 failed). Main post-merge should now be fully green except #106 flakes.
+- #126 slice 1 2286a997e TL-1 PASS (a31c68e34); nit: action string evaluated at caller (`can("workspace.create")` in Home) uncovered after extraction → ledger line + fixture in slice 2. Awaiting QA-3.
+- #113 89f396381 pushed (aclCount allow+deny, role.grant bar, RF-9 6+2, D4/D5/D6/C dead; 20/20). Regating /tmp/wt-113; TL-1 3-line re-read + QA-1 6 cases dispatched.

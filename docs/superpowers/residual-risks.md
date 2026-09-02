@@ -249,3 +249,6 @@ Guard-below-cache equivalence depends on cache key being exactly the material; a
 
 ## #119 (TL-2)
 `nestedSealables` walks express internals (`.stack`, `._router.stack`) for nested discovery only; discriminator is `SEALED_METHODS`. Express layout change → F7 red (fail-visible). No cycle guard on `sealRoutes(sealable, ...nested)` beyond nestedSealables' `seen`. Residual: router captured before seal and never re-`use`d stays writable (deliberate two-step, no module does it).
+
+## #126 slice 1 (TL-1 nit)
+`WorkspaceGate` takes `canCreate` as a prop, so the action string `can("workspace.create")` lives at the Home caller and is not covered by the gate's render tests (a `workspace.write` typo passes all 7). Known limit of the extraction; slice 2 adds a caller-side fixture.
