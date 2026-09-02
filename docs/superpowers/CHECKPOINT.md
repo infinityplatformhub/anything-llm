@@ -691,3 +691,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #121 Dev1: pinged 21:15, no reply yet; local branch still e3fbcf775.
 - #134 TL-1: both Dev3 rulings accepted. Condition: docblock says enumerateDirectory calls driver; T7 widened to pin no concrete driver import (driver as argument only). Relayed to Dev3.
 - #121 Dev1 21:22: all fixes done (mock gap EXIT=0/107, F-A 4 caps + literal 11-entry test 23 passed, F-B, F-C, M7 mutation red, ledger). Confirming suite on fresh DB pr121b. ETA SHA 21:35. Lesson taken: log to file not `| tail`.
+- #121 21:10: SHA 7b3063bee is partial (3 frontend files). Dev1 blocked on mockup drift gate (ORG_CAPS 7 in approved mockup vs 11). Ruling: (A) as separate commit "mockup: ORG_CAPS 7→11 (re-approval pending)"; TL-1 pre-reads catalog-only; MERGE HELD pending user approval of mockup re-pin.
+- V8 confirmed to Dev4: (ข)=53/41 incl LoadingChat:11, (ค)=24 enumerated (supersedes TL-2's 19). Dev4 writes contract.
