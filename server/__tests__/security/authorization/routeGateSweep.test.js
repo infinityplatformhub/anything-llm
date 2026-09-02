@@ -107,21 +107,23 @@ describe("issue 52: every session-authenticated mutating route asks something", 
             "./endpoints/"
           )
       )
-      .flatMap((node) =>
-        node.declarations[0].id.properties.map(
-          (property) => property.value.name
-        )
-      )
+      .flatMap((node) => node.declarations[0].id.properties)
       .filter(
-        (name) => name.endsWith("Endpoints") || name === "agentWebsocket"
-      );
+        (property) =>
+          property.key.name.endsWith("Endpoints") ||
+          property.key.name === "agentWebsocket"
+      )
+      .map((property) => ({
+        exported: property.key.name,
+        local: property.value.name,
+      }));
     const listed = new Set(
       registrations.map((entry) =>
         typeof entry === "function" ? entry.name : entry.register.name
       )
     );
     expect(imports.length).toBeGreaterThanOrEqual(32);
-    expect(imports.filter((name) => !listed.has(name))).toEqual([]);
+    expect(imports.filter(({ local }) => !listed.has(local))).toEqual([]);
 
     const directCalls = [];
     const visit = (node) => {
@@ -129,7 +131,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       if (
         node.type === "CallExpression" &&
         node.callee?.type === "Identifier" &&
-        imports.includes(node.callee.name)
+        imports.some(({ local }) => local === node.callee.name)
       ) {
         directCalls.push(node.callee.name);
       }
@@ -142,6 +144,21 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // Any `probe (apiRouter)` or multiline direct registration bypasses the
     // production list regardless of formatting and must fail here.
     expect(directCalls).toEqual([]);
+  });
+
+  test("aliased endpoint imports retain their local registration name", () => {
+    const ast = parse(
+      'const { hiddenSweepProbeEndpoints: probe } = require("./endpoints/hiddenSweepProbe"); probe (apiRouter);',
+      { sourceType: "script" }
+    );
+    const property = ast.body[0].declarations[0].id.properties[0];
+    expect({ exported: property.key.name, local: property.value.name }).toEqual(
+      {
+        exported: "hiddenSweepProbeEndpoints",
+        local: "probe",
+      }
+    );
+    expect(ast.body[1].expression.callee.name).toBe("probe");
   });
 
   test("no mutating route carries validatedRequest alone", () => {
