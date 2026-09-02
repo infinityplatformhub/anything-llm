@@ -108,3 +108,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 14:24 main c79c5d2b: post-merge suite 1897 passed / 1933 (36 skipped)
 
 - Opened: #71 invite-code leak (Dev3, spec = TL-2 5 holes), #72 unknown-key drop (Dev1, QA-3 5 amendments), #73 CI real-store services (Dev4). Slice 2 waits QA-2 only. #40 task1 waits FINDING-2 fix.
+- #70 65dc3890: gate PASS 12/12 (/tmp/wt-70 kept). Waiting QA-1 + TL-1 verdict → close/merge. Then #72 (Dev1).
