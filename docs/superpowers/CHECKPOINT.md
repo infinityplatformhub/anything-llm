@@ -281,3 +281,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 8fdb067dc (rebased on main): inventory 316 measured (8 new routes; ldap login/enabled allowlisted with reason, entry removal → red; chats/search workspace-bound), mount order 328 non-wildcard identical. Gating (contract 82 exact + sweeps); QA-3 + TL-2 dispatched.
 - #84 f309f1247: QA-3 found gate-equality test search unbounded (slice(at).match → next route's requirePermission) → Dev1 bounds to route block + delete-line mutation; TL-1 delta pending.
 - #91 started (impl91, contract on #91, #93 dup closed — 5th today). #94 O5b opened (CLI-only, no migration). #49 RED suite in progress.
+- #40 8fdb067dc: gate PASS (check-local; contract 82/82 exact; authz+sweeps 664 pass 0 fail; result bound). Waiting QA-3 (SPA re-probe) + TL-2 (inventory diff 316/8 new) → close task 1 / merge → NIT-2 follow-up → task 2.
+- #84 c22939503 (final: bounded gate-equality scan; delete-line mutation now red 2, move-both stays green on relation test): gating (gate-84d); QA-3 point-2 + TL-1 one-line delta requested → close/merge.
