@@ -70,10 +70,46 @@ null** (PMO ruling). A mailed invite must expire: a link sent to an inbox and
 valid forever is a permanent bearer credential sitting in mail history, and
 unlike the copy-link case nobody can say where it ended up.
 
-Open question for the plan, not for this recon: whether `expiresAt` is enforced
-in `Invite.get`/the public `GET /invite/:code`, or by a job. Enforcing it at read
-time is the version that cannot be missed; a job that sweeps late leaves a window
-where the link still works.
+### Where expiry has to be enforced (recon done, independent of the A/B choice)
+
+Read the call sites rather than guessing. Every route reaches invites through
+`Invite.*`, and nothing queries `prisma.invites` directly:
+
+| site | call | validates status? |
+|---|---|---|
+| `endpoints/invite.js:16` (`GET /invite/:code`) | `Invite.get({ code })` | yes — `status !== "pending"` |
+| `endpoints/invite.js:40` (`POST /invite/:code`) | `Invite.get({ code })` | yes — its own copy of the same check |
+| `endpoints/admin.js:257`, `api/admin/index.js:309` | `whereWithUsers()` | no — listing only |
+| `endpoints/admin.js:277`, `api/admin/index.js:365` | `create()` | n/a |
+| `endpoints/admin.js:308`, `api/admin/index.js:436` | `deactivate(id)` | n/a |
+
+So the redemption path has **two independent status checks, duplicated across two
+routes** — and `Invite.get` itself validates nothing; it is a thin `findFirst`.
+
+**Enforce expiry inside `Invite.get`, not at the routes.** A third copy of the
+rule at each call site is a third place to forget it, and the existing
+duplication is the evidence: the two checks are already byte-identical by
+coincidence rather than by construction. A job that sweeps expired invites is
+strictly worse on its own — between expiry and the sweep the link still works,
+and that window is exactly when a leaked link gets used.
+
+A job may still be wanted for tidiness (flipping `status` so the admin list shows
+reality), but it must not be the thing redemption depends on.
+
+Two consequences for the plan:
+
+- `Invite.get` returning null for an expired invite means both routes report
+  "not found or invalid" with no new branch — which is also the non-disclosing
+  answer QA-3 asked for, since it is the same response an unknown code gets.
+- The listing calls (`whereWithUsers`) deliberately keep showing expired rows.
+  An admin needs to see that an invite expired unredeemed; that is not the same
+  question as whether it can be redeemed.
+
+**Note on the response shape** (QA-3): `POST /invite/:code` answers `200` with
+`{success: false}` rather than a 4xx, deliberately — a status code is readable
+without a body and would make the endpoint an oracle. Tests must assert the
+BODY, not the status; asserting `expect(status).toBe(404)` here would fail
+against correct behaviour.
 
 ## 5. What the driver is, and is not
 
