@@ -69,3 +69,4 @@
 - [→ backlog] regression.test.js "does not expose password in login response" flaked once in 4 runs at ee4be889 (QA-1); watch for recurrence.
 - [→ backlog] parseRetentionDays (server/utils/retention/purge.js:30) tests regex after trim: " 7 " and "07
 " accepted as 7; fix compare raw before trim + /^[1-9]\d*$/ (QA-2 post-merge probe, low, not fail-open)
+- [→ backlog] embed sessionId is client-chosen UUIDv4: two concurrent first requests with the same id can both mint a token; closing it needs server-minted session ids (widget contract change) (#32 fix review)
