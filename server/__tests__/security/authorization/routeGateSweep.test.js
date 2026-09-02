@@ -37,63 +37,65 @@ const EXPECTED_SKIPPED_REGISTRARS = new Set(["agentWebsocket"]);
 
 function collectImports(ast) {
   const imports = [];
-  const visit = (node, parent, grandparent) => {
+  const endpointLiterals = [];
+
+  const visit = (node, parent, grandparent, greatGrandparent) => {
     if (!node || typeof node !== "object") return;
-    const isRequireCall =
-      node.type === "CallExpression" &&
-      ((node.callee?.type === "Identifier" && node.callee.name === "require") ||
-        (node.callee?.type === "MemberExpression" &&
-          node.callee.object?.type === "Identifier" &&
-          node.callee.object.name === "module" &&
-          ((node.callee.property?.type === "Identifier" &&
-            node.callee.property.name === "require") ||
-            (node.callee.property?.type === "Literal" &&
-              node.callee.property.value === "require"))));
-    if (isRequireCall) {
-      const argument = node.arguments[0];
-      if (argument?.type !== "Literal") {
-        throw new Error(
-          `Unsupported dynamic require at line ${node.loc?.start.line ?? "unknown"}: endpoint modules use top-level unaliased destructuring`
-        );
-      }
-      if (argument.value.startsWith("./endpoints/")) {
-        const declaration = parent;
-        const topLevel =
-          node.callee.type === "Identifier" &&
-          declaration?.type === "VariableDeclarator" &&
-          declaration.init === node &&
-          grandparent?.type === "VariableDeclaration" &&
-          ast.body.includes(grandparent);
-        const properties =
-          declaration?.id?.type === "ObjectPattern"
-            ? declaration.id.properties
-            : null;
-        const unaliased = properties?.every(
-          (property) =>
-            property.key.type === "Identifier" &&
-            property.value.type === "Identifier" &&
-            property.key.name === property.value.name
-        );
-        if (!topLevel || !unaliased) {
-          throw new Error(
-            `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example")`
-          );
-        }
-        for (const property of properties) {
-          imports.push({
-            exported: property.key.name,
-            local: property.value.name,
-          });
-        }
-      }
+    const literal =
+      node.type === "Literal" && typeof node.value === "string"
+        ? node.value
+        : node.type === "TemplateLiteral" && node.expressions.length === 0
+          ? node.quasis[0]?.value.cooked
+          : null;
+    if (literal?.startsWith("./endpoints/")) {
+      endpointLiterals.push({ node, parent, grandparent, greatGrandparent });
     }
     for (const value of Object.values(node)) {
       if (Array.isArray(value))
-        value.forEach((child) => visit(child, node, parent));
-      else if (value && typeof value === "object") visit(value, node, parent);
+        value.forEach((child) => visit(child, node, parent, grandparent));
+      else if (value && typeof value === "object")
+        visit(value, node, parent, grandparent);
     }
   };
   visit(ast, null, null);
+
+  for (const {
+    node,
+    parent: call,
+    grandparent: declaration,
+    greatGrandparent: variableDeclaration,
+  } of endpointLiterals) {
+    const bareRequire =
+      call?.type === "CallExpression" &&
+      call.callee?.type === "Identifier" &&
+      call.callee.name === "require" &&
+      call.arguments[0] === node &&
+      node.type === "Literal";
+    const topLevel =
+      bareRequire &&
+      declaration?.type === "VariableDeclarator" &&
+      declaration.init === call &&
+      variableDeclaration?.type === "VariableDeclaration" &&
+      ast.body.includes(variableDeclaration);
+    const properties =
+      declaration?.id?.type === "ObjectPattern"
+        ? declaration.id.properties
+        : null;
+    const unaliased = properties?.every(
+      (property) =>
+        property.key.type === "Identifier" &&
+        property.value.type === "Identifier" &&
+        property.key.name === property.value.name
+    );
+    if (!topLevel || !unaliased) {
+      throw new Error(
+        `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example")`
+      );
+    }
+    imports.push(
+      ...properties.map((property) => ({ local: property.value.name }))
+    );
+  }
   return imports;
 }
 
@@ -205,7 +207,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     {
       name: "normal top-level destructuring",
       source: 'const { normalEndpoints } = require("./endpoints/normal");',
-      expected: [{ exported: "normalEndpoints", local: "normalEndpoints" }],
+      expected: [{ local: "normalEndpoints" }],
       reason: null,
     },
     {
@@ -224,7 +226,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       name: "second declarator",
       source:
         'const harmless = 1, { probeEndpoints } = require("./endpoints/probe");',
-      expected: [{ exported: "probeEndpoints", local: "probeEndpoints" }],
+      expected: [{ local: "probeEndpoints" }],
       reason: null,
     },
     {
@@ -237,6 +239,22 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       name: "computed module require",
       source:
         '\nconst { probeEndpoints } = module["require"]("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "aliased require function",
+      source:
+        '\nconst req = require; const { probeEndpoints } = req("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "single-part template literal",
+      source: "\nconst { probeEndpoints } = require(`./endpoints/probe`);",
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "ESM import",
+      source: '\nimport { probeEndpoints } from "./endpoints/probe";',
       reason: "Unsupported endpoint import at line 2",
     },
     {
@@ -268,13 +286,13 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     {
       name: "computed require",
       source: '\nconst { probeEndpoints } = require("./endpoints/" + name);',
-      reason: "Unsupported dynamic require at line 2",
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "indirect require",
       source:
         '\nconst path = "./endpoints/probe"; const { probeEndpoints } = require(path);',
-      reason: "Unsupported dynamic require at line 2",
+      reason: "Unsupported endpoint import at line 2",
     },
   ])("collectImports: $name", ({ source, expected, reason }) => {
     const collect = () =>
