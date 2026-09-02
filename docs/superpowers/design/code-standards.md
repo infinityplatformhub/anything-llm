@@ -942,3 +942,11 @@ PMO post-merge suite ต้องเก็บบรรทัด `✕` และ�
 การตรวจใดที่อ่าน property/ชื่อจากฟังก์ชันเพื่อตัดสินความน่าเชื่อถือ (`resolverName`, `fn.name`, `isApiKeyGuard`) ปลอมได้โดยคนที่เขียนฟังก์ชันนั้นเสมอ — ใช้สมาชิกภาพใน registry (WeakSet บน globalThis symbol) ที่ endpoint file ใส่เองไม่ได้ · เจอ pattern นี้ = finding ทันที ไม่ต้อง mutation ก่อน (#40 bypass 4/5/7)
 
 §7.9f หลักฐาน: #40 task 1 เจอ bypass 8 ตัว — ทั้ง 8 เจอด้วย mutation, 0 ด้วยการอ่าน, 4 ตัวหลังเจอหลัง implementer รายงาน "แก้แล้ว" · shape/count guard (regex, registrations===N, skipped ว่าง) จับ "ของที่รู้จักหาย" ไม่จับ "ของที่ไม่รู้จักโผล่" — ต้องใช้ list ที่ production วนจริง (§7.9g)
+
+### 7.9h เกณฑ์จบงาน guard/sweep = mutation ที่ทีมนึกออกแดงครบ + backlog ซื่อสัตย์
+
+งานที่สร้าง "ตัวตรวจ" (sweep, completeness guard, registry) ไม่มีวันพิสูจน์ได้ว่า "ไม่มี bypass เหลือ" — #40 มี bypass 9 ครั้ง และ 3 ครั้งติดกันตัวตรวจใหม่ถูกเจาะทันทีที่เกิด (regex → AST → router walk → identity registry → AST completeness ทุกชั้นเจาะได้ที่ชั้นของมันเอง)
+
+เกณฑ์รับงาน: (1) mutation ทุกตัวที่ Dev/QA/Techlead นึกออกแดง (2) surface ที่ยังเปิดอยู่ถูกบันทึกใน `residual-risks.md` โดยระบุว่าอะไรยังไม่กัน (3) ห้ามเขียนว่า "ปิดครบ" — เขียนว่า "ปิดที่รู้จัก N ตัว ณ SHA X"
+
+เทส sweep/spoof ต้องเรียก predicate/registry ตัวจริง ห้าม parametrize classifier ให้ inject ได้ (`classifiers.isOrgResolver || isOrgResolver` = พิสูจน์ตัวปลอม ไม่ใช่ตัวจริง)
