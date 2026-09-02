@@ -101,3 +101,4 @@
 - **`SSO_ACS_URL` vs `SSO_CALLBACK_BASE_URL` not canonical across saml.js / identity.js** — setting only SSO_ACS_URL leaves OIDC on Host fallback without warning. Techlead NOTE-A on #43 4765dbae. `[→ backlog]`
 - **Flag set + legacy LanceDB table + actor with allow/deny list serves every legacy row** (unlabelled rows have no docId to check). Per rulings B/C; no production caller passes allowedDocumentIds today. #56 must backfill before the embed path sends allow-lists. Techlead-2 on #30 1a. `[→ #56]`
 - **Milvus predicate rendered but never executed in tests** — same bug class as LanceDB backtick / pgvector placeholder. Real-store test or "unverified" label required in 1b. `[→ #30 1b]`
+- **Milvus real-store test skips without `MILVUS_TEST_ADDRESS`** — CI must set it or the parser regression (§7.12) is unguarded there. Dev4 #30 1b. `[→ O2/CI backlog]`

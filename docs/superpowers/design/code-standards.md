@@ -895,3 +895,6 @@ A shorter pepper makes 8 authorization suites fail at import with a pepper error
 
 ### §7.3c XML namespace URIs trip the URL gate
 `http://www.w3.org/...xmldsig#` and friends are identifiers, not endpoints. Add the file to `.infi/checkignore` (#43 4765dbae).
+
+### §7.12 every vector predicate renderer needs a real-store test
+Three renderers in one slice looked correct as strings and were rejected by the engine: LanceDB bare identifier (case-folded), pgvector placeholder numbering, Milvus `not exists a and not exists b` (precedence). A new provider or clause ships only with a test that executes the predicate against the real store (skip-if-unavailable is acceptable, string comparison is not). #30 slices 1a/1b.
