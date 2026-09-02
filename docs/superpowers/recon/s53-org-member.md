@@ -98,3 +98,4 @@ Half a day. The work is small; §1 is the whole risk, and the reason DoD 3 is wr
 - 5 routes move (workspaces list, search, PUT workspace-chats, 2 file-server); chat.js 2 routes stay on chat.send.
 - DoD: org-wide member grant + 0 workspace_users rows → workspace.read DENIED on every workspace; impersonated POST /workspace/:slug/chat still 403.
 - requireSelfSession from #52 is REPLACED, not kept alongside.
+- SUPERSEDES (ก)-only: (ข) lands in #53 — permissions.scope column ('org'|'workspace'|'any'); evaluate() denies org_scoped_action_on_workspace_resource before lookup when scope='org' and resource.workspaceId != null. org.member is scope 'org'. Engine never reads workspace_users; membership = workspace-scoped grant (044000). (Techlead)
