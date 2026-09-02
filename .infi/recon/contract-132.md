@@ -1,7 +1,7 @@
 # #132 contract — a client guard that asks `system.read`
 
-Base `origin/approof/main`. Ruling-independent prep only; **no code**. The route list in §4 is a
-placeholder that TL-2's (ก) fills. Every claim below was produced by running something, and the
+Base `origin/approof/main`. **No code** until the #121 merge signal. The route list in §4 is
+filled by TL-2's ruling ddf0772f2. Every claim below was produced by running something, and the
 harness that produced §2 is committed beside this file as `pbleed-132.cjs`.
 
 Prerequisite, unchanged: `system.read` must be in `ORG_CAPABILITIES` before any guard asks for
@@ -93,7 +93,10 @@ principal before the capability map arrives, and a wrong redirect is not recover
 — the user lands on home and must navigate back — whereas a late-appearing page is a flicker.
 That asymmetry is the whole reason the line exists.
 
-**It ships marked `inherited-untested` (#127 G3), not "covered".** Measured, not assumed:
+**It ships marked `inherited-untested` (#127 G3), not "covered"** — TL-2 confirmed the
+declaration. Per §5 the line lives in the ONE shared internal function, so the mark attaches
+there and covers every guard that calls it, rather than being duplicated alongside a duplicated
+body. Measured, not assumed:
 deleting `AdminRoute`'s copy of the line leaves **adminRoute.test.jsx 9/9 and
 mobileConnectionsGuard.test.jsx 6/6 — 15/15 green.**
 
@@ -113,16 +116,25 @@ next person to touch it deletes it on the strength of a green suite.
 
 ## 4. Tests (RED before GREEN, each mutation run)
 
-Route list placeholder — **filled by TL-2's (ก)**; the shape below holds for whatever routes (ก)
-names.
+TL-2 ruling ddf0772f2 fills the placeholder: **`/settings/mobile-connections` only.**
 
 | # | assertion | why it cannot pass vacuously |
 |---|---|---|
-| R1 | `setup_admin` (holds `settings.write`, not `system.read`) is refused before render | fails today: `AdminRoute` admits them |
+| R1 | a principal WITHOUT `system.read` is refused before render | fails today: `AdminRoute` admits them |
 | R2 | `AdminRoute` **still admits that same principal** | control. Without it, a guard refusing everyone satisfies R1. Proves the new guard genuinely differs |
-| R3 | `super_admin` reaches the page | positive control |
-| R4 | route table pairs the route with the new guard | §2. Behavioural tests prove what the guard *does*, never that *this route uses it* |
+| R3 | a holder of `system.read` reaches the page | positive control |
+| R4 | route table pairs `/settings/mobile-connections` with `SystemReadRoute` | §2. Behavioural tests prove what the guard *does*, never that *this route uses it* |
 | R5 | server: `system.read ∈ ORG_CAPABILITIES` | #121's guard, re-asserted from this issue's side |
+| R6 | `hideUserMenu={true}` renders the page WITHOUT `UserMenu` | (ค). The prop is a branch, and an unexercised branch in a guard is where the next guard-shaped bug lives |
+
+**R1/R3 name the CAPABILITY, never the role** (TL-2 (ข)). Writing "setup_admin is refused" pins
+the test to today's grant table: #137 or any regrant that gives `setup_admin` the permission
+would turn a correct test red for a reason that has nothing to do with the guard. The guard's
+contract is "holds `system.read` or not"; the fixture supplies the map directly.
+
+**`setup_admin` losing this page is the fix, not a regression** (TL-2 (ข)). That principal cannot
+call either of the page's routes; today it sees a page that 403s on load. #132 does **not** wait
+for #137.
 
 Fixture requirements, each from a defect already paid for:
 
@@ -133,14 +145,48 @@ Fixture requirements, each from a defect already paid for:
 - **No `getByRole(name)` for any name assertion.** The accessible name falls back to text
   content — #124 QA-3 deleted an `aria-label` entirely with 4/4 still green.
 
+### R6 note — `hideUserMenu` is plumbed but unused on this route
+
+Measured: `hideUserMenu` appears twice in `main.jsx` (:154, :167), both `AdminRoute` +
+`AgentBuilder`. `/settings/mobile-connections` does not pass it. So R6 tests the prop's wiring in
+`SystemReadRoute`, not a live production path — which is the reason to write it rather than a
+reason to skip it: a prop that no route exercises is exactly the one a refactor silently drops.
+Stated here so nobody later reads R6 as evidence that this route hides its menu.
+
 ---
 
-## 5. Scope and residual
+## 5. Structure — one internal function, not a copied body
 
-This closes the mismatch **for this page only**. The other route sites keep whatever
-approximation they have — 26 `AdminRoute`, 10 `ManagerRoute`, 3 `SingleUserRoute`, counted with
-line comments stripped. #132 does **not** convert them and does **not** add `system.read` to
-`ORG_CAPABILITIES` (TL-2 condition 2; #121 owns that).
+TL-2: `SystemReadRoute` and `AdminRoute` call **one shared internal function** differing only in
+the `can()` argument. No duplicated body.
+
+This is load-bearing rather than tidiness. The two guards are already near-identical, and the
+`FullScreenLoader` line in §3 is *unguarded by any test in either of them* — so a copied body
+means the untested line exists twice, and a later fix to one copy leaves the other wrong with the
+suite green. One function, one place for the gap, one place to fix it.
+
+Consequence for §3: the `inherited-untested` mark attaches to the shared function, and covers
+every guard that calls it. Widening rather than duplicating the gap.
+
+## 5b. Scope and residual
+
+This closes the mismatch **for this page only**.
+
+**Deliberately NOT converted (TL-2 (ก)): `/settings/default-system-prompt` (`main.jsx:240`,
+`AdminRoute`) and `/settings/event-logs` (`main.jsx:172`, `AdminRoute`).** The sidebar gates both
+on `capability: "system.read"` (`SettingsSidebar/index.jsx:325,428`), so they look like the same
+case — they are not. Both pages **write**, via `settings.write` / `system.write`. A `system.read`
+guard would admit a principal who can read the page and cannot save from it: #127's
+"renders and cannot work" defect reproduced in the opposite direction, by the fix for it.
+
+**Open question recorded, not answered here:** *read-with-A, write-with-B pages — which guard?*
+Neither permission alone is right: gating on the read action admits users who cannot save,
+gating on the write action hides a page they may legitimately read. This needs a ruling about
+what a route guard is *for* (reaching the page, or using it), and it is out of #132's scope.
+
+The other route sites keep whatever approximation they have — 26 `AdminRoute`, 10 `ManagerRoute`,
+3 `SingleUserRoute`, counted with line comments stripped. #132 does **not** convert them and does
+**not** add `system.read` to `ORG_CAPABILITIES` (TL-2 condition 2; #121 owns that).
 
 ## 6. Tier
 

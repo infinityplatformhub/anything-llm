@@ -68,6 +68,19 @@ reference with the `addListener` fallback.
 
 Replacement: delete the `style` prop, add `md:h-[calc(100%-32px)]` to the className.
 
+**Where the 32px comes from — TL-1 pre-read 996bdbb26, and it must be written down.** The number
+is not arbitrary and is not a magic constant: every one of the 53 sites also carries
+`md:my-[16px]` in the same className — verified, 53 of 53, LoadingChat included. 16px top plus
+16px bottom is the 32px the height subtracts. The two are one decision expressed twice, and today
+the halves are in different languages: the margin in a Tailwind class, the compensation in an
+inline style keyed off the user agent.
+
+That is why the conversion is safe and also why it is fragile if left unexplained. After (ข) both
+halves are classes on the same element and change together under the same breakpoint. **One site
+carries a comment naming the relationship** (`ChatContainer/index.jsx`, the most-read of the 53),
+so the next person to change `md:my-[16px]` finds out that a height depends on it. The contract
+records it here so the comment is not the only copy.
+
 Three facts that make this safe as one mechanical PR, each measured:
 - All 53 sites **already carry `h-full`** in the adjacent className. The mobile half of the
   behaviour is already expressed in CSS; only the desktop half needs adding.
@@ -125,11 +138,30 @@ not reasoned about.
 | F1 | hook re-renders on viewport change | dispatch a `matchMedia` change event with no resize; a non-subscribing hook (the `usePrefersDarkMode` shape) stays stale |
 | F2 | hook cleans up | unmount, fire change, assert no setState-after-unmount warning |
 | F3 | breakpoint is 768px | drift test reads `tailwind.config.js`, asserts no `screens` override, and pins 768 — a config override silently moving `md` must go red |
-| F4 | all 53 (ข) sites converted | count `isMobile ? "100%" : "calc(100% - 32px)"` == 0 AND `height: "calc(100% - 32px)"` == 0; **assert the file list is non-empty before counting**, so a broken glob cannot pass as "zero remaining" |
-| F5 | residual is exactly the allowlist | compare the measured set against `v8-allowlist-24.txt` **as a set, both directions** — a `toContain` passes while a site is added |
+| F4 | all 53 (ข) sites converted | count `isMobile ? "100%" : "calc(100% - 32px)"` == 0 AND `height: "calc(100% - 32px)"` == 0; **and assert the scanned file count equals the expected number**, not merely that it is non-empty (TL-1). A glob that silently narrows to one file reports "zero remaining" and passes; a count pins what was actually searched |
+| F5 | residual is exactly the allowlist | compare the measured set against `v8-allowlist-24.txt` **as a set, both directions**; the failure message **prints both directions separately** — sites present-but-not-listed and listed-but-absent are different defects (a new UA dependency vs. a stale allowlist) and a single "sets differ" message sends the reader to the wrong one |
 | F6 | lint blocks new `react-device-detect` imports | add a probe import in a non-allowlisted file, confirm red; delete the probe |
 | F7 | a11y names present and constant | `getAttribute("aria-label")` non-empty on the SettingsSidebar menu button and the Sidebar toggle; `aria-expanded` flips with panel state |
 | F8 | the six surviving imports are the six named | list them from source and compare as a set — not `toContain` |
+| RF-9 | the hook follows WIDTH, not the user agent — the two conflicting rows | see below |
+
+### RF-9 — the only two fixtures that can tell the implementations apart (TL-1)
+
+Every *consistent* fixture (narrow + mobile UA, wide + desktop UA) passes under **both** the old
+`isMobile` implementation and the new viewport hook, because the two agree there. A suite built
+only from consistent fixtures is green before the change and green after it — describing the
+behaviour rather than asserting it, the exact class in `tests-that-pass-vacuously`.
+
+Only the two rows where the axes conflict separate them:
+
+| fixture | expected after V8 | what the old code does |
+|---|---|---|
+| width 500 + **desktop** UA | mobile tree | desktop tree |
+| width 900 + **mobile** UA | desktop tree | mobile tree |
+
+**Named mutant: keep `isMobile`.** Revert the hook to the user-agent read and these two must go
+red while every consistent fixture stays green. Run it — if the suite survives, the fixtures are
+all consistent and RF-9 is not present regardless of what the test file is called.
 
 **Vacuous-pass guard, from `tests-that-pass-vacuously`:** every extraction offset is asserted
 before slicing (#127 QA-3: `indexOf` → -1 → `slice(0,-1)` ≈ whole file, assertion fails open),
