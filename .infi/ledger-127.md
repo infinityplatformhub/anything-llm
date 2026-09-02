@@ -77,6 +77,28 @@ component, not a decision.
 (`|| !multiUserMode`), so a fixture without it is green under either guard and proves nothing —
 the accidentally-passing-fixture class from #94 and #49.
 
+## Corrections from QA-3
+
+Correction 4: **F1 failed OPEN.** `const routeEnd = block.indexOf("},\n      {")` returns -1
+when the delimiter does not match, and `block.slice(0, -1)` is "everything but the last
+character" — so a prettier run or a reordered route would silently widen the search to almost
+the whole file, find `AdminRoute` in some other route, and pass while THIS route carried no
+guard at all. QA-3 reproduced it: guard removed entirely, 6/6 green.
+
+Both offsets are now asserted before slicing. Verified by reproducing the exact P-bleed —
+guard removed AND the delimiter broken — which is now red.
+
+This is the #84 class: a text-derived assertion whose extraction step can fail, where the
+failure direction is to assert LESS rather than to error. The lesson pairs with #124's: it is
+not enough for an assertion to run in a state where only the named property can satisfy it —
+the code that BUILDS the assertion's input must fail loudly rather than degrade.
+
+Correction 5: **R2 counted wrong.** `expect(gated).toContain("system.read")` passes when only
+one of the two mobile routes is still gated on it, so re-gating `/mobile/devices` to something
+weaker while leaving `/mobile/connect-info` alone kept the test green — and `/mobile/devices`
+is the half that names which user owns which device. Now asserts a count of exactly 2.
+Mutation-verified by re-gating one route only: 1 failed.
+
 ## Residuals
 
 ### Narrowed, not closed (TL-2 pre-read)
@@ -102,6 +124,14 @@ leaks; and the page shows no data before its calls return.
 page needs. Building one is its own issue: today the route guards are a coarse two-tier
 approximation of a fine-grained permission model, and #127 fits the page to the closest
 available tier rather than inventing a third.
+
+### `AdminRoute`'s loading guard is untested (#40 t4)
+
+`PrivateRoute/index.jsx:103` — `if (multiUserMode && capabilitiesLoading) return <FullScreenLoader />` —
+survives deletion with every suite green. Its own comment says so and explains why: the
+`isAuthd === null` check above holds the route through most of the window, so the line is
+reachable only if the session check settles before the capability map. Belongs to #40 task 4,
+not to this issue; recorded here because QA-3 found it while reviewing this one.
 
 ### `system.read` is coarse
 

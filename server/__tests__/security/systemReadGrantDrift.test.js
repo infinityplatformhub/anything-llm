@@ -71,6 +71,10 @@ describe("issue 127: system.read is not granted beyond super_admin", () => {
     const gated = [...source.matchAll(/requirePermission\("([^"]+)"/g)].map(
       ([, action]) => action
     );
-    expect(gated).toContain("system.read");
+    // BOTH routes, counted — not `toContain`. QA-3: with `toContain` this passes when only one
+    // of the two is still gated on `system.read`, so re-gating `/mobile/devices` to something
+    // weaker while leaving `/mobile/connect-info` alone would keep this green — and the device
+    // list is the half that names which user owns which device.
+    expect(gated.filter((action) => action === "system.read")).toHaveLength(2);
   });
 });

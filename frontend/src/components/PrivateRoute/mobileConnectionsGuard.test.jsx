@@ -105,10 +105,18 @@ describe("#127 F1: the ROUTE uses AdminRoute, not merely AdminRoute working", ()
     const { resolve } = await import("path");
     const source = readFileSync(resolve(process.cwd(), "src/main.jsx"), "utf8");
 
-    const block = source.slice(
-      source.indexOf('path: "/settings/mobile-connections"')
-    );
+    // Both offsets are asserted BEFORE slicing. `indexOf` returns -1 when it does not match,
+    // and `slice(0, -1)` means "everything but the last character" — so a delimiter that
+    // stopped matching (a prettier run, a reordered route) would silently widen this to
+    // almost the whole file, find `AdminRoute` somewhere else entirely, and pass while THIS
+    // route carried no guard at all. QA-3 found exactly that: the assertion failed OPEN.
+    const routeStart = source.indexOf('path: "/settings/mobile-connections"');
+    expect(routeStart).toBeGreaterThan(0);
+
+    const block = source.slice(routeStart);
     const routeEnd = block.indexOf("},\n      {");
+    expect(routeEnd).toBeGreaterThan(0);
+
     const routeBlock = block.slice(0, routeEnd);
 
     expect(routeBlock).toMatch(/AdminRoute Component=\{MobileConnections\}/);
