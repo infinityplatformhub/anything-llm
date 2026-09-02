@@ -399,3 +399,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #104: QA-3 PASS (N1–N4 both sides after probe harness fix) + TL-1 PASS (NIT-1 docblock) → waiting Dev1 comment-only amend → close/merge.
 - #98: TL-2 PASS-conditional — seal bypassed by app.all / apiRouter.all / router.route().post() / use(subRouter) without pre-seal refs (HTTP 200 measured); residual rewrite + 4 behaviour-recording tests + app.get-after-require fixture → Dev3 amend with A1–A3.
 - #108: TL-2 asked whether harness exists → answered (#111 merged 5041a0a55, gate ran 24/24).
+- #114: Dev1 measured ~200 fields consumed (8 settings pages pass whole object to provider options); TL-2 tier-3 cut (72) would break admin pages. Proposed option 1: unauth → 6 tier-1 fields; authenticated → full; pre-user window via isConfirmedSingleUser for /onboarding. TL-2 confirm pending (structural ruling rule).
