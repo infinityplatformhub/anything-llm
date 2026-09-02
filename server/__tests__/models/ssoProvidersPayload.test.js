@@ -23,6 +23,7 @@ const OIDC_ENV = [
   "SSO_OIDC_ISSUER",
   "SSO_OIDC_CLIENT_ID",
   "SSO_OIDC_CLIENT_SECRET",
+  "SSO_SAML_ENABLED",
 ];
 
 describe("issue 50: SSOProviders exposes ids only", () => {
@@ -55,6 +56,20 @@ describe("issue 50: SSOProviders exposes ids only", () => {
       process.env.SSO_OIDC_ENABLED = value;
       expect(SystemSettings.ssoEnabledProviders()).toEqual([]);
     }
+  });
+
+  it("picks up SAML too, without an edit here (#43 landed after this)", () => {
+    // The helper derives from the provider registry and the SSO_<ID>_ENABLED
+    // convention, so a provider added by another issue appears on its own. #43
+    // registered SAML after this was written and needed no change — asserted
+    // rather than assumed, because the login page sends users to the FIRST
+    // entry and a silently empty list strands them.
+    process.env.SSO_SAML_ENABLED = "1";
+    expect(SystemSettings.ssoEnabledProviders()).toEqual(["saml"]);
+
+    process.env.SSO_OIDC_ENABLED = "1";
+    // Registry order, which is what Login/index.jsx takes [0] from.
+    expect(SystemSettings.ssoEnabledProviders()).toEqual(["oidc", "saml"]);
   });
 
   it("carries no issuer, client id, or secret — only the id", () => {

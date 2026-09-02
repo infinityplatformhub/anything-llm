@@ -162,3 +162,19 @@ top-level require จะ bind prisma singleton กับ database ผิดก�
 
 GREEN: `bash scripts/check-local.sh` → all checks passed
 `Tests: 1355 passed, 1355 total` / `Test Suites: 134 passed, 134 total`
+
+## Rebase ทับ #43 (SAML)
+
+Ruling: `ssoEnabledProviders()` ไม่ต้องแก้หลัง #43 register SAML — วัดแล้วด้วย probe จริง
+(`SSO_SAML_ENABLED=1` → `["saml"]`, ทั้งคู่ → `["oidc","saml"]`) เพราะ helper derive
+จาก registry + convention `SSO_<ID>_ENABLED` ซึ่งตรงกับ `samlEnabled()` ใน
+`endpoints/identity/saml.js:86-90` พอดี เพิ่มเทสตรึงไว้แทนการเชื่อ
+ถ้าผิด: หน้า login ส่งคนไป providers[0] — list ที่ว่างเปล่าเงียบ ๆ = คนเข้าไม่ได้
+
+Ruling: worktree s50 ต้อง `yarn install` ใหม่หลัง rebase — #43 เพิ่ม `xml-crypto`
+และ `@xmldom/xmldom` ใน package.json แต่ node_modules ของ worktree ไม่ได้ตามมา
+เจอตอน probe: `systemSettings.js` → registry → SamlIdentityProvider → xml-crypto
+พังทั้ง chain ไม่ใช่แค่ SAML ถ้าผิด: gate ที่รันบน worktree ที่ deps ไม่ครบจะ
+แดงด้วยเหตุผลที่ไม่เกี่ยวกับ diff เลย
+
+GREEN หลัง rebase: `Tests: 1546 passed, 1546 total` / 150 suites + check-local ผ่าน
