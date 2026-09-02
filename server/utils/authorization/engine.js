@@ -7,6 +7,7 @@
 // expired grants, impersonated non-read actions (blanket, BEFORE policy lookup).
 
 const prisma = require("../prisma");
+const { grantPrincipalPairs } = require("./groupMembership");
 const {
   AuthorizationDeniedError,
   AuthorizationContractError,
@@ -61,7 +62,7 @@ class DatabaseAuthorizationEngine {
    * @param {{actor: Object|null, action: string, resource: {type: string, id: string|null, orgId: number, workspaceId: number|null, ownerId?: number}}} input
    * @returns {Promise<{allowed: boolean, reason: string, matchedPolicyIds: string[]}>}
    */
-  async authorize({ actor, action, resource }) {
+  async authorize({ actor, action, resource, memo = null }) {
     if (!actor || !actor.type || !actor.id) return asDenied("missing_actor");
     if (typeof action !== "string" || !action.includes(".")) {
       throw new AuthorizationContractError(`invalid action: ${action}`);
@@ -88,7 +89,7 @@ class DatabaseAuthorizationEngine {
     }
 
     try {
-      return await this.evaluate(actor, action, resource);
+      return await this.evaluate(actor, action, resource, memo);
     } catch (error) {
       // A store failure must read as unavailable, never as "no permissions"
       if (error instanceof AuthorizationContractError) throw error;
@@ -120,8 +121,15 @@ class DatabaseAuthorizationEngine {
         `authorizeMany accepts at most ${MAX_BATCH_RESOURCES} resources, got ${resources.length}`
       );
     }
+    // #96: group membership is a property of the ACTOR, not of the resource, so it
+    // is read once for the whole batch and handed to each decision. Without this a
+    // 500-resource batch adds 500 identical `group_members` queries — the ceiling
+    // above exists because each resource already costs three, and this would make
+    // it four. The memo lives for this call only: a longer-lived cache would let a
+    // removed membership keep authorizing.
+    const memo = new Map();
     const decisions = await Promise.all(
-      resources.map((resource) => this.authorize({ actor, action, resource }))
+      resources.map((resource) => this.authorize({ actor, action, resource, memo }))
     );
     return new Map(decisions.map((decision, i) => [i, decision]));
   }
@@ -138,7 +146,7 @@ class DatabaseAuthorizationEngine {
     return "grantPrincipal" in actor ? actor.grantPrincipal : actor;
   }
 
-  async evaluate(actor, action, resource) {
+  async evaluate(actor, action, resource, memo = null) {
     // Unknown action = deny (vocabulary is the seeded permissions table; T-1 diff test
     // keeps P0-4 scopes in the same namespace).
     const permission = await this.db.permissions.findUnique({ where: { action } });
@@ -172,10 +180,30 @@ class DatabaseAuthorizationEngine {
 
     // Grants for this principal: org-wide (workspace_id NULL) + workspace-scoped to the
     // resource's workspace. Expired grants grant nothing.
+    // #96: grants may be written against the principal ITSELF or against a group it
+    // belongs to. Before this, only the first was read — so a role granted to a
+    // group authorized nobody, while the admin UI offered it, explainAccess
+    // confirmed it was held, and documentFilter honoured it for documents. Every
+    // layer agreed except the one that decides.
+    //
+    // Expansion is skipped for an actor evaluating through a grantPrincipal (an
+    // api-key). Its authority is what its creator holds DIRECTLY; inheriting the
+    // creator's departments would widen the key whenever someone edits a group,
+    // to grants its scope list was never reviewed against. `grantPrincipalOf`
+    // returns the creator, who IS a user, so this has to be refused explicitly —
+    // it is not something the type check catches.
+    const principalPairs =
+      "grantPrincipal" in actor
+        ? [
+            {
+              principal_type: grantPrincipal.type,
+              principal_id: String(grantPrincipal.id),
+            },
+          ]
+        : await grantPrincipalPairs(grantPrincipal, actor.orgId ?? 1, this.db, memo);
+
     const grantWhere = {
       orgId: actor.orgId ?? 1,
-      principal_type: grantPrincipal.type,
-      principal_id: String(grantPrincipal.id),
       OR: [
         { expires_at: null },
         { expires_at: { gt: new Date() } },
@@ -185,8 +213,11 @@ class DatabaseAuthorizationEngine {
       resource.workspaceId != null
         ? { OR: [{ workspace_id: null }, { workspace_id: resource.workspaceId }] }
         : { workspace_id: null };
+    // Three separate OR clauses (principal, expiry, workspace scope) must all hold,
+    // so each is its own AND member — merging them into one object would overwrite
+    // the earlier `OR` keys and silently widen the query.
     const grants = await this.db.principal_role_grants.findMany({
-      where: { AND: [grantWhere, workspaceScope] },
+      where: { AND: [grantWhere, workspaceScope, { OR: principalPairs }] },
       select: { role_id: true },
     });
     if (grants.length === 0) return asDenied("no_grants");
