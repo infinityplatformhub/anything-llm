@@ -781,3 +781,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #136 QA-2 F1b: "false"/"no"/"[]"/"0.0" all → 1; only "" → 0. Probe D now 23 (16 ok / 7 red). Fix = parse explicit set + refuse unparseable + CONTROL "1" still suspends; dailyMessageLimit:"abc" guard.
 - #138 driver half GREEN 24/24; Dev3 committing before mutants after a harness near-miss (killed run left mutant on disk; SURVIVOR-UNKNOWN caught it). Mutants A-F queued.
 - preflight :413 addendum (TL-1, 9d32ae768): not a bypass; tooling gap → sidebar/route audit issue.
+- #138 QA-1 driver baseline (qa1-138-driver-baseline.md): A/B/D hang >20s on main, C rejects 2.5s (inherited). Floor = timeout+backoff not 4×timeout; token memo → fresh instance per case; 5 mutants with distinct red sets. Forwarded to Dev3.
+- O3 contract v2 (Dev2, contract-o3-v2 branch) landed if diff present.
