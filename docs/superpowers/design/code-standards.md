@@ -928,3 +928,6 @@ Dev/Techlead ส่ง SHA ให้ PMO gate ได้ก็ต่อเมื�
 
 ### §7.15 /v1 test paths
 `/v1/*` mount ใต้ `/api` — เทสต้องยิง `/api/v1/...` ยิง `/v1/...` ตรงจะแขวนจน timeout ไม่ใช่ 404 (Dev3 #71, QA-2 slice 2 เจอทั้งคู่)
+
+### §7.6d shared worktree cleanup
+worktree ที่มี agent อื่น (implementer) ทำงานอยู่ ห้าม `git checkout -- <dir>` / `git stash` ทั้งไดเรกทอรี — revert เฉพาะไฟล์ที่ตัวเองแตะตอน mutation (#40: `checkout -- server/` ลบงาน implementer ที่ยังไม่ commit)
