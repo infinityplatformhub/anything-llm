@@ -837,3 +837,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-#121 audit (Dev1): legacy roles 0, caps missing from ORG_CAPS 0; flagged 11/37 in 4 classes: (1) 4 true mismatches incl. a SWAP (mailer gates settings.write/route system.write; text-splitting gates system.write/route settings.write; community-hub ×2 settings.write vs system.read); (2) 2 Model-Router-shape (embeds → embed.*, browser-extension → browser-extension.*, neither in ORG_CAPS); (3) 3 gate settings.write but call only ungated routes (interface, chat, system-prompt-variables); (4) 2 ungated (telegram, scheduled-jobs). NEW: route guards are still role-string (AdminRoute/ManagerRoute/SingleUserRoute) — 3 ManagerRoute pages refuse capability holders. → TL-2.
 - QA-2 #135/slice-2 oracle rehearsed against inert stub: 8 red exactly, 11 controls green; two probe bugs fixed (import path; vacuous P2 → workspace viewer + real document). §7.17.
 - #138 queue half SHA c3f5b9b6a (rebased on eaf910819; includes a8841bf86). Gate setup; TL-1 + QA-1 dispatch.
+
+- #136 SLICE 1 MERGED (f76172fec; gate PASS, TL-2 PASS 160ee0c15, QA-2 PASS, suite 3309/0). Issue OPEN for slice 2 (offboardUser).
