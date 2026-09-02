@@ -104,7 +104,7 @@ function collectImports(ast) {
     );
     if (!topLevel || !unaliased) {
       throw new Error(
-        `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example")`
+        `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example"); if this string is not a module path, move it out of index.js or declare an exception`
       );
     }
     imports.push(
@@ -239,6 +239,8 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThanOrEqual(31);
+    // 309 counts each route layer once. A 356-line dump expands app.all("*")
+    // into 35 method handlers; both measure the same mounted router tree.
     expect(mountedRoutesAtTestLoad).toHaveLength(309);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
