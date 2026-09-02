@@ -148,3 +148,6 @@ Until then: any change to `utils/doctor/index.js` touching required extensions o
 
 ## #88 — telemetry labels read VECTOR_DB raw (8 sites in endpoints/)
 Data-quality only: `Chroma` vs `chroma` split aggregate counts. None selects a provider or gates anything. `endpoints/utils.js:25` is a metrics response (operator sees own spelling — arguably preferable). No test drives `connect()` to success (needs live engines in CI).
+
+## #90 O5a — counters read zero until O5a-wire lands
+All 5 counters are declared with an enforced vocabulary but no call site calls `observe()` yet. A dashboard wired now shows flat lines that look like "endpoint broken". `observe()` throws on vocabulary violation — fine while every call site passes literals; becomes a liveness question if a label is ever computed. `doctor.test.js` needs a pgvector-capable DB (1 red on stock postgres:16) — dependency not visible from the suite name.

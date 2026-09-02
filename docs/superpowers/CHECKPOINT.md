@@ -259,3 +259,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #84: QA-2 probe RED-proven on main (4/14 red); counts on main 214 keys / 92 secret (declared flag). Waiting Dev1 SHA after rebase.
 - #40 task 1 final 6038e1179 (text-only over 30bd41698): gate PASS — check-local, contract 3 suites 82/82 exact, sweeps (updateSettingsReturns, drift, apiRouteAuthSweep) green; result bound. Verdicts: TL-1 PASS, TL-2 PASS, QA-2 PASS (stand — diff excludes router walk); waiting QA-3 blocker re-probe + TL-2 ก/ข/ค on 30bd41698 → close/merge → NIT-2 follow-up → task 2.
 - #49 rulings sent (no session table, flag kept, widget out of scope = upstream submodule → separate issue, old client-minted ids refused when flag on, unique (embed_id, session_id)).
+
+## 2026-09-02 — #90 O5a merged (71/92)
+- 7fe628cd7: gate PASS (18/18), QA-3 PASS (4 allowlist states, fail-closed typo, 8 spoofs throw), TL-2 PASS (8/8). Residual: counters unwired (→ O5a-wire), doctor.test needs pgvector DB.
+- #40 task 1 NOT on main (Dev2 misread own dirty checkout); resolved merge parked at approof/40-task1-merge-wip (pushed for Dev2); snapshot 309→315 needs inventory before re-pin. NIT-2 implementer stopped, restarts on new base.
+- #80 hotfix c6b56093: gate PASS (137/137 incl. sweep), TL-1 PASS; waiting QA-3 → merge (clears main's 1 red).
+- #84 8bcc62ce: gate PASS (7/7 + #72/#78); QA-2 + TL-1 reviewing.
