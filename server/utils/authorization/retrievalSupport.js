@@ -27,9 +27,22 @@ const SUPPORTED_PROVIDERS = Object.freeze(["lancedb", "pgvector", "milvus"]);
 /**
  * Count vectors with no ACL metadata, per provider.
  *
- * Returns null when the count cannot be taken (provider unreachable, table absent, a
- * driver with no cheap way to ask). Null means "unknown", and the caller says so rather
- * than reporting a reassuring zero — an unknown count must never read as "all clear".
+ * THREE outcomes, never conflated (Ruling C2):
+ *
+ *   {unlabelled, total}          a real count
+ *   {unsupported: true}          this provider has no cheap way to ask
+ *   {error: "<message>"}         the count was attempted and FAILED
+ *
+ * The previous version returned bare `null` for all three from a `catch {}`, which is how
+ * a genuine bug stayed invisible: `countRows("orgId IS NULL")` used a bare identifier,
+ * DataFusion threw `No field named orgid`, the catch swallowed it, and LanceDB reported
+ * "could not count" on every deployment forever. An operator reading that assumes their
+ * driver is old, not that the query is broken.
+ *
+ * A swallowed error and an unsupported provider read identically to the operator while
+ * meaning opposite things: one is "nothing to do here", the other is "something is
+ * broken". Reporting them as one value is what let the broken case hide behind the benign
+ * one for as long as it did.
  */
 async function unprovableVectorCount(provider) {
   try {
@@ -55,18 +68,33 @@ async function unprovableVectorCount(provider) {
       let total = 0;
       for (const name of await client.tableNames()) {
         const table = await client.openTable(name);
-        total += await table.countRows();
-        // LanceDB counts with a predicate rather than scanning rows into the process.
-        unlabelled += await table.countRows("orgId IS NULL");
+        const rows = await table.countRows();
+        total += rows;
+
+        // A pre-T-5 table has no ACL COLUMNS in its Arrow schema, and a predicate naming a
+        // column that is not there throws rather than matching nothing. So the schema is
+        // asked first: no columns means every row in that table is unlabelled, which is a
+        // fact worth counting rather than an error worth reporting.
+        if (!(await instance.hasAclColumns(table))) {
+          unlabelled += rows;
+          continue;
+        }
+
+        // Backticks for the same reason as the read path: an unquoted camelCase
+        // identifier is case-folded to `orgid` and throws.
+        unlabelled += await table.countRows("`orgId` IS NULL");
       }
       return { unlabelled, total };
     }
 
     // Milvus has no cheap count-with-predicate across a JSON member on every version, and
-    // guessing is worse than admitting the gap.
-    return null;
-  } catch {
-    return null;
+    // guessing is worse than admitting the gap. Distinct from an error: nothing is wrong
+    // here, the question just cannot be asked cheaply.
+    return { unsupported: true };
+  } catch (error) {
+    // Surfaced with its message rather than flattened to null. The operator can act on
+    // "No field named orgid"; they cannot act on silence.
+    return { error: error.message };
   }
 }
 
@@ -92,12 +120,26 @@ async function reportRetrievalFilterSupport(
   }
 
   const counts = await unprovableVectorCount(normalized);
-  if (counts === null) {
+
+  // A failed count is an ERROR, not a shrug. The message is included because it is the
+  // actionable part: "No field named orgid" tells an operator the diagnostic itself is
+  // broken, where the old catch-all "could not count" told them to look at their driver.
+  if (counts?.error) {
+    logger.error(
+      `\x1b[31m[authorization]\x1b[0m failed to count vectors missing ACL metadata for "${normalized}": ${counts.error}. ` +
+        `This is a fault in the diagnostic, not a statement about your data — retrieval enforcement is unaffected, but this deployment cannot report how many vectors predate the ACL metadata.`
+    );
+    return { supported: true, provider: normalized, counts };
+  }
+
+  // Distinct from the above: nothing is broken, the question just cannot be asked cheaply
+  // on this provider.
+  if (counts?.unsupported) {
     logger.warn(
-      `\x1b[33m[authorization]\x1b[0m could not count vectors missing ACL metadata for "${normalized}". ` +
+      `\x1b[33m[authorization]\x1b[0m cannot count vectors missing ACL metadata on "${normalized}" — this provider offers no cheap way to ask. ` +
         `If this deployment has documents embedded before the ACL metadata was introduced, they cannot be proven readable and will be excluded from retrieval.`
     );
-    return { supported: true, provider: normalized, counts: null };
+    return { supported: true, provider: normalized, counts };
   }
 
   if (counts.unlabelled > 0) {

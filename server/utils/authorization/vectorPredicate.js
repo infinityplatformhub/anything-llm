@@ -56,6 +56,17 @@ const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
 const ident = (name) => `\`${name}\``;
 
 /**
+ * The three fields that make a vector's provenance provable, in one place.
+ *
+ * Every dialect's unlabelled-row escape clause is built from this list, so a renderer
+ * cannot quietly check two of them and admit a half-labelled row through the third. The
+ * LanceDB provider also reads it to ask whether a table carries these COLUMNS at all — a
+ * pre-T-5 table has none, and a predicate naming a column that is not in the Arrow schema
+ * throws rather than matching nothing.
+ */
+const ACL_FIELDS = Object.freeze(["orgId", "workspaceId", "docId"]);
+
+/**
  * A filter must be a filter. Null, `{}`, or a filter with no policy stamp are all refused
  * rather than treated as "no restriction" — an unfiltered read must never be reachable by
  * forgetting an argument.
@@ -145,7 +156,7 @@ class RetrievalConstraint {
     }
     const strict = clauses.join(" AND ");
     if (!allowUnprovableRows()) return strict;
-    const unlabelled = ["orgId", "workspaceId", "docId"]
+    const unlabelled = ACL_FIELDS
       .map((key) => `${ident(key)} IS NULL`)
       .join(" AND ");
     return `((${unlabelled}) OR (${strict}))`;
@@ -179,7 +190,7 @@ class RetrievalConstraint {
     if (!allowUnprovableRows()) return strict;
     // Same all-or-nothing escape as toSqlString; Milvus spells "JSON key absent" as
     // `not exists`.
-    const unlabelled = ["orgId", "workspaceId", "docId"]
+    const unlabelled = ACL_FIELDS
       .map((key) => `not exists ${member(key)}`)
       .join(" and ");
     return `((${unlabelled}) or (${strict}))`;
@@ -202,38 +213,50 @@ class RetrievalConstraint {
     if (this.matchNone) return null;
     const params = [];
     const clauses = [];
-    const next = () => `$${startIndex + params.length}`;
+
+    // ONE way to allocate a placeholder: push the value, then return the number it landed
+    // on. Nothing else may touch `params`.
+    //
+    // The previous version had a `next()` that read `params.length` WITHOUT pushing, and
+    // call sites disagreed about the order — orgId pushed then called it, everything else
+    // called it then pushed. So orgId got `$2`, workspaceId got `$2` as well, and `$1` was
+    // never referenced by anything. Postgres rejected every shape:
+    // `could not determine data type of parameter $1`, or an array bound where a scalar
+    // was expected. pgvector's queryAuthorized could not run at all.
+    //
+    // Off-by-one in placeholder numbering is not a typo class you can review your way out
+    // of — the two orderings look identical at a glance and only differ at runtime. Making
+    // reserve-and-push atomic removes the ordering question rather than answering it.
+    const bind = (value) => {
+      params.push(value);
+      return `$${startIndex + params.length - 1}`;
+    };
 
     // Strict in every state, for the same reason as toSqlString.
-    params.push(String(this.orgId));
-    clauses.push(`${column}->>'orgId' = ${next()}`);
+    clauses.push(`${column}->>'orgId' = ${bind(String(this.orgId))}`);
 
     if (this.workspaceIds.length > 0) {
-      const placeholder = next();
-      params.push(this.workspaceIds);
-      clauses.push(`${column}->>'workspaceId' = ANY(${placeholder})`);
+      clauses.push(
+        `${column}->>'workspaceId' = ANY(${bind(this.workspaceIds)})`
+      );
     }
     if (this.deniedDocIds.length > 0) {
-      const placeholder = next();
-      params.push(this.deniedDocIds);
       // A row with no docId cannot be checked against the deny list, so it is refused
       // rather than admitted. `docId IS NULL OR NOT IN (...)` would have been the natural
       // SQL and the wrong answer: it admits exactly the rows whose provenance cannot be
       // established.
       clauses.push(
-        `${column}->>'docId' IS NOT NULL AND NOT (${column}->>'docId' = ANY(${placeholder}))`
+        `${column}->>'docId' IS NOT NULL AND NOT (${column}->>'docId' = ANY(${bind(this.deniedDocIds)}))`
       );
     }
     if (this.allowedDocIds !== null) {
-      const placeholder = next();
-      params.push(this.allowedDocIds);
-      clauses.push(`${column}->>'docId' = ANY(${placeholder})`);
+      clauses.push(`${column}->>'docId' = ANY(${bind(this.allowedDocIds)})`);
     }
     const strict = clauses.join(" AND ");
     if (!allowUnprovableRows()) return { sql: strict, params };
     // Same all-or-nothing escape as toSqlString. No new parameters: the escape clause is
     // three IS NULL checks, so the caller's placeholder numbering is unaffected.
-    const unlabelled = ["orgId", "workspaceId", "docId"]
+    const unlabelled = ACL_FIELDS
       .map((key) => `${column}->>'${key}' IS NULL`)
       .join(" AND ");
     return { sql: `((${unlabelled}) OR (${strict}))`, params };
@@ -355,4 +378,5 @@ module.exports = {
   constraintFor,
   isRowAllowed,
   RetrievalConstraint,
+  ACL_FIELDS,
 };

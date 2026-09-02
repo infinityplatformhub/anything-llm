@@ -11,7 +11,11 @@ const {
   assertFilter,
   constraintFor,
   isRowAllowed,
+  ACL_FIELDS: ACL_COLUMNS,
 } = require("../../authorization/vectorPredicate");
+const {
+  allowUnprovableRows,
+} = require("../../authorization/retrievalEnforcement");
 const {
   aclMetadataForNamespace,
 } = require("../../authorization/vectorAclMetadata");
@@ -266,6 +270,48 @@ class LanceDb extends VectorDatabase {
     if (!(await this.namespaceExists(client, namespace))) return empty;
 
     const collection = await client.openTable(namespace);
+
+    // A table written before T-5 has no ACL COLUMNS in its Arrow schema — not null
+    // values, no columns. DataFusion resolves identifiers against the schema, so even
+    // `` `orgId` IS NULL `` throws `No field named orgId` there. The escape clause would
+    // fail on precisely the tables it exists to serve (Techlead FINDING-1).
+    //
+    // So the case is detected and branched explicitly rather than by relaxing the
+    // predicate. A looser predicate would have to hold for post-T-5 tables too, which is
+    // where the real enforcement happens; this keeps that path strict and handles the
+    // legacy table as its own decision.
+    const labelled = await this.hasAclColumns(collection);
+    if (!labelled) {
+      if (!allowUnprovableRows()) {
+        // Not silent: an empty result with no explanation reads as "no matching
+        // documents", and the operator would look at their embeddings rather than at the
+        // one variable that governs this.
+        this.logger(
+          `namespace "${namespace}" predates the ACL metadata (no orgId/workspaceId/docId columns). Its vectors cannot be proven readable and are EXCLUDED. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to serve them meanwhile.`
+        );
+        return empty;
+      }
+      // Flag set: serve the table unfiltered at the query, then let isRowAllowed rule on
+      // each row. Every row here is unlabelled by construction, so the second layer
+      // applies the same all-or-nothing rule it applies everywhere else — this is not a
+      // bypass, it is the one input shape the flag exists for.
+      return this.#collect(
+        await collection
+          .vectorSearch(queryVector)
+          .distanceType("cosine")
+          .limit(
+            rerank
+              ? Math.max(
+                  10,
+                  Math.min(50, Math.ceil((await this.namespaceCount(namespace)) * 0.1))
+                )
+              : topN
+          )
+          .toArray(),
+        { aclFilter, similarityThreshold, topN, filterIdentifiers, rerank, query, namespace }
+      );
+    }
+
     // Reranking widens the candidate set before ranking it, so the ACL predicate must be
     // attached to THAT query too — otherwise the wider net is the unfiltered one, which
     // would make rerank mode a way around the seam rather than a retrieval-quality knob.
@@ -279,6 +325,59 @@ class LanceDb extends VectorDatabase {
       .limit(searchLimit)
       .toArray();
 
+    return this.#collect(response, {
+      aclFilter,
+      similarityThreshold,
+      topN,
+      filterIdentifiers,
+      rerank,
+      query,
+      namespace,
+    });
+  }
+
+  /**
+   * Does this table carry the ACL columns at all?
+   *
+   * A table written before T-5 has none — not null values, no COLUMNS. DataFusion resolves
+   * identifiers against the Arrow schema, so any predicate naming `orgId` throws there,
+   * `IS NULL` included. That is why this is a schema question rather than a data one.
+   *
+   * Errs toward "labelled" only when the schema cannot be read at all, because the strict
+   * path is the safe one: a wrong `true` produces a failed query, a wrong `false` on a
+   * flagged deployment would serve a labelled table unfiltered.
+   *
+   * @param {import('@lancedb/lancedb').Table} table
+   */
+  async hasAclColumns(table) {
+    try {
+      const schema = await table.schema();
+      const names = new Set((schema?.fields ?? []).map((field) => field.name));
+      return ACL_COLUMNS.every((column) => names.has(column));
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Rank, re-check and shape the rows a search returned.
+   *
+   * Shared by both branches of queryAuthorized so the legacy-table path cannot drift into
+   * a second, laxer copy of the row check — the pushdown differs between those branches,
+   * but what happens to a returned row must not.
+   */
+  async #collect(
+    response,
+    {
+      aclFilter,
+      similarityThreshold,
+      topN,
+      filterIdentifiers,
+      rerank,
+      query,
+      namespace,
+    }
+  ) {
     // Reranking runs over rows that already survived the ACL check, never before it: a
     // reranker scoring forbidden chunks would both read them and let them displace
     // permitted ones from the final topN.

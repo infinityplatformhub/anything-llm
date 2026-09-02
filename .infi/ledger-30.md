@@ -81,3 +81,19 @@ Ruling: the regression test opens a REAL LanceDB table (rows written via `aclMet
 Note (not a regression): `__tests__/jobs/providerDocIdCallSites.test.js` intermittently fails 3 tests with a 5s `beforeAll` timeout — its hook shells out to `prisma migrate deploy`. Reproduced identically on `aa437ade` with this fix stashed, and it passes when run alone. Environment timing, unrelated to this change; flagged so a recurrence is not read as new.
 
 SHA: e1f257b2 (branch approof/t5-vector-filter, base aa437ade)
+
+## Slice 1a — QA-2 round 2 FAIL on aa437ade/05e18e79, corrected
+
+Ruling A (Techlead/QA-2 blocker, my bug): `toJsonbSql` allocates placeholders through ONE `bind(value)` that pushes and returns the number the value landed on. The previous `next()` read `params.length` without pushing, and call sites disagreed about ordering — orgId pushed then called it, every other clause called it then pushed — so `$1` was never referenced and `$2` bound two clauses on every filter shape. PostgreSQL rejected all of them (`could not determine data type of parameter $1`, `op ANY/ALL (array) requires array on right side`), meaning pgvector's `queryAuthorized` could not execute at all. Present since c60d69d0, never reached main. Off-by-one placeholder numbering is not reviewable by eye — the two orderings look identical and differ only at runtime — so reserve-and-push is made atomic rather than documented.
+
+Ruling A2: the regression test executes every shape against a REAL PostgreSQL table (orgWide / workspace / +deny / +allow / all four) and asserts the ROWS returned. `JSON.stringify` comparison is forbidden here and is exactly what hid the bug: the SQL string was plausible and the params array was plausible; only their relationship was wrong, and no string comparison can see a relationship. Mutation-verified — restoring the old `next()` fails 9 of 9.
+
+Ruling B (Techlead FINDING-1, option ข): a table written before T-5 has no ACL COLUMNS in its Arrow schema, so DataFusion throws `No field named orgId` even for `` `orgId` IS NULL `` — the escape clause failed on precisely the tables it exists to serve. The read path now asks `table.schema()` first and branches explicitly: flag unset → refuse (empty result) with a log naming the reason and the variable; flag set → serve the table without a predicate and let `isRowAllowed` rule on each row. Option (ก) — loosening the predicate — was rejected because that predicate also governs post-T-5 tables, where the real enforcement happens. Mutation-verified: forcing `labelled = true` fails 3 of 13.
+
+Ruling B2: the test builds a real `{id, vector, text}` table with no ACL columns and drives both states, plus a modern table in both states to prove the legacy branch is not a general loosening. A mocked table cannot produce this failure — no Arrow schema, no planner — which is why every earlier suite passed.
+
+Ruling C/C2 (FINDING-2): `unprovableVectorCount` returns three distinguishable outcomes — `{unlabelled, total}`, `{unsupported: true}`, `{error: message}` — never bare null. The old `catch {}` flattened all three, which is how the bare-identifier `countRows("orgId IS NULL")` throw stayed invisible: LanceDB reported "could not count" on every deployment and it read as a benign capability gap. A failure is now logged at error level WITH its message; an unsupported provider stays a warning. A table with no ACL columns counts as 100% unlabelled — a countable fact about the data, not a fault in the query. Mutation-verified: restoring the bare identifier fails 1 of 13.
+
+Note (not a regression, #57): `__tests__/jobs/providerDocIdCallSites.test.js` fails 3 tests intermittently on a 5s `beforeAll` that shells out to `prisma migrate deploy`. Reproduced on plain `aa437ade`; passes when run alone. Known and tracked.
+
+SHA: (below)
