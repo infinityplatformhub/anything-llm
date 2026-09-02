@@ -381,7 +381,7 @@ your code:
 
 ```bash
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"        # Node 22
-export DATABASE_URL="postgresql://approof:approof@localhost:5432/approofworkspace_test"
+export DATABASE_URL="postgresql://approof:approof@localhost:5432/approofworkspace_test?connection_limit=5"
 export API_KEY_PEPPER="local-dev-api-key-pepper-32-bytes-min"   # >= 32 bytes
 cd server
 npx prisma generate --schema prisma/schema.prisma        # after EVERY rebase
@@ -791,7 +791,7 @@ database**, not one carried over from a previous probe.
 ```bash
 DB="gate_$$"
 psql "postgresql://…/postgres" -c "CREATE DATABASE $DB;"
-export DATABASE_URL="postgresql://…/$DB"
+export DATABASE_URL="postgresql://…/$DB?connection_limit=5"
 cd server && ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
 # … run …
 psql "postgresql://…/postgres" -c "DROP DATABASE $DB;"
