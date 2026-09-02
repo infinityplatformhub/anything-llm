@@ -17,3 +17,4 @@
 - #54 overlap: none — Actor = grants(creator) ∩ scopes(key), binding only narrows. Add test: remove creator from workspace → bound key 403 immediately (grant read at request time, not mint time).
 - generated-files has no owner row (flat disk, no table): bound key → 403 on the whole route (global-namespace class, like folders). Root fix (agent_generated_files table) → follow-up issue. 404 amendment applies to :docName only.
 - #41 amendment (Dev1, correct): membership-revoke test replaced by ROLE-revoke → 403 immediately; org-level routes evaluate against workspace_id:null so membership does not authorize them (test asserts this explicitly). boundKeyWorkspaceScope exists as a test file name only.
+- HOLD 3d37ae81 (Techlead): docpath must come from the on-disk name not normalizePath(input); attach failure must not return success:true; write half needs tests (bound upload → visible immediately, 4 routes, attach-fail response).
