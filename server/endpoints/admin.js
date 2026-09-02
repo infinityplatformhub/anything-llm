@@ -226,7 +226,11 @@ function adminEndpoints(app) {
         // could drop would let them upgrade a read-only session to a real one.
         // Short-lived by design — this is a support tool, not a login.
         const token = makeJWT(
-          { id: target.id, username: target.username, impersonatedBy: admin.id },
+          {
+            id: target.id,
+            username: target.username,
+            impersonatedBy: admin.id,
+          },
           "30m"
         );
 
@@ -587,6 +591,8 @@ function adminEndpoints(app) {
           resource: await orgResource(),
         });
         if (!unrestrictedSettings.allowed) {
+          // Unknown keys stay silent here to avoid exposing valid setting names to
+          // callers without broad system write access.
           const managerAllowedFields = [
             "custom_app_name",
             "footer_data",
@@ -606,7 +612,7 @@ function adminEndpoints(app) {
         const result = await SystemSettings.updateSettings(updates);
         const status = result.success
           ? 200
-          : result.code === "unknown_keys"
+          : ["unknown_keys", "protected_keys"].includes(result.code)
             ? 400
             : 500;
         response.status(status).json(result);

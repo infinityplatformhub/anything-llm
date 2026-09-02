@@ -62,8 +62,11 @@ const repository = require("../../utils/authorization/policyRepository");
 const { SERVICE_PRINCIPALS } = require("../../utils/authorization/actorResolver");
 
 let admin;
+let manager;
 let apiSecret;
 const auth = () => `Bearer ${makeJWT({ id: admin.id, username: admin.username })}`;
+const managerAuth = () =>
+  `Bearer ${makeJWT({ id: manager.id, username: manager.username })}`;
 const routes = [
   ["admin route", "/api/admin/system-preferences", () => auth(), (body) => body],
   ["v1 route", "/api/v1/admin/preferences", () => `Bearer ${apiSecret}`, (body) => body],
@@ -101,6 +104,23 @@ beforeAll(async () => {
     update: { value: "true" },
     create: { label: "multi_user_mode", value: "true" },
   });
+  manager = await prisma.users.create({
+    data: {
+      username: "unknown-key-manager",
+      password: bcrypt.hashSync("Pw123456!", 10),
+      role: "manager",
+    },
+  });
+  const managerRole = await prisma.roles.findFirstOrThrow({
+    where: { name: "setup_admin", scope: "org" },
+  });
+  await repository.grantRole({
+    actor: SERVICE_PRINCIPALS.singleUser,
+    principalType: "user",
+    principalId: String(manager.id),
+    roleId: managerRole.id,
+    db: prisma,
+  });
   const created = await ApiKey.create(admin.id, "unknown-key-writer", {
     scopes: ["system.write"],
   });
@@ -122,97 +142,154 @@ const failSettingsWrite = () =>
   });
 
 describe("unknown settings keys over HTTP", () => {
-  test("mixed keys answer 400 and write no valid key", async () => {
-    await prisma.system_settings.deleteMany({ where: { label: "support_email" } });
-
-    const response = await update(
-      "/api/admin/system-preferences",
-      () => auth(),
-      { not_a_real_key: "x", support_email: "mixed@example.com" }
+  const directRoutes = [
+    ["admin route", "/api/admin/system-preferences", () => auth()],
+    ["v1 route", "/api/v1/admin/preferences", () => `Bearer ${apiSecret}`],
+  ];
+  const snapshotSettings = async () =>
+    JSON.stringify(
+      await prisma.system_settings.findMany({ orderBy: { id: "asc" } })
     );
 
+  test.each(directRoutes)(
+    "%s rejects mixed keys without changing any database row",
+    async (_name, path, authorization) => {
+      await prisma.system_settings.upsert({
+        where: { label: "support_email" },
+        update: { value: "already@example.com" },
+        create: { label: "support_email", value: "already@example.com" },
+      });
+      const before = await snapshotSettings();
+
+      const response = await update(path, authorization, {
+        not_a_real_key: "x",
+        support_email: "already@example.com",
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        success: false,
+        code: "unknown_keys",
+        unknownKeys: ["not_a_real_key"],
+        unknownKeyCount: 1,
+      });
+      expect(await snapshotSettings()).toBe(before);
+    }
+  );
+
+  test.each(directRoutes)(
+    "%s rejects an all-unknown body",
+    async (_name, path, authorization) => {
+      const response = await update(path, authorization, {
+        not_a_real_key: "x",
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.unknownKeys).toEqual(["not_a_real_key"]);
+    }
+  );
+
+  test.each(directRoutes)(
+    "%s accepts and writes an all-valid body",
+    async (_name, path, authorization) => {
+      const response = await update(path, authorization, {
+        support_email: "valid@example.com",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(
+        prisma.system_settings.findUnique({ where: { label: "support_email" } })
+      ).resolves.toMatchObject({ value: "valid@example.com" });
+    }
+  );
+
+  test("community hub rejects unknown keys outside its 500 catch path", async () => {
+    const response = await update("/api/community-hub/settings", () => auth(), {
+      not_a_real_key: "x",
+    });
+
     expect(response.status).toBe(400);
+    expect(response.status).not.toBe(500);
     expect(response.body).toMatchObject({
-      success: false,
       code: "unknown_keys",
       unknownKeys: ["not_a_real_key"],
     });
-    expect(
-      await prisma.system_settings.findUnique({ where: { label: "support_email" } })
-    ).toBeNull();
   });
 
-  test("all-unknown body answers 400", async () => {
+  test("manager unknown keys stay silent and write no rows", async () => {
+    const before = await snapshotSettings();
+
     const response = await update(
       "/api/admin/system-preferences",
-      () => auth(),
+      managerAuth,
       { not_a_real_key: "x" }
     );
 
-    expect(response.status).toBe(400);
-    expect(response.body.unknownKeys).toEqual(["not_a_real_key"]);
-  });
-
-  test("all-valid body answers 200 and writes the setting", async () => {
-    const response = await update(
-      "/api/admin/system-preferences",
-      () => auth(),
-      { support_email: "valid@example.com" }
-    );
-
     expect(response.status).toBe(200);
-    await expect(
-      prisma.system_settings.findUnique({ where: { label: "support_email" } })
-    ).resolves.toMatchObject({ value: "valid@example.com" });
+    expect(await snapshotSettings()).toBe(before);
   });
 
-  test.each(routes)("%s maps typed unknown-key failures to 400", async (
-    _name,
-    path,
-    authorization,
-    bodyFor
-  ) => {
-    jest.spyOn(SystemSettings, "updateSettings").mockResolvedValue({
-      success: false,
-      error: "Unknown setting keys: not_a_real_key",
-      code: "unknown_keys",
-      unknownKeys: ["not_a_real_key"],
-    });
+  test.each(["__proto__", "constructor", "prototype"])(
+    "%s remains unpolluted through parsed HTTP JSON",
+    async (key) => {
+      const response = await request(app)
+        .post("/api/v1/admin/preferences")
+        .set("Authorization", `Bearer ${apiSecret}`)
+        .set("Content-Type", "application/json")
+        .send(`{"${key}":{"x":"polluted"}}`);
 
-    const response = await update(
-      path,
-      authorization,
-      bodyFor({ not_a_real_key: "x", default_system_prompt: "prompt" })
-    );
+      expect(response.status).toBe(400);
+      expect(response.body.unknownKeys).toEqual([key]);
+      expect({}.x).toBeUndefined();
+    }
+  );
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      success: false,
-      code: "unknown_keys",
-      unknownKeys: ["not_a_real_key"],
-    });
-  });
+  test.each(routes)(
+    "%s maps typed refusal failures to 400",
+    async (_name, path, authorization, bodyFor) => {
+      jest.spyOn(SystemSettings, "updateSettings").mockResolvedValue({
+        success: false,
+        error: "Protected setting keys: hub_api_key",
+        code: "protected_keys",
+        protectedKeys: ["hub_api_key"],
+      });
 
-  test.each(routes)("%s keeps settings write failures at 500", async (
-    _name,
-    path,
-    authorization,
-    bodyFor
-  ) => {
-    failSettingsWrite();
+      const response = await update(
+        path,
+        authorization,
+        bodyFor({ not_a_real_key: "x", default_system_prompt: "prompt" })
+      );
 
-    const response = await update(
-      path,
-      authorization,
-      bodyFor({ support_email: "ops@example.com", default_system_prompt: "prompt" })
-    );
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        success: false,
+        code: "protected_keys",
+        protectedKeys: ["hub_api_key"],
+      });
+    }
+  );
 
-    expect(response.status).toBe(500);
-    expect(response.body.success).toBe(false);
-    expect(response.body.error || response.body.message).toBe(
-      "system_settings unavailable"
-    );
-  });
+  test.each(routes)(
+    "%s keeps settings write failures at 500",
+    async (_name, path, authorization, bodyFor) => {
+      failSettingsWrite();
+
+      const response = await update(
+        path,
+        authorization,
+        bodyFor({
+          support_email: "ops@example.com",
+          default_system_prompt: "prompt",
+        })
+      );
+
+      expect(response.status).toBe(500);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error || response.body.message).toBe(
+        "system_settings unavailable"
+      );
+    }
+  );
 
   test("default system prompt exposes the model error as its HTTP message", async () => {
     failSettingsWrite();

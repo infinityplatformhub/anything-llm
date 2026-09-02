@@ -1011,7 +1011,7 @@ function systemEndpoints(app) {
         const result = await SystemSettings.updateSettings({
           default_system_prompt: defaultSystemPrompt,
         });
-        if (result.code === "unknown_keys")
+        if (["unknown_keys", "protected_keys"].includes(result.code))
           return response.status(400).json(result);
         if (!result.success)
           throw new Error(
