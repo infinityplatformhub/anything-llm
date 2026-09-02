@@ -110,3 +110,6 @@ bespoke expiry logic, and the failure mode is legible.
 
 If that shape does not survive contact with slice 3's design, the fallback is rung-0 as written
 and a documented residual — not a hand-rolled lock.
+
+## Addendum — RF-2 comment fix f75f39462: PASS (TL-1, 22:40)
+Comment now states what the test pins (two counted rows, both halves, not "non-empty"), says explicitly it is NOT the F1 witness with the refuting measurement, and points M2/M3 to the ledger as §7.9 survivors.
