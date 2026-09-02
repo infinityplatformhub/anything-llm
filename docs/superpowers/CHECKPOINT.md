@@ -700,3 +700,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #121 TL-1 rulings: (ก) mapping correct, seed is the bug → #137 opened (setup_admin system.write/system.read, auth tier, needs migration); (ข) content_moderator workspace-chats confirmed intended; manager→member loses 8 = intended, record in issue. Neither blocks #121. QA-3 oracle committed.
 - #130 Dev1 pre-read: brief stale (c2fdb8dc8 already polls; in-process assertion cannot catch M4). Options A child-process test / B tier-3 / C close stale → routed to TL-2. Dev1 holds.
 - #121 gate: check-local 0, lane 3 files, frontend 122/122 exit 0, caps PASS; server authz contract running.
+- #121 gate on 7960ceac1: authz 756 passed / 1 failed = mockup drift test only (fixed by 6e205d79b); sweeps 63/63. Rerun on 6e205d79b requested. Dev4's F-A stop was against superseded 7b3063bee; asked to re-run set-intersection on 6e205d79b. V8 contract 46a10d846 on main.
