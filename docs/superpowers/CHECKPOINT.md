@@ -246,3 +246,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 e1bf4adb8: gate PASS (122/122 exact), QA-1/QA-2/QA-3/TL-1/TL-2 PASS. Follow-up (Dev3): smtp_verified_hash → protectedFields, mailerTest 429 test, 3 comments. S11b UI awaits user A/B.
 - Post-merge main after #88: 2447/2447.
 - #40 a2bbb0de8: QA-2 PASS (37/37, lane excludes singleUserRouteShapeB), TL-1 PASS, QA-3 FAIL (SPA fallback), gate confirms 2 red in that suite. Waiting new SHA + TL-2.
+- #84 started (Dev1, impl84, recon ebbbf2ce, ruling ข whole route → system.write); #89 dup closed; contract on #84.
+- O5 recon merged; rulings: split O5a /metrics (mount /api, ipAllowlist, const labels) / O5b bundle CLI first (diagnostics.export, slot 100000, super_admin). Dev5 opens O5a issue.
