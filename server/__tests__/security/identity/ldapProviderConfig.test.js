@@ -114,8 +114,12 @@ describe("identity_providers carries an LDAP configuration", () => {
     // is read on every login and is in every backup, so a password column here
     // is a password in plaintext at rest.
     const columns = await prisma.$queryRawUnsafe(
+      // Scoped to this suite's schema — see the note on the query below. Here
+      // it matters more, not less: a secret column added to THIS schema's table
+      // would be missed if the row set came from another schema's copy.
       `SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'identity_providers'`
+       WHERE table_name = 'identity_providers'
+         AND table_schema = current_schema()`
     );
     const names = columns.map((row) => row.column_name.toLowerCase());
     // Guard the guard: on a table that did not exist, the loop below would pass
@@ -186,7 +190,7 @@ describe("a provider row is ONE complete shape", () => {
       prisma.identity_providers.create({
         data: samlRow({ ldapUrl: "ldaps://directory.example.com:636" }),
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/one_shape/);
   });
 
   test("LDAP columns PLUS a non-empty entityId is REJECTED", async () => {
@@ -197,7 +201,7 @@ describe("a provider row is ONE complete shape", () => {
       prisma.identity_providers.create({
         data: ldapRow({ entityId: `${APP_ORIGIN}/saml/metadata` }),
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/one_shape/);
   });
 
   test("an EMPTY ldapUrl is REJECTED, not treated as configured", async () => {
@@ -206,7 +210,7 @@ describe("a provider row is ONE complete shape", () => {
     // this is the input that separates the two spellings.
     await expect(
       prisma.identity_providers.create({ data: ldapRow({ ldapUrl: "" }) })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/one_shape/);
   });
 
   test("a row that is NEITHER shape is REJECTED", async () => {
@@ -221,7 +225,7 @@ describe("a provider row is ONE complete shape", () => {
           certificates: [],
         },
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/one_shape/);
   });
 
   test("entityId and ssoUrl are NOT NULL — the empty-string contract cannot be flipped quietly", async () => {
@@ -230,8 +234,13 @@ describe("a provider row is ONE complete shape", () => {
     // constraint stops meaning what it says — silently, because a comment is
     // documentation and Prisma will not argue. This is the part that fails.
     const columns = await prisma.$queryRawUnsafe(
+      // `current_schema()` matters: these suites run against a per-test schema,
+      // and information_schema spans every schema in the database. Without it
+      // the query can answer from a table of the same name left by another
+      // suite, so the assertion would describe a table nobody is testing.
       `SELECT column_name, is_nullable FROM information_schema.columns
        WHERE table_name = 'identity_providers'
+         AND table_schema = current_schema()
          AND column_name IN ('entityId', 'ssoUrl')`
     );
     expect(columns).toHaveLength(2);
