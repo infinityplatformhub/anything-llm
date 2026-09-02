@@ -604,3 +604,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #119 0e2317834 gate GREEN: check-local pass, routeMountGuard+routeGateSweep 77/77 (from 71), sweeps 63/63, ledger 11 rulings; result written (run-id gate-119-0e2317834). TL-2 + QA-2 re-verdict dispatched.
 - #128 (Dev3): code+tests done 11/11, 4 mutants dead, sweeps running → push soon on approof/128-held-group-expand (base 166cd3865, after #113). TL-1 pre-alerted. §7.17 wrong-reason-fixture logged.
 - #120 da2cb0cd8 (Dev5, comma reversal) pushed: regating /tmp/wt-120; TL-2 re-read after #127/#119 verdicts. 7 stale jest procs in .claude/worktrees/hf125 + o5 belong to other sessions (left alone).
+- #120 da2cb0cd8 gate GREEN (commas dropped; sweeps 63/63; ledger 6). Result written. TL-2 3-line re-read queued after #127/#119.
+- #128 6087af79c (Dev3) pushed: gate /tmp/wt-128 running; TL-1 verdict + QA-1 probe dispatched (incl. scope-in-OR mutant, null-guard order).
