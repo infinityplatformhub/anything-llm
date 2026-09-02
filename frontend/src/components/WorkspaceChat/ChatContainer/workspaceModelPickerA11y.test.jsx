@@ -10,8 +10,19 @@
 // accessible name" and fix nothing. So the name is asserted to be CONSTANT across two different
 // model values, which is the assertion that rejects the plausible-looking fix.
 //
-// RED before the fix: `getByRole("button", {name: /select model/i})` finds nothing, because the
-// name is "gpt-4o-mini".
+// QA-3 correction. An earlier version of this file claimed to be RED before the fix and was
+// not: its matcher `/select_model|select model/i` matched the button's VISIBLE TEXT during the
+// fallback window (before the async model name arrives, the span reads the same key), so
+// `getByRole` found the button whether or not an aria-label existed. Deleting the label
+// entirely left 4/4 green.
+//
+// Two rules came out of that, and both shape the assertions below:
+//   1. Every test waits for the RESOLVED state — the model name on screen — before asking for
+//      the button. In the fallback window the visible text and the intended label are the same
+//      string, so nothing can be distinguished there.
+//   2. The name is asserted to be a NON-EMPTY string, not merely equal across renders.
+//      `getAttribute("aria-label")` returns null when the attribute is absent, and
+//      `null === null` made the constancy test pass for a button with no label at all.
 
 // A note on the matcher. i18next is not initialised under vitest, so `t("chat_window.select_model")`
 // returns the KEY rather than "Select Model". The tests therefore match the key, which is what
@@ -85,10 +96,19 @@ describe("#124: the model picker announces its purpose, not its value", () => {
   test("the button is reachable by an accessible name that says what it does", async () => {
     renderPicker();
 
+    // Wait for the RESOLVED state first. Before the model name arrives the visible text is the
+    // same string as the intended label, so a match here would prove nothing about the label.
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /select_model|select model/i })
-      ).toBeInTheDocument()
+      expect(screen.getByText(/gpt-4o-mini/i)).toBeInTheDocument()
+    );
+
+    const button = screen.getByRole("button", {
+      name: /select_model|select model/i,
+    });
+    // And the name must come from the LABEL, not from the text content — which now reads
+    // "gpt-4o-mini". Asserted explicitly so deleting the attribute fails here.
+    expect(button.getAttribute("aria-label")).toMatch(
+      /select_model|select model/i
     );
   });
 
@@ -125,8 +145,11 @@ describe("#124: the model picker announces its purpose, not its value", () => {
       })
       .getAttribute("aria-label");
 
-    // Both names are read once the model is on screen, so a label derived from the model
-    // differs here and a constant one does not.
+    // Non-empty on BOTH sides before comparing. `getAttribute` returns null for a missing
+    // attribute, and `null === null` passed happily for a button carrying no label at all —
+    // the mutant QA-3 found. Equality alone is not the property; a stable NAME is.
+    expect(firstName).toEqual(expect.any(String));
+    expect(firstName.length).toBeGreaterThan(0);
     expect(secondName).toBe(firstName);
   });
 
@@ -149,10 +172,14 @@ describe("#124: the model picker announces its purpose, not its value", () => {
     mockModelName.current = "";
     renderPicker();
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /select_model|select model/i })
-      ).toBeInTheDocument()
+    // With no model the visible text IS the fallback key, so `getByRole` matching a name here
+    // cannot tell a label from the text. The attribute is asserted directly instead.
+    const button = await waitFor(() =>
+      screen.getByRole("button", { name: /select_model|select model/i })
+    );
+
+    expect(button.getAttribute("aria-label")).toMatch(
+      /select_model|select model/i
     );
   });
 });
