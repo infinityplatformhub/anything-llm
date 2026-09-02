@@ -931,3 +931,6 @@ Dev/Techlead ส่ง SHA ให้ PMO gate ได้ก็ต่อเมื�
 
 ### §7.6d shared worktree cleanup
 worktree ที่มี agent อื่น (implementer) ทำงานอยู่ ห้าม `git checkout -- <dir>` / `git stash` ทั้งไดเรกทอรี — revert เฉพาะไฟล์ที่ตัวเองแตะตอน mutation (#40: `checkout -- server/` ลบงาน implementer ที่ยังไม่ commit)
+
+### §7.16 push after merge
+PMO ต้อง publish approof/main ทันทีหลังทุก merge — main ค้าง local 51 commit ทำให้ Dev4 rebase บน base ที่ไม่มี slice 2 (2026-09-02)
