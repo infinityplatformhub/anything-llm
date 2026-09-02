@@ -318,3 +318,35 @@ refuses, correctly, and generation cannot write. This must be a **doctor check w
 remedy** (`chown` the file, or set `UID`/`GID` in `docker/.env`), not something the operator meets
 as a refusal message during first boot. It is also the reason the doctor's secrets check reports
 "cannot write `.env`" separately from "secret missing": they have different fixes.
+
+## PMO rulings on part 2 (2026-09-02)
+
+Ruling: (2a) the doctor invocation is `docker compose run --rm anything-llm doctor` — the service in `docker/docker-compose.yml` is `anything-llm`, there is no `app`. The entrypoint gains `case "${1:-serve}"` with `exec` for the doctor arm.
+If wrong: the documented command boots the whole server and drops the word `doctor` silently, so the operator reads a booting app as a passing check.
+
+Ruling: (2b) the doctor also runs automatically in the entrypoint, after the PostgreSQL wait loop and before `prisma migrate deploy`.
+If wrong: before the wait loop it fails on a database that is merely still starting; after `migrate deploy` it is a post-mortem of the failure it exists to prevent (§7.13).
+
+Ruling: (2c) the doctor is not read-only — the only honest permission probe is `CREATE EXTENSION` inside a rolled-back transaction — and its output says so rather than claiming otherwise.
+If wrong: an operator who was told "read-only" finds extension DDL in their audit log and stops trusting every other line the tool prints.
+
+Ruling: (2d) extension **availability** (`pg_available_extensions`) is reported separately from extension **permission**.
+If wrong: an operator on a managed PostgreSQL that does not ship `vector` is told to request a grant that cannot exist.
+
+Ruling: (2e) the PostgreSQL version floor is 16, checked and reported by name.
+If wrong: PostgreSQL 15 fails inside migration `20260902100000` at `pg_input_is_valid` with an error that never mentions a version.
+
+Ruling: (2f) `scripts/doctor.js` must not import the server, `utils/boot/`, or anything reaching `apiKeySecurity`, with one test asserting it loads with `API_KEY_PEPPER` unset.
+If wrong: the doctor throws at import on exactly the missing-pepper case it is meant to diagnose.
+
+Ruling: (3a) blocking failures are reported in the terminal only; warnings and operator choices (LC_CTYPE, the five secrets, the admin account) are the React step.
+If wrong: the design promises a preflight page that cannot exist, because a blocking failure means no server booted to serve it.
+
+Ruling: (3b) a migration writes `onboarding_complete` for instances matching the old predicate, and only then does `isLegacyOnboarded()` lose its `AUTH_TOKEN || JWT_SECRET` branch. A test asserts the migration's predicate on both populations.
+If wrong: either every fresh install is marked onboarded and never sees the wizard, or a single-user instance in production for a year is shown a setup wizard.
+
+Ruling: (4a) `ensure-secrets.js` branches on `writeEnvFileAtomic`'s return value and fails the boot when it is `false`.
+If wrong: the installer prints "secrets generated" and boots with a pepper that exists only in memory, so every API key minted that run stops verifying at the next restart.
+
+Ruling: (4b) a `.env` owned by a uid other than the container user is a **blocking** doctor check, reported separately from "secret missing", with the remedy named (`chown`, or `UID`/`GID` in `docker/.env`).
+If wrong: the ordinary macOS bind-mount case surfaces as a refusal message during first boot instead of a checked precondition with a fix.
