@@ -683,3 +683,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - V8 scope dispute: Dev4 measures 77 isMobile decision sites / 51 files (TL-2 said 10); 3 surfaces cover ~6. Sent to TL-2: accept 71-site residual with allowlist, or widen scope in slices. usePrefersDarkMode is a plain function (no state/effect) = do-not-copy.
 - #136 opened (Dev5, S12 slice 1: suspend = terminal state, key revoke in same tx, version bump, pinning test; auth). Dev5 RED started; TL-2 pre-read dispatched. Board 101/136. Still waiting #121 SHA (Dev1, local branch), #134 SHA (Dev3).
 - #136 lane conflict: bumpVersion is local to policyRepository (Dev3 lane, #134 in flight). Options (ก) export 1 line / (ข) offboardUser in repo / (ค) duplicate outbox (rejected by Dev5) → TL-2 ruling. Dev5 RED on independent parts meanwhile.
+
+## 2026-09-02 ~21:20 — TL-2 rulings landed
+- #136: (ข) `offboardUser` in policyRepository, `bumpVersion` not exported, no `change_type:"suspension"`. Order: #134 closes first; Dev5 does non-policyRepository slices (removeGroupMember endpoint, audit event, revokedAt) now, offboardUser last. RED fixture must go through `cache.invalidateScopes`, not assert bumpVersion called.
+- V8: Dev4's 78 correct. Ruling: (ก) three surfaces + (ข) convert 52× height idiom to one Tailwind class `h-full md:h-[calc(100%-32px)]` in one slice + (ค) residual ~19 accepted with lint allowlist. Dev4 writes contract + mockup after #132.
