@@ -118,3 +118,7 @@ Driver + core linking + routes + 10 RED tests ≈ 4–5d. The driver itself is t
 - Routes: new `server/endpoints/identity.js` mounted in `server/index.js` like adminAuthorizationEndpoints; do NOT touch endpoints/system.js except the R3 deletion.
 - index.js import/call go at END of their groups; final rebase after t7 merges.
 - No frontend/src/models/system.js edits (reserved t7).
+- R3 SPLIT (2026-09-02): simple-SSO deletion moves to its own issue after #27 and #31 merge (15-file surface overlaps t7/pr4c). S1 ships OIDC only: new files + schema + index.js. `simpleSSOEnabled`/`simpleSSOLoginDisabled` untouched (different feature).
+- Q-3: identity_login_state rows expire via T-6 retention purge registration (server/utils/retention/purge.js), no new sweeper; TTL 15 min.
+- Q-4: `/sso/:provider/login` gets the existing limiter pattern from invite.js:35.
+- D-2: S1 ships REJECT + IdentityConflictError with a message naming the settings flow; the settings link flow is a follow-up issue [→ needs issue].
