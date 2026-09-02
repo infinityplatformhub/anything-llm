@@ -75,3 +75,4 @@
 - [→ #36 follow-up] OIDC discovery cached for process lifetime (no TTL); IdP changing jwks_uri needs restart (Techlead S1 review)
 - [→ backlog] providerDocIdCallSites.test.js 5s hook timeout flakes under parallel load (C-1, #28); raise hook timeout or isolate (QA-2)
 - [→ #52] view-as-user mutation via engine-less routes (POST /system/user, /onboarding) — LIVE on main until hotfix merges; MAJOR-2 setup_admin cannot delegate (QA-1 T-7 baseline)
+- [→ #52] 24 engine-less mutating routes rely on handler-level isSingleUserMode/multiUserMode checks (scheduled-jobs, telegram, outlook, update-password, api-key): safe only in one mode; sweep test allowlist must assert the check (QA-2)

@@ -1,0 +1,4 @@
+# QA-2 T-7 probe + impersonation sweep — main 704e8b1f (2026-09-02)
+Fresh DB: 115/115 suites, 1197/1197.
+#31 PASS 17/17: two guards distinct (route scope vs gateway subset, no row on refusal); fake principal 404, service/system 400; workspaceId not found → 404 with no org-wide fallback; revoke guard throws + grant intact; revoke miss 200 deleted=0; grant_revocations same tx (policy_version match); inTransaction 5/5 fired via #39 callers passing tx, rollback removes membership+grant together.
+Impersonation sweep: 189 mutating routes, 29 engine-less. Exploitable 4: POST /system/user (username+password of victim changed), POST /onboarding, POST /web-push/subscribe (201), POST /system/enable-multi-user (passes gates). 24 others rely on handler single/multi-user checks → safe only in one mode. Embed/extension use separate credentials, unreachable by session JWT. → #52.
