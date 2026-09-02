@@ -160,17 +160,78 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
   });
 }
 
-/** Revoke a grant — same gateway, same transactional version bump. */
-async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null, db = prisma }) {
+/**
+ * Revoke a grant — same gateway, same transactional version bump.
+ *
+ * T-7 (#31): revoking is a privileged act in its own right. `grantRole` has
+ * carried an escalation guard since T-2, but revoke had only the actor
+ * requirement — anyone who could reach the function could strip anyone's
+ * access. It is fail-safe in direction (it removes access, never adds), which
+ * is why it was not an escalation, but it is a denial of service against any
+ * principal, and it left no trace of who did it.
+ *
+ * The revocation record is written in the SAME transaction as the delete: an
+ * audit row that can be lost while the deletion commits is worse than none,
+ * because it makes the log look complete when it is not.
+ */
+async function revokeGrant({ actor, principalType, principalId, roleId, workspaceId = null, reason = null, db = prisma }) {
   requireActor(actor, "revokeGrant");
   return inTransaction(db, async (tx) => {
+    if (!isExemptPrincipal(actor)) {
+      const held = await heldPermissionIds(tx, actor, workspaceId);
+      const revokePermission = await tx.permissions.findUnique({
+        where: { action: "role.revoke" },
+        select: { id: true },
+      });
+      if (!revokePermission || !held.has(revokePermission.id)) {
+        throw new AuthorizationContractError(
+          "revoke refused: actor does not hold role.revoke in this scope"
+        );
+      }
+    }
+
     const version = await bumpVersion(tx, "grant", SCOPE_KEY(1), actorIdOf(actor), workspaceId ? [`workspace:${workspaceId}`] : []);
+
+    // Read before deleting: afterwards there is nothing left to describe, which
+    // is the whole reason this cannot be a column on the grant.
+    const doomed = await tx.principal_role_grants.findMany({
+      where: {
+        orgId: 1, principal_type: principalType, principal_id: String(principalId),
+        role_id: roleId, workspace_id: workspaceId,
+      },
+      select: { id: true, role_id: true, workspace_id: true },
+    });
+
     const res = await tx.principal_role_grants.deleteMany({
       where: {
         orgId: 1, principal_type: principalType, principal_id: String(principalId),
         role_id: roleId, workspace_id: workspaceId,
       },
     });
+
+    if (doomed.length > 0) {
+      const role = await tx.roles.findUnique({
+        where: { id: roleId },
+        select: { name: true },
+      });
+      await tx.grant_revocations.createMany({
+        data: doomed.map((grant) => ({
+          orgId: 1,
+          principal_type: principalType,
+          principal_id: String(principalId),
+          role_id: grant.role_id,
+          // The name at revocation time: roles may be renamed or deleted later,
+          // and the auditor needs what was actually taken away.
+          role_name: role?.name ?? `role:${roleId}`,
+          workspace_id: grant.workspace_id,
+          revoked_by_type: actor.type,
+          revoked_by_id: String(actor.id),
+          policy_version: version,
+          reason,
+        })),
+      });
+    }
+
     return { deleted: res.count, policyVersion: version };
   });
 }
@@ -244,8 +305,43 @@ async function currentPolicyVersion(db = prisma) {
   return row?.version ?? 0n;
 }
 
+
+/**
+ * T-7 (#31): may `actor` assign the legacy role string `targetRole` to someone?
+ *
+ * This is the same question `grantRole`'s escalation guard already answers —
+ * you may hand over only what you already hold — expressed for the legacy
+ * `users.role` column, which R4 keeps frozen rather than dropped. The old
+ * helper compared role strings in a fixed hierarchy (admin > manager >
+ * default), which cannot express a delegated admin who may create members but
+ * not other admins.
+ */
+async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
+  if (!actor) return false;
+  // Read-only, so it needs no transaction of its own — it runs inside the
+  // caller's when there is one. (#39 adds inTransaction for the write paths.)
+  const tx = db;
+  {
+    if (isExemptPrincipal(actor)) return true;
+    const {
+      ORG_ROLE_FOR_LEGACY,
+    } = require("./legacyRoleGrants");
+    const orgRoleName =
+      ORG_ROLE_FOR_LEGACY[targetRole] ?? ORG_ROLE_FOR_LEGACY.default;
+    const role = await tx.roles.findFirst({
+      where: { name: orgRoleName, scope: "org" },
+      select: { id: true },
+    });
+    if (!role) return false;
+    const rolePerms = await permissionIdsForRole(tx, role.id);
+    const held = await heldPermissionIds(tx, actor, null);
+    return [...rolePerms].every((permission) => held.has(permission));
+  }
+}
+
 module.exports = {
   grantRole,
+  canAssignLegacyRole,
   revokeGrant,
   grantDocumentAcl,
   revokeDocumentAcl,

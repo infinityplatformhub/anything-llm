@@ -33,6 +33,10 @@ const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { requirePermission } = require("../utils/middleware/requirePermission");
+const { resolveActor } = require("../utils/authorization/actorResolver");
+const {
+  DatabaseAuthorizationEngine,
+} = require("../utils/authorization/engine");
 const { orgResource } = require("../utils/middleware/resourceResolvers");
 const fs = require("fs");
 const path = require("path");
@@ -69,9 +73,6 @@ const { EncryptionManager } = require("../utils/EncryptionManager");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { MobileDevice } = require("../models/mobileDevice");
 const {
-  chatHistoryViewable,
-} = require("../utils/middleware/chatHistoryViewable");
-const {
   simpleSSOEnabled,
   simpleSSOLoginDisabled,
 } = require("../utils/middleware/simpleSSOEnabled");
@@ -80,6 +81,17 @@ const { SystemPromptVariables } = require("../models/systemPromptVariables");
 const { isReservedCommand } = require("../utils/chats");
 const { AgentSkillWhitelist } = require("../models/agentSkillWhitelist");
 const { Memory } = require("../models/memory");
+
+// Org-level capabilities the UI gates on. Kept short and explicit — see the
+// endpoint comment for why this is not "every seeded action".
+const ORG_CAPABILITIES = [
+  "chat.read_others",
+  "document.bulk_export",
+  "user.manage",
+  "settings.write",
+  "key.manage",
+  "access.diagnose",
+];
 
 function systemEndpoints(app) {
   if (!app) return;
@@ -1205,7 +1217,6 @@ function systemEndpoints(app) {
   app.post(
     "/system/workspace-chats",
     [
-      chatHistoryViewable,
       validatedRequest,
       requirePermission("chat.read_others", orgResource),
     ],
@@ -1246,11 +1257,62 @@ function systemEndpoints(app) {
     }
   );
 
+  // T-7 (#31, D-1 + #40A): what may THIS caller do, org-wide.
+  //
+  // Replaces the instance-wide DisableViewChatHistory flag the UI used to read.
+  // A flag says what the instance forbids everyone, which cannot answer a
+  // per-principal question — and answering it per-principal is what lets the UI
+  // stop gating on role strings (T-8).
+  //
+  // This gates AFFORDANCES, never access: every route re-decides on its own, so
+  // a stale or forged answer here shows a menu item that then refuses.
+  app.get(
+    "/system/my-capabilities",
+    [validatedRequest],
+    async (request, response) => {
+      try {
+        const actor = await resolveActor(request, response);
+        // No actor is not an error — an anonymous caller simply has nothing.
+        if (!actor) return response.status(200).json({ capabilities: {} });
+
+        const engine = new DatabaseAuthorizationEngine();
+        const org = { type: "org", id: "1", orgId: 1, workspaceId: null };
+
+        // One decision per action, batched. ORG_CAPABILITIES is deliberately a
+        // fixed list rather than "every seeded action": the UI asks about what
+        // it actually gates, and an endpoint that enumerates the whole
+        // vocabulary would hand any caller a map of the permission model.
+        const decisions = await Promise.all(
+          ORG_CAPABILITIES.map(async (action) => {
+            const result = await engine.authorizeMany({
+              actor,
+              action,
+              resources: [org],
+            });
+            return [action, result.get(0)?.allowed === true];
+          })
+        );
+
+        response.status(200).json({
+          capabilities: Object.fromEntries(decisions),
+        });
+      } catch (e) {
+        console.error(e.message, e);
+        // Fail closed: a capability we cannot confirm is one we do not offer.
+        response.status(200).json({ capabilities: {} });
+      }
+    }
+  );
+
   app.get(
     "/system/export-chats",
     [
-      chatHistoryViewable,
       validatedRequest,
+      // D-2: reading other people's chats and bulk-extracting them are
+      // separately grantable, and this route does both. Requiring only the
+      // export permission would let someone with no right to read a single
+      // conversation download all of them at once.
+      requirePermission("chat.read_others", orgResource),
       requirePermission("document.bulk_export", orgResource),
     ],
     async (request, response) => {

@@ -197,6 +197,85 @@ describe("T-2 engine core", () => {
     expect(res.policyVersion).toBeGreaterThan(before);
   });
 
+  test("D-4: revoking requires role.revoke — not merely a non-null actor", async () => {
+    // revokeGrant refused a null actor from T-3 onward, but never asked whether
+    // the caller could revoke. Anyone reaching the function could strip anyone's
+    // access: fail-safe in direction, but a denial of service all the same.
+    const target = await principal({ id: 940, grants: [{ roleId: roles.member.id }] });
+    const bystander = await principal({ id: 941, grants: [{ roleId: roles.member.id }] });
+
+    await expect(
+      repository.revokeGrant({
+        actor: bystander,
+        principalType: "user",
+        principalId: target.id,
+        roleId: roles.member.id,
+        db: prisma,
+      })
+    ).rejects.toThrow(/does not hold role.revoke/);
+
+    // and the grant survives the refusal
+    const survived = await prisma.principal_role_grants.findFirst({
+      where: { principal_type: "user", principal_id: target.id, role_id: roles.member.id },
+    });
+    expect(survived).not.toBeNull();
+  });
+
+  test("D-4: a revocation outlives the grant it removed", async () => {
+    const target = await principal({ id: 942, grants: [{ roleId: roles.member.id }] });
+    const before = await repository.currentPolicyVersion(prisma);
+
+    await repository.revokeGrant({
+      actor: SYS,
+      principalType: "user",
+      principalId: target.id,
+      roleId: roles.member.id,
+      reason: "left the team",
+      db: prisma,
+    });
+
+    const gone = await prisma.principal_role_grants.findFirst({
+      where: { principal_type: "user", principal_id: target.id, role_id: roles.member.id },
+    });
+    expect(gone).toBeNull();
+
+    // The whole point: the grant row is deleted, so the record of who removed it
+    // has to live somewhere else.
+    const record = await prisma.grant_revocations.findFirst({
+      where: { principal_type: "user", principal_id: target.id },
+      orderBy: { id: "desc" },
+    });
+    expect(record).not.toBeNull();
+    expect(record.role_name).toBe("member");
+    expect(record.revoked_by_type).toBe(SYS.type);
+    expect(record.revoked_by_id).toBe(String(SYS.id));
+    expect(record.reason).toBe("left the team");
+    expect(record.policy_version).toBeGreaterThan(before);
+  });
+
+  test("D-4: a refused revocation writes no audit row and does not bump the clock", async () => {
+    const target = await principal({ id: 943, grants: [{ roleId: roles.member.id }] });
+    const bystander = await principal({ id: 944, grants: [{ roleId: roles.member.id }] });
+    const before = await repository.currentPolicyVersion(prisma);
+    const rowsBefore = await prisma.grant_revocations.count();
+
+    await expect(
+      repository.revokeGrant({
+        actor: bystander,
+        principalType: "user",
+        principalId: target.id,
+        roleId: roles.member.id,
+        db: prisma,
+      })
+    ).rejects.toThrow();
+
+    // The transaction must roll the version bump back with everything else — a
+    // refused write that still moves the clock invalidates every cache for
+    // nothing, and an audit row for a revocation that did not happen is a lie.
+    expect(await prisma.grant_revocations.count()).toBe(rowsBefore);
+    expect(await repository.currentPolicyVersion(prisma)).toBe(before);
+  });
+
   test("policy clock: every repository write bumps the monotonic version", async () => {
     const before = await repository.currentPolicyVersion(prisma);
     await repository.grantRole({ actor: SYS, principalType: "user", principalId: "911", roleId: roles.member.id, db: prisma });

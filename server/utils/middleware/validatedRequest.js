@@ -119,6 +119,11 @@ async function validateMultiUserRequest(request, response, next) {
   }
 
   response.locals.user = user;
+  // T-7 (#31, D-3): carry impersonation provenance from the token into locals,
+  // where actorResolver reads it. The claim is signed, so it cannot be added or
+  // removed by the holder — dropping it is what would turn a read-only
+  // view-as-user session into a real one.
+  if (valid.impersonatedBy) response.locals.impersonatedBy = valid.impersonatedBy;
   UserMetaCache.setFromRequest(request, user.id);
   next();
 }

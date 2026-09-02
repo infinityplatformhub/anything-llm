@@ -1,6 +1,9 @@
 const {
   reportUsersWithoutAccess,
 } = require("../authorization/legacyRoleGrants");
+const {
+  migrateChatHistoryPermission,
+} = require("../authorization/chatHistoryMigration");
 const { Telemetry } = require("../../models/telemetry");
 const { BackgroundService } = require("../BackgroundWorkers");
 const { EncryptionManager } = require("../EncryptionManager");
@@ -51,6 +54,9 @@ function bootSSL(app, port = 3001) {
         await startEventServices();
       // T-4a (#25): surface users stranded without workspace access on every
       // boot, not once as a migration NOTICE nobody reads twice.
+      // T-7 (#31): one-shot, marker-guarded; the env var it reads is invisible
+      // to SQL, so this cannot be a migration.
+      await migrateChatHistoryPermission();
       await reportUsersWithoutAccess();
         await jobRuntime.start();
         await eagerLoadContextWindows();
@@ -93,6 +99,9 @@ function bootHTTP(app, port = 3001) {
       await startEventServices();
       // T-4a (#25): surface users stranded without workspace access on every
       // boot, not once as a migration NOTICE nobody reads twice.
+      // T-7 (#31): one-shot, marker-guarded; the env var it reads is invisible
+      // to SQL, so this cannot be a migration.
+      await migrateChatHistoryPermission();
       await reportUsersWithoutAccess();
       await jobRuntime.start();
       await eagerLoadContextWindows();

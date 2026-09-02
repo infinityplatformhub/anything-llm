@@ -772,3 +772,24 @@ model legacy_docid_map {
 }
 
 // END T-1 P0-5 AUTHORIZATION SCHEMA.
+
+// T-7 (#31): revocations outlive the grants they describe — revokeGrant deletes
+// the row, so a column on principal_role_grants would die with the fact it
+// records. See migration 20260902021000.
+model grant_revocations {
+  id              Int       @id @default(autoincrement())
+  orgId           Int       @default(1)
+  principal_type  String
+  principal_id    String
+  role_id         Int?
+  role_name       String
+  workspace_id    Int?
+  revoked_by_type String
+  revoked_by_id   String
+  revoked_at      DateTime  @default(now()) @db.Timestamptz(3)
+  policy_version  BigInt    @default(0)
+  reason          String?
+
+  @@index([principal_type, principal_id, revoked_at])
+  @@index([workspace_id, revoked_at])
+}
