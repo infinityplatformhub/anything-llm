@@ -602,6 +602,35 @@ describe("#119 (QA-2): app._router is the object express actually mounts on", ()
   });
 });
 
+describe("#119 NIT: a target that is not there", () => {
+  // `sealTarget` opens with `if (!target) return`. It was written because an
+  // app's `_router` does not exist until express creates it lazily, and a guard
+  // that crashes boot on that shape is worse than the hole it closes — but
+  // nothing asserted it, so the line could be deleted today with the suite
+  // green.
+  const express = require("express");
+
+  test("a missing or empty target is skipped rather than thrown on", () => {
+    expect(() => sealRoutes(undefined)).not.toThrow();
+    expect(() => sealRoutes(null)).not.toThrow();
+    expect(() => sealRoutes({})).not.toThrow();
+    expect(() => sealRoutes()).not.toThrow();
+  });
+
+  test("a missing target does not stop the REAL targets beside it being sealed", () => {
+    // The assertion that matters, and the reason "it does not throw" is not
+    // enough on its own: an implementation that returns from `sealRoutes`
+    // instead of from `sealTarget` also throws nothing, and silently leaves
+    // every target after the bad one unsealed. That is a hole, not a nit.
+    const app = express();
+    const router = express.Router();
+    sealRoutes(undefined, app, null, router);
+
+    expect(() => app.post("/late", () => {})).toThrow(/after boot/i);
+    expect(() => router.post("/late", () => {})).toThrow(/after boot/i);
+  });
+});
+
 describe("#119: what remains uncovered on _router — recorded, not implied", () => {
   const loadReal = () => {
     jest.resetModules();
