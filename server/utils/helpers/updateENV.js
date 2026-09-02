@@ -1822,6 +1822,101 @@ async function loadStoredCredentials(store = null) {
 }
 
 /**
+ * Keys that authenticate the INSTANCE rather than a provider. Never clearable.
+ *
+ * `AUTH_TOKEN` and `JWT_SECRET` are `secret: true` KEY_MAPPING entries, so without this
+ * they would be clearable. The other three are not in KEY_MAPPING at all today and are
+ * therefore already refused by the credential-key check below — they are listed anyway
+ * because the harm if one were ever added is total (SIG_KEY/SIG_SALT decrypt the
+ * credential store itself; API_KEY_PEPPER validates every API key), and a denylist that
+ * only covers today's mapping is one PR away from being wrong.
+ */
+const INSTANCE_AUTH_KEYS = new Set([
+  "AUTH_TOKEN",
+  "JWT_SECRET",
+  "SIG_KEY",
+  "SIG_SALT",
+  "API_KEY_PEPPER",
+]);
+
+/** Shape of an env key. Checked before the name is scanned or echoed anywhere. */
+const ENV_KEY_PATTERN = /^[A-Z0-9_]{1,64}$/;
+
+/**
+ * Clears one stored credential: removes the encrypted row AND unsets the live value.
+ *
+ * #48: `persistCredential` has a delete branch for an empty value, but 49 of the 91
+ * `secret: true` keys carry a validator that rejects "" before `updateENV` ever reaches
+ * it — `force` does not help, because those validators do not read the flag. So for the
+ * keys most worth revoking (`OpenAiKey`, `AnthropicApiKey`, ...) the branch is dead and
+ * an operator has no way to take a credential back.
+ *
+ * Both halves are required. Deleting only the row leaves `process.env` holding the value
+ * until the next restart, so the provider keeps working after the operator was told the
+ * credential was cleared — a false belief in the unsafe direction. Unsetting only the
+ * variable leaves the row, and `loadStoredCredentials()` puts it back on the next boot.
+ *
+ * Refuses any key that is not a `secret: true` entry in KEY_MAPPING: this must not become
+ * a way to unset arbitrary process environment variables.
+ *
+ * @param {string} envKey
+ * @param {Object} store injectable for tests
+ * @returns {Promise<{cleared: boolean, error: string|null}>}
+ */
+async function clearStoredCredential(envKey, store = null) {
+  // Techlead NIT-1: shape first, and the rejection does not echo what was sent. The
+  // name comes off a URL path, so reflecting it back is caller-controlled text in a
+  // response body — and the message below is the same for every malformed key, so it
+  // says nothing about which names exist either.
+  if (typeof envKey !== "string" || !ENV_KEY_PATTERN.test(envKey))
+    return {
+      cleared: false,
+      error: "Invalid credential key.",
+    };
+
+  // QA-1 BLOCKER-1: `secret: true` is not the same question as "safe to unset".
+  // `AUTH_TOKEN` and `JWT_SECRET` carry the flag because they must not be written to
+  // the .env file in plaintext, but they are the instance's OWN authentication, not a
+  // provider credential. Clearing AUTH_TOKEN takes `validatedRequest.js:29-36` down the
+  // passthrough branch — `!process.env.AUTH_TOKEN` skips session auth entirely — so an
+  // unauthenticated caller reaches `POST /system/update-env`. The row is deleted, so
+  // boot does not put it back: the instance stays open. Clearing JWT_SECRET invalidates
+  // every live session at once. Neither is a revocation an operator would recognise as
+  // one, and the password flow is where they are meant to change.
+  if (INSTANCE_AUTH_KEYS.has(envKey))
+    return {
+      cleared: false,
+      error: `${envKey} is instance authentication, not a provider credential; use /system/update-password.`,
+    };
+
+  const isCredentialKey = Object.values(KEY_MAPPING).some(
+    (values) => values.secret === true && values.envKey === envKey
+  );
+  if (!isCredentialKey)
+    return {
+      cleared: false,
+      error: `${envKey} is not a stored credential.`,
+    };
+
+  const { CredentialStore } = store
+    ? { CredentialStore: store }
+    : require("../../models/credentialStore");
+
+  // The row goes first. If the delete fails, the live value stays too — a half-cleared
+  // credential that reappears on the next boot is worse than one that never left, and
+  // the caller is told the clear did not happen.
+  const removed = await CredentialStore.delete(envKey);
+  if (!removed)
+    return {
+      cleared: false,
+      error: `${envKey} could not be removed from the credential store.`,
+    };
+
+  delete process.env[envKey];
+  return { cleared: true, error: null };
+}
+
+/**
  * @param {{envPath?: string}} options `envPath` overrides the default location. Tests
  *   pass a temp file: which settings reach the file is the property worth asserting,
  *   and asserting it should not mean writing over the repo's own .env.
@@ -2020,6 +2115,9 @@ function writeEnvFileAtomic(envPath, contents) {
 module.exports = {
   KEY_MAPPING,
   loadStoredCredentials,
+  clearStoredCredential,
+  INSTANCE_AUTH_KEYS,
+  ENV_KEY_PATTERN,
   dumpENV,
   updateENV,
   writeEnvFileAtomic,

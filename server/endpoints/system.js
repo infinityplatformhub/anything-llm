@@ -11,7 +11,11 @@ const {
 } = require("../utils/files");
 const { purgeDocument, purgeFolder } = require("../utils/files/purgeDocument");
 const { getVectorDbClass } = require("../utils/helpers");
-const { updateENV, dumpENV } = require("../utils/helpers/updateENV");
+const {
+  updateENV,
+  dumpENV,
+  clearStoredCredential,
+} = require("../utils/helpers/updateENV");
 const {
   reqBody,
   makeJWT,
@@ -366,6 +370,23 @@ function systemEndpoints(app) {
           }
 
           const { password } = reqBody(request);
+          // #48 NIT-3: `bcrypt.hashSync(undefined, …)` throws, so an instance with no
+          // AUTH_TOKEN answered 500 to a login attempt — an error shape that says
+          // "something broke here", which is more than a caller should learn from a
+          // failed login. It is also not true: nothing broke, there is simply no
+          // password to match. Same 401 and same `[003]` body as a wrong password.
+          if (!process.env.AUTH_TOKEN) {
+            await emitAuditEvent("failed_login_invalid_password", {
+              ip: request.ip || "Unknown IP",
+              multiUserMode: false,
+            });
+            response.status(401).json({
+              valid: false,
+              token: null,
+              message: "[003] Invalid password provided",
+            });
+            return;
+          }
           if (
             !bcrypt.compareSync(
               password,
@@ -643,6 +664,36 @@ function systemEndpoints(app) {
         }
 
         response.status(200).json({ types });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // #48: the only way to take a stored credential back. `POST /system/update-env` with an
+  // empty value cannot do it — 49 of the 91 credential keys carry a validator that
+  // rejects "" before the delete branch is reached, and `force` does not bypass those
+  // validators. A separate route rather than a sentinel value in the update payload:
+  // the update path is shared by all 213 settings, and a magic value there would be one
+  // typo away from clearing a credential nobody meant to touch.
+  app.delete(
+    "/system/credential/:envKey",
+    [validatedRequest, requirePermission("settings.write", orgResource)],
+    async (request, response) => {
+      try {
+        const { envKey } = request.params;
+        const { cleared, error } = await clearStoredCredential(envKey);
+        if (!cleared) return response.status(400).json({ cleared, error });
+
+        await emitAuditEvent(
+          "credential_cleared",
+          // The key name only. The value is the thing being revoked, and an audit row
+          // holding it would outlive the credential it was written to retire.
+          { envKey },
+          response?.locals?.user?.id
+        );
+        return response.status(200).json({ cleared: true, error: null });
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();
