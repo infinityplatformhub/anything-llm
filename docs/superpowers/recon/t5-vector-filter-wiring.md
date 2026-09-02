@@ -85,3 +85,10 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Collisions: utils/agents/**, utils/telegramBot/**, endpoints/api/workspace/index.js:999 owned by T-4b → merge order T-4b → T-5, never in flight together. img.js:55 with T-4a.
 - Note from T-4a: `utils/helpers/search.js:35` calls `Workspace.whereWithUser`; after W-2 (bypass removed at workspace.js:299,425) managers stop seeing non-member workspaces in search with no diff in search.js. Intended; T-5 must not "fix" it back.
 - DoD (from T-3, not follow-up): `policy.changed` subscriber `authorization-cache` → FilterCache.invalidateScopes/disable must land in the same change that wires FilterCache into retrieval. Without it, ACL revoke is invisible until TTL (30s). Version-stamp backstop is a DB round-trip, not a substitute.
+
+## §PMO ruling — SLICES (2026-09-02)
+- #30 ships as 3 sequential slices on branch `approof/t5-vector-filter`, one ledger-30 with a section per slice; each slice is gated and merged separately, issue closes after slice 3.
+- Slice 1: queryAuthorized on base+lance, 9 provider sites, FilterCache wiring, policy.changed subscriber (S-10/11/12/13/14/17/26).
+- Slice 2: context injection choke point DocumentManager.pinnedDocs + getContextFiles (S-21); RED must prove S-10 does not catch the pinned path.
+- Slice 3: fillSourceWindow rehydration (S-22), cardinality endpoints (S-25), canonicalize 4 sites, docVectorsCanonicalize.js:19-20 comment.
+- Before each slice SHA: merge-tree against Dev2's t7 branch; report any overlap.
