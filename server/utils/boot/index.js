@@ -36,10 +36,18 @@ const {
 // Update .env keys with the correct values and boot. These are temporary and not real SSL certs - only use for local.
 // Test with https://localhost:3001/api/ping
 // build and copy frontend to server/public with correct API_BASE and start server in prod model and all should be ok
-async function bootSSL(app, port = 3001) {
+async function bootSSL(app, port = 3001, { credentialStore = null } = {}) {
   // issue 58: before listen(). The callbacks below run AFTER the socket is
   // open, and the repair must land before the first request is authorized.
   await repairDeploymentShape();
+  // #115: same reason, same place. This used to sit first INSIDE the listen()
+  // callback, which is first among the callback's own steps but still after the
+  // socket is open — so every request in that window read all 97 `secret: true`
+  // keys as undefined. Since #48 the database row is the only copy, so that
+  // window is the difference between configured and not configured, not a cold
+  // cache. Boot is ~2.5s slower on a 97-key deployment until #117 stops
+  // re-deriving the store key per row; slower boot, not a hang.
+  await loadStoredCredentials(credentialStore);
   try {
     console.log(
       `\x1b[33m[SSL BOOT ENABLED]\x1b[0m Loading the certificate and key for HTTPS mode...`
@@ -53,9 +61,8 @@ async function bootSSL(app, port = 3001) {
 
     server
       .listen(port, async () => {
-        // First: everything below may construct a provider client, and a credential
-        // that is still only a database row is not a configured provider yet.
-        await loadStoredCredentials();
+        // Credentials are already in process.env (above, before listen): the
+        // steps here may construct provider clients and must see them.
         await markOnboarded();
         await setupTelemetry();
         new CommunicationKey(true);
@@ -98,19 +105,19 @@ async function bootSSL(app, port = 3001) {
         stacktrace: e.stack,
       }
     );
-    return await bootHTTP(app, port);
+    return await bootHTTP(app, port, { credentialStore });
   }
 }
 
-async function bootHTTP(app, port = 3001) {
+async function bootHTTP(app, port = 3001, { credentialStore = null } = {}) {
   if (!app) throw new Error('No "app" defined - crashing!');
   await repairDeploymentShape();
+  // #115: before listen(), for the reason spelled out in bootSSL.
+  await loadStoredCredentials(credentialStore);
 
-  app
+  const server = app
     .listen(port, async () => {
-      // First, for the same reason as bootSSL: a credential that is still only a
-      // database row is not a configured provider yet.
-      await loadStoredCredentials();
+      // Credentials are already in process.env (above, before listen).
       await markOnboarded();
       await setupTelemetry();
       new CommunicationKey(true);
@@ -136,7 +143,10 @@ async function bootHTTP(app, port = 3001) {
     })
     .on("error", catchSigTerms);
 
-  return { app, server: null };
+  // #115: returned so a test can reach the port and race the boot. Production
+  // (index.js:218) ignores the return value; bootSSL already returned its
+  // server for express-ws.
+  return { app, server };
 }
 
 function catchSigTerms() {

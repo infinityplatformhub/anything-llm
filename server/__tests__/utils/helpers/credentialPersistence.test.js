@@ -179,14 +179,21 @@ describe("both boot paths load credentials", () => {
     "utf8"
   );
 
-  test("bootHTTP and bootSSL both call loadStoredCredentials", () => {
-    expect(source.match(/await loadStoredCredentials\(\)/g)).toHaveLength(2);
-  });
-
-  test("it runs before anything that could construct a provider client", () => {
-    const httpBody = source.slice(source.indexOf("function bootHTTP"));
-    expect(httpBody.indexOf("loadStoredCredentials")).toBeLessThan(
-      httpBody.indexOf("markOnboarded")
-    );
+  // #115: the two assertions that used to live here matched the literal
+  // `await loadStoredCredentials()` and compared its index against
+  // markOnboarded's. Both were source scans, and both broke the moment the call
+  // took an argument — while a hydrate moved back inside the listen() callback
+  // would still have satisfied the ordering one, because it is still textually
+  // before markOnboarded there. `__tests__/utils/boot/credentialsBeforeListen.test.js`
+  // now asserts the real property by timing an HTTP request against both boot
+  // functions, which a text match cannot do.
+  test("the loader is referenced from both boot functions", () => {
+    // QA-1 NIT-1: this counts REFERENCES in the source, which is all a text
+    // scan can do. It deliberately does not claim "each path calls it once" —
+    // that is a runtime property this cannot see: bootSSL's fallback runs the
+    // loader twice in one boot, and a call routed through an alias would not
+    // match at all. The behaviour is asserted by timing an HTTP request against
+    // both boot functions in __tests__/utils/boot/credentialsBeforeListen.test.js.
+    expect(source.match(/await loadStoredCredentials\(/g)).toHaveLength(2);
   });
 });
