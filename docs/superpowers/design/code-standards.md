@@ -956,3 +956,6 @@ PMO post-merge suite ต้องเก็บบรรทัด `✕` และ�
 collector/sweep ที่อ่าน source (AST/regex) ห้ามมี default "ไม่ตรงรูป = ข้าม" — #40 bypass #9–#12 (alias, suffix, declarator index, member access) เป็นคลาสเดียวกัน: collector รู้จัก import รูปหนึ่ง ของนอกรูปหลุด แก้ทีละรูปไม่จบ
 
 กฎ: ประกาศรูปที่รับเป็น convention (คอมเมนต์ในไฟล์ที่ถูกบังคับ) แล้ว assert ว่าทุก require ในขอบเขต (เช่น `./endpoints/*` ใน `server/index.js`) ตรงรูปนั้น รูปอื่นแดงพร้อมบรรทัด + รูปที่รับ · fixture ทั้งสองทิศ ("รับ" / "ปฏิเสธ+เหตุผล") ครอบ bypass ที่เคยเจอ · ต้นทุน = convention บังคับในไฟล์เดียว ถูกกว่าไล่ตามรูป
+
+#### 7.6c note — prisma client ฝัง path `.env` ของ worktree ที่ generate
+generated client โหลด dotenv จาก path absolute ที่ฝังตอน `prisma generate` — hardlink/symlink `node_modules` ข้าม worktree จึงดึง `.env` ของ worktree ต้นทางเข้า `process.env` (#74 TL-2: `SIG_SALT` โผล่จาก `f40/server/.env`) · เทสที่คาดว่า key "หาย" ต้อง `delete process.env.KEY` ก่อนเรียก คืนค่าใน `finally` · gate worktree ของ PMO ต้อง `prisma generate` ในที่ของตัวเอง (wt-bootstrap ทำอยู่แล้ว)
