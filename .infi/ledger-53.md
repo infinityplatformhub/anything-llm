@@ -60,3 +60,33 @@ Ruling: count guard 2 ตัวอัปเดต ไม่ปิด — `vocabu
 ## GREEN
 `Tests: 1597 passed, 1597 total` / `Test Suites: 151 passed, 151 total` fresh DB
 + `check-local: all checks passed`
+
+## Techlead-1 pre-review
+
+Ruling: BLOCKER (base ไม่มี #50) แก้ตอน rebase ทับ afb7cfb5 — conflict ที่
+`vocabulary-diff.test.js` เป็น 61 (main, sso.issue ถูกลบโดย #50) vs 63 (branch ผม
+คำนวณก่อน merge) resolve เป็น **62** โดย**วัดจาก seed file จริง** ไม่ใช่เลขคณิต:
+`node -e 'require(seeds/permissions).ALL_ACTIONS.length'` → 62, org.member=true,
+sso.issue=false `seeds/permissions.js` merge อัตโนมัติได้ ไม่ต้องแก้มือ
+ถ้าผิด: count guard ที่เลขผิดจะบังคับให้คนถัดไปแก้ตามโดยไม่รู้ว่าเลขไหนถูก
+
+Ruling: (1) `ORG_CAPABILITIES` ไม่ใส่ `org.member` โดยตั้งใจ + comment อธิบาย 2 เหตุผล
+— ทุก principal ถือมัน จึงไม่มีอะไรให้ UI แสดง/ซ่อน และถ้าใส่จะ**พัง endpoint ทั้งตัว**
+เพราะ (2) `authorizeMany` re-throw contract error ทั้ง batch ไม่ใช่รายตัว
+org-scoped action ตัวเดียวจะลาก capability ที่เหลือตายไปด้วย → เขียนรวมใน comment เดียว
++ เทส assert ว่า list นี้ไม่มี org-scoped action (ไม่ปล่อยให้ comment เป็นหลักฐานเดียว)
+ถ้าผิด: `/system/capabilities` 500 ทั้ง endpoint แทนที่จะตอบ
+
+Ruling: (3) `explainAccess.js` ไม่ได้รับผลจาก scope check เลย — วัดแล้ว: ไฟล์นี้
+**ไม่เคยเรียก engine** (0 call site) อ่าน `document_acl` ตรง ๆ ตามที่ header ประกาศ
+และ default action `document.read` เป็น scope 'any' อยู่แล้ว ใส่ comment ระบุทั้งสองข้อ
+ส่วน contract error → **500** ยืนยันแล้วที่ `requirePermission.js` (503 สงวนไว้ให้
+`AuthorizationUnavailableError`) + เทส assert branch นี้จาก source
+ถ้าผิด: 503 บอก "retry" ซึ่ง gate ที่ต่อผิดจะ retry ตลอดกาล
+
+Ruling: NIT — เทสเทียบ `ACTION_SCOPES` (JS) กับ `SELECT action,scope WHERE scope<>'any'`
+(DB) + assert ว่า map ไม่ว่าง (ไม่งั้น {} === {} ผ่านโดยไม่ตรวจอะไร)
+ถ้าผิด: engine บังคับ scope ที่ไม่มีใครประกาศ หรือเพิกเฉย scope ที่ประกาศไว้
+
+GREEN หลัง rebase + 4 ข้อ: `Tests: 1594 passed, 1594 total` / 152 suites
++ `check-local: all checks passed`

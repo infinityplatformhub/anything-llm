@@ -270,6 +270,60 @@ describe("issue 53: the seeded vocabulary", () => {
     expect(scoped).toEqual([{ action: "org.member", scope: "org" }]);
   });
 
+  test("NIT: the JS scope map and the database agree", async () => {
+    // Two sources of the same fact — ACTION_SCOPES drives the seed file, the
+    // column drives the engine. If they drift, the engine enforces a scope no
+    // author declared, or ignores one they did.
+    const {
+      ACTION_SCOPES,
+    } = require("../../../prisma/seeds/permissions");
+    const rows = await prisma.permissions.findMany({
+      where: { scope: { not: "any" } },
+      select: { action: true, scope: true },
+      orderBy: { action: "asc" },
+    });
+    const fromDb = Object.fromEntries(rows.map((r) => [r.action, r.scope]));
+    expect(fromDb).toEqual(ACTION_SCOPES);
+    // Non-vacuous: an empty map on both sides would satisfy the equality above.
+    expect(Object.keys(fromDb).length).toBeGreaterThan(0);
+  });
+
+  test("ORG_CAPABILITIES holds no org-scoped action", async () => {
+    // authorizeMany re-throws a contract error for the WHOLE batch, so one
+    // org-scoped action in this list would take every capability down with it —
+    // /system/capabilities would 500 instead of answering. Asserted rather than
+    // left to the comment in system.js.
+    const {
+      ACTION_SCOPES,
+    } = require("../../../prisma/seeds/permissions");
+    const source = require("fs").readFileSync(
+      require("path").join(SERVER_DIR, "endpoints/system.js"),
+      "utf8"
+    );
+    const block = source
+      .split("const ORG_CAPABILITIES = [")[1]
+      .split("];")[0];
+    const listed = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(listed.length).toBeGreaterThan(0);
+    const orgScoped = listed.filter((a) => ACTION_SCOPES[a] === "org");
+    expect(orgScoped).toEqual([]);
+  });
+
+  test("a contract error from a route gate is a 500, not a 503", async () => {
+    // requirePermission maps AuthorizationContractError to 500 and
+    // AuthorizationUnavailableError to 503. The distinction matters: 503 says
+    // "retry, the store is down", and a miswired gate would retry forever.
+    const source = require("fs").readFileSync(
+      require("path").join(SERVER_DIR, "utils/middleware/requirePermission.js"),
+      "utf8"
+    );
+    const contractBranch = source
+      .split("error instanceof AuthorizationContractError")[1]
+      .split("}")[0];
+    expect(contractBranch).toContain("sendStatus(500)");
+    expect(contractBranch).not.toContain("503");
+  });
+
   test("the org member role carries NOTHING but chat.send and org.member", async () => {
     // §3: the migration must prove it did not seed authority onto the org-wide
     // role, not merely avoid doing so. An org-wide grant matches every
