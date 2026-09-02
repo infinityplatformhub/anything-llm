@@ -135,3 +135,10 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 35c91ab0 step 4 driver gating (contract 3 suites 36/36); rulings A/B/D in scope, C→#85, E→#78. Step 2+3 red suites = env-order (pass isolated).
 - #40 Dev2 5a60695: org spoof loop red OK; bypass #10 `mountProbeRoutes` open → key completeness guard by require path + apiRouter call. §7.9h added.
 - Cleanup done: Dev1, QA-1, QA-2, QA-3, TL-2, Dev5. Pending: Dev4, TL-1 reply.
+
+## 2026-09-02 — post-#72 state (main af559a3d1)
+- Post-merge suite main: 2110/2110; 2 suites red in full run (regression, samlRoutesHttp) pass 50/50 isolated = load flake (load 35 at the time).
+- #74 ffb39ccf: gate PASS (3 suites), QA-3 PASS (lowpriv role, both directions). Ruling: doctor FAIL when VECTOR_DB normalizes to pgvector but raw ≠ "pgvector" (app falls back to LanceDB silently) + ext.permitted "already installed" vs "probed" detail → Dev5 small commit → regate → TL-2 verdict.
+- #80 35c91ab0: contract 36/36; URL gate hit = user.js:366 old comment (Dev3 fixes in step 5) + mockup CDN (checkignore mockups/). Ruling B revised: keep updateENV:1655 order; persistCredential returns {error}; verified-hash written last only if persist succeeded. Scope: A/B/D in #80, C → #85, E → #78.
+- #40: bypass #10 (mountProbeRoutes) open; rulings: default-deny collector keyed by require ./endpoints/* + apiRouter call, collectImports(ast) fixture-driven, helper register(app, apiRouter), no injectable classifier in spoof/sweep tests, CONTROL + bucket exclusivity. #86 opened: /v1 rate limit has zero test coverage (Dev2 after #40).
+- Cleanup replies complete (all 10). Open question: s1-oidc-postgres owner (Dev3 asked).
