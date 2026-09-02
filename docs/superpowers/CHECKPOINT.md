@@ -192,3 +192,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge main after #87: 2232/2232 (fresh STORAGE_DIR, real-store env).
 - #30 slice 3 f77433728 full run: 2013/2161, 5 suites red under load 25–30 (identity concurrency, auditRedaction, C-1); diff touches none of those areas; isolated --runInBand rerun in flight.
 - #78 7ae7ba763 (test contract update) forks before #87 → Dev1 asked to rebase onto 08bbb989b before declaring.
+- #30 slice 3 f77433728: 5 red suites pass isolated 197/197 (fresh STORAGE_DIR, --runInBand) → load flake. Gate = check-local PASS + full suite green modulo load. Waiting: Dev4 contract on #30, QA-1/QA-2/QA-3/TL-1/TL-2 verdicts.
