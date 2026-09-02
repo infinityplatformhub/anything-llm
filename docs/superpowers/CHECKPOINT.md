@@ -558,3 +558,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113: TL-1 confirms count allow+deny; retracts "unreachable" (QA-1 reached via exported gateway). Naming ruling: aclCount, no "deny" wording. Dev3 → next SHA. §7.17 logged.
 - Post-merge #40 t4 DONE: server 3023 (2 #106 flakes green alone + helper suite), frontend 92/92 exit 0, capabilities PASS. Jest hang-after-summary noted in memory.
 - #124 4646ed17b (Dev4, local on 510a4584a): frontend 96/96 exit 0 claimed; gate /tmp/wt-124 running; TL-1 pre-read + QA-3 light probe dispatched. §7.17 stability-in-one-state logged. Dev4 free after.
+- #124 4646ed17b gate GREEN: delta = WorkspaceModelPicker/index.jsx only; check-local pass; frontend 96/96 exit 0; capabilities PASS. Result file written (run-id gate-124-4646ed17b). Awaiting TL-1 pre-read + QA-3 light probe → close/merge.
