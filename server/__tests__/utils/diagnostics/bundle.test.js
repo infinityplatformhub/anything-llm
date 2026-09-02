@@ -490,6 +490,51 @@ describe("O5b bundle — embedded connection credentials (TL-1 FINDING-1)", () =
     expect(scrubbed).toContain("localhost:5432");
   });
 
+  it("strips a username with NO password half (QA-2 FINDING-2)", () => {
+    // The doctor's own `maskUrl` produces exactly this shape — it replaces the
+    // password and KEEPS the username — and it reaches the bundle through
+    // `checks[].detail`, a different path from `database.connection`.
+    const scrubbed = scrubText(
+      "Connected to postgresql://qa2_leak_probe:****@localhost:55451/qa."
+    );
+    expect(scrubbed).not.toContain("qa2_leak_probe");
+    expect(scrubbed).toContain("localhost:55451");
+
+    // And with no password half at all, which the first version let through
+    // because its pattern required a `:`.
+    const bare = scrubText("postgresql://qa2_leak_probe@postgres:5432/qa");
+    expect(bare).not.toContain("qa2_leak_probe");
+    expect(bare).toContain("postgres:5432");
+  });
+
+  it("redacts the account the pg driver names in prose (QA-2 FINDING-2)", () => {
+    // `password authentication failed for user "appuser"` matches no pattern in
+    // redaction.js — a database username is neither a secret nor PII, so
+    // nothing was ever going to catch it.
+    const scrubbed = scrubText(
+      'password authentication failed for user "appuser"'
+    );
+    expect(scrubbed).not.toContain("appuser");
+    expect(scrubbed).toContain("[redacted]");
+  });
+
+  it("names db_username among the redaction classes", async () => {
+    const { redactions } = await buildBundle({
+      env: seededEnv(),
+      client: seededClient(),
+      checks: [
+        {
+          id: "db.reachable",
+          ok: false,
+          level: "block",
+          detail: 'password authentication failed for user "appuser"',
+          remedy: "",
+        },
+      ],
+    });
+    expect(redactions).toContain("db_username");
+  });
+
   it("leaves text with no credentials alone", () => {
     // A strip that fires on everything is not a strip.
     expect(scrubText("relation \"users\" does not exist")).toBe(

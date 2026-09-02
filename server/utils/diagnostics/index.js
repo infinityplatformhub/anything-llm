@@ -132,7 +132,25 @@ function collectEnv(env = process.env) {
  * `error.message` verbatim, and the pg driver quotes the connection string in
  * its failure text — at exactly the moment someone runs `--bundle`.
  */
-const URL_CREDENTIALS = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*:[^\s/@]*@/gi;
+const URL_CREDENTIALS = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*@/gi;
+
+/**
+ * QA-2 FINDING-2 (#94): the pg driver names the account in plain prose, and in
+ * more than one phrasing —
+ *
+ *   password authentication failed for user "appuser"
+ *   role "qa2_leak_probe" does not exist
+ *
+ * — none of which matches a pattern in redaction.js. A database username is
+ * neither a secret nor PII, so nothing was ever going to catch it; it is simply
+ * something an operator would rather not publish beside their host.
+ *
+ * The three lead-ins are matched as a set rather than one at a time, for the
+ * same reason redaction.js matches the `apw-*-` credential FAMILY rather than a
+ * prefix list: the second phrasing was found only because a test drove a
+ * connection failure that the first one did not cover.
+ */
+const PG_USER_PHRASE = /\b(for user|role|user) ("|')([^"']*)\2/gi;
 
 /**
  * The one text path. Strip embedded credentials first, then run the pattern
@@ -145,9 +163,16 @@ function scrubText(value, hits = new Set()) {
   // redaction CLASSES that fired, and a scrub that swallows its own hits makes
   // the bundle claim nothing was removed while removing things.
   if (typeof value !== "string") return scrubValue(value, hits, 0);
-  const stripped = value.replace(URL_CREDENTIALS, (_m, scheme) => {
+  // The userinfo run has NO password half in `user@host` — QA-2 FINDING-2. The
+  // earlier pattern required a `:`, so `postgresql://qa2_leak_probe@localhost`
+  // passed through with the account named. The password half is optional here.
+  let stripped = value.replace(URL_CREDENTIALS, (_m, scheme) => {
     hits.add("url_credentials");
     return scheme;
+  });
+  stripped = stripped.replace(PG_USER_PHRASE, (_m, lead, quote) => {
+    hits.add("db_username");
+    return `${lead} ${quote}[redacted]${quote}`;
   });
   return scrubValue(stripped, hits, 0);
 }
@@ -215,6 +240,9 @@ async function safeQuery(client, sql, params = [], hits = new Set()) {
 
 async function collectDatabase(
   client,
+  // The default reads process.env only when the caller injects nothing.
+  // buildBundle always passes `env.DATABASE_URL`, so the seam the tests drive
+  // is the same one production uses.
   { databaseUrl = process.env.DATABASE_URL, hits = new Set() } = {}
 ) {
   // The connection line is BUILT HERE from `stripUrlCredentials`, not borrowed

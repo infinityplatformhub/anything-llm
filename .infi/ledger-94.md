@@ -135,6 +135,43 @@ Removing the strip from `scrubText`: **10 red**, and the dotted-host detail test
 which is the finding itself, reproduced.
 Adding `API_KEY_PEPPER` to `UNDECLARED_ENV_KEYS`: **1 red**, the NIT-1 guard.
 
+## QA-2 FINDING-2, applied
+
+Ruling: the userinfo strip drops the password half as OPTIONAL. My first version required a `:`, so
+`postgresql://qa2_leak_probe@localhost:55451/qa` passed through with the account named — and that is
+exactly the shape the doctor's own `maskUrl` produces, since it replaces the password and KEEPS the
+username. It reaches the bundle through `checks[].detail`, a different path from
+`database.connection`, which was already clean. — ถ้าผิด: username + internal host ไปอยู่ใน
+public issue ผ่านทางที่ไม่มีใครดู
+
+Ruling: a second pattern for the account named in PROSE. `password authentication failed for user
+"appuser"` matches nothing in redaction.js — a database username is neither a secret nor PII, so no
+existing pattern was ever going to catch it. — ถ้าผิด: ทางที่ pg บอกชื่อ account ยังเปิดอยู่
+
+Ruling: the prose pattern matches THREE lead-ins (`for user`, `role`, `user`) as a set, not one.
+Driving a real connection failure through the CLI surfaced a second phrasing QA-2's example did not
+cover: `role "qa2_leak_probe" does not exist`. Same argument as redaction.js matching the `apw-*-`
+FAMILY rather than a prefix list — the phrasing found second would have leaked until someone noticed.
+— ถ้าผิด: pattern ที่ครอบคลุมตัวอย่างเดียวที่มีคนยกมา ไม่ใช่คลาสของปัญหา
+
+Ruling: `collectDatabase`'s `databaseUrl` default keeps `process.env` but `buildBundle` always
+passes `env.DATABASE_URL`, so the seam the tests drive is the one production uses. — ถ้าผิด:
+เทสขับ seam ที่ production ไม่ได้ใช้
+
+Ruling (test correctness, my own error twice): the CLI probe cannot assert on the REAL username. On
+a dev box the role, the password and the database name are often the same word (`approof` /
+`approof` / `approof_o5b`), so `not.toContain(username)` failed on the DATABASE name — which the
+bundle reports deliberately. The failure path now uses a distinctive probe username AND password;
+the success path asserts on the SHAPE that would carry a username (`//<anything>@` anywhere in the
+bundle) rather than on a word. — ถ้าผิด: เทสแดงเพราะสภาพเครื่อง ไม่ใช่เพราะโค้ดผิด แล้วคนแก้ด้วยการ
+ลดความเข้มของ assertion
+
+### Mutations (§7.9f)
+
+Removing `scrubText` from `checks[]`: **5 red**.
+Narrowing the prose pattern back to `for user` alone: **1 red** — the CLI end-to-end probe, which is
+the test that found the second phrasing in the first place.
+
 ## Finding split out — #95
 
 The seeded-secret scan found a live PDPA leak in `utils/events/redaction.js`: the three numeric
@@ -151,12 +188,14 @@ reverted, and the test's comment now says that rather than "red until #95".
 Measured on `820ede6c4`, rebased onto main `c7a4711c4`:
 
     Test Suites: 4 passed, 4 total
-    Tests:       241 passed, 241 total
+    Tests:       245 passed, 245 total
 
-Per suite: `bundle.test.js` 38, `doctorBundleCli.test.js` 9, `doctor.test.js` 46,
+Per suite: `bundle.test.js` 41, `doctorBundleCli.test.js` 9, `doctor.test.js` 46,
 `auditRedaction.test.js` 148 (144 + the 4 that arrived with #95).
 
-25 → 38 in `bundle.test.js`: the FINDING-1 table (3 hosts × 3 assertions), the two strip-behaviour
-tests, the `url_credentials` reporting test, and the NIT-1 guard.
+25 → 41 in `bundle.test.js`: the FINDING-1 table (3 hosts × 3 assertions), the two strip-behaviour
+tests, the `url_credentials` reporting test, the NIT-1 guard, and FINDING-2's three (username with
+no password half, the pg prose forms, and `db_username` among the reported classes).
+9 → 10 in `doctorBundleCli.test.js`: the end-to-end username probe on both paths.
 `doctor.test.js` unchanged and green; header note added saying the suite needs PostgreSQL 16+, that
 pgvector is NOT required, and that missing it skips rather than fails (TL-2 lost ten minutes).

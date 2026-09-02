@@ -132,6 +132,44 @@ withDb("doctor --bundle against a database", () => {
     expect(() => JSON.parse(run.stdout)).toThrow();
   });
 
+  it("carries no database username anywhere, on either the success or the failure path", () => {
+    // QA-2 FINDING-2, end to end through the real CLI. The doctor's own
+    // `maskUrl` keeps the username in `db.reachable`'s detail, and the pg
+    // driver names the account in its failure text; neither matches a pattern
+    // in redaction.js, so only the strip catches them.
+    // A DISTINCTIVE username, not the real one: on a typical dev box the role
+    // and the database share a name (`approof` / `approof_o5b`), so asserting
+    // on the real username would fail on the DATABASE name — which is
+    // deliberately reported. The probe must name only the account.
+    const probe = "qa2_leak_probe_username";
+    const probePassword = "qa2_leak_probe_password";
+    const withProbe = new URL(process.env.DATABASE_URL);
+    withProbe.username = probe;
+    withProbe.password = probePassword;
+
+    // Success path. The real DATABASE_URL cannot serve as the probe: on a dev
+    // box the role, the password and the database name are often the same word
+    // (`approof` / `approof` / `approof_o5b`), so asserting on it fails on the
+    // DATABASE name, which is deliberately reported. Assert on the SHAPE that
+    // would carry a username instead — `//<anything>@` in any reported string.
+    const ok = runDoctor(["--bundle"]).stdout;
+    const parsed = JSON.parse(ok);
+    const strings = JSON.stringify(parsed);
+    expect(strings).not.toMatch(/:\/\/[^"/@]+@/);
+    expect(parsed.environment.DATABASE_URL).not.toContain("@");
+    expect(parsed.database.connection).not.toContain("@");
+
+    // Failure path: pg quotes the connection string AND names the account in
+    // prose. The probe username cannot connect, which is the point.
+    const bad = runDoctor(["--bundle"], {
+      DATABASE_URL: withProbe.toString(),
+    }).stdout;
+    expect(bad).not.toContain(probe);
+    expect(bad).not.toContain(probePassword);
+    // still a whole bundle, and the host is kept because it is diagnostic
+    expect(JSON.parse(bad)).toHaveProperty("database");
+  });
+
   it("exits on the CHECKS, not on whether bundling worked", () => {
     // A bundle assembled from a broken install is a successful bundling of a
     // failing install; the operator needs the failure in $?.
