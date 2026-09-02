@@ -103,3 +103,56 @@ describe("#126 RF-5: `!workspace` is a condition in its own right", () => {
     expect(surface()).toBeInTheDocument();
   });
 });
+
+describe("#126 QA-3: the call site, which no render test can reach", () => {
+  // A text guard, deliberately, and narrow on purpose.
+  //
+  // The tests above render WorkspaceGate and prove the DECISION is right. They
+  // say nothing about whether Home asks it — nothing imports Home, because
+  // mounting it drags in the chat surface, which is the whole reason the gate
+  // was extracted. So three claims live outside their reach:
+  //
+  //   N1  the condition is not also written inline, where two copies drift
+  //   N4  BOTH return paths go through the gate, not just one
+  //   N6  the gate is called at all, rather than being dead code
+  //
+  // #40 task 4's source assertion held N1 and N6. Deleting it under RF-3 was
+  // wrong: "the render test covers the component" and "the render test covers
+  // the call site" are different claims, and only the first was true. QA-3
+  // caught it by making WorkspaceGate dead code and watching 93 tests pass.
+  //
+  // Comments are stripped before matching (§7.17): a check that reads prose
+  // reports kills it did not make — the same failure three times over in task 4.
+  const homeSource = () => {
+    const { readFileSync } = require("fs");
+    return readFileSync(`${__dirname}/index.jsx`, "utf8")
+      .split("\n")
+      .map((line) => line.replace(/\/\/.*$/, ""))
+      .join("\n");
+  };
+
+  test("N6: Home actually calls the gate", () => {
+    expect(homeSource()).toMatch(/<WorkspaceGate/);
+  });
+
+  test("N4: every return path goes through it", () => {
+    // Two returns in Home itself. A gate on one path leaves the other
+    // ungated, which is invisible to a component test.
+    expect(homeSource().match(/return gate\(/g)).toHaveLength(2);
+  });
+
+  test("N1: the condition is not duplicated at the call site", () => {
+    // A second copy would decide first, leaving the gate ornamental and free
+    // to drift from the copy that actually runs.
+    expect(homeSource()).not.toMatch(
+      /!workspace && user && \(loading \|\| !can\(/
+    );
+  });
+
+  test("the action string is the one the gate is asked about", () => {
+    // TL-1's nit: `canCreate` is evaluated at the CALLER, so the action string
+    // sits outside the component under test — swapping it to workspace.write
+    // leaves every render test green.
+    expect(homeSource()).toMatch(/canCreate=\{can\("workspace\.create"\)\}/);
+  });
+});
