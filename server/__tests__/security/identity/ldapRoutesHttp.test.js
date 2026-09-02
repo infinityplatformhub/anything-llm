@@ -109,6 +109,12 @@ beforeEach(async () => {
 afterAll(async () => {
   await prisma.$disconnect();
   fs.rmSync(tempDir, { recursive: true, force: true });
+  // issue 77: hand the environment back. These are set at module scope because
+  // the app is built at require time, but the limit is now read PER REQUEST —
+  // so a value left behind is a value another suite's limiters would read.
+  // Jest isolates the module registry per file, not `process.env`.
+  delete process.env.INVITE_RATE_LIMIT_MAX;
+  delete process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX;
 });
 
 const login = (body) =>
