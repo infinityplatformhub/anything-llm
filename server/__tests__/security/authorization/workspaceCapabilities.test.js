@@ -120,17 +120,22 @@ describe("capability vocabulary by resource scope", () => {
     }
   });
 
-  test("a throwing unknown resolver is not workspace evidence", () => {
-    const throwingGate = {
-      action: "document.delete",
-      resolveResource: () => {
+  test("unknown resolvers are not workspace.members.manage evidence", () => {
+    const unknownResolvers = [
+      async () => null,
+      () => {
         throw new Error("boom");
       },
-    };
+      () => ({ workspaceId: 1 }),
+      Object.assign(async () => null, { resolverName: "unknownResolver" }),
+    ];
 
-    expect(hasGateAtScope([throwingGate], "document.delete", "workspace")).toBe(
-      false
-    );
+    for (const resolveResource of unknownResolvers) {
+      const gate = { action: "workspace.members.manage", resolveResource };
+      expect(
+        hasGateAtScope([gate], "workspace.members.manage", "workspace")
+      ).toBe(false);
+    }
   });
 
   test("capability lists match the approved mockup", () => {
