@@ -60,3 +60,13 @@ route ทั้งสามอยู่คนละโหมด: `update-env` �
 (max_connections 100, มี 55 ใช้อยู่แล้วจาก worktree อื่น) — ไม่ใช่ผลของ diff นี้
 รันแต่ละ suite ที่เกี่ยวข้องแยกทีละตัว: credentialClear 27/27, settingsWriteFailure 11/11,
 secretLeakScan 7/7, updateEnvUnknownKeys 13/13, mailerSettingsRoutes 12/12 เขียวหมด
+
+## Residual (TL-1)
+
+- `secret: true` คีย์ที่ได้ `postUpdate` hook ในอนาคต จะรัน hook นั้น**หลัง** persist ล้มไปแล้ว
+  ลูปยังเดินต่อตามที่ ruling สั่ง (สะสม error ไม่ break) วันนี้ไม่มีคีย์ secret ตัวไหนมี postUpdate
+  จึงยังไม่มีผล แต่ถ้ามีคนเพิ่ม จะต้องตัดสินว่า hook ควรรันเมื่อค่าเก็บไม่ลงหรือไม่
+- การลบคีย์ออกจาก `newValues` ยังไม่กระทบ audit mapping — `logChangesToEventLog` ดูแค่
+  `LLMProvider` / `EmbeddingEngine` / `VectorDB` ซึ่งทั้งสามเป็น `secret: false` จึงไม่มีทาง
+  ถูกลบด้วยเส้นทางนี้ ถ้ามีคีย์ secret เข้า mapping วันหน้า audit event ของมันจะหายไปเงียบ ๆ
+  เมื่อ persist ล้ม

@@ -1808,14 +1808,16 @@ async function logChangesToEventLog(newValues = {}, userId = null) {
 /**
  * Persists one credential to the encrypted store instead of the .env file.
  *
- * A failure here is logged, not thrown: the value is already live in process.env and
- * the setting has been accepted, so throwing would 500 a request whose work is done.
- * The cost of the failure is that the credential does not survive a restart, which the
- * log says explicitly rather than leaving an operator to discover it later.
+ * A failure here is returned and logged, not thrown. #104: `updateENV` accumulates the
+ * returned error and every caller surfaces it — `/system/update-env` and its `/v1` twin
+ * as a 500, `/system/update-password` as `success: false`, and `/system/enable-multi-user`
+ * by throwing into its rollback. It is not thrown from here because the value is already
+ * live in process.env: the running instance keeps working, and what the failure costs is
+ * that the credential does not survive a restart.
  *
  * @param {string} envKey
  * @param {string} value
- * @returns {Promise<void>}
+ * @returns {Promise<{error: string|null}>}
  */
 async function persistCredential(envKey, value) {
   const { CredentialStore } = require("../../models/credentialStore");
