@@ -63,7 +63,7 @@ describe("QA-2 FINDING-1: single-user is confirmed by evidence, not by a setting
     SystemSettings.isMultiUserMode.mockResolvedValue(false);
     const actor = await resolveActor(
       {},
-      res({ apiKeyContext: { keyId: 7, keyPrefix: "apw-key-x", scopes: ["*"], workspaceId: null } }),
+      res({ apiKeyContext: { keyId: 7, keyPrefix: "apw-key-x", scopes: ["*"], workspaceId: null, keyKind: "api-key" } }),
       { db: populatedDb() }
     );
     expect(actor.grantPrincipal).toBeNull();
@@ -134,7 +134,7 @@ describe("QA-2 FINDING-1: single-user is confirmed by evidence, not by a setting
     };
     const actor = await resolveActor(
       {},
-      res({ apiKeyContext: { keyId: 7, keyPrefix: "apw-key-x", scopes: ["*"], workspaceId: null } }),
+      res({ apiKeyContext: { keyId: 7, keyPrefix: "apw-key-x", scopes: ["*"], workspaceId: null, keyKind: "api-key" } }),
       { db }
     );
     expect(actor.grantPrincipal).toEqual({ type: "service", id: "single-user" });

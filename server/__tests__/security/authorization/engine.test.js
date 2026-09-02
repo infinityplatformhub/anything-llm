@@ -412,7 +412,7 @@ describe("T-4b B-1: an API-key Actor evaluates grants as its creator", () => {
       });
       return resolveActor(
         {},
-        { locals: { apiKeyContext: { keyId: row.id, keyPrefix: row.keyPrefix, scopes, workspaceId: workspaceId ? String(workspaceId) : null } } },
+        { locals: { apiKeyContext: { keyId: row.id, keyPrefix: row.keyPrefix, scopes, workspaceId: workspaceId ? String(workspaceId) : null, keyKind: "api-key" } } },
         { db: prisma }
       );
     };
