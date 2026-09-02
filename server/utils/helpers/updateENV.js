@@ -1620,8 +1620,26 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
   let error = "";
   const runAfterAll = [];
   const validKeys = Object.keys(KEY_MAPPING);
+  const unknownKeys = Object.keys(newENVs).filter(
+    (key) => !validKeys.includes(key)
+  );
+  if (unknownKeys.length) {
+    const reflectedKeys = unknownKeys.slice(0, 50).map((key) => {
+      const characters = [...key];
+      return characters.length > 64
+        ? `${characters.slice(0, 64).join("")}…`
+        : key;
+    });
+    return {
+      newValues: {},
+      error: `Unknown environment keys: ${reflectedKeys.join(", ")}`,
+      code: "unknown_keys",
+      unknownKeys: reflectedKeys,
+      unknownKeyCount: unknownKeys.length,
+    };
+  }
   const ENV_KEYS = Object.keys(newENVs).filter(
-    (key) => validKeys.includes(key) && !/^\*+$/.test(newENVs[key]) // strip out answers where the value is all asterisks (masked placeholder)
+    (key) => !/^\*+$/.test(newENVs[key]) // strip out answers where the value is all asterisks (masked placeholder)
   );
   const newValues = {};
 

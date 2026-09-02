@@ -779,12 +779,13 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const body = reqBody(request);
-        const { newValues, error } = await updateENV(
+        const result = await updateENV(
           body,
           false,
           response?.locals?.user?.id
         );
-        response.status(200).json({ newValues, error });
+        const status = result.code === "unknown_keys" ? 400 : result.error ? 500 : 200;
+        response.status(status).json(result);
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();
