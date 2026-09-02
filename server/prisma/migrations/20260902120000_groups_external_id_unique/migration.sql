@@ -7,7 +7,9 @@
 --
 -- A PLAIN unique is correct. An earlier draft of the contract claimed local groups
 -- (which all carry externalId NULL) would collide under it, and that a partial or
--- NULLS NOT DISTINCT form was needed. Measured on PostgreSQL 17.11:
+-- NULLS NOT DISTINCT form was needed. NULLs being DISTINCT in a unique index is
+-- standard behaviour and holds on every version this runs on; `NULLS NOT DISTINCT`
+-- is the PG15+ addition. Measured on PG16 (what CI runs) and PG17:
 --
 --   two local groups with NULL externalId  -> both accepted (NULLs are DISTINCT)
 --   two lark rows on externalId 'od-123'   -> refused

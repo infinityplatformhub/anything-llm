@@ -21,6 +21,7 @@
 
 const { execSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { PrismaClient } = require("@prisma/client");
@@ -51,28 +52,40 @@ beforeAll(async () => {
   // behaviour but never the migration's — and the migration is the half that runs
   // against a populated production database.
   //
-  // So: migrate up to the migration BEFORE this one, insert two local groups with
-  // NULL externalId, then apply the rest. `migrate deploy` has no "up to" flag, so
-  // the boundary is drawn by moving this migration aside and putting it back.
-  const HELD = path.join(SERVER_DIR, "prisma/migrations", MIGRATION);
-  const PARKED = path.join(SERVER_DIR, `.migration-parked-${dbSuffix}`);
-  fs.renameSync(HELD, PARKED);
-  try {
-    execSync(`npx prisma migrate deploy --schema ${SCHEMA}`, {
-      env: { ...process.env, DATABASE_URL: testUrl },
-      cwd: SERVER_DIR,
-      stdio: "pipe",
-    });
-    const seeder = new PrismaClient({ datasources: { db: { url: testUrl } } });
-    await seeder.$executeRawUnsafe(
-      `INSERT INTO "groups" ("orgId", "name", "source", "externalId")
-         VALUES (1, 'pre-existing-local-a', 'local', NULL),
-                (1, 'pre-existing-local-b', 'local', NULL)`
-    );
-    await seeder.$disconnect();
-  } finally {
-    fs.renameSync(PARKED, HELD);
-  }
+  // `migrate deploy` has no "up to" flag, so the boundary is drawn by COPYING the
+  // migrations into a temp directory and deleting this one from the copy.
+  //
+  // TL-1 F1/F2: an earlier version renamed the real directory aside and restored it
+  // in a `finally`. That mutates the working tree for the duration of the run, and
+  // a `finally` does not run for SIGKILL / OOM / a killed test process — which would
+  // leave the repository missing a migration and a `.migration-parked-*` directory
+  // behind, with the next `migrate deploy` recording a shorter history against a dev
+  // database. It also raced any other suite touching the same folder when jest is
+  // not run with --runInBand. Copying removes both: the working tree is read-only
+  // for the whole test, so there is nothing to restore and nothing to race.
+  const REAL_MIGRATIONS = path.join(SERVER_DIR, "prisma/migrations");
+  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), `s4a-mig-${dbSuffix}-`));
+  const stagedMigrations = path.join(stageDir, "migrations");
+  fs.cpSync(REAL_MIGRATIONS, stagedMigrations, { recursive: true });
+  fs.rmSync(path.join(stagedMigrations, MIGRATION), { recursive: true, force: true });
+  // Prisma resolves `migrations/` as a sibling of the schema file, so the schema is
+  // copied beside the staged directory rather than pointed at across trees.
+  const stagedSchema = path.join(stageDir, "schema.prisma");
+  fs.copyFileSync(SCHEMA, stagedSchema);
+
+  execSync(`npx prisma migrate deploy --schema ${stagedSchema}`, {
+    env: { ...process.env, DATABASE_URL: testUrl },
+    cwd: SERVER_DIR,
+    stdio: "pipe",
+  });
+  const seeder = new PrismaClient({ datasources: { db: { url: testUrl } } });
+  await seeder.$executeRawUnsafe(
+    `INSERT INTO "groups" ("orgId", "name", "source", "externalId")
+       VALUES (1, 'pre-existing-local-a', 'local', NULL),
+              (1, 'pre-existing-local-b', 'local', NULL)`
+  );
+  await seeder.$disconnect();
+  fs.rmSync(stageDir, { recursive: true, force: true });
 
   // Now the index is created over a table that already holds two NULL rows. Under
   // NULLS NOT DISTINCT this step fails outright, which is the mutation.

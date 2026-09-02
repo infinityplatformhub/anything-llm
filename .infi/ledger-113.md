@@ -51,18 +51,42 @@ thing not to copy, and nothing would have said so.
   legitimately carry the same opaque id, and one tenant's department id must not
   collide with another's.
 
+Ruling (TL-1 F1/F2): the "migrate up to here" boundary is drawn by COPYING
+`prisma/migrations` to a temp directory and deleting this migration from the copy —
+never by renaming the real directory aside.
+
+My first version renamed and restored in a `finally`, and I recorded the SIGKILL
+window as a residual. TL-1 was right that recording it was not enough: a `finally`
+does not run for SIGKILL, OOM, or a killed test process, and the wreckage is a
+repository missing a migration plus an orphaned `.migration-parked-*` — which reads
+as a missing file rather than an interrupted test, and makes the next
+`migrate deploy` record a shorter history against a dev database. It also raced any
+other suite touching that folder whenever jest runs without `--runInBand`.
+
+Copying closes both, and closes them by construction rather than by cleanup: the
+working tree is read-only for the whole test, so there is nothing to restore and
+nothing to race. Verified after a run where the mutant killed `beforeAll` mid-flight
+— no temp directories left, no orphaned `s4a_idx_*` database, `git status` clean.
+
+Ruling (TL-1): the migration comment cites the version CI actually runs. It said
+"measured on PostgreSQL 17.11" — true, but CI is `postgres:16`, so the evidence and
+the deployment target did not match. Re-measured on PG16.14 in the running
+`t1-authz-postgres-1` container before changing the claim:
+
+```
+plain unique created over 2 NULL rows on PG16
+NOTICE: PG16: duplicate lark dept REFUSED — index works
+ERROR:  could not create unique index "pg16_nnd"
+DETAIL: Key ("orgId", source, "externalId")=(1, local, null) is duplicated.
+```
+
+Identical on both. NULLs being distinct in a unique index is standard behaviour;
+`NULLS NOT DISTINCT` is the PG15+ addition, and the comment now says that instead of
+naming one patch version.
+
 ## Residual risks
 
-1. **The migration-parking harness mutates the working tree during a test run.**
-   `groupsExternalIdUnique.test.js` renames `prisma/migrations/20260902120000_*` aside
-   to draw a "migrate up to here" boundary, then restores it. The restore is in a
-   `finally`, and it was verified to hold on the run where the `NULLS NOT DISTINCT`
-   mutant killed `beforeAll` mid-flight — no stranded directory, no orphaned
-   `s4a_idx_*` database. But a `SIGKILL` between the two renames leaves the repository
-   without that migration, and the failure would look like a missing file rather than
-   an interrupted test. Nothing else in the suite does this; it is here because there
-   is no other way to place data between two migrations with `migrate deploy`.
-2. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers
+1. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers
    both answers; (b) "Lark re-points every conflicting link" carries a shape
    structurally identical to the account takeover R1 exists to prevent, and TL-1 notes
    that no delta API makes it worse — every full sync becomes another opportunity to
