@@ -536,3 +536,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Killed 22 stale jest procs in main server dir (>10 min, other sessions/earlier post-merges).
 - #119 136d069ae (approof/seal-use) NOT gated: still `.stack` discriminator (sealRoutes.js:95), pushed before TL-2 ruling reached Dev5. Dev5 reworking: SEALED_METHODS discriminator, seal use() argument, F2/F3/F8/F9.
 - Post-merge #125 frontend half still running (pid 38683).
+- #40 t4 3c7ee3609: regate green, task.sh close posted (gate-40-task4-3c7ee3609), but merge --no-ff CONFLICTED in frontend/src/components/PrivateRoute/adminRoute.test.jsx (main 5d1cabfa4 #108 describe vs task-4 describe at same spot). Merge aborted, main clean at 30fb5b537. Dev2 rebasing 40-task4 on main keeping both blocks → new SHA → frontend regate → re-close (close binds HEAD) → merge. Issue #40 still OPEN.
