@@ -58,12 +58,12 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">207bd2fb5</span> · 2026-09-02 22:55</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">0e3c100df</span> · 2026-09-02 23:05</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
 <section class="overall">
-  <div class="big">102<small>/ 137 issues ปิด</small></div>
+  <div class="big">103<small>/ 137 issues ปิด</small></div>
   <div>
     <div class="bar" aria-label="99 closed, 3 in review, 3 in dev, 5 queued of 133">
       <span style="width:74.4%;background:var(--done)"></span>
@@ -72,7 +72,7 @@ td.mono{white-space:nowrap}
       <span style="width:3.8%;background:var(--queue)"></span>
     </div>
     <div class="legend">
-      <span><i style="background:var(--done)"></i>ปิดแล้ว 102</span>
+      <span><i style="background:var(--done)"></i>ปิดแล้ว 103</span>
       <span><i style="background:var(--gate)"></i>รอ review 1</span>
       <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
       <span><i style="background:var(--queue)"></i>คิว 5</span>
@@ -99,11 +99,6 @@ td.mono{white-space:nowrap}
 <section class="lanes">
   <div class="lane" style="--c:var(--gate)">
     <h2>รอ review / merge <span class="mono">1</span></h2>
-    <div class="card">
-      <div class="top"><span class="id">#134 S4b slice 2 apply + checkpoint</span><span class="who">Dev3 · 825139ce6</span></div>
-      <p>migration checkpoint + CHECK ทั้งสองทิศพิสูจน์แล้ว · RF-1..RF-7 ยังไม่เขียน · 2 ruling โครงสร้างส่ง TL-1 ยืนยัน · mutants ก่อน push</p>
-      <div class="chips"><span class="chip ok">gate 37/37</span><span class="chip ok">TL-1 PASS</span><span class="chip ok">QA-1 PASS</span><span class="chip wait">regate comment fix</span></div>
-    </div>
   </div>
 
   <div class="lane" style="--c:var(--dev)">
@@ -115,7 +110,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="card">
       <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · 49f7a0cd9</span></div>
-      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository · SHA แล้ว: revokedAt ใน tx เดียวกับ suspend, endpoint ถอดสมาชิกกลุ่ม, 5 mutants ตาย · gate + TL-2 + QA-2 กำลังตรวจ</p>
+      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository · SHA แล้ว: revokedAt ใน tx เดียวกับ suspend, endpoint ถอดสมาชิกกลุ่ม, 5 mutants ตาย · QA-2 พบ blocker: key ที่ mint หลัง suspend ยังใช้ได้ (sweep เป็น edge-triggered) รอ TL-2 ตัดสินรูปแบบแก้</p>
     </div>
     <div class="card">
       <div class="top"><span class="id">V8 mobile</span><span class="who">Dev4 · หลัง #132</span></div>
@@ -138,6 +133,7 @@ td.mono{white-space:nowrap}
   <div class="tbl"><table>
     <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุ</th></tr></thead>
     <tbody>
+      <tr><td class="mono">#134</td><td>S4b slice 2: apply directory plan ผ่าน repository ต่อ entity + checkpoint พร้อม CHECK</td><td>TL-1 กลับ ruling lock: sync เป็น core job ไม่สร้างกลไกที่สอง · #135 ต้องผ่าน offboardUser ไม่เขียน cleanup ซ้ำ</td></tr>
       <tr><td class="mono">#130</td><td>disconnect hook ทดสอบด้วยการเรียก afterAll callback ที่จับมาเอง (ไม่ใช่ grep source)</td><td>TL-2 พิสูจน์ว่า "ทดสอบใน process ไม่ได้" ในคอมเมนต์เป็นเท็จ</td></tr>
       <tr><td class="mono">#40 (4 tasks)</td><td>Frontend authz: capabilities endpoint + can() แทน role string ทุก site</td><td>ปิดครบ 4 task · drift sweep และ source assertion ต้องตัดคอมเมนต์ก่อน match (บทเรียนซ้ำ 3 รอบ)</td></tr>
       <tr><td class="mono">#113 #129</td><td>S4a Lark directory sync + guard บน addGroupMember/removeGroupMember</td><td>ACL-only group และ deny group ปิดครบ · bar = role.grant</td></tr>
