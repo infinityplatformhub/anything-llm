@@ -390,3 +390,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #112 43cf5da87: TL-1 PASS (RF-1..5 each red at a named test; OBS: synthetic check id in level test is load-bearing; #114 link belongs in residual). Waiting QA-2 A–G only.
 - #108 5992b34b9: gate PASS at wt-108 (g108) — check-local, frontend 24/24, server guard 6/6, sweeps 63/63; ledger-108 missing → Dev4 committing. Waiting QA-1 DOM probe + TL-2 N6–N10.
 - #98 71acf4173 gate running at wt-98 (g98); TL-2 verdict (plain) → merge.
+- #98 71acf4173: gate at wt-98 (g98) check-local + sweeps 63/63; contract 33 (recheck suite set at regate). TL-2 not PASS: fixture corrections (read-mount test must call app.get AFTER require; app.all bypasses seal in express 4.22.1) + A1 app.all probe, A2 capture real apiRouter via app._router.stack, A3 double-call → Dev3 amends.
+- scrypt memoize issue (Dev2 to open): TL-2 pre-ruling cache keyed by SIG_KEY material, module-scope let, RF (ก)-(ง).
