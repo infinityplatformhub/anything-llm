@@ -25,9 +25,11 @@ const testUrl = baseDatabaseUrl?.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 let prisma;
 let linkPrincipal;
 const { RESERVED_APEX } = require("../../../__testHelpers__/identity/urls");
+const { deriveUsername } = require("../../../utils/identity/deriveUsername");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
+  IdentityUnavailableError,
 } = require("../../../utils/identityProviders/errors");
 
 beforeAll(async () => {
@@ -196,6 +198,125 @@ describe("R1 — email collision with an existing local account", () => {
         db: prisma,
       })
     ).rejects.toThrow(IdentityConflictError);
+  });
+
+  test("QA-1 NIT-1: a collision on the DERIVED username is R1's 409, not a raw constraint error", async () => {
+    // An SSO-created account is stored under its derived username, not the raw
+    // address. Checking only the raw address misses that collision, and it then
+    // surfaces as a P2002 the caller sees as a bare 401 — against the FIRST
+    // person's account, which did nothing wrong. It has to be R1's conflict,
+    // which is the answer that tells the user what to do.
+    const local = `1derived-${crypto.randomBytes(4).toString("hex")}`;
+    const email = `${local}@${RESERVED_APEX}`;
+    await prisma.users.create({
+      data: {
+        username: deriveUsername(email),
+        password: "local-hash",
+        role: "default",
+      },
+    });
+
+    const error = await linkPrincipal(principal({ email }), { db: prisma }).catch(
+      (e) => e
+    );
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    expect(error.message).toMatch(/settings/i);
+  });
+
+  test("QA-1 NIT-1: a derived-username clash yields a suffixed account, not an error", async () => {
+    // Two genuinely different mailboxes that sanitize to the same handle. This
+    // is NOT the takeover case — R1 checks the email and has already passed —
+    // so the second person must get their own account. Before the retry loop,
+    // this surfaced as a P2002 the caller saw as a bare 401, and the person who
+    // arrived FIRST is the one whose login appeared to break.
+    //
+    // `+` and `!` are both sanitized to `-`, so these two addresses derive the
+    // same username while remaining different mailboxes.
+    const suffix = crypto.randomBytes(4).toString("hex");
+    const first = await linkPrincipal(
+      principal({ email: `user+${suffix}@${RESERVED_APEX}` }),
+      { db: prisma }
+    );
+    const second = await linkPrincipal(
+      principal({ email: `user!${suffix}@${RESERVED_APEX}` }),
+      { db: prisma }
+    );
+
+    // Same derived handle, different people, two accounts.
+    expect(deriveUsername(`user+${suffix}@${RESERVED_APEX}`)).toBe(
+      deriveUsername(`user!${suffix}@${RESERVED_APEX}`)
+    );
+    expect(second.user.id).not.toBe(first.user.id);
+    expect(second.user.username).not.toBe(first.user.username);
+    expect(second.user.username).toMatch(/-sso-[0-9a-f]+$/);
+  });
+
+  test("PMO ruling 1: the handle comparison normalizes BOTH sides", async () => {
+    // `User+X@` and `user+x@` are one mailbox. If either side of the comparison
+    // skips a step of the normalization the other side applies, they stop
+    // matching and the collision rule quietly does nothing — which is exactly
+    // the failure the rule exists to prevent, only now it looks like it works.
+    const suffix = crypto.randomBytes(4).toString("hex");
+    const stored = deriveUsername(`user+${suffix}@${RESERVED_APEX}`);
+    await prisma.users.create({
+      data: { username: stored, password: "local-hash", role: "default" },
+    });
+
+    // Arrives with different case in both the local part and the domain.
+    const incoming = `User+${suffix.toUpperCase()}@${RESERVED_APEX.toUpperCase()}`;
+    const error = await linkPrincipal(principal({ email: incoming }), {
+      db: prisma,
+    }).catch((e) => e);
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    expect(error.message).toMatch(/settings/i);
+  });
+
+  test("PMO ruling 2: an email already linked to ANOTHER provider stays under R1", async () => {
+    // The handle rule must not shadow the email rule. This address is already
+    // federated somewhere else, so the account carries identity_links — which
+    // is precisely the marker the handle rule uses to say "different person,
+    // give them their own account". Checking the handle FIRST would send one
+    // mailbox down the suffix retry and create a second account for it.
+    const email = `crossidp-${crypto.randomBytes(4).toString("hex")}@${RESERVED_APEX}`;
+    await linkPrincipal(principal({ provider: "oidc", email }), { db: prisma });
+    const usersBefore = await prisma.users.count();
+
+    // Same address, a different provider and subject.
+    const error = await linkPrincipal(
+      principal({ provider: "saml", email }),
+      { db: prisma }
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    // R1's email-match refusal, not the handle rule's, and not a second account.
+    expect(error.message).toMatch(/already linked to another identity/i);
+    expect(await prisma.users.count()).toBe(usersBefore);
+  });
+
+  test("NIT-2: exhausting every candidate is UNAVAILABLE (retryable), not a conflict", async () => {
+    // Five random 4-byte suffixes all colliding is not "this identity belongs to
+    // someone else, an admin must sort it out" — it is the database misbehaving,
+    // and the very same login will almost certainly succeed on the next attempt.
+    // Only IdentityUnavailableError is retryable, and the caller decides what to
+    // do with the answer based on that flag.
+    const failing = {
+      identity_links: {
+        findUnique: async () => null,
+        findFirst: async () => null,
+      },
+      users: {
+        findFirst: async () => null,
+        create: async () => {
+          const error = new Error("duplicate key");
+          error.code = "P2002";
+          throw error;
+        },
+      },
+    };
+
+    const error = await linkPrincipal(principal(), { db: failing }).catch((e) => e);
+    expect(error).toBeInstanceOf(IdentityUnavailableError);
+    expect(error.retryable).toBe(true);
   });
 
   test("the refusal writes nothing — no user, no link", async () => {

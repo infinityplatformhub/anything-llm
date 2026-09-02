@@ -41,6 +41,7 @@
     "@qdrant/js-client-rest": "^1.9.0",
     "@vscode/ripgrep": "1.17.1",
     "@xenova/transformers": "^2.14.0",
+    "@xmldom/xmldom": "^0.9.12",
     "@zilliz/milvus2-sdk-node": "2.3.5",
     "adm-zip": "^0.5.16",
     "apache-arrow": "19.0.0",
@@ -100,7 +101,9 @@
     "uuid": "^9.0.0",
     "weaviate-ts-client": "^1.4.0",
     "web-push": "^3.6.7",
-    "winston": "^3.13.0"
+    "winston": "^3.13.0",
+    "xml-crypto": "^6.1.2",
+    "xpath": "^0.0.34"
   },
   "resolutions": {
     "**/graphql-request/form-data": "3.0.4",

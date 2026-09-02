@@ -12,6 +12,9 @@ const {
   OidcIdentityProvider,
 } = require("../../../utils/identityProviders/OidcIdentityProvider");
 const {
+  SamlIdentityProvider,
+} = require("../../../utils/identityProviders/SamlIdentityProvider");
+const {
   IdentityConfigurationError,
 } = require("../../../utils/identityProviders/errors");
 const { IDP_ORIGIN } = require("../../../__testHelpers__/identity/urls");
@@ -25,9 +28,18 @@ describe("identity provider registry", () => {
     expect(OidcIdentityProvider.providerId()).toBe("oidc");
   });
 
+  test("saml is registered under its own providerId", () => {
+    // S2 (#43): the one line adding a driver. `saml` was asserted UNREGISTERED
+    // here while S1 was the only driver; now it must be present, and keyed by
+    // the same id that goes into identity_links.
+    expect(identityProviders.saml).toBe(SamlIdentityProvider);
+    expect(SamlIdentityProvider.providerId()).toBe("saml");
+  });
+
   test("isKnownProvider answers for registered and unregistered ids", () => {
     expect(isKnownProvider("oidc")).toBe(true);
-    expect(isKnownProvider("saml")).toBe(false);
+    expect(isKnownProvider("saml")).toBe(true);
+    expect(isKnownProvider("ldap")).toBe(false);
     expect(isKnownProvider("")).toBe(false);
     expect(isKnownProvider(undefined)).toBe(false);
   });
