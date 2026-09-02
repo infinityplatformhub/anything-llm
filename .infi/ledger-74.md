@@ -96,6 +96,9 @@ Ruling: when `vector` is not checked, `ext.available` says so and names the sett
 Ruling: `requiredExtensions` compares case-insensitively and treats an unset `VECTOR_DB` as not-pgvector.
 ถ้าผิด: `VECTOR_DB=PGVector` skips the check the operator needs, and an install that has not chosen a vector store yet is asked for an extension it will never use.
 
+Ruling: (QA-3 nit) `ext.permitted` states the installed half and the probed half as two different claims — "already installed, so no permission was needed or tested" versus "permission verified by creating and rolling back". They are different facts: probing establishes that the role MAY create the extension; an extension already present establishes only that it is there.
+ถ้าผิด: the detail reports a verified privilege that was never verified — the same class of lie as `IF NOT EXISTS` returning success on a no-op, which is what ruling 6 already removed from the probe itself. Mutation-verified: wording the installed half as "verified", or merging the two lists into one claim, each turns 4 tests red.
+
 ## Residual
 
 - **QA-3 ruling 1, the half that is not testable here.** `POST /system/update-password` with `usePassword:false` blanks `AUTH_TOKEN` and `JWT_SECRET` in memory only (`endpoints/system.js:705-707`) — no `updateENV` call, nothing written. Three tests cover what O2a controls: a restart finds no `AUTH_TOKEN`, `JWT_SECRET` is not rotated, and ensure-secrets never writes `AUTH_TOKEN` back. The in-memory/on-disk divergence itself is pre-existing behaviour outside this issue's diff; flagged for O2b, where the React step meets it.

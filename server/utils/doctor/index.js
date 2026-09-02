@@ -324,11 +324,20 @@ async function checkExtensions(client, needed) {
     }
   }
 
+  // The two halves are reported as two different claims, because they are.
+  // Probing establishes that the role MAY create the extension. An extension
+  // that is already installed establishes only that it is there — nobody tested
+  // whether this role could have created it, and nobody needs to, since it will
+  // not be created again. Wording them alike would report a verified privilege
+  // that was never verified.
   const parts = [];
-  if (installed.length) parts.push(`already installed: ${installed.join(", ")}`);
+  if (installed.length)
+    parts.push(
+      `already installed, so no permission was needed or tested: ${installed.join(", ")}`
+    );
   if (toProbe.length)
     parts.push(
-      `probed by creating and rolling back (this writes inside a transaction that is rolled back, so nothing is left behind): ${toProbe.join(", ")}`
+      `permission verified by creating and rolling back, which writes inside a transaction that is rolled back so nothing is left behind: ${toProbe.join(", ")}`
     );
 
   return [

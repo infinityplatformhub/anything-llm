@@ -158,6 +158,58 @@ withDb("checks against a healthy database", () => {
     expect(detail).toMatch(/probed|already installed|not checked/);
   });
 
+  it("does not claim a permission it did not test (QA-3 nit)", async () => {
+    // An installed extension proves it is there. It proves nothing about
+    // whether THIS role could have created it — and nothing needs to, since it
+    // will not be created again. Wording the two halves alike would report a
+    // verified privilege that was never verified, which is the same class of
+    // lie as `IF NOT EXISTS` returning success on a no-op.
+    const { Client } = require("pg");
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      // pg_trgm is installed on a migrated database; the made-up name is not
+      // available at all, so between them the detail must carry the
+      // "installed" half without carrying the "verified" half.
+      const [, permitted] = await doctor.checkExtensions(client, ["pg_trgm"]);
+      expect(permitted.detail).toMatch(
+        /already installed, so no permission was needed or tested/
+      );
+      expect(permitted.detail).not.toMatch(/permission verified/);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("says permission was verified only for what it actually probed", async () => {
+    const { Client } = require("pg");
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      // pg_trgm installed + a genuinely absent extension the server ships.
+      // If the server ships nothing else, this falls back to asserting the
+      // installed-only shape, which the previous test already pins.
+      const { rows } = await client.query(
+        "SELECT name FROM pg_available_extensions WHERE installed_version IS NULL ORDER BY name LIMIT 1"
+      );
+      if (!rows.length) return;
+      const [, permitted] = await doctor.checkExtensions(client, [
+        "pg_trgm",
+        rows[0].name,
+      ]);
+      expect(permitted.detail).toMatch(/already installed/);
+      expect(permitted.detail).toMatch(/permission verified/);
+      expect(permitted.detail).toMatch(/rolled back/);
+      // The two lists must not be merged: the installed one appears in the
+      // installed half, the probed one in the verified half.
+      const installedHalf = permitted.detail.split("permission verified")[0];
+      expect(installedHalf).toContain("pg_trgm");
+      expect(installedHalf).not.toContain(rows[0].name);
+    } finally {
+      await client.end();
+    }
+  });
+
   it("distinguishes 'already installed' from 'permitted to install' (ruling 6)", async () => {
     // CREATE EXTENSION IF NOT EXISTS on a database that already has the
     // extension is a no-op: it tests nothing and returns success, so a doctor
