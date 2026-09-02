@@ -110,3 +110,5 @@
 - **`chat.read` is now a dead API scope** (no route declares it after #64) but migration 045000 backfilled legacy wildcard keys with it; harmless, confusing in audit; minting a NEW key with `chat.read` now fails validateScopes (400) while existing keys still resolve. QA-1/Techlead-1 on #64. `[→ backlog]`
 - **pg_trgm produces zero trigrams for Thai under `lc_ctype=C`** (initdb default) — chat search full-scans silently for the product's primary language. #61 adds detection (migration warning + boot error); O2 installer must create the DB with a UTF-8 locale. QA-3 on #61. `[→ #61 detect / O2 enforce]`
 - **Embed principal never granted** — every embed widget retrieves nothing (matchNone); fail-closed availability bug, predates slice 2. QA-2 on #30 s2. `[→ new issue]`
+- **Scan test for response_text derivation uses a 600-char window from the prisma call** — upsert-shaped writes (payload built above the call) escape it; behaviour tests still cover today's 4 paths. Techlead-1 on #61. `[→ backlog]`
+- **`WorkspaceChats.upsert` returns `{chat: undefined}`** (destructures a bare row); sole caller ignores it. QA-3 on #61. `[→ backlog]`
