@@ -18,6 +18,10 @@ const {
   ACTION_SCOPES,
   ALL_ACTIONS,
 } = require("../../../prisma/seeds/permissions");
+const {
+  isWorkspaceResolver,
+  isOrgResolver,
+} = require("../../../utils/middleware/resourceResolvers");
 
 const REPO_DIR = path.join(__dirname, "../../../..");
 const MOCKUP_FILE = path.join(
@@ -37,21 +41,9 @@ const mountedGates = mountedRoutes.flatMap((layer) =>
     .filter((handler) => handler?.action && handler.resolveResource)
 );
 
-const WORKSPACE_RESOLVER_NAMES = new Set([
-  "workspaceBySlug",
-  "workspaceByBodySlug",
-  "workspaceByIdParam",
-  "chatByIdParam",
-  "documentInWorkspaceBySlug",
-  "promptHistoryByIdParam",
-  "memoryByIdParam",
-  "watchedDocumentInWorkspaceBySlug",
-]);
-
 function scopeOf(resolveResource) {
-  const resolverName = resolveResource.resolverName || resolveResource.name;
-  if (resolverName === "orgResource") return "org";
-  if (WORKSPACE_RESOLVER_NAMES.has(resolverName)) return "workspace";
+  if (isOrgResolver(resolveResource)) return "org";
+  if (isWorkspaceResolver(resolveResource)) return "workspace";
   return null;
 }
 
@@ -128,6 +120,10 @@ describe("capability vocabulary by resource scope", () => {
       },
       () => ({ workspaceId: 1 }),
       Object.assign(async () => null, { resolverName: "unknownResolver" }),
+      async function workspaceByIdParam() {
+        return null;
+      },
+      Object.assign(async () => null, { resolverName: "workspaceByIdParam" }),
     ];
 
     for (const resolveResource of unknownResolvers) {

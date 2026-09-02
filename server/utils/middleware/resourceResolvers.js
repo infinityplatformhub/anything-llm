@@ -9,6 +9,10 @@
 const prisma = require("../prisma");
 
 const ORG_ID = 1;
+const workspaceResolvers = new WeakSet();
+
+const isWorkspaceResolver = (resolver) => workspaceResolvers.has(resolver);
+const isOrgResolver = (resolver) => resolver === orgResource;
 
 /** The org itself — for actions with no narrower subject (user admin, settings). */
 const orgResource = async () => ({
@@ -70,6 +74,7 @@ const workspaceByIdParam = (param) => {
     };
   };
   resolve.resolverName = "workspaceByIdParam";
+  workspaceResolvers.add(resolve);
   return resolve;
 };
 
@@ -95,6 +100,7 @@ const chatByIdParam = (param = "id") => {
     };
   };
   resolve.resolverName = "chatByIdParam";
+  workspaceResolvers.add(resolve);
   return resolve;
 };
 
@@ -140,6 +146,7 @@ const promptHistoryByIdParam = (param = "id") => {
     };
   };
   resolve.resolverName = "promptHistoryByIdParam";
+  workspaceResolvers.add(resolve);
   return resolve;
 };
 
@@ -161,6 +168,7 @@ const memoryByIdParam = (param = "memoryId") => {
     };
   };
   resolve.resolverName = "memoryByIdParam";
+  workspaceResolvers.add(resolve);
   return resolve;
 };
 
@@ -212,6 +220,13 @@ const grantScopeFromBody = async (request) => {
   };
 };
 
+[
+  workspaceBySlug,
+  workspaceByBodySlug,
+  documentInWorkspaceBySlug,
+  watchedDocumentInWorkspaceBySlug,
+].forEach((resolver) => workspaceResolvers.add(resolver));
+
 module.exports = {
   orgResource,
   workspaceBySlug,
@@ -223,4 +238,6 @@ module.exports = {
   memoryByIdParam,
   watchedDocumentInWorkspaceBySlug,
   grantScopeFromBody,
+  isWorkspaceResolver,
+  isOrgResolver,
 };
