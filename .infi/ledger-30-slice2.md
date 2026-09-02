@@ -102,3 +102,63 @@ Ruling (Techlead-2 NIT): `UNVERIFIED_PROVIDERS` is asserted non-empty, so emptyi
 cannot silently promote pinecone and astra to "supported".
 
 SHA: 58eafae7 (branch approof/t5-slice-2, base f738590e; code at dfde3672)
+
+## Slice 2 — round 3 (Techlead-2 BLOCKER: pinned scope; QA-1 M7; embed prefetch)
+
+Ruling (Techlead-2 BLOCKER, my bug): `pinnedDocs` takes its workspace from
+`this.workspace` — the workspace the REQUEST addressed — and read only the filter's deny
+and allow lists. So scope came from the URL rather than from the authorization decision. A
+viewer of workspace A posting to workspace B's stream-chat received every pinned document
+in B, whole, in both the prompt and the citations, while the vector path beside it filtered
+correctly. `chat.send` is org-wide and validWorkspaceSlug is a LOADER, not a gate (T-4a made
+that deliberate), so the request reaches the handler by design.
+
+Ruling: a deny list cannot close this. There is no deny row for a document in a workspace
+the actor was never meant to reach, and absence of a deny is not evidence of a grant. The
+filter's POSITIVE scope is what says which workspaces may be read, so `pinnedDocs` consults
+`workspaceIds`/`orgWide`, not only the exclusions. Same rule `isRowAllowed` applies to a
+vector row, applied to the row this path actually has.
+
+Ruling: tenancy comes from a joined `document.orgId`, not from the request, and applies in
+both branches — orgWide means "every workspace in YOUR org", never every org. A pinned row
+whose org cannot be read is UNPROVABLE and follows the existing rule (excluded by default,
+admitted only under RETRIEVAL_FILTER_ALLOW_UNPROVABLE), rather than being admitted because
+no check could be made.
+
+Ruling: the RED is driven over real HTTP through the real app, not only as a unit test. The
+unit test proves `pinnedDocs` refuses a filter whose scope excludes the workspace; it cannot
+prove that the filter arriving on a genuine cross-workspace request HAS that scope. The leak
+needed both halves and only the route shows them composed (§7.9). Citations are asserted
+separately from prompt text: `sources` is a different array and is what the UI renders, so a
+fix covering one would still show the document title and its first 1,000 characters.
+
+Ruling: the HTTP suite carries a positive control, and it earned its place twice — a missing
+`streamingEnabled` aborted the handler before retrieval, and a `handleStream` stub that
+returned text without writing it left nothing on the wire. Both would have made every
+"must not contain" assertion pass on an empty response. A suite of absence-assertions alone
+cannot distinguish a fix from a crash.
+
+Ruling (Techlead-2 item 4): the embed's principal reference is threaded through
+`resolveProviderConnector` -> `gatherRoutingContext` -> `authorizedPinnedDocs`. The router
+PREFETCHES pinned documents; the embed path passed no principal, so the prefetch resolved to
+nobody, returned [], and `??` accepted the empty array as an answer rather than an absence —
+the fallback that does carry the actorRef never ran. Fail-closed, so not a leak, but a
+router-backed embed silently lost every pinned document it was entitled to serve and it
+looked exactly like a workspace with nothing pinned.
+
+Ruling (QA-1 M7, and the cause was worse than the symptom): the systemActor assertion was
+VACUOUS — W1 held no parsed files, so [] came back whether the branch existed or not.
+Seeding one made the positive control fail, which exposed the real reason: the model reaches
+for the `utils/prisma` singleton, which reads DATABASE_URL once at import, so a row seeded
+through the suite's own client was invisible to the code under test. `db:` injection covers
+the code that accepts a client; `getContextFiles` does not. The process now points at the
+test database before the first require. An assertion about a filter has to be made against
+data the filter must exclude, or it is only asserting that the fixture is empty.
+
+Ruling (PMO correction, accepted): `getContextFiles` is NOT a hole — it filters by userId,
+which is narrower than workspace. Left unchanged rather than adding a redundant check.
+
+Mutation-verified: scope check disabled (1 unit + 2 HTTP red), org check removed (1 red),
+router actorRef dropped (1 red), systemActor branch removed (1 red).
+
+SHA: b4c6c8b (branch approof/t5-slice-2, base f738590e)
