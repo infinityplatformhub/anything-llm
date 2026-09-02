@@ -282,6 +282,128 @@ class RetrievalConstraint {
         : [];
     return { must, mustNot };
   }
+
+  // ---------------------------------------------------------------------------
+  // Slice 1b: the five object-DSL dialects.
+  //
+  // Each renders the same neutral constraint into one driver's syntax. They are separate
+  // methods rather than a generic mapper because the dialects disagree about more than
+  // spelling — Qdrant nests must/must_not, Pinecone uses Mongo-ish operators, Chroma
+  // requires an explicit $and above one clause, Weaviate wants a GraphQL operator tree,
+  // Astra is Mongo-like but flat. A "generic" mapper would either be a lowest common
+  // denominator (weaker than every dialect can express) or a pile of conditionals.
+  //
+  // All five share one rule the tests assert as a table: null means SKIP THE QUERY. A
+  // dialect returning an empty filter object instead would issue an unrestricted search,
+  // which is the single most dangerous mistake available in this file.
+  // ---------------------------------------------------------------------------
+
+  /** Qdrant: `{must: [...], must_not: [...]}` with `match: {value}` / `match: {any}`. */
+  toQdrantFilter() {
+    if (this.matchNone) return null;
+    const must = [{ key: "orgId", match: { value: String(this.orgId) } }];
+    if (this.workspaceIds.length > 0) {
+      must.push({ key: "workspaceId", match: { any: this.workspaceIds } });
+    }
+    if (this.allowedDocIds !== null) {
+      must.push({ key: "docId", match: { any: this.allowedDocIds } });
+    }
+    const filter = { must };
+    if (this.deniedDocIds.length > 0) {
+      filter.must_not = [{ key: "docId", match: { any: this.deniedDocIds } }];
+    }
+    return filter;
+  }
+
+  /** Pinecone: a Mongo-ish metadata filter — `$eq`, `$in`, `$nin`. */
+  toPineconeFilter() {
+    if (this.matchNone) return null;
+    const filter = { orgId: { $eq: String(this.orgId) } };
+    if (this.workspaceIds.length > 0) {
+      filter.workspaceId = { $in: this.workspaceIds };
+    }
+    // Both docId clauses can apply at once, so they merge into one object rather than the
+    // second overwriting the first — an allow-list that silently dropped the deny-list
+    // would re-admit a revoked document.
+    const docId = {};
+    if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
+    if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
+    if (Object.keys(docId).length > 0) filter.docId = docId;
+    return filter;
+  }
+
+  /** Chroma: `where` clauses, with `$and` required as soon as there is more than one. */
+  toChromaWhere() {
+    if (this.matchNone) return null;
+    const clauses = [{ orgId: { $eq: String(this.orgId) } }];
+    if (this.workspaceIds.length > 0) {
+      clauses.push({ workspaceId: { $in: this.workspaceIds } });
+    }
+    if (this.allowedDocIds !== null) {
+      clauses.push({ docId: { $in: this.allowedDocIds } });
+    }
+    if (this.deniedDocIds.length > 0) {
+      clauses.push({ docId: { $nin: this.deniedDocIds } });
+    }
+    return clauses.length === 1 ? clauses[0] : { $and: clauses };
+  }
+
+  /** Weaviate: a GraphQL `where` operator tree; `And` of `Equal` / `ContainsAny` paths. */
+  toWeaviateWhere() {
+    if (this.matchNone) return null;
+    const operands = [
+      {
+        path: ["orgId"],
+        operator: "Equal",
+        valueText: String(this.orgId),
+      },
+    ];
+    if (this.workspaceIds.length > 0) {
+      operands.push({
+        path: ["workspaceId"],
+        operator: "ContainsAny",
+        valueTextArray: this.workspaceIds,
+      });
+    }
+    if (this.allowedDocIds !== null) {
+      operands.push({
+        path: ["docId"],
+        operator: "ContainsAny",
+        valueTextArray: this.allowedDocIds,
+      });
+    }
+    if (this.deniedDocIds.length > 0) {
+      // Weaviate has no NOT-IN, so a denied set is a Not() around ContainsAny.
+      operands.push({
+        operator: "Not",
+        operands: [
+          {
+            path: ["docId"],
+            operator: "ContainsAny",
+            valueTextArray: this.deniedDocIds,
+          },
+        ],
+      });
+    }
+    return operands.length === 1
+      ? operands[0]
+      : { operator: "And", operands };
+  }
+
+  /** Astra: Mongo-like, addressing the stored metadata sub-document. */
+  toAstraFilter() {
+    if (this.matchNone) return null;
+    const filter = { "metadata.orgId": String(this.orgId) };
+    if (this.workspaceIds.length > 0) {
+      filter["metadata.workspaceId"] = { $in: this.workspaceIds };
+    }
+    // Merged for the same reason as Pinecone: both docId constraints can apply.
+    const docId = {};
+    if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
+    if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
+    if (Object.keys(docId).length > 0) filter["metadata.docId"] = docId;
+    return filter;
+  }
 }
 
 /**
