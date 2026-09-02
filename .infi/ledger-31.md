@@ -103,3 +103,17 @@ Note: the first run of this suite was 3/3 red and meant nothing — `/system/wor
 ## Evidence
 
 `Tests: 972 passed, 972 total`, `Test Suites: 91 passed, 91 total` (`yarn test`, Node 22, PostgreSQL).
+
+## Rebase onto main (final)
+
+Ruling: `policyRepository.js` resolved by the recipe — `inTransaction(db, async (tx) => {` from HEAD, t7's `role.revoke` guard body kept whole. All 5 transaction sites verified to use `inTransaction`, and the guard verified present, because either half alone compiles and passes.
+
+Ruling: S-20's `/v1` leg is now IN, since T-4b's W-8 arrived with the rebase. Two API keys with IDENTICAL scopes differing only in whose grants stand behind them — effective permission is grants(creator) ∩ scopes(key), so a test where the scopes also differ proves only the scope half, which PR-4a already had. RED proof disables `grantAllows` alone: the `/v1` refusal fails, its positive control and all three session tests stay green.
+
+Note: `__tests__/utils/helpers/modelPricing/cacheIsolation.test.js` — "two instances with different directories do not overwrite each other" — fails on **pristine `origin/approof/main` (40ded26b)**, verified in a clean worktree. Not T-7's: no file in this branch's diff touches modelPricing. Reported to PMO rather than fixed here.
+
+## Evidence (rebased)
+
+Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
+`Test Suites: 1 failed, 112 passed, 113 total` · `Tests: 1 failed, 1167 passed, 1168 total`
+The single failure is the pre-existing main flake above. Every T-7 suite passes.
