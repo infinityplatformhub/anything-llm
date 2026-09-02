@@ -63,7 +63,7 @@ td.mono{white-space:nowrap}
 </header>
 
 <section class="overall">
-  <div class="big">47<small>/ 59 issues ปิด</small></div>
+  <div class="big">49<small>/ 61 issues ปิด</small></div>
   <div>
     <div class="bar" aria-label="47 closed, 3 in review, 3 in dev, 6 queued of 59">
       <span style="width:79.7%;background:var(--done)"></span>
@@ -88,8 +88,8 @@ td.mono{white-space:nowrap}
     <thead><tr><th>#</th><th>รายการ</th><th>เดือน</th><th>สถานะ 2 ก.ย.</th></tr></thead>
     <tbody>
 <tr><td class="mono">S1</td><td>OIDC generic (Google/Entra)</td><td class="mono">2</td><td><span class="chip ok">ปิด</span> ปิด #36</td></tr>
-<tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> กำลังทำ #43 (dab75e1a รอ Techlead)</td></tr>
-<tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip ok">ปิด</span> #43 merged</td></tr>
+<tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> Dev3 #60 (ruling ออกแล้ว)</td></tr>
 <tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
 <tr><td class="mono">S5</td><td>Audit ครบ + export + retention</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> บางส่วน: audit export + retention ผ่าน T-6 #28</td></tr>
 <tr><td class="mono">S6</td><td>Data governance PDPA redaction</td><td class="mono">3–4</td><td><span class="chip wait">บางส่วน</span> บางส่วน: redaction hook ผ่าน T-6 #28</td></tr>
@@ -138,12 +138,12 @@ td.mono{white-space:nowrap}
     <div class="card">
       <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 66cb5e7d</span></div>
       <p>DELETE /system/credential/:envKey. รอบ 4: denylist AUTH_TOKEN/JWT_SECRET/SIG_KEY/SIG_SALT/API_KEY_PEPPER + เทสมีแถวก่อนแล้วปฏิเสธ + sweep เทียบ passthrough condition gate กำลังรัน</p>
-      <div class="chips"><span class="chip wait">gate รอบ 4</span><span class="chip wait">QA-1 E/J rerun</span><span class="chip wait">Techlead-1</span></div>
+      <div class="chips"><span class="chip ok">gate 1391</span><span class="chip ok">Techlead-1 PASS</span><span class="chip wait">QA-1 E/J rerun</span></div>
     </div>
     <div class="card">
       <div class="top"><span class="id">#43 S2 Entra SAML</span><span class="who">Dev3 · 79448c01</span></div>
-      <p>XSW fixtures + xml-crypto + deriveUsername. FINDING-1 (NameID อ่านจาก doc root) แก้ใน dab75e1a พร้อม slot 082000 (assertion replay + identity_providers) 128/128 รอ Techlead ยืนยัน แล้วต่อ SamlIdentityProvider</p>
-      <div class="chips"><span class="chip ok">FINDING-1 fixed</span><span class="chip wait">Techlead confirm</span><span class="chip dim">driver ต่อ</span></div>
+      <p>S2 SAML ครบ: verifier ผูก assertion ที่ verify, key จาก config, replay table, Recipient/Issuer, cross-provider state merged 69a64bf7 → Dev3 ต่อ S3 LDAP (#60)</p>
+      <div class="chips"><span class="chip ok">merged</span><span class="chip ok">QA-2 40/40</span><span class="chip ok">Techlead PASS</span></div>
     </div>
   </div>
 
