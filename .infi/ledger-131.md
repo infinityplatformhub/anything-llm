@@ -60,6 +60,32 @@ Default_Ignorable is precisely the property meaning "not intended to be seen", w
 actually at issue. Verified that Thai and NFD Vietnamese pass the union untouched. — ถ้าผิด: ทำลาย
 ข้อความไทยและเวียดนามทุกแถวเพื่อปิดรูที่ปิดได้อยู่แล้ว
 
+Ruling REVISED after QA-2 F1 — the strip is PER MATCH, not whole-string. The earlier rule rewrote
+the entire value on any hit; QA-2 measured a field holding Thai text plus a national id losing all
+four of its ICU word-boundary marks. TL-2 then named the case that actually forces it, and it is
+not Thai: **U+FE0F VARIATION SELECTOR-16 is Default_Ignorable**, so a whole-string strip turns `❤️`
+into `❤` and `1️⃣` into `1` — a field is silently RE-RENDERED because something else in it was PII.
+Now only the spans the patterns claimed are rewritten; an invisible character inside a match still
+goes with the value it was disguising. — ถ้าผิด: ฟิลด์ถูกเขียนใหม่ทั้งก้อนเพราะมีอย่างอื่นในนั้นเป็น PII
+
+Ruling: the offset map is an ARRAY, never arithmetic, and it is indexed in CODE UNITS. `origin[i]`
+records which index of the original produced `stripped[i]`. Sliding by a running count is wrong by
+one per codepoint removed before that point (TL-2 measured it cutting a character short), and a map
+built by counting CODEPOINTS while `exec`/`slice` count UNITS slides by one per astral character and
+cuts into a surrogate pair — which yields a lone surrogate rather than an error, so it corrupts
+silently. — ถ้าผิด: ตัดกลาง surrogate pair แบบไม่มี error ให้เห็น
+
+Ruling: an overlap goes to whichever pattern comes first in `PATTERNS`, preserving the precedence
+the sequential replace already had — `1234567890123` stays a `thai_national_id` rather than becoming
+a `credit_card` (which reads 13 digits as 4+4+4+1). Asserted on the LABEL, not on the fact that
+something was redacted.
+
+Ruling: **U+2800 BRAILLE PATTERN BLANK is OUT**, and it does defeat the patterns. It is `So` —
+printing, with advance width, blank only in a braille font — so it is not "not intended to be seen",
+which is what the class means. Admitting it would make the rule "anything hard to see", which has no
+property behind it and returns to the hand-list this issue just removed. Recorded as a residual, not
+an oversight. — ถ้าผิด: class ไม่มีนิยาม กลายเป็น list ที่พลาดสมาชิกตัวถัดไปเสมอ
+
 Ruling: keep the STRIPPED value when a pattern hits; return the ORIGINAL byte-identical when
 nothing hits. A hit means the value was PII wearing a disguise, and keeping the disguise beside
 `[redacted:…]` preserves the evasion attempt for no benefit. No hit means ordinary text —
@@ -94,8 +120,8 @@ the real `scrubText`, and the RF-5 mutation is checked against BOTH suites.
 ## Evidence
 
 `npx jest __tests__/utils/events/auditRedaction.test.js __tests__/utils/diagnostics/bundle.test.js`
-→ **347 passed** (audit 293, bundle 54). With the whole events and diagnostics trees plus
-`routeGateSweep`: **380 passed**.
+→ **354 passed** (audit 300, bundle 54). With the whole events and diagnostics trees plus
+`routeGateSweep`: **387 passed**.
 
 RED against the seal as main ships it: **96 failed** — 16 codepoints × 4 secret shapes, both email
 halves per codepoint, the nested `changes: {code}` path #71 exists to close, and the bundle suite.
@@ -116,6 +142,16 @@ behaviour rather than the fix.
 | keep the stripped value even when nothing matched | 3 red: `Thai text carrying U+200B from TextSplitter is byte-identical`, `a value with an invisible character but no PII is untouched`, and the bundle's `legitimate text carrying U+200B still reaches the bundle intact` |
 | `\p{Default_Ignorable_Code_Point}` only, dropping `\p{Cf}` | 15 red — the U+0600 and U+13430 blocks |
 | add `\p{Mn}` at large to the class (over-strip) | `Thai and Vietnamese DIACRITICS are not stripped, even beside PII` |
+| whole-string strip on a hit (the rule QA-2 rejected) | 5 red: `invisible characters OUTSIDE the match survive a redaction`, `a variation selector next to PII keeps its emoji intact`, `an invisible character immediately BEFORE and AFTER a match survives`, `a RUN of invisible characters on both sides survives`, `NON-BMP: a separator outside the BMP does not corrupt the span` |
+| use the stripped offsets directly instead of the `origin` map | 5 red, incl. `TL-2 (4): several classes in ONE string are each cut in the right place` |
+| build `origin` by counting CODEPOINTS instead of code units | `NON-BMP: a separator outside the BMP does not corrupt the span` |
+| drop the overlap guard | 3 red, incl. `OVERLAP: the first pattern in the list claims the span, and the label says so` |
+
+**The codepoint-counted map survived its first run**, and the fixture had to be strengthened rather
+than the result accepted. An astral SEPARATOR does not distinguish the two maps — the only astral
+characters present are the ones being deleted, so both answer alike. What separates them is astral
+CONTENT that SURVIVES before the match: each one costs the map a unit and slides the cut left.
+Measured on that mutant: `😀😀 id 12[redacted:…]ail`.
 
 **The over-strip mutation SURVIVED the first time it was run**, and that is the finding worth
 keeping: nothing in the suite objected to stripping every Thai and Vietnamese diacritic, because
@@ -123,6 +159,15 @@ every over-strip control used a value that did not match a pattern — and a val
 returned untouched whatever the class does, so those controls could not see it. The test that
 catches it puts the diacritics BESIDE a real redaction, which is the only arrangement where the
 class's width is observable.
+
+**One NIT is deliberately NOT claimed as covered.** `INVISIBLE` is non-global because `.test` on a
+`/g` regex advances `lastIndex` between calls. Flipping it to `/g` leaves all 354 green — measured,
+not assumed: every string reaching the loop is tested against single characters, where `lastIndex`
+resets on each failure and the alternating answers land the same way. It is a latent trap for the
+next caller rather than a live defect, so the code is written correctly and the comment says no test
+pins it. The `/g` twin the whole-string version needed was deleted rather than left unused. A test
+was written for it and then REMOVED, because it passed on the mutant and would have been a false
+claim of coverage.
 
 Two of these first reported "DID NOT APPLY" and were re-run rather than counted — the source stores
 `͏` as escape TEXT, so a replacement written with the literal character matches nothing. Per

@@ -300,24 +300,49 @@ const MAX_DEPTH = 8;
  * codepoint in this union is length-reducing by exactly one and nothing is
  * substituted.
  */
-const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+// NOT `/g`. Every use here is `.test`, and `.test` on a global regex advances
+// `lastIndex` between calls — the loop below tests one codepoint at a time, so
+// a global flag would make it walk the string instead of examining the
+// character it was handed.
+//
+// NO TEST PINS THIS, and that is measured rather than assumed: flipping the
+// flag to `/g` leaves all 355 green. Every string that reaches the loop is
+// tested against single characters, where `lastIndex` resets to 0 on each
+// failure and the alternating answers happen to land the same way. It is a
+// latent trap for the next caller, not a live defect — so it is written
+// correctly and labelled, instead of being claimed as covered.
+const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 
 /**
  * Replace every pattern hit in a string with its class marker.
  *
- * The scan runs TWICE when the value carries invisible characters: once on the
- * value as stored, and once on a stripped copy. The stripped copy is what the
- * patterns get to see, and if it hits, the stripped text is what is kept.
+ * When the value carries invisible characters the scan runs on a STRIPPED copy,
+ * so a disguised value is still found — but only the spans the patterns actually
+ * claimed are rewritten. Every invisible character outside a match stays exactly
+ * where it was.
  *
- * Keeping the stripped text on a hit is deliberate. A hit means the value was
- * PII wearing a disguise, and preserving the disguise next to `[redacted:…]`
- * keeps the evasion attempt in the log for no benefit. When nothing hits, the
- * ORIGINAL is returned byte-identical: `utils/TextSplitter/index.js:176` inserts
- * U+200B at ICU word boundaries because Thai has no spaces between words, so a
- * strip that rewrote every value would corrupt our own output.
+ * That per-match rule is the whole design, and the case that forces it is not
+ * Thai. U+FE0F VARIATION SELECTOR-16 is Default_Ignorable, so a whole-string
+ * strip turns `❤️` into `❤` and `1️⃣` into `1` — a field is silently re-rendered
+ * because something ELSE in it was PII. `TextSplitter` word marks (U+200B at ICU
+ * boundaries) are the same failure with a less visible symptom.
  *
- * The two steps are one function on purpose. Stripping without re-running the
- * patterns removes the disguise and leaves the value — the worst of both.
+ * Keeping the stripped text INSIDE a match is deliberate: there, the invisible
+ * character was the disguise, and preserving it next to `[redacted:…]` keeps the
+ * evasion attempt in the log for no benefit.
+ *
+ * The offset map is an ARRAY, never arithmetic. `origin[i]` records which index
+ * of the original produced `stripped[i]`; strip is deletion only, so each
+ * surviving unit knows its own source. Sliding by a running count instead is
+ * wrong by one per codepoint removed before that point — TL-2 measured it
+ * cutting a character short.
+ *
+ * Everything here is indexed in CODE UNITS, because that is what `RegExp.exec`
+ * and `String.slice` use. `U+13430` is a `Cf` codepoint above U+FFFF and
+ * therefore two units: a map built by iterating codepoints while slicing by
+ * units slides by one per astral character and cuts into the middle of a
+ * surrogate pair, which yields a lone surrogate rather than an error and so
+ * corrupts silently.
  */
 function scrubString(value, hits) {
   const scan = (text) => {
@@ -333,15 +358,65 @@ function scrubString(value, hits) {
     return { out, matched };
   };
 
-  const direct = scan(value);
-  INVISIBLE.lastIndex = 0;
-  if (!INVISIBLE.test(value)) return direct.out;
+  if (!INVISIBLE.test(value)) return scan(value).out;
 
-  // Strip from the ORIGINAL, not from `direct.out`: a marker already
-  // substituted in would hide the rest of the value from this second pass.
-  const stripped = scan(value.replace(INVISIBLE, ""));
-  if (stripped.matched) return stripped.out;
-  return direct.out;
+  // Strip to FIND, keeping a map back to the original. Iterating by code POINT
+  // is what makes an astral character a single decision; pushing one entry per
+  // code UNIT is what keeps the map usable with `exec` and `slice`.
+  let stripped = "";
+  const origin = [];
+  for (let index = 0; index < value.length; ) {
+    const point = String.fromCodePoint(value.codePointAt(index));
+    if (!INVISIBLE.test(point)) {
+      stripped += point;
+      for (let unit = 0; unit < point.length; unit += 1) origin.push(index + unit);
+    }
+    index += point.length;
+  }
+
+  // Collect the spans each pattern claims, on the stripped text.
+  const spans = [];
+  for (const { name, re } of PATTERNS) {
+    const pattern = re();
+    let match;
+    while ((match = pattern.exec(stripped)) !== null) {
+      if (match[0].length === 0) {
+        pattern.lastIndex += 1;
+        continue;
+      }
+      spans.push({ start: match.index, end: match.index + match[0].length, name });
+    }
+  }
+  if (spans.length === 0) {
+    // Nothing matched even undisguised: the value is ordinary text and is
+    // returned byte-identical, invisible characters and all.
+    return value;
+  }
+
+  // Earliest first; on a tie the longer span wins, and an overlap is resolved in
+  // favour of whichever pattern comes first in PATTERNS — the same precedence
+  // the sequential replace already had, which is why `1234567890123` stays a
+  // `thai_national_id` rather than becoming a `credit_card`.
+  spans.sort((left, right) =>
+    left.start - right.start ||
+    right.end - left.end ||
+    PATTERNS.findIndex((p) => p.name === left.name) -
+      PATTERNS.findIndex((p) => p.name === right.name)
+  );
+
+  let out = "";
+  let cursor = 0;
+  let consumed = -1;
+  for (const span of spans) {
+    if (span.start < consumed) continue;
+    const from = origin[span.start];
+    const to = origin[span.end - 1] + 1;
+    out += value.slice(cursor, from) + `[redacted:${span.name}]`;
+    hits.add(span.name);
+    cursor = to;
+    consumed = span.end;
+  }
+  return out + value.slice(cursor);
 }
 
 function scrubValue(value, hits, depth) {

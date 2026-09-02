@@ -601,6 +601,93 @@ describe("issue 71: invite codes never reach the audit log", () => {
         expect(redactions).toContain("credential");
       });
 
+      describe("per-match: only the matched span is rewritten (QA-2 F1)", () => {
+        const { scrubValue } = require("../../../utils/events/redaction");
+        const scrub = (value) => scrubValue(value, new Set(), 0);
+
+        test("invisible characters OUTSIDE the match survive a redaction", async () => {
+          // A whole-string strip loses them all: one hit anywhere rewrote the
+          // entire value. Measured — a field holding Thai text plus a national
+          // id came back with all four ICU word-boundary marks gone.
+          const value =
+            "สวัสดี\u200Bครับ\u200Bยินดี\u200Bต้อนรับ id 1234567\u200B890123";
+          const out = scrub(value);
+          // THREE, not four. The fourth is INSIDE the national id, where the
+          // character was the disguise rather than content — it goes with the
+          // value it was hiding. The three word marks outside the match are the
+          // ones that must survive.
+          expect(out.match(/\u200B/g) ?? []).toHaveLength(3);
+          expect(out).toContain("สวัสดี\u200Bครับ\u200Bยินดี\u200Bต้อนรับ");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("890123");
+        });
+
+        test("a variation selector next to PII keeps its emoji intact", async () => {
+          // The reason this ruling is not about Thai. U+FE0F is
+          // Default_Ignorable, so a whole-string strip turns ❤️ into ❤ and 1️⃣
+          // into 1 — a field is silently re-rendered because something else in
+          // it was PII.
+          const out = scrub("❤️ 1️⃣ ok id 1234567\u200B890123");
+          expect(out).toContain("❤️");
+          expect(out).toContain("1️⃣");
+          expect(out).toContain("[redacted:thai_national_id]");
+        });
+
+        test("an invisible character immediately BEFORE and AFTER a match survives", async () => {
+          const out = scrub("a\u200B0812345678\u200Bb");
+          expect(out).toBe("a\u200B[redacted:phone_th]\u200Bb");
+        });
+
+        test("a RUN of invisible characters on both sides survives", async () => {
+          const out = scrub("\u200B\u200C0812345678\u200D\uFEFF");
+          expect(out).toBe("\u200B\u200C[redacted:phone_th]\u200D\uFEFF");
+        });
+
+        test("three classes in one string are each cut in the right place", async () => {
+          const out = scrub(
+            "id 1234567\u200B890123 | phone 08123\u200B45678 | code apw-inv-ABCDEFGH\u200BIJKLMNOP"
+          );
+          expect(out).toBe(
+            "id [redacted:thai_national_id] | phone [redacted:phone_th] | code [redacted:credential]"
+          );
+        });
+
+        test("NON-BMP: a separator outside the BMP does not corrupt the span", async () => {
+          // TL-2 condition 4. U+13430 is a Cf codepoint above U+FFFF, so it is
+          // TWO code units. An origin map that counts codepoints while the
+          // string is indexed in code units slides by one per astral character
+          // and slices into the middle of a surrogate pair — which produces a
+          // lone surrogate rather than an error, so it corrupts silently.
+          const out = scrub("x\u{13430}1234567\u{13430}890123x");
+          expect(out).toBe("x\u{13430}[redacted:thai_national_id]x");
+
+          // An astral separator alone does NOT distinguish the two maps —
+          // measured, a codepoint-counted map produces the same answer here,
+          // because the only astral characters are the ones being removed.
+          // What separates them is astral CONTENT that SURVIVES before the
+          // match: each one costs the map a unit, so the cut slides left.
+          // Measured on that mutant: "😀😀 id 12[redacted:…]ail".
+          const withContent = scrub(
+            "\u{1F600}\u{1F600} id 1234567\u200B890123 tail"
+          );
+          expect(withContent).toBe(
+            "\u{1F600}\u{1F600} id [redacted:thai_national_id] tail"
+          );
+          // no lone surrogate anywhere in the output
+          expect(out).toBe(out.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "!"));
+        });
+
+        test("OVERLAP: the first pattern in the list claims the span, and the label says so", async () => {
+          // `thai_national_id` precedes `credit_card`, and 13 digits satisfy
+          // both (`credit_card` reads them as 4+4+4+1). The order is what
+          // decides, so the label is asserted rather than merely the fact that
+          // something was redacted.
+          const out = scrub("1234567\u200B890123");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("[redacted:credit_card]");
+        });
+      });
+
       describe("what must NOT change", () => {
         test("Thai text carrying U+200B from TextSplitter is byte-identical", async () => {
           // `utils/TextSplitter/index.js:176` inserts U+200B at ICU word
