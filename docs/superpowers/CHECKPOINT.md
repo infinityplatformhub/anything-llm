@@ -466,3 +466,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #114 fdb32d825 merged 701b22ce0, closed (infi-run:gate-114-fdb32d825); TL-2 PASS M1–M5; recon-114.md conflict resolved (theirs). 89/123. wt-114/g114 reaped.
 - #123 (Dev1): default legacy role = manager set via ORG_ROLE_FOR_LEGACY; PMO leans option 1 (compute only when user.manage held) → TL-1 confirm pending.
 - #114 merge verified by content on main: publicSettings.js present, system.js references ×4, setupCompleteExposureHttp 14/14 on main (earlier grep used the wrong symbol — lives in helper). Post-merge suite launched (/tmp/postmerge-114.log).
+- #123 rulings: option 1 (compute only when user.manage held), api-key [] via type guard (F2), impersonated [] (F3, TL-1 rec), manager/default inseparable documented (F1), RF-1..5 + mutation B. Dev1 → contract + RED; TL-1 + QA-1.
