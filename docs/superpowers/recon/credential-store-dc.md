@@ -1,0 +1,6 @@
+# Recon P0-4D(c): CredentialStore — provider secrets out of .env dump path + response masking done right
+- Follow-ups folded here: (1) 30 URL-valued env keys (CHROMA/WEAVIATE/QDRANT/ZILLIZ/ASTRA/AZURE endpoints, *_BASE_PATH, AGENT_*_URL) echo user:pass@ verbatim in update-env response (QA-2 #7, positive-control test DSN-4 locks current behavior); (2) maskSecretValues is a name heuristic — add guard test: every KEY_MAPPING entry declares secret:true|false; (3) keys outside protectedKeys dropped on dumpENV (ruling #7 item 7).
+- Work: parse-URL mask (strip credentials, keep host) for URL-shaped values; `secret` flag on KEY_MAPPING with a test that fails on undeclared entries; CredentialStore table (encrypted at rest with SIG_KEY-derived key, slot 060000) for provider secrets, .env keeps non-secret config only; dumpENV writes secrets nowhere.
+- Owner files: server/utils/helpers/updateENV.js, server/models/credentialStore.js (new), prisma migration 20260902060000, server/endpoints/system.js update-env handler (after T-4a merge).
+- Deps: #7 merged, T-4a (#25) for system.js ownership.
+- RED DoD: DSN-4 style test flips to expect masked; guard test enumerates KEY_MAPPING; HTTP sentinel through update-env for a URL credential → 0 hits in response/log/audit; migration moves existing provider keys and .env no longer contains them.
