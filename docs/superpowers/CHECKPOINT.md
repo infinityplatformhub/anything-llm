@@ -375,3 +375,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge job after #96 never started (its wait loop matched stale finished shells). Killed stale runners; one fresh post-merge suite on main (covers #96 + #111) → /tmp/postmerge-111.log.
 - #108 S11b (Dev4, branch approof/108-mailer-ui from 5041a0a55): rulings — test route field is `body.to`; second consent checkbox `smtp_allow_untrusted_cert` in scope (mockup showed one; omitting kills a shipped field); test that the two consents are independent in payload. SHA within the hour.
 - #115: TL-2 pre-read + Dev2 recon (no code) requested; Dev2 takes it after #40 t3 merge.
+- Post-merge after #96 + #111: server 2892/2892 green (frontend line pending in log).
+- #40 task 3 bbac19502: TL-1 PASS (plain) with F1 (cached rejected promise never cleared; hook .then has no catch → loading stuck) + F2 (resetCapabilities never called on sign-out/refreshUser). Both one-liners → Dev2 amends same SHA, regate contract, merge without further verdict.
