@@ -1031,3 +1031,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Model Router 0e9722774 = own issue (not in contract-137.md); Dev1 writing .infi/recon/issue-model-router-gate.md. Stack unchanged. #143 gate FULL PASS (result 91fb3549d, 7/7) → close+merge on TL-2 pre-read via `sh /tmp/merge-plain.sh 143 91fb3549d /tmp/wt-143 /tmp/ledger-143.norm.md "..." "..."`. #146 gate PASS (task check 47/47) → close on TL-1 yes. Dev5 #149 first commit c8dcab465 (prettier 43 files).
 - gate-138c 27e60402e FULL PASS: task check 0, result 45/45, both shapes 63 identical, MR+seed mutants red. #138 fully cleared (TL-1 a131712e5/127a36782, TL-2 ab19044c9, QA-1/2/3). Merge path: user #121 → merge-121 → merge-137 a89c38ebf → quick regate of 138-stacked c81ae7d73 (contract 5 suites + task check on the rebased SHA) → merge-138 c81ae7d73.
 - gate-stack spawned: pre-gates 137-stacked a89c38ebf + 138-stacked c81ae7d73 with --base mainplus121 (/tmp/gate-137s.report, /tmp/gate-138s.report). Outstanding asks: TL-2 #143 pre-read; TL-1 #146 close + MR scope; Dev5 #149 SHA; QA-3 138-stacked; Dev1 MR recon; user #121.
+
+- #146 MERGED e66ccbebd (plain).
