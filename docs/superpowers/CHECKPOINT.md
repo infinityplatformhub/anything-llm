@@ -239,3 +239,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 e1bf4adb8: 4/5 verdicts; waiting QA-1. #40 a2bbb0de8: gate bootstrapping; 3 reviewers on it.
 - #40 a2bbb0de8: TL-1 PASS (3 directions; X1–X7 red incl. X7 "correct import, ungated route"; push throws — frozen at language level; 2 NIT → task 2). Waiting QA-2 + TL-2 + gate-40c (yarn install slow). Task-1 contract 46 exact.
 - Post-merge #88 suite running.
+- #78 follow-up 034243d1 merged 96ea07382 (TL-1 PASS). #84 ruling: whole route → system.write (option ข).
+- #40 a2bbb0de8: QA-3 FAIL — singleUserRouteShapeB mounts via app.use → URLs without /api hit SPA catch-all 200 html; ruling add /api + content-type assert. TL-1 PASS. NIT-2 (re-run gate-check after setImmediate) = immediate follow-up. §7.9k added.

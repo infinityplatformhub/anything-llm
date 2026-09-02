@@ -974,3 +974,6 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 #### 7.9f evidence — #78 follow-up 034243d1: drift test ที่เทียบตัวเอง
 `forbidden = recognized − allowed; expect(allowed ∪ forbidden).toEqual(recognized)` จริงโดยนิยาม ไม่เคยถาม runtime — ลบ `multi_user_mode` จาก protectedFields ยังเขียว · แก้เป็นเรียก `narrowManagerSystemPreferences` จริงด้วย actor ที่ถูกปฏิเสธ ทีละ key แล้ว mutation ถอด union จาก helper → แดง · กฎ: เทส drift/relation ต้องมีอย่างน้อยหนึ่งฝั่งที่มาจากการ**รันของจริง** ไม่ใช่สูตรเดียวกันสองครั้ง
+
+### 7.9k mutation report ต้องบันทึก `git rev-parse HEAD` + baseline count ก่อน mutate
+#40: QA-2 รายงาน 42/42 บน revision ที่ label ว่า a2bbb0de แต่จริงเป็นตัวก่อน; Dev2 เจอแบบเดียวกันที่ 9d94919 · ทุกแถวใน mutation table ต้องมี SHA ที่วัดจริง + baseline count ก่อนแก้ ไม่งั้นแถวนั้นไม่นับ (§7.9f attribution)
