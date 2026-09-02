@@ -168,14 +168,26 @@ describe("capability vocabulary by resource scope", () => {
       expect(
         hasGateAtScope([workspaceGate], "workspace.members.manage", "workspace")
       ).toBe(false);
-
-      const orgGate = { action: "access.diagnose", resolveResource };
-      expect(hasGateAtScope([orgGate], "access.diagnose", "org")).toBe(false);
     }
 
     const {
       orgResource,
     } = require("../../../utils/middleware/resourceResolvers");
+    const orgImpersonators = [
+      Object.assign(async () => ({ workspaceId: null }), {
+        resolverName: "orgResource",
+      }),
+      async function orgResource() {
+        return { workspaceId: null };
+      },
+      (...args) => orgResource(...args),
+      orgResource.bind(null),
+    ];
+    for (const resolveResource of orgImpersonators) {
+      const orgGate = { action: "access.diagnose", resolveResource };
+      expect(hasGateAtScope([orgGate], "access.diagnose", "org")).toBe(false);
+    }
+
     const wrongScopeGate = {
       action: "workspace.members.manage",
       resolveResource: orgResource,
