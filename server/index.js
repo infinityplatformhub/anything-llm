@@ -27,6 +27,7 @@ const { utilEndpoints } = require("./endpoints/utils");
 const { developerEndpoints } = require("./endpoints/api");
 const { extensionEndpoints } = require("./endpoints/extensions");
 const { bootHTTP, bootSSL } = require("./utils/boot");
+const { sealRoutes } = require("./utils/boot/sealRoutes");
 const { workspaceThreadEndpoints } = require("./endpoints/workspaceThreads");
 const { documentEndpoints } = require("./endpoints/document");
 const { agentWebsocket } = require("./endpoints/agentWebsocket");
@@ -207,10 +208,25 @@ if (process.env.NODE_ENV !== "development") {
   });
 }
 
+// #98: boot is over. Anything mounting a mutating route after this point is
+// invisible to routeGateSweep — which asserts at a moment, so a mount scheduled
+// past it ships ungated and green — and is refused from here on.
+//
+// HERE, not at the end of the registration loop: the development branch above
+// mounts `apiRouter.post("/v/:command")` after that loop, so arming earlier would
+// throw on every dev boot. This point is also where the codebase already draws the
+// line — the terminal 404 below must be last, and routeGateSweep asserts it is.
+// The terminal 404 is mounted BEFORE the seal, because `all` is one of the sealed
+// methods (TL-2: express's `app.all` does not route through `app.post`, so leaving
+// it unsealed is a bypass by definition — and #40's R3 mutation was `apiRouter.all`).
+// It has to be last in the stack and it has to be inside the seal point; mounting it
+// here satisfies both, and routeGateSweep still asserts it is the final layer.
 const terminalNotFound = function (_, response) {
   response.sendStatus(404);
 };
 app.all("*", terminalNotFound);
+
+sealRoutes(app, apiRouter);
 
 // In non-https mode we need to boot at the end since the server has not yet
 // started and is `.listen`ing.
