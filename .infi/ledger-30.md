@@ -230,4 +230,4 @@ schema lacks).
 Residual: pinecone and astra remain rendered-but-unverified until someone runs a real-store
 test against a hosted instance.
 
-SHA: (below)
+SHA: 3cfdc70c (branch approof/t5-slice-1b, base 85ccf3b2)
