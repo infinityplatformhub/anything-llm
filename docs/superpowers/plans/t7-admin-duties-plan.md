@@ -10,7 +10,7 @@ revocation.
 
 **`revoked_by` cannot be a column on `principal_role_grants`.** Revocation deletes the
 row, so a column on it dies with the grant — the audit question is precisely "what used
-to be here". Migration `20260902021000` adds a `grant_revocations` table: who revoked,
+to be here". Migration `20260902070000` adds a `grant_revocations` table: who revoked,
 which principal lost which role in which workspace, when, and the policy version. That
 outlives the grant and answers "why can this person no longer do X".
 
