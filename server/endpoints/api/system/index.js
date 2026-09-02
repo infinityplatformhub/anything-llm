@@ -179,12 +179,8 @@ function apiSystemEndpoints(app) {
           }
         }
       }
-      #swagger.responses[400] = {
-        description: 'Unknown environment keys. No settings are changed.'
-      }
-      #swagger.responses[500] = {
-        description: 'A setting failed validation or could not be updated.'
-      }
+      #swagger.responses[400] = { description: 'Unknown environment keys. No settings are changed.' }
+      #swagger.responses[500] = { description: 'A setting failed validation or could not be updated.' }
       #swagger.responses[403] = {
         schema: {
           "$ref": "#/definitions/InvalidAPIKey"
