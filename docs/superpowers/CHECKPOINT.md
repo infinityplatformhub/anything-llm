@@ -122,3 +122,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - S11 expiry recon merged 623269b1 (expiry in Invite.get). #73 4646ef8be gating (title fixed; earlier report stale). Post-#77 main suite running.
 - #80 S11a opened (Dev3, backend half; no A/B needed). Ruling: verified-hash stored beside config, atomic. 61/80.
 - post-merge suite on main d65973bc (after #77): 2085 passed / 2121, 36 skipped, 0 fail.
+- #73 4646ef8be gate PASS 2123/2123 + TL-2 PASS; close waits ledger-73 from Dev4.
