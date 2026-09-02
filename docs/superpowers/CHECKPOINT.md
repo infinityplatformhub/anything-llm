@@ -588,3 +588,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #120 caccf5514 (Dev5, approof/sep-class, 2 files): gate /tmp/wt-120 running; TL-2 pre-read dispatched; plain tier. §7.17 range-vs-set logged.
 - #119: Dev5 has the sealRoutes-mode fix measured (matches TL-2 ruling); go-ahead given to commit + RED tests → SHA.
 - #126 s1 df7d54f72 TL-1 PASS (N4 count-based text guard accepted, fail-loud). Awaiting QA-3 re-fire → close/merge. §7.17 logged.
+- #126 slice 1 df7d54f72 MERGED (ff858e18f): TL-1 + QA-3 PASS (N1/N4/N6/ACT/P1 dead, P2a/P2b strip verified); closed gate-126-s1-df7d54f72. Issue #126 stays OPEN for slice 2 (SettingsSidebar, after #121). .closed marker deliberately not copied.
+- #120 caccf5514: gate green (203/203, sweeps 63/63) but ledger missing from commit → Dev5 pushing ledger-only SHA. TL-2 pre-read pending.

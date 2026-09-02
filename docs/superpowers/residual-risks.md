@@ -258,3 +258,6 @@ Guard-below-cache equivalence depends on cache key being exactly the material; a
 
 ## #113 (QA-1 NIT-1)
 Exempt set pinned only by type: mutant `actor?.type !== "user"` survives 43/43; a scoped api-key service actor could add users to an ACL-holding group. One test (non-exempt service actor → refused) closes it. Assigned to Dev3 in the #128 lane. Residual for #129-class: `grantDocumentAcl` accepts `principalType` unguarded; first caller passing "group" opens allow AND deny paths.
+
+## #126 slice 1 (QA-3 P3)
+Call-site guard strips only `//` comments; a `/* */` block containing the condition text makes N1 red on correct code (false positive, fails closed). If tightened later, strip block comments too; never loosen the pattern.
