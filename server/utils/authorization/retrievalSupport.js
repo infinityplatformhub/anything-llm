@@ -105,8 +105,8 @@ async function reportRetrievalFilterSupport(
     logger.warn(
       `\x1b[33m[authorization]\x1b[0m ${counts.unlabelled} of ${counts.total} vectors have no ACL metadata and cannot be proven readable. ` +
         (allowed
-          ? `RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, so they are being served — this is the pre-backfill escape hatch and it weakens the document ACL for exactly those rows. Run the backfill, then remove the variable.`
-          : `They are being EXCLUDED from retrieval. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to serve them in the meantime (which weakens the document ACL for those rows).`)
+          ? `RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, so they are included in search results — this is the pre-backfill escape hatch. It weakens the document ACL for exactly those rows, and because they compete for the same result slots, it can also crowd out documents that DO carry metadata. Run the backfill, then remove the variable.`
+          : `They are EXCLUDED from search results — searches will return fewer results than expected until they are backfilled. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to include them in the meantime (which weakens the document ACL for those rows).`)
     );
   }
 

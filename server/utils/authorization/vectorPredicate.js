@@ -74,10 +74,27 @@ class RetrievalConstraint {
   /**
    * For providers taking an SQL-ish expression string: lance, pgvector, milvus.
    *
-   * ALWAYS the strict predicate, in every state. Relaxing it to admit rows with no ACL
-   * metadata would let those rows occupy topN slots and push the actor's own documents
-   * out of the results — S-17 in reverse, and a silent retrieval-quality loss rather than
-   * a visible one. The unprovable-row decision belongs to `isRowAllowed`, after ranking.
+   * The strict predicate by default. When RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, the
+   * whole thing is wrapped so that a fully unlabelled row also survives:
+   *
+   *   ((orgId IS NULL AND workspaceId IS NULL AND docId IS NULL) OR (<strict>))
+   *
+   * QA correction (Techlead): my first version left the predicate strict in both states
+   * and put the escape hatch only in `isRowAllowed`. That made the flag INERT — a legacy
+   * row was cut by `orgId = '1'` inside the query and never reached the row check — while
+   * the boot report told operators the flag was serving those rows. A flag that does
+   * nothing is worse than no flag: it converts "retrieval is broken" into "retrieval is
+   * broken and the fix I was told to apply did not help".
+   *
+   * The escape clause is the CONJUNCTION of all three being absent, not a per-field
+   * `IS NULL OR`. Per-field leniency would admit half-labelled rows — a row claiming an
+   * orgId but no workspaceId would pass the workspace check by having no workspace, which
+   * is a genuine hole rather than a rollout accommodation. All-or-nothing means only the
+   * pre-T-5 shape is excused, and `isRowAllowed` applies the same rule to what comes back.
+   *
+   * Accepted cost until #56 backfills: unlabelled rows compete for topN slots and can push
+   * the actor's own documents out. That is a retrieval-quality loss in the flagged state
+   * only, and it is the price of the flag working at all.
    */
   toSqlString() {
     if (this.matchNone) return null;
@@ -91,7 +108,9 @@ class RetrievalConstraint {
     if (this.allowedDocIds !== null) {
       clauses.push(`docId IN (${this.allowedDocIds.map(quote).join(", ")})`);
     }
-    return clauses.join(" AND ");
+    const strict = clauses.join(" AND ");
+    if (!allowUnprovableRows()) return strict;
+    return `((orgId IS NULL AND workspaceId IS NULL AND docId IS NULL) OR (${strict}))`;
   }
 
   /**
@@ -108,7 +127,6 @@ class RetrievalConstraint {
     const member = (key) => `${field}["${key}"]`;
     const list = (values) => `[${values.map(quote).join(", ")}]`;
 
-    // Strict in every state, for the same reason as toSqlString.
     const clauses = [`${member("orgId")} == ${quote(this.orgId)}`];
     if (this.workspaceIds.length > 0) {
       clauses.push(`${member("workspaceId")} in ${list(this.workspaceIds)}`);
@@ -119,7 +137,14 @@ class RetrievalConstraint {
     if (this.allowedDocIds !== null) {
       clauses.push(`${member("docId")} in ${list(this.allowedDocIds)}`);
     }
-    return clauses.join(" and ");
+    const strict = clauses.join(" and ");
+    if (!allowUnprovableRows()) return strict;
+    // Same all-or-nothing escape as toSqlString; Milvus spells "JSON key absent" as
+    // `not exists`.
+    const unlabelled = ["orgId", "workspaceId", "docId"]
+      .map((key) => `not exists ${member(key)}`)
+      .join(" and ");
+    return `((${unlabelled}) or (${strict}))`;
   }
 
   /**
@@ -166,7 +191,14 @@ class RetrievalConstraint {
       params.push(this.allowedDocIds);
       clauses.push(`${column}->>'docId' = ANY(${placeholder})`);
     }
-    return { sql: clauses.join(" AND "), params };
+    const strict = clauses.join(" AND ");
+    if (!allowUnprovableRows()) return { sql: strict, params };
+    // Same all-or-nothing escape as toSqlString. No new parameters: the escape clause is
+    // three IS NULL checks, so the caller's placeholder numbering is unaffected.
+    const unlabelled = ["orgId", "workspaceId", "docId"]
+      .map((key) => `${column}->>'${key}' IS NULL`)
+      .join(" AND ");
+    return { sql: `((${unlabelled}) OR (${strict}))`, params };
   }
 
   /**

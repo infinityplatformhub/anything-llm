@@ -52,7 +52,17 @@ Ruling (Techlead, item 3): the boot report COUNTS unlabelled vectors per provide
 
 Ruling (PMO (ก)): T-4a's rule stands — an org-wide grant means "the workspaces you belong to", not "every workspace". T-5 is the first change that makes it apply to retrieval, so `regression.test.js` now gives the key's creator membership rather than the rule being reverted. The write-side asymmetry it exposed (upload into a workspace you cannot read from) is a separate issue, not fixed here.
 
-Residual [→ needs issue]: backfill vector metadata for existing deployments, then REMOVE `RETRIEVAL_FILTER_ALLOW_UNPROVABLE`.
+## Slice 1a — QA FAIL on 52b3d176, corrected
+
+Ruling (Techlead FAIL, my bug): the flag was INERT. I put the escape hatch only in `isRowAllowed` and kept the pushdown strict in both states, so `orgId = '1'` removed every unlabelled row inside the query and the row check never saw one — `constraintFor` rendered identical SQL in both states, which is how QA proved it. Meanwhile the boot report told operators those rows were being served. A flag that does nothing is worse than no flag: it converts "retrieval is broken" into "retrieval is broken and the documented fix did not help" — risk if wrong is none; the correction is verified by reverting it, which fails 3 of the new tests.
+
+Ruling: the escape clause is emitted by `constraintFor` in EVERY dialect as one all-or-nothing wrap — `((orgId IS NULL AND workspaceId IS NULL AND docId IS NULL) OR (<strict>))`. Per-field `IS NULL OR` was rejected: a row claiming an orgId but no workspaceId would pass the workspace check by having no workspace, which is a genuine hole wearing the costume of a rollout accommodation. Only the pre-T-5 shape is excused.
+
+Ruling: accepted cost until #56 — in the flagged state unlabelled rows compete for result slots and can crowd out labelled ones. My original reasoning about that cost was correct but led to the wrong trade: a degraded ranking that works beats a pristine ranking that ignores the operator's only lever. The boot report now states this cost in both states.
+
+Ruling: the regression test drives `queryAuthorized` on a real provider with a legacy row present, in both states — NOT `isRowAllowed` directly. Testing the row check in isolation is precisely what hid the bug: it was fed rows no real query would ever have returned. Every dialect is asserted to render differently once the flag is set, so a dialect that ignored it cannot be inert in only one deployment.
+
+Residual [→ needs issue]: backfill vector metadata for existing deployments (#56), then REMOVE `RETRIEVAL_FILTER_ALLOW_UNPROVABLE`.
 Residual: slice 1b — qdrant, pinecone, chroma, weaviate, astra via `toStructured()`.
 Residual: slice 2 (G17 context injection / S-21), slice 3 (S-22 rehydration, S-25 cardinality, canonicalize 4 sites + fix the `docVectorsCanonicalize.js:19-20` comment).
 
