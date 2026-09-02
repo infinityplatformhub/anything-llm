@@ -95,3 +95,22 @@ Ruling: manager check ทำ **ก่อน** `updateSettings` (อำนาจ�
 Ruling: บอดี้ระบุเฉพาะคีย์ที่ผู้เรียกส่งมา ห้ามสะท้อน allow-list
 Ruling: `hub_api_key` — manager 403 `forbidden_keys` · admin 400 `protected_keys`
 Ruling: premise guard ใช้ `setup_admin` จาก grant จริง ไม่ใช่ role string
+
+## ruling เพิ่ม (TL-1, หลัง #72 merge)
+
+Ruling: **narrowing ต้องคุมทั้ง 3 route ไม่ใช่ route เดียว** ตรวจโค้ดยืนยันแล้ว:
+- `communityHub.js:31-37` — `POST /community-hub/settings` ส่ง `reqBody` ดิบเข้า `updateSettings` guard เป็น `settings.write` เปล่า เขียน `hub_api_key` ซึ่งเป็น forbidden key ของ manager
+- `system.js:1005-1012` — `POST /system/default-system-prompt` guard เดียวกัน เขียน `default_system_prompt` ซึ่ง forbidden เช่นกัน
+
+`setup_admin` มี `settings.write` ไม่มี `system.write` แปลว่า manager ที่ถูกปฏิเสธที่ `/admin/system-preferences` เดินอ้อมไปอีกสองประตูได้ **การปฏิเสธที่ประตูเดียวไม่ใช่การปฏิเสธ** ถ้าผิดจะเสียตรงที่เราคิดว่าปิดแล้วแต่ไม่ได้ปิด ซึ่งแย่กว่าไม่ปิดเลย
+
+Ruling: ทั้งสามใช้ **const ตัวเดียวกัน** ที่ยกออกมา ห้าม copy เงื่อนไข — การที่มันถูกใช้สามที่คือเหตุผลของการยกออกมา
+Ruling: เทส HTTP จริงทั้งสาม route แต่ละตัวมี premise guard และ positive control ของตัวเอง
+
+ไม่กระทบ #72 (merge แล้ว): actor ที่มี `system.write` ยังได้ 400 `protected_keys` สำหรับ `hub_api_key` และเขียน `default_system_prompt` ได้ปกติ — manager check ทำก่อนและมีผลเฉพาะ actor ที่ไม่ผ่าน
+
+## docs-only follow-up หลัง #78 (ไม่บล็อก)
+
+- คอมเมนต์ที่ dead 400 branch `system.js:1014` ว่าเป็น defensive ตั้งใจ
+- เพิ่มแถว `{multi_user_mode:"true"}` ใน `directRoutes` e2e — `protected_keys` ไม่เคยผ่าน route จริงเลย
+- `expect(overlap).toEqual(["hub_api_key"])` แทน `length > 0` (แม่นกว่า แต่ต้องคง assert ว่าไม่ว่างไว้ด้วยเหตุผลเดิม)
