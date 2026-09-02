@@ -901,3 +901,6 @@ Three renderers in one slice looked correct as strings and were rejected by the 
 
 ### §7.6b every worktree installs its own node_modules
 Never symlink to, or `yarn add` into, the main checkout's `server/node_modules`; it is shared by every worktree and a stray install breaks all of them. New deps from a merged branch (xml-crypto from #43) mean `yarn install` + `prisma generate` before any test run. (Dev3 on #60; Dev2/Dev4 hit the same on #50/#30 1b.)
+
+### §7.9c layered defences shadow each other under mutation
+Removing an inner check (LDAP `authenticated !== true`) killed no test because the outer guard (empty-password) rejected every fixture first. To prove an inner layer, feed an input the outer layer passes (`alwaysAnonymous` mock) or disable the outer layer in that test. An inner check no mutant can kill is dead code that looks tested. (Dev3, #60 f221df51; pairs with §7.9b.)
