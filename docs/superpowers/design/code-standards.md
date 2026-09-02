@@ -959,3 +959,6 @@ collector/sweep ที่อ่าน source (AST/regex) ห้ามมี defa
 
 #### 7.6c note — prisma client ฝัง path `.env` ของ worktree ที่ generate
 generated client โหลด dotenv จาก path absolute ที่ฝังตอน `prisma generate` — hardlink/symlink `node_modules` ข้าม worktree จึงดึง `.env` ของ worktree ต้นทางเข้า `process.env` (#74 TL-2: `SIG_SALT` โผล่จาก `f40/server/.env`) · เทสที่คาดว่า key "หาย" ต้อง `delete process.env.KEY` ก่อนเรียก คืนค่าใน `finally` · gate worktree ของ PMO ต้อง `prisma generate` ในที่ของตัวเอง (wt-bootstrap ทำอยู่แล้ว)
+
+### 7.1d เทสที่ขึ้นกับสถานะ server (extension/locale/version) ต้องรัน suite บนทั้งสองสถานะ
+#74: QA-3 และ PMO gate เขียวเพราะ DB ของตัวเองบังเอิญมี extension ติดตั้งแล้ว; TL-2 บน DB สดพบ 3 เทสแดง · กฎ: เทสที่ assert สาขาซึ่งขึ้นกับสถานะ DB ต้องจัดสถานะเอง (`beforeAll` CREATE/DROP, `afterAll` คืน) และ reviewer ที่ probe สถานะพิเศษด้วยมือต้องรัน suite ทั้งบนสถานะนั้นและสถานะสด — probe ด้วยมือเห็นพฤติกรรมถูก ไม่ได้พิสูจน์ว่า suite จัดสถานะให้ตัวเอง
