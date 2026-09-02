@@ -916,3 +916,6 @@ A test that greps source for `requirePermission(...)` passes when the gate is a 
 
 ### §7.9e gate-presence tests read the mounted router, not source text
 A hand-written source scanner for `requirePermission(...)` was bypassed twice under mutation (commented gate; `notrequirePermission` prefix). Assert gate presence from the real router's middleware stack: `requirePermission` exposes `mw.action`/`mw.resolver` (like `validApiKey` exposes `middleware.scope`) and the test walks `app._router.stack`. (Dev2 on #40 task 1.)
+
+### §7.14 one full suite per merge target
+Full `yarn test` (1,600+ tests, 5–10 min) runs **once**, by the PMO gate on the final merge target. Everyone else runs only what the diff touches: developers iterate with `jest --findRelatedTests <changed files>` and send a SHA once related suites are green; QA and Techlead probe and mutate, they do not rerun the suite. Running the suite four times per SHA was the largest single source of latency on 2026-09-02.
