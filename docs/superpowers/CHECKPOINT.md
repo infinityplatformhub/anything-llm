@@ -528,3 +528,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #119 (Dev5): reclassified auth tier (route-mount seal is a security guard). Lane utils/boot/sealRoutes.js + routeMountGuard.test.js + index.js, no overlap. RED started; TL-2 pre-read requested after #127 ruling. #120 queued after.
 - #40 t4 1ca353edc gate GREEN: check-local pass, frontend 82/82 exit 0, capabilities 9 checks PASS, drift+uiBypass 13/13, sweeps 63/63. Result file written (run-id gate-40-task4-1ca353edc). Awaiting TL-1 pre-read + QA-3 mutants.
 - Post-merge after #123 (before #125 merge): 3014 passed, 1 failed, 2 suites failed — names not captured; rerunning --onlyFailures. 37 jest processes on the box, most >1h old from other sessions.
+- Post-merge #123: 3014/3051, 1 red = identityRoutesHttp; --onlyFailures alone 11/11 green → flake class #106 (logged). Post-merge after #125 running → /tmp/postmerge-125.log. Killed 3 stale jest procs in /tmp/wt-96 (1h47m, issue long merged).
