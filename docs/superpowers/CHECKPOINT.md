@@ -816,3 +816,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #136 QA-2 PASS on f76172fec (qa2-136-f76172fec.md). Waiting: gate-136b remaining steps + TL-2 verdict.
 - #138 driver ab26979ab TL-1 PASS (410f9adeb). Contract corrections for the queue half: lease = (maxRetries+1)×(timeoutMs+MAX_RETRY_AFTER_MS) derived, ≈160s worst not 150; optionally drop the final _backoff before throw; heartbeat keeps firing during a hung fetch → takeover mechanism is process death/wedge, not heartbeat stop. Waiting QA-1 verdict → close/merge driver half.
 - #137 QA-3 confirm on edd8db6b7: prisma 33/33, setup_admin 11. Remaining: gate FINAL + TL-1 one-line → then merge AFTER #121.
+- #137 edd8db6b7 TL-1 confirm (fa478d85a; swept all ALL_ACTIONS readers, no third pin). #137 = gate (contract 18/1 RF-D dep, prisma 33/33) + TL-1 PASS + QA-3 PASS. READY TO MERGE AFTER #121 (RF-D goes green on #121 merge; then Model Router second commit).
+- #136 f76172fec gate-136b PASS: contract 57/57, neighbours 1164/0, sweeps 63/63, frontend 0, task check 0, result written. QA-2 PASS. Waiting TL-2 verdict only. Merge order: #121 → #137 → #136 (offboardUser slice 2 follows).
+- MERGE QUEUE blocked on USER approval of #121 mockup re-pin: #121 → #137 (+Model Router commit) → #136 → #138 driver (after QA-1). Then #132, #126 s2, #135, #138 queue half, V8 (needs mockup approval).
