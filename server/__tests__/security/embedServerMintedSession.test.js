@@ -210,6 +210,33 @@ describe("issue 49: the session-open endpoint mints the id itself", () => {
     expect(prisma.embed_chats.findFirst).not.toHaveBeenCalled();
   });
 
+  test("a disallowed origin cannot open a session", async () => {
+    // Found by mutation, not by design: removing embedSessionOpen from the route entirely
+    // left this suite green. An embed that restricts its origins must restrict who can open a
+    // session on it, or the restriction is decorative — the mint endpoint would be the one
+    // unguarded way in, and every token it handed out would be valid on the guarded routes.
+    const response = await request(appWithEmbed())
+      .post(`/embed/${EMBED_UUID}/session`)
+      .set("Origin", "https://not-allowed.example")
+      .send();
+
+    expect(response.status).toBe(401);
+  });
+
+  test("a disabled embed cannot open a session", async () => {
+    // The other half of the same gate. An admin who disables an embed has stopped it
+    // answering, and a route that still mints for it would leave sessions being created
+    // against something that is switched off.
+    EmbedConfig.getWithWorkspace.mockResolvedValue(embedRow({ enabled: false }));
+
+    const response = await request(appWithEmbed())
+      .post(`/embed/${EMBED_UUID}/session`)
+      .set("Origin", ORIGIN)
+      .send();
+
+    expect(response.status).toBe(503);
+  });
+
   test("two opens are identical in shape regardless of what the caller knows", async () => {
     // hole 4. Compared as whole shapes — status, sorted key set, header presence — rather
     // than field by field: a parsed comparison lets a stray key through, which is exactly
@@ -264,6 +291,41 @@ describe("issue 49: stream-chat stops minting, so the row-shaped holes close", (
     const response = await chat(VICTIM_SESSION);
 
     expect(response.headers[SESSION_TOKEN_HEADER]).toBeUndefined();
+  });
+
+  test("rotation carries the ORIGINAL firstIssuedAt, it does not restart it", async () => {
+    // Without this the absolute ceiling is unreachable: every rotation would push it out by
+    // another week, and SESSION_ABSOLUTE_MAX_MS would bound nothing. Read off the wire rather
+    // than from the middleware, because the route is where the two could drift apart.
+    const opened = await open(appWithEmbed());
+    const originalFirstIssuedAt = opened.body.token.split(".")[1];
+
+    const rotated = await chat(opened.body.sessionId, opened.body.token);
+    const rotatedToken = rotated.headers[SESSION_TOKEN_HEADER];
+
+    expect(rotatedToken.split(".")[1]).toEqual(originalFirstIssuedAt);
+  });
+
+  test("a rotation for a session WITH rows and one WITHOUT are byte-identical", async () => {
+    // Rotation must not become the oracle that free minting was. If a caller holding a valid
+    // token could tell "this session has messages" from "it has none" by the shape or size of
+    // the reply, hole 4 would be back in a quieter place. Compared as raw bytes plus
+    // content-length, not parsed fields — a stray key is exactly what a parsed comparison
+    // lets through.
+    const opened = await open(appWithEmbed());
+    const shape = (res) => ({
+      status: res.status,
+      text: res.text,
+      length: res.headers["content-length"],
+      hasToken: SESSION_TOKEN_HEADER in res.headers,
+    });
+
+    prisma.embed_chats.findFirst.mockResolvedValue({ id: 55 });
+    const withRows = await chat(opened.body.sessionId, opened.body.token);
+    prisma.embed_chats.findFirst.mockResolvedValue(null);
+    const withoutRows = await chat(opened.body.sessionId, opened.body.token);
+
+    expect(shape(withRows)).toEqual(shape(withoutRows));
   });
 
   test("a chat carrying a valid server-minted token still works", async () => {
