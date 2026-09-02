@@ -202,3 +202,7 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - preUserOrGated catch block is unreachable (helper never throws) — comment or remove.
 - Synthetic check id in level test is load-bearing; do not "tidy" to a real id.
 - GET /setup-complete neighbour still unauth → #114.
+
+## #98 residuals (mount guard)
+- apiRouter.use(subRouter) after boot is not sealed (use is how every middleware mounts) → #119; test records it still mounts.
+- Seal covers app + apiRouter references only.

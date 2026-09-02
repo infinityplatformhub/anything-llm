@@ -423,3 +423,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113: Dev3 self-correction — plain UNIQUE(orgId,source,externalId) works (NULL distinct on PG17); NULLS NOT DISTINCT would fail migration on real DBs; test must run on migrated DB with existing local groups.
 - #118 amend c16a1ee27 (comment+ledger only): order clause + separator residual (U+3000/U+FF0D → #120). Waiting QA-2 → close/merge.
 - #106 recon (Dev5): two regimes — partial pressure = shared-DB data collisions (few random 401 reds), saturation = too-many-clients (all red). 52/55 authz suites share schema, 28 never $disconnect. Ruling: (ง) connection_limit=5 in test DATABASE_URL + (ข) $disconnect afterAll first (plain), measure regime 1 after; (ก) per-suite schema only if still red.
+- #98 db9649c24 merged 53ee95219, closed (infi-run:gate-98-db9649c24); content verified. 83/120. wt-98/g98 reaped. Dev3 → #113.
