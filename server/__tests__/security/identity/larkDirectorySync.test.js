@@ -340,3 +340,250 @@ describe("S4a (#113) RF-6/RF-7: a snapshot is complete, or it is an error", () =
     ).toThrow(IdentityUnavailableError);
   });
 });
+
+/**
+ * #138 R2a: the request timeout, and why a concurrency issue starts in the driver.
+ *
+ * TL-1's lease rule for slice 3 is "the lease must exceed the longest plausible stall
+ * in a SINGLE driver call". That number could not be derived, because the stall was
+ * unbounded: `_page` forwards an optional `signal` that no production caller supplies,
+ * and `_tenantAccessToken` had no signal at all. The retry loop covers a DROPPED
+ * socket; a socket that stays open and never answers is not a dropped socket.
+ *
+ * Why it matters: an unbounded request makes the sync job run forever. The job never
+ * completes, its worker slot is held indefinitely, and the directory silently stops
+ * syncing while every dashboard reports a run in progress.
+ *
+ * NOT because it triggers a lease takeover. An earlier version of this comment said a
+ * hung fetch stops the heartbeat and lets a second worker start a concurrent apply;
+ * TL-1 measured that false — `setInterval` keeps firing while a promise is awaited (9
+ * beats during a hung request), so the lease keeps renewing. Takeover covers a killed,
+ * wedged or event-loop-starved process, not one politely waiting on a socket.
+ *
+ * The fixture ACCEPTS the connection and never answers. A dead port is not a
+ * substitute: it rejects instantly, so a driver with no timeout is green against it.
+ */
+describe("#138 R2a: an unanswered request is bounded, not waited on forever", () => {
+  test("a Lark tenant that accepts and never answers makes listPrincipals reject", async () => {
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: Infinity,
+    });
+    // Small explicit numbers so the bound is provable rather than approximately
+    // observed: 4 attempts x 150ms, plus backoff, is comfortably inside the jest
+    // timeout below. Without the timeout this call never settles and the test fails
+    // by TIMING OUT — which is the RED state, and is what the mutant reproduces.
+    const driver = driverFor(fixture, {
+      pageSize: 50,
+      maxRetries: 3,
+      timeoutMs: 150,
+    });
+
+    const started = Date.now();
+    await expect(driver.listPrincipals()).rejects.toThrow(IdentityUnavailableError);
+    const elapsed = Date.now() - started;
+
+    // Bounded ABOVE: the whole retry sequence finished. The ceiling is loose on
+    // purpose — the assertion is "it terminated", not a stopwatch on CI.
+    expect(elapsed).toBeLessThan(10_000);
+
+    // And bounded BELOW, which is the half that would otherwise pass for the wrong
+    // reason: a driver that gave up after ONE attempt also "rejects quickly", and
+    // would lose the retry behaviour #113 built. Four attempts at 150ms cannot
+    // finish in under 300ms.
+    expect(elapsed).toBeGreaterThan(300);
+
+    // It really did retry, rather than failing once: 1 initial + 3 retries.
+    expect(fixture.userPages.filter((p) => p === 1)).toHaveLength(4);
+  }, 30_000);
+
+  test("a hung TOKEN endpoint is bounded too — the call every enumeration makes first", async () => {
+    // `_tenantAccessToken` runs before any page is fetched, so a timeout on `_page`
+    // alone leaves the whole run stalled before it starts. Bounding one and not the
+    // other looks correct in review and fails identically in production.
+    fixture = await startLarkFixture({ users: 10, hangToken: true });
+    const driver = driverFor(fixture, { timeoutMs: 150 });
+
+    const started = Date.now();
+    await expect(driver.listPrincipals()).rejects.toThrow(IdentityUnavailableError);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 30_000);
+
+  test("a caller's own signal still aborts, and is not overwritten by the timeout", async () => {
+    // The timeout must COMBINE with a caller's signal, never replace it. Replacing it
+    // is the plausible implementation (`signal: AbortSignal.timeout(ms)`), and it
+    // silently removes the caller's ability to cancel — which slice 3 will rely on to
+    // stop a sync on shutdown.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: Infinity,
+    });
+    // A LONG timeout, so anything that settles quickly settled because of the
+    // caller's abort and not because the timeout fired.
+    const driver = driverFor(fixture, { pageSize: 50, timeoutMs: 30_000 });
+
+    const controller = new AbortController();
+    const pending = driver.listPrincipals({ signal: controller.signal });
+    setTimeout(() => controller.abort(), 100);
+
+    const started = Date.now();
+    await expect(pending).rejects.toThrow(IdentityUnavailableError);
+    // Well under the 30s timeout: the caller's signal is what ended it.
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 30_000);
+
+  test("Retry-After cannot make the driver sleep unboundedly", async () => {
+    // The second hole TL-1 named. A 429 carrying `Retry-After: 86400` is honoured
+    // verbatim today, so a rate-limited tenant parks the run for a day — the same
+    // stalled-lease outcome as a hung socket, arriving through a header instead.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "429",
+      failTimes: 1,
+      retryAfterSeconds: 86_400,
+    });
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 2, timeoutMs: 1_000 });
+
+    const started = Date.now();
+    const { principals } = await driver.listPrincipals();
+    const elapsed = Date.now() - started;
+
+    // It waited (the clamp is a ceiling, not a bypass) and then SUCCEEDED — the
+    // retry still works, which a test asserting only "it was fast" would not show.
+    expect(principals).toHaveLength(100);
+    expect(elapsed).toBeLessThan(60_000);
+  }, 90_000);
+});
+
+/**
+ * #138: witnesses for the two implementation rulings the timeout forced.
+ *
+ * Both are cases where the driver has a bounded timeout and is still wrong, so the
+ * hang tests above are green against either bug. They need their own fixtures.
+ */
+describe("#138: the timeout's two implementation rulings", () => {
+  test("a fresh signal per ATTEMPT — one hoisted signal starves the retries", async () => {
+    // `AbortSignal.timeout` starts counting when it is CREATED. A signal built once
+    // above the retry loop gives all four attempts a single shared deadline: attempt
+    // 1 consumes it and attempts 2-4 get an already-aborted signal, so they fail
+    // instantly without ever reaching Lark.
+    //
+    // The fixture: page 1 hangs ONCE, then answers. A per-attempt signal recovers;
+    // one shared signal cannot. A fixture that hangs forever is red under both
+    // implementations and proves nothing about which.
+    fixture = await startLarkFixture({
+      users: 60,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: 1,
+    });
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 3, timeoutMs: 400 });
+
+    const { principals } = await driver.listPrincipals();
+
+    // It recovered: attempt 2 had a full budget of its own. Under a hoisted signal
+    // the enumeration dies here instead, because attempt 2 starts already aborted.
+    expect(principals).toHaveLength(60);
+    // Page 1 was tried twice (hung, then served).
+    expect(fixture.userPages.filter((p) => p === 1).length).toBeGreaterThanOrEqual(2);
+  }, 60_000);
+
+  test("a caller's cancel is NOT retried — one attempt, then stop", async () => {
+    // A deliberate cancel and a request timeout arrive as the IDENTICAL error, so
+    // the driver tells them apart by whose signal fired. Get that wrong and a
+    // shutdown cancel is retried three more times, keeping the process doing work
+    // somebody explicitly stopped.
+    //
+    // This is the assertion the hang tests cannot make: they never cancel, so a
+    // driver that retries a cancel is green against all of them.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: Infinity,
+    });
+    // A long timeout, so nothing here can be the timeout firing.
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 3, timeoutMs: 30_000 });
+
+    const controller = new AbortController();
+    const pending = driver.listPrincipals({ signal: controller.signal });
+    setTimeout(() => controller.abort(), 150);
+
+    await expect(pending).rejects.toThrow(/cancelled/i);
+
+    // EXACTLY ONE attempt at page 1. Three or four would mean the cancel was treated
+    // as a retryable transport failure — the bug, and it would still "reject", so
+    // the count is the only thing that distinguishes them.
+    expect(fixture.userPages.filter((p) => p === 1)).toHaveLength(1);
+  }, 60_000);
+});
+
+/**
+ * #138, QA-1's baseline findings turned into fixtures.
+ *
+ * Both are cases where a test LOOKS like it covers the timeout and does not.
+ */
+describe("#138: what the timeout tests would otherwise miss (QA-1)", () => {
+  test("the token timeout is not masked by memoisation — a fresh provider per case", async () => {
+    // `_tenantAccessToken` caches on `_tokenExpiresAt`. A provider that already
+    // fetched a token successfully never calls the endpoint again, so a hangToken
+    // assertion made on a REUSED instance passes whether or not the token call is
+    // bounded — the request under test is never made.
+    //
+    // This asserts the memo exists (one token call across two enumerations) and then
+    // proves the bound holds on an instance that has NOT primed it. Both halves:
+    // without the first, the second is just the hangToken test again.
+    fixture = await startLarkFixture({ users: 10 });
+    const warm = driverFor(fixture, { timeoutMs: 5_000 });
+    await warm.listPrincipals();
+    await warm.listGroups();
+    const tokenCalls = fixture.requests.filter((r) =>
+      r.path.endsWith("/auth/v3/tenant_access_token/internal")
+    );
+    expect(tokenCalls).toHaveLength(1);
+    await fixture.close();
+
+    // A COLD provider against a hung token endpoint: the memo cannot help it.
+    fixture = await startLarkFixture({ users: 10, hangToken: true });
+    const cold = driverFor(fixture, { timeoutMs: 150 });
+    const started = Date.now();
+    await expect(cold.listPrincipals()).rejects.toThrow(IdentityUnavailableError);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 60_000);
+
+  test("the DRIVER's timeout wins when the caller's signal never fires", async () => {
+    // The pairing for the caller-abort test. That one proves the caller can still
+    // cancel — but it is green on unfixed code too, because passing the caller's
+    // signal through is inherited behaviour. This is the half that is not: a caller
+    // supplies a signal it never aborts, and the driver's own timeout must still end
+    // the request. An implementation that forwards only the caller's signal hangs
+    // here forever.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: Infinity,
+    });
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 1, timeoutMs: 200 });
+
+    // A real signal, never aborted.
+    const controller = new AbortController();
+    const started = Date.now();
+    await expect(
+      driver.listPrincipals({ signal: controller.signal })
+    ).rejects.toThrow(IdentityUnavailableError);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(controller.signal.aborted).toBe(false);
+  }, 60_000);
+});
