@@ -7,6 +7,11 @@ const { v4: uuidv4 } = require("uuid");
 const { sourceIdentifier } = require("../../chats");
 const { NativeEmbeddingReranker } = require("../../EmbeddingRerankers/native");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  predicateFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
 const path = require("path");
 
 /**
@@ -205,6 +210,70 @@ class LanceDb extends VectorDatabase {
       if (this.distanceToSimilarity(item._distance) < similarityThreshold)
         return;
       const { vector: _, ...rest } = item;
+      if (filterIdentifiers.includes(sourceIdentifier(rest))) {
+        this.logger(
+          "A source was filtered from context as it's parent document is pinned."
+        );
+        return;
+      }
+
+      result.contextTexts.push(rest.text);
+      result.sourceDocuments.push({
+        ...rest,
+        score: this.distanceToSimilarity(item._distance),
+      });
+      result.scores.push(this.distanceToSimilarity(item._distance));
+    });
+
+    return result;
+  }
+
+  /**
+   * T-5 (#30): the authorized read path. See base.js for the contract this owes.
+   *
+   * The predicate is attached with `where()` BEFORE `limit()`. lancedb prefilters by
+   * default in 0.15 — `postfilter()` is the opt-in — so this genuinely narrows the
+   * candidate set rather than trimming the winners. Getting that order wrong would not
+   * leak, which is what makes it dangerous: it would silently drop the actor's own
+   * lower-ranked documents and look like a retrieval-quality problem (S-17).
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    // Before any client work: an invalid filter is a caller bug, and connecting first
+    // would let a miswired route make the database work on its behalf.
+    assertFilter(aclFilter);
+    const predicate = predicateFor(aclFilter);
+
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    // No scope, no query. Skipping the round trip entirely is cheaper than issuing an
+    // unsatisfiable predicate and cannot be defeated by a dialect quirk.
+    if (predicate === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const collection = await client.openTable(namespace);
+    const response = await collection
+      .vectorSearch(queryVector)
+      .distanceType("cosine")
+      .where(predicate)
+      .limit(topN)
+      .toArray();
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    response.forEach((item) => {
+      const { vector: _, ...rest } = item;
+      // Second layer, deliberately redundant with the predicate: a row that cannot be
+      // proven allowed — including one written before the ACL backfill — is dropped here
+      // even though the query already claimed to exclude it (S-26/G4).
+      if (!isRowAllowed(rest, aclFilter)) return;
+      if (this.distanceToSimilarity(item._distance) < similarityThreshold) return;
       if (filterIdentifiers.includes(sourceIdentifier(rest))) {
         this.logger(
           "A source was filtered from context as it's parent document is pinned."
