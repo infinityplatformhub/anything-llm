@@ -112,9 +112,11 @@ async function permissionIdsForGroup(tx, groupId) {
  * above: membership is unscoped, so a workspace-A admin must not be able to activate
  * a grant that reaches workspace B.
  *
- * Applied to REMOVAL as well as addition. Removal is not the harmless direction —
- * evaluation is deny-wins, so pulling someone out of a group that DENIES them widens
- * what they may do. Guarding only `add` leaves the same hole with the sign flipped.
+ * Applied to REMOVAL as well as addition. Removal is not the harmless direction:
+ * deciding who a group reaches IS the delegated authority, whichever way it moves —
+ * pulling someone out of a group that denies them widens what they may do, exactly as
+ * adding them to one that allows does. Guarding only `add` leaves the same hole with
+ * the sign flipped.
  *
  * KNOWN LIMIT (#128, queued): `heldPermissionIds` reads the actor's OWN grants and
  * does not expand their group memberships, though the engine has since #96. So a
@@ -127,20 +129,36 @@ async function refuseGroupEscalation(tx, actor, groupId, fn) {
   if (isExemptPrincipal(actor)) return;
   const groupPerms = await permissionIdsForGroup(tx, groupId);
 
-  // RF-9 (TL-1): a group can carry authority WITHOUT holding a single role grant.
-  // `document_acl` deny rows are keyed `{principal_type:"group", principal_id}` and
-  // `documentFilter:91-99` reads them directly — they never pass through
-  // `principal_role_grants`. So a group whose whole purpose is "these people may not
-  // see these documents" has an EMPTY permission set here, and the early return let
-  // any actor pull the victim out and hand them every document the group hid.
+  // RF-9 (TL-1, QA-1): a group can carry authority WITHOUT holding a single role
+  // grant. `document_acl` rows are keyed `{principal_type:"group", principal_id}` and
+  // `documentFilter` reads them directly — they never pass through
+  // `principal_role_grants`. So a group whose whole purpose is a document ACL has an
+  // EMPTY permission set here, and the early return let any actor rewrite its
+  // membership.
+  //
+  // ANY row keyed on this group counts, either effect. The reason is the same one
+  // `permissionIdsForGroup` does not filter by workspace: a single `group_members`
+  // row activates the group's ENTIRE ACL set at once, so what is being delegated is
+  // that whole set. QA-1 measured the allow direction on `98b2627a1` — a group
+  // holding an ALLOW row for `document.read`, and a `member` actor adding THEMSELVES
+  // to it, which succeeded. Counting one effect would guard freeing a victim and miss
+  // helping yourself.
   //
   // Containment on an empty set is not a safe default: the empty set is contained by
-  // everyone, so "carries nothing" and "carries only denials" reached the same answer
-  // while meaning opposite things. The count is what separates them.
-  const denyCount = await tx.document_acl.count({
-    where: { principal_type: "group", principal_id: String(groupId), effect: "deny" },
+  // everyone, so "carries nothing" and "carries an ACL" reached the same answer while
+  // meaning opposite things. The count is what separates them.
+  const groupRow = await tx.groups.findUnique({
+    where: { id: Number(groupId) },
+    select: { orgId: true },
   });
-  if (groupPerms.size === 0 && denyCount === 0) return; // Genuinely carries nothing.
+  const aclCount = await tx.document_acl.count({
+    where: {
+      orgId: groupRow?.orgId ?? 1,
+      principal_type: "group",
+      principal_id: String(groupId),
+    },
+  });
+  if (groupPerms.size === 0 && aclCount === 0) return; // Genuinely carries nothing.
 
   const held = await heldPermissionIds(tx, actor, null);
   const baselineIds = await baselinePermissionIds(tx);
@@ -151,26 +169,32 @@ async function refuseGroupEscalation(tx, actor, groupId, fn) {
     );
   }
 
-  // The deny half needs its own bar, because set containment cannot supply one: the
-  // permissions above are EMPTY for a deny-only group, and the empty set is contained
+  // The ACL half needs its own bar, because set containment cannot supply one: the
+  // permissions above are EMPTY for an ACL-only group, and the empty set is contained
   // by everyone, so the check just passed for an actor holding nothing.
   //
-  // `document.share` is the bar — it is the permission governing who may change a
-  // document's reach, which is exactly what moving someone in or out of a deny group
-  // does. Requiring org-wide `super_admin` would be stricter than writing the ACL row
-  // itself and would lock out the admin whose job this is.
-  if (denyCount > 0) {
-    const sharePerm = await tx.permissions.findUnique({
-      where: { action: "document.share" },
+  // `role.grant` is the bar (TL-1 ruling). Rewriting the membership of a group that
+  // carries an ACL hands out that ACL, so this IS a grant, and `role.grant` is the
+  // axis `grantRole` and `revokeGrant` already turn on — one permission governs
+  // delegation rather than two that can drift apart.
+  //
+  // `document.share` was the first choice here and was WRONG in a way worth
+  // recording: it is the permission for sharing a document you can already reach, not
+  // for deciding who a group reaches. Measured on a freshly migrated database, it is
+  // held by org `super_admin` and workspace `owner` — so the bar would have admitted
+  // every workspace owner to rewrite any group's membership org-wide, which is the
+  // scope leak the org-wide read of `heldPermissionIds` exists to prevent.
+  if (aclCount > 0) {
+    const grantPerm = await tx.permissions.findUnique({
+      where: { action: "role.grant" },
       select: { id: true },
     });
     // Fail closed if the permission is missing: an unseeded row must not read as
     // "nothing to check", which is the shape of the hole this whole branch closes.
-    if (!sharePerm || !held.has(sharePerm.id)) {
+    if (!grantPerm || !held.has(grantPerm.id)) {
       throw new AuthorizationContractError(
-        `${fn} refused: the group carries document denials, and changing its ` +
-          `membership changes what those documents reach — the actor does not hold ` +
-          `document.share org-wide`
+        `${fn} refused: the group carries document ACL rows, so changing its ` +
+          `membership hands those out — the actor does not hold role.grant org-wide`
       );
     }
   }

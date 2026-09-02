@@ -410,25 +410,27 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
   }, 120_000);
 
   /**
-   * RF-9 / TL-1: a group can carry authority WITHOUT holding a single role grant.
+   * RF-9 (#129): a group can carry authority WITHOUT holding a single role grant.
    *
-   * `document_acl` deny rows are keyed `{principal_type:"group", principal_id}` and
-   * `documentFilter:91-99` reads them directly — they never pass through
-   * `principal_role_grants`. So a group whose entire purpose is "these people may
-   * not see these documents" has ZERO role grants, `permissionIdsForGroup` returns
-   * an empty set, and the early return in `refuseGroupEscalation` let ANY actor call
-   * `removeGroupMember` and hand the victim every document the group hid.
+   * `document_acl` rows are keyed `{principal_type:"group", principal_id}` and
+   * `documentFilter` reads them directly — they never pass through
+   * `principal_role_grants`. So a group whose entire purpose is a document ACL holds
+   * ZERO role grants, `permissionIdsForGroup` returns an empty set, and the early
+   * return in `refuseGroupEscalation` let ANY actor rewrite its membership.
    *
-   * Containment on an empty set is not a safe default here: an empty set is
-   * contained by everyone, so "the group carries nothing" and "the group carries
-   * only denials" reached the same answer while meaning opposite things.
+   * BOTH effects count. QA-1 measured the allow direction: a group holding an ALLOW
+   * row and a `member` actor adding THEMSELVES to it succeeded — escalation in its
+   * plainest form. The reason both count is the same one `permissionIdsForGroup`
+   * does not filter by workspace: one `group_members` row activates the group's
+   * ENTIRE ACL set at once, so the whole set is what is being delegated.
    *
-   * Ruling: a group with deny rows is refused unless the actor is exempt or holds
-   * `document.share` — the permission that governs who may change document reach.
-   * Requiring org-wide `super_admin` instead would be stricter than the ACL write
-   * itself and would block the ordinary document-sharing admin.
+   * Containment cannot supply the bar here — the permission set is empty and the
+   * empty set is contained by everyone — so the ACL branch requires `role.grant`
+   * (TL-1 ruling): rewriting the membership of a group that carries an ACL hands
+   * that ACL out, which is a grant, and `role.grant` is the axis `grantRole` and
+   * `revokeGrant` already turn on.
    */
-  async function denyGroupWorld(label, actorRoleName = null) {
+  async function aclGroupWorld(label, actorRoleName = null) {
     const group = await prisma.groups.create({
       data: {
         orgId: 1, name: `rf9-${label}-${dbSuffix}`,
@@ -443,21 +445,23 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
     });
     if (actorRoleName) {
       const role = await prisma.roles.findFirstOrThrow({
-        where: { name: actorRoleName, scope: "org" },
+        where: { name: actorRoleName },
       });
       await repository.grantRole({
         actor: SYS, principalType: "user", principalId: String(actorUser.id),
-        roleId: role.id, db: prisma,
+        roleId: role.id,
+        workspaceId: role.scope === "workspace" ? null : null,
+        db: prisma,
       });
     }
-    await repository.addGroupMember({
-      actor: SYS, groupId: group.id, userId: victim.id, db: prisma,
-    });
-    return { group, victim, actor: { type: "user", id: String(actorUser.id), orgId: 1 } };
+    return {
+      group, victim, actorUser,
+      actor: { type: "user", id: String(actorUser.id), orgId: 1 },
+    };
   }
 
-  /** A deny row hiding one document from the group. No role grant anywhere. */
-  async function denyOneDocument(group, label) {
+  /** One ACL row of the given effect, keyed on the group. No role grant anywhere. */
+  async function aclRow(group, label, effect) {
     const document = await prisma.documents.create({
       data: {
         filename: `rf9-${label}.txt`,
@@ -471,25 +475,26 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
       principalType: "group",
       principalId: String(group.id),
       action: "document.read",
-      effect: "deny",
+      effect,
       db: prisma,
     });
     return document;
   }
 
-  test("RF-9: a group with only DENY rows is still guarded — removal is refused", async () => {
-    // The hole the early return opened. The group holds no role grant at all, so
-    // `permissionIdsForGroup` is empty; before the fix that returned immediately and
-    // a `member` actor could pull the victim out, restoring every hidden document.
-    const { group, victim, actor } = await denyGroupWorld("deny", "member");
-    await denyOneDocument(group, "deny");
+  test("RF-9 case 1: deny-only group — a `member` actor cannot REMOVE anyone", async () => {
+    // Removing the victim from a group that hides documents from them restores every
+    // one of those documents. The group holds no role grant, so before the fix
+    // `permissionIdsForGroup` was empty and the guard returned immediately.
+    const { group, victim, actor } = await aclGroupWorld("deny", "member");
+    await repository.addGroupMember({ actor: SYS, groupId: group.id, userId: victim.id, db: prisma });
+    await aclRow(group, "deny", "deny");
 
-    // Matched on `document.share` specifically, not a generic "does not hold": the
-    // role-grant branch refuses with its own wording, and a loose pattern would be
-    // green for a refusal that came from the wrong half of the guard.
+    // Matched on `role.grant`, not a generic "does not hold": the role-grant branch
+    // refuses with different wording, and a loose pattern would be green for a
+    // refusal that came from the wrong half of the guard.
     await expect(
       repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
-    ).rejects.toThrow(/document\.share/);
+    ).rejects.toThrow(/role\.grant/);
 
     const membership = await prisma.group_members.findFirst({
       where: { group_id: group.id, user_id: victim.id },
@@ -497,56 +502,109 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
     expect(membership).not.toBeNull();
   }, 120_000);
 
-  test("RF-9: addition to a deny-only group is refused too", async () => {
-    // Symmetric, and not redundant: adding someone to a deny group is a denial
-    // handed out, which is authority in the other direction.
-    const { group, victim, actor } = await denyGroupWorld("denyadd", "member");
-    await denyOneDocument(group, "denyadd");
-    const outsider = await prisma.users.create({
-      data: { username: `rf9-outsider-${dbSuffix}`, password: "x", role: "default" },
+  test("RF-9 case 2: deny-only group — a `member` actor cannot ADD anyone", async () => {
+    // The other direction: handing someone a denial is authority too.
+    const { group, victim, actor } = await aclGroupWorld("denyadd", "member");
+    await aclRow(group, "denyadd", "deny");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).rejects.toThrow(/role\.grant/);
+  }, 120_000);
+
+  test("RF-9 case 3: allow-only group — a `member` actor cannot add THEMSELVES", async () => {
+    // QA-1's measurement, and the plainest escalation of the set: the actor is the
+    // beneficiary. A guard that counted only `deny` rows is green here, which is why
+    // this case exists separately from cases 1 and 2.
+    const { group, actorUser, actor } = await aclGroupWorld("allowself", "member");
+    await aclRow(group, "allowself", "allow");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: actorUser.id, db: prisma })
+    ).rejects.toThrow(/role\.grant/);
+
+    const membership = await prisma.group_members.findFirst({
+      where: { group_id: group.id, user_id: actorUser.id },
     });
-
-    await expect(
-      repository.addGroupMember({ actor, groupId: group.id, userId: outsider.id, db: prisma })
-    ).rejects.toThrow(/document\.share/);
-    expect(victim).toBeTruthy();
+    expect(membership).toBeNull();
   }, 120_000);
 
-  test("RF-9 control: the SAME actor passes when the group has no deny rows either", async () => {
-    // This is what separates "the deny row is what refuses" from "this actor is
-    // refused everywhere". Same `member` actor, same shape of group — only the deny
-    // row is missing, and it passes. Without this, the two tests above are also
-    // green for a guard that refuses every non-exempt actor unconditionally, which
-    // would break ordinary directory sync.
-    const { group, victim, actor } = await denyGroupWorld("control", "member");
+  test("RF-9 case 4: allow-only group — a `member` actor cannot REMOVE anyone", async () => {
+    // Removal from an allow group takes access away rather than granting it, and it
+    // is still refused: deciding who a group's ACL reaches is the delegated authority,
+    // in both directions. Also the second test that a deny-only count leaves green.
+    const { group, victim, actor } = await aclGroupWorld("allowremove", "member");
+    await repository.addGroupMember({ actor: SYS, groupId: group.id, userId: victim.id, db: prisma });
+    await aclRow(group, "allowremove", "allow");
 
     await expect(
       repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
-    ).resolves.toMatchObject({ version: expect.anything() });
+    ).rejects.toThrow(/role\.grant/);
   }, 120_000);
 
-  test("RF-9: an actor holding document.share may change a deny group's membership", async () => {
-    // The guard bounds rather than forbids. `document.share` is the permission that
-    // governs who may change a document's reach, and that is exactly what removing
-    // someone from a deny group does — so holding it is the honest bar. Without this
-    // test, "refuse whenever a deny row exists" passes and locks out the admin whose
-    // job this is.
-    const { group, victim, actor } = await denyGroupWorld("sharer", "super_admin");
-    await denyOneDocument(group, "sharer");
-
-    await expect(
-      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
-    ).resolves.toMatchObject({ version: expect.anything() });
-  }, 120_000);
-
-  test("RF-9: coreJobs stays exempt for a deny-only group — S4b must still sync", async () => {
-    const { group, victim } = await denyGroupWorld("denyexempt");
-    await denyOneDocument(group, "denyexempt");
-
+  test("RF-9 case 5: coreJobs stays exempt for both effects — S4b must still sync", async () => {
+    // The reconciler holds no grants at all. A guard that applied to it would refuse
+    // every directory-sync write, so this is checked on both ACL shapes.
+    const denyWorld = await aclGroupWorld("denyexempt");
+    await repository.addGroupMember({
+      actor: SYS, groupId: denyWorld.group.id, userId: denyWorld.victim.id, db: prisma,
+    });
+    await aclRow(denyWorld.group, "denyexempt", "deny");
     await expect(
       repository.removeGroupMember({
-        actor: SERVICE_PRINCIPALS.coreJobs, groupId: group.id, userId: victim.id, db: prisma,
+        actor: SERVICE_PRINCIPALS.coreJobs,
+        groupId: denyWorld.group.id, userId: denyWorld.victim.id, db: prisma,
       })
+    ).resolves.toMatchObject({ version: expect.anything() });
+
+    const allowWorld = await aclGroupWorld("allowexempt");
+    await aclRow(allowWorld.group, "allowexempt", "allow");
+    await expect(
+      repository.addGroupMember({
+        actor: SERVICE_PRINCIPALS.coreJobs,
+        groupId: allowWorld.group.id, userId: allowWorld.victim.id, db: prisma,
+      })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("RF-9 case 6: a group with NO acl rows and no grants is still addable", async () => {
+    // The control that separates "the ACL row refuses" from "this guard refuses
+    // everyone". Same `member` actor, same shape of group, no ACL row — and it
+    // passes. Without this, every case above is also green for a guard that refuses
+    // every non-exempt actor unconditionally, which would break directory sync.
+    const { group, victim, actor } = await aclGroupWorld("control", "member");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("RF-9 control: holding document.share is NOT enough — the bar is role.grant", async () => {
+    // `document.share` was the first bar chosen here and it was wrong: it is the
+    // permission for sharing a document you can already reach, not for deciding who a
+    // group reaches. Measured on a freshly migrated database it is held by org
+    // `super_admin` and workspace `owner`, so it would have let every workspace owner
+    // rewrite any group's membership org-wide.
+    //
+    // This test pins the bar rather than the outcome: swapping `role.grant` back to
+    // `document.share` must turn something red, and without this test that swap is
+    // invisible — `owner` holds document.share and not role.grant.
+    const { group, victim, actor } = await aclGroupWorld("sharer", "owner");
+    await aclRow(group, "sharer", "deny");
+
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).rejects.toThrow(/role\.grant/);
+  }, 120_000);
+
+  test("RF-9 control: an actor holding role.grant may rewrite an ACL group", async () => {
+    // The guard bounds rather than forbids. Without this, "refuse whenever an ACL row
+    // exists" passes every test above and locks out the admin whose job this is.
+    const { group, victim, actor } = await aclGroupWorld("granter", "super_admin");
+    await aclRow(group, "granter", "deny");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
     ).resolves.toMatchObject({ version: expect.anything() });
   }, 120_000);
 

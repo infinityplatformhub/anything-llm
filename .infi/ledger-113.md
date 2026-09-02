@@ -304,77 +304,117 @@ under the org they read.
 
 ## Slice 6 — RF-9 (#129): a group can carry authority with no role grant at all
 
-Closes #129, which PMO opened when TL-1 downgraded this to a residual. It lands here
-rather than separately because it is a three-line change to a guard this SHA
-introduces, and splitting it would ship the wrong answer first and correct it after.
+Closes #129. It lands here rather than separately because it is a small change to a
+guard this SHA introduces, and splitting it would ship the wrong answer first and
+correct it after.
 
+`document_acl` rows are keyed `{principal_type:"group", principal_id}` and
+`documentFilter` reads them directly — they never pass through
+`principal_role_grants`. So a group whose entire purpose is a document ACL holds ZERO
+role grants, `permissionIdsForGroup` returns an empty set, and slice 5's early return
+let any actor rewrite its membership.
 
-TL-1's pre-check on `98b2627a1` found that slice 5's early return was wrong for
-denials, and it is. `document_acl` deny rows are keyed
-`{principal_type:"group", principal_id}` and `documentFilter:91-99` reads them
-directly — they never pass through `principal_role_grants`. So a group whose entire
-purpose is "these people may not see these documents" holds ZERO role grants,
-`permissionIdsForGroup` returns an empty set, and my early return let any actor call
-`removeGroupMember` and hand the victim every document the group hid.
+The mistake underneath: I treated "the group's permission set is empty" as "the group
+carries nothing". Containment on an empty set is not a safe default — the empty set is
+contained by everyone, so "carries nothing" and "carries an ACL" reached the same
+answer while meaning opposite things.
 
-The mistake underneath it: I treated "the group's permission set is empty" as "the
-group carries nothing". Containment on an empty set is not a safe default — the empty
-set is contained by everyone, so "carries nothing" and "carries only denials" reached
-the same answer while meaning opposite things.
+Ruling: `aclCount` counts ANY `document_acl` row keyed on the group, either effect, and
+the early return fires only when it and `groupPerms` are both zero. The reason is the
+same one `permissionIdsForGroup` does not filter by workspace: one `group_members` row
+activates the group's ENTIRE ACL set at once, so the whole set is what is delegated.
+This is NOT deny-wins reasoning — the naming and the comment say "reach", because a
+guard justified by deny-wins would be rewritten the moment someone noticed allow rows
+matter too. `orgId` comes from the group row, as in `workspaceScopeKeysFor`.
 
-Ruling: `denyCount` from `document_acl` is counted alongside the role permissions, and
-the early return fires only when BOTH are zero.
+Ruling: the ACL branch requires `role.grant` (TL-1). Containment cannot supply a bar
+here — the permission set is empty, so it passes for an actor holding nothing, and
+adding `aclCount` without a bar would leave the guard exactly as permissive as before.
+Rewriting the membership of a group carrying an ACL hands that ACL out, so this IS a
+grant, and `role.grant` is the axis `grantRole` and `revokeGrant` already turn on.
 
-Ruling: the deny branch needs its OWN bar, and `document.share` is it. Set containment
-cannot supply one here — the permission set is empty, so the containment check passes
-for an actor holding nothing, and adding `denyCount` without a bar would leave the
-guard exactly as permissive as before. `document.share` governs who may change a
-document's reach, which is precisely what moving someone in or out of a deny group
-does. Org-wide `super_admin` was the stricter option and the wrong one: it would be
-stricter than writing the ACL row itself and would lock out the admin whose job this
-is. If wrong: the bar is either ornamental or it blocks ordinary document sharing.
+Ruling: a missing permission row FAILS CLOSED. An unseeded permission must not read as
+"nothing to check" — the same shape as the hole this branch exists to close.
 
-Ruling: a missing `document.share` permission row FAILS CLOSED. An unseeded permission
-must not read as "nothing to check" — that is the same shape as the hole this branch
-exists to close.
+### My first bar was wrong, and the reason matters more than the fix
 
-### Both measurements are true, and they answer different questions
+I chose `document.share` and reasoned that it "governs who may change a document's
+reach". TL-1 rejected it. Measured on a freshly migrated database rather than argued:
 
-TL-1 then measured that this is not reachable today: `grantDocumentAcl` has no caller
-outside tests, and the seeded `document_acl` rows are all `principal_type:'workspace'`.
-I verified that independently and it is correct — there is no exploit path right now,
-which is why TL-1 downgraded it to a residual and passed `98b2627a1`.
+```
+ document.share | org       | super_admin
+ document.share | workspace | owner
+ role.grant     | org       | setup_admin
+ role.grant     | org       | super_admin
+```
 
-What is fixed here is different: the guard returned the WRONG ANSWER for an input the
-schema already accepts. `document_acl.principal_type` takes `'group'` today, and the
-first deny row S4b or S4c writes opens the hole with nothing to announce it — in the
-very slice that made group membership an authorization path. Recorded both ways rather
-than only the half that favours the fix.
+`document.share` is held by workspace `owner`, so the bar would have admitted every
+workspace owner to rewrite any group's membership ORG-WIDE — the exact scope leak the
+org-wide read of `heldPermissionIds` exists to prevent. My own RF-9 control ("a
+document.share holder may proceed") was therefore evidence the hole was open, written
+as if it were evidence the guard worked. It is now inverted: `owner` holds
+`document.share` and not `role.grant`, so that control is what kills the mutant that
+swaps the bar back.
+
+TL-1's stated reason was that seed grants `member` and `owner` the permission. Half
+right — `20260902044000_workspace_scoped_member_grants` deletes it from org `member`,
+so `member` does NOT hold it today. The ruling is correct on `owner` alone; recording
+the correction so nobody later "fixes" a claim about `member` and concludes the bar was
+fine.
+
+### QA-1 found the half I had not guarded
+
+Counting only `deny` rows was mine, and QA-1 measured it on `98b2627a1`: a group holding
+an ALLOW row for `document.read`, and a `member` actor adding THEMSELVES to it —
+which succeeded. Escalation in its plainest form, with the actor as the beneficiary.
+I had reasoned about the direction where someone frees a victim and never asked about
+the direction where someone helps themselves.
+
+An earlier claim of mine is also withdrawn: I recorded this as "unreachable until the
+first group-principal ACL writer". QA-1 reached it through an exported gateway.
+`grantDocumentAcl` takes `principalType` as a parameter with no allowlist, so "no
+caller passes 'group' today" was never the same statement as "nothing can".
 
 ### Evidence, slice 6
 
-RED first, and cleanly: only the two escalation tests failed. Three controls passed —
-the SAME `member` actor against a group with no deny rows (which is what separates "the
-deny row refuses" from "this guard refuses everyone", and would otherwise break
-directory sync), a `document.share` holder, and `coreJobs`. 17/17 green after.
+RED first: only the escalation cases failed, with every control green. 20/20 after; full
+authorization+identity sweep green.
 
-Two mutants, each killed by its named tests:
+RF-9 is six cases plus two controls:
 
-- D1 restore the unconditional early return → both deny tests
-- D2 never enforce `document.share` → both deny tests
+1. deny-only group, `member` actor REMOVE → refused
+2. deny-only group, `member` actor ADD → refused
+3. allow-only group, `member` actor adds THEMSELVES → refused (QA-1's case)
+4. allow-only group, `member` actor REMOVE → refused
+5. `coreJobs` exempt on BOTH shapes → allowed (S4b holds no grants; a guard applying to
+   it would refuse every directory-sync write)
+6. group with no ACL and no grants → allowed
 
-The tests match `/document\.share/` rather than `/does not hold/`: the role-grant branch
-refuses with its own wording, and a loose pattern would be green for a refusal that came
-from the wrong half of the guard.
+- control A: a `document.share` holder (workspace `owner`) is REFUSED — this pins the
+  bar rather than the outcome
+- control B: a `role.grant` holder is ALLOWED — without it, "refuse whenever an ACL row
+  exists" passes everything above and locks out the admin whose job this is
+
+Four mutants, each killed by its named tests:
+
+- D4 count only `effect:"deny"` → cases 3 and 4 red, 1 and 2 green. Exactly the split
+  TL-1 predicted, and the reason cases 3/4 exist apart from 1/2.
+- D5 swap the bar back to `document.share` → control A alone
+- D6 never enforce the bar → cases 1-4 and control A
+- C guard `add` only → the slice-5 removal test, cases 1 and 4, and control A
+
+The tests match `/role\.grant/` rather than `/does not hold/`: the role-grant branch of
+the guard refuses with different wording, and a loose pattern would be green for a
+refusal that came from the wrong half.
 
 ### A fixture error I nearly read as RED
 
-The first run failed FOUR tests, not two — including the two controls that should have
-passed. The cause was mine and not the code: the fixture created `documents` with
-`docId`/`docpath`/`workspaceId`, and the real model has none of them (`dedupe_key` is
-the column). `PrismaClientValidationError` in a test that expects a throw is
-indistinguishable from a pass if the assertion is loose enough, and counting those four
-as RED would have "proved" a guard that had not run at all.
+The first run failed FOUR tests, including two controls that should have passed. That
+was my fixture, not the code: `documents` was created with `docId`/`docpath`/
+`workspaceId` and the model has none of them (`dedupe_key` is the column). A
+`PrismaClientValidationError` in a test that expects a throw is indistinguishable from
+a pass under a loose assertion, and counting those four as RED would have "proved" a
+guard that never ran.
 
 ## Residual risks
 
