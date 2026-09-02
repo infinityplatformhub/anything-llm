@@ -72,6 +72,134 @@ async function baselinePermissionIds(tx) {
   return new Set(rows.map((r) => r.id));
 }
 
+/**
+ * Permissions carried by every role a GROUP holds, org-wide or workspace-scoped.
+ *
+ * TL-1 FINDING-3 (#113). Since #96 the engine expands `group_members` when it
+ * evaluates grants, which made membership a GRANT PATH: adding a user to a group
+ * hands them everything the group's roles carry, without `grantRole` ever running
+ * and therefore without its set-containment check. An actor holding nothing but
+ * `member` could add anyone — themselves included — to a group holding `super_admin`.
+ *
+ * Workspace-scoped grants are counted here WITHOUT filtering by workspace, and that
+ * asymmetry is deliberate: membership is not written into a scope. One row in
+ * `group_members` activates every grant the group holds in every workspace at once,
+ * so the thing being delegated is the union, and the union is what must be contained.
+ */
+async function permissionIdsForGroup(tx, groupId) {
+  const grants = await tx.principal_role_grants.findMany({
+    where: {
+      principal_type: "group",
+      principal_id: String(groupId),
+      OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+    },
+    select: { role_id: true },
+  });
+  if (grants.length === 0) return new Set();
+  const rows = await tx.role_permissions.findMany({
+    where: { role_id: { in: grants.map((g) => g.role_id) }, effect: "allow" },
+    select: { permission_id: true },
+  });
+  return new Set(rows.map((r) => r.permission_id));
+}
+
+/**
+ * The escalation guard for membership writes — deliberately the SAME SHAPE as
+ * `grantRole`'s, not a second rule worded differently. Two checks guarding one
+ * capability drift, and the weaker one becomes the way in.
+ *
+ * Held permissions are read ORG-WIDE (`targetWorkspaceId: null`) for the reason
+ * above: membership is unscoped, so a workspace-A admin must not be able to activate
+ * a grant that reaches workspace B.
+ *
+ * Applied to REMOVAL as well as addition. Removal is not the harmless direction:
+ * deciding who a group reaches IS the delegated authority, whichever way it moves —
+ * pulling someone out of a group that denies them widens what they may do, exactly as
+ * adding them to one that allows does. Guarding only `add` leaves the same hole with
+ * the sign flipped.
+ *
+ * KNOWN LIMIT (#128, queued): `heldPermissionIds` reads the actor's OWN grants and
+ * does not expand their group memberships, though the engine has since #96. So a
+ * delegated admin who holds their role only through a group is refused here. That is
+ * fail-closed — it denies a legitimate write rather than allowing an escalation — and
+ * #128 closes it in `heldPermissionIds` itself, which fixes `grantRole` and this
+ * together rather than teaching one of them a private answer.
+ */
+async function refuseGroupEscalation(tx, actor, groupId, fn) {
+  if (isExemptPrincipal(actor)) return;
+  const groupPerms = await permissionIdsForGroup(tx, groupId);
+
+  // RF-9 (TL-1, QA-1): a group can carry authority WITHOUT holding a single role
+  // grant. `document_acl` rows are keyed `{principal_type:"group", principal_id}` and
+  // `documentFilter` reads them directly — they never pass through
+  // `principal_role_grants`. So a group whose whole purpose is a document ACL has an
+  // EMPTY permission set here, and the early return let any actor rewrite its
+  // membership.
+  //
+  // ANY row keyed on this group counts, either effect. The reason is the same one
+  // `permissionIdsForGroup` does not filter by workspace: a single `group_members`
+  // row activates the group's ENTIRE ACL set at once, so what is being delegated is
+  // that whole set. QA-1 measured the allow direction on `98b2627a1` — a group
+  // holding an ALLOW row for `document.read`, and a `member` actor adding THEMSELVES
+  // to it, which succeeded. Counting one effect would guard freeing a victim and miss
+  // helping yourself.
+  //
+  // Containment on an empty set is not a safe default: the empty set is contained by
+  // everyone, so "carries nothing" and "carries an ACL" reached the same answer while
+  // meaning opposite things. The count is what separates them.
+  const groupRow = await tx.groups.findUnique({
+    where: { id: Number(groupId) },
+    select: { orgId: true },
+  });
+  const aclCount = await tx.document_acl.count({
+    where: {
+      orgId: groupRow?.orgId ?? 1,
+      principal_type: "group",
+      principal_id: String(groupId),
+    },
+  });
+  if (groupPerms.size === 0 && aclCount === 0) return; // Genuinely carries nothing.
+
+  const held = await heldPermissionIds(tx, actor, null);
+  const baselineIds = await baselinePermissionIds(tx);
+  const missing = [...groupPerms].filter((p) => !held.has(p) && !baselineIds.has(p));
+  if (missing.length > 0) {
+    throw new AuthorizationContractError(
+      `${fn} refused: the group carries permissions the actor does not hold org-wide`
+    );
+  }
+
+  // The ACL half needs its own bar, because set containment cannot supply one: the
+  // permissions above are EMPTY for an ACL-only group, and the empty set is contained
+  // by everyone, so the check just passed for an actor holding nothing.
+  //
+  // `role.grant` is the bar (TL-1 ruling). Rewriting the membership of a group that
+  // carries an ACL hands out that ACL, so this IS a grant, and `role.grant` is the
+  // axis `grantRole` and `revokeGrant` already turn on — one permission governs
+  // delegation rather than two that can drift apart.
+  //
+  // `document.share` was the first choice here and was WRONG in a way worth
+  // recording: it is the permission for sharing a document you can already reach, not
+  // for deciding who a group reaches. Measured on a freshly migrated database, it is
+  // held by org `super_admin` and workspace `owner` — so the bar would have admitted
+  // every workspace owner to rewrite any group's membership org-wide, which is the
+  // scope leak the org-wide read of `heldPermissionIds` exists to prevent.
+  if (aclCount > 0) {
+    const grantPerm = await tx.permissions.findUnique({
+      where: { action: "role.grant" },
+      select: { id: true },
+    });
+    // Fail closed if the permission is missing: an unseeded row must not read as
+    // "nothing to check", which is the shape of the hole this whole branch closes.
+    if (!grantPerm || !held.has(grantPerm.id)) {
+      throw new AuthorizationContractError(
+        `${fn} refused: the group carries document ACL rows, so changing its ` +
+          `membership hands those out — the actor does not hold role.grant org-wide`
+      );
+    }
+  }
+}
+
 async function permissionIdsForRole(tx, roleId) {
   const rows = await tx.role_permissions.findMany({
     where: { role_id: roleId, effect: "allow" },
@@ -380,6 +508,131 @@ async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
   }
 }
 
+/**
+ * The workspaces a user is a member of — the extra scope keys a membership change
+ * has to invalidate.
+ *
+ * A cache entry is keyed on the actor's workspaceIds and scoped to `org:<id>` plus
+ * one `workspace:<id>` per workspace (cache.js `scopesFor`). Bumping only the org
+ * key would still invalidate those entries, but a workspace-scoped consumer that
+ * listens narrowly would miss it, so both are published — the same shape `grantRole`
+ * uses for a workspace-scoped grant.
+ */
+async function workspaceScopeKeysFor(tx, userId, groupId) {
+  const keys = new Set();
+
+  // NIT-3 (TL-1): the org comes from the GROUP ROW, not from a hardcoded 1. The
+  // group is what is being changed, so it is the only thing that knows which org
+  // this write belongs to — and it decides BOTH halves: which grants count, and
+  // which `org:` key the bump is published under. Splitting those (filtering on the
+  // group's org while publishing `org:1`) would emit a key no cache entry in that
+  // org carries, which is the exact defect the RF-5 scope test exists to catch.
+  const group = await tx.groups.findUnique({
+    where: { id: Number(groupId) },
+    select: { orgId: true },
+  });
+  const orgId = group?.orgId ?? 1;
+
+  // Workspaces the user is a direct member of.
+  const memberships = await tx.workspace_users.findMany({
+    where: { user_id: Number(userId) },
+    select: { workspace_id: true },
+  });
+  for (const row of memberships) keys.add(`workspace:${row.workspace_id}`);
+
+  // And the workspaces the GROUP's own grants name. This half is the point: a user
+  // whose only path to a workspace is through the group has no `workspace_users`
+  // row at all, so a membership-only lookup published `org:1` and nothing else.
+  // Found by the RF-5 scope test, which asserted the emitted keys rather than
+  // trusting that invalidation happened for some reason.
+  //
+  // Org-wide grants (workspace_id NULL) need no key of their own — the `org:` key is
+  // already published and every cache entry carries it.
+  const grants = await tx.principal_role_grants.findMany({
+    where: {
+      orgId,
+      principal_type: "group",
+      principal_id: String(groupId),
+      workspace_id: { not: null },
+    },
+    select: { workspace_id: true },
+  });
+  for (const row of grants) keys.add(`workspace:${row.workspace_id}`);
+
+  // Returned WITH the org rather than as bare keys: the caller publishes under
+  // `SCOPE_KEY(orgId)`, and reading the org here but publishing `org:1` there would
+  // reintroduce the mismatch this fix exists to remove.
+  return { orgId, extra: [...keys] };
+}
+
+/**
+ * Add a user to a group, and bump the policy version in the SAME transaction.
+ *
+ * S4a (#113), the residual #96 left behind. Group membership decides authorization
+ * — since #96 the engine expands it, and documentFilter reads it on both halves —
+ * but nothing about writing `group_members` advanced `policy_versions`. So a
+ * membership change was invisible to every cached filter until its TTL expired.
+ *
+ * The direction that matters is REMOVAL: a user taken out of a group kept the
+ * group's access for up to the cache TTL. That is the shape T-5's own comment calls
+ * "not a caching artifact but the authorization failure the seam exists to
+ * prevent", and offboarding (S12) will depend on it being immediate.
+ *
+ * Membership writes therefore live HERE rather than in a caller, for the same reason
+ * grants do: a caller that forgets the bump produces a silent staleness bug, and
+ * nothing about `prisma.group_members.create()` looks wrong.
+ */
+async function addGroupMember({ actor, groupId, userId, db = prisma }) {
+  requireActor(actor, "addGroupMember");
+  return inTransaction(db, async (tx) => {
+    await refuseGroupEscalation(tx, actor, groupId, "addGroupMember");
+    const { orgId, extra } = await workspaceScopeKeysFor(tx, userId, groupId);
+    const version = await bumpVersion(
+      tx,
+      "group_membership",
+      SCOPE_KEY(orgId),
+      actorIdOf(actor),
+      extra
+    );
+    await tx.group_members.upsert({
+      where: { group_id_user_id: { group_id: Number(groupId), user_id: Number(userId) } },
+      create: { group_id: Number(groupId), user_id: Number(userId) },
+      update: {},
+    });
+    return { version };
+  });
+}
+
+/**
+ * Remove a user from a group, bumping the policy version in the same transaction.
+ *
+ * The scope keys are collected BEFORE the delete: `workspace_users` is not what is
+ * being deleted here, so ordering does not strictly matter today — but reading them
+ * first keeps this symmetric with any future membership model where the removal
+ * itself changes what needs invalidating.
+ */
+async function removeGroupMember({ actor, groupId, userId, db = prisma }) {
+  requireActor(actor, "removeGroupMember");
+  return inTransaction(db, async (tx) => {
+    await refuseGroupEscalation(tx, actor, groupId, "removeGroupMember");
+    const { orgId, extra } = await workspaceScopeKeysFor(tx, userId, groupId);
+    const version = await bumpVersion(
+      tx,
+      "group_membership",
+      SCOPE_KEY(orgId),
+      actorIdOf(actor),
+      extra
+    );
+    // deleteMany, not delete: removing someone who is not a member is a no-op, not
+    // an error. The version still bumps — a caller that asked for the removal is
+    // entitled to know the cache reflects reality afterwards.
+    await tx.group_members.deleteMany({
+      where: { group_id: Number(groupId), user_id: Number(userId) },
+    });
+    return { version };
+  });
+}
+
 module.exports = {
   grantRole,
   canAssignLegacyRole,
@@ -393,4 +646,6 @@ module.exports = {
   revokeDocumentAcl,
   setDocumentVisibility,
   currentPolicyVersion,
+  addGroupMember,
+  removeGroupMember,
 };

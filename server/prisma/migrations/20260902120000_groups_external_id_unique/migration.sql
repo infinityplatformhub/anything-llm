@@ -1,0 +1,35 @@
+-- S4a (#113): one row per Lark department, enforced by the database.
+--
+-- `groups.source` already enumerates 'lark' and `externalId` already exists, but
+-- nothing stops two rows claiming one department. That matters because the S4b
+-- reconciler matches on `externalId`: finding two rows has no correct answer, and
+-- picking either one silently splits a department's membership in half.
+--
+-- A PLAIN unique is correct. An earlier draft of the contract claimed local groups
+-- (which all carry externalId NULL) would collide under it, and that a partial or
+-- NULLS NOT DISTINCT form was needed. NULLs being DISTINCT in a unique index is
+-- standard behaviour and holds on every version this runs on; `NULLS NOT DISTINCT`
+-- is the PG15+ addition. Measured on PG16 (what CI runs) and PG17:
+--
+--   two local groups with NULL externalId  -> both accepted (NULLs are DISTINCT)
+--   two lark rows on externalId 'od-123'   -> refused
+--
+-- and the "fix" for that imagined problem is the real hazard:
+--
+--   CREATE UNIQUE INDEX ... NULLS NOT DISTINCT
+--   ERROR:  could not create unique index
+--   DETAIL: Key ("orgId", source, "externalId")=(1, local, null) is duplicated.
+--
+-- It fails at CREATION time on any database that already holds two local groups —
+-- a migration that breaks on real data while passing on an empty test database.
+-- Hence the test for this runs against a database with local groups present.
+--
+-- DO NOT COPY THE NEIGHBOURING INDEX. `principal_role_grants` (migration
+-- 20260902020000, line 158) DOES use NULLS NOT DISTINCT, deliberately: there a NULL
+-- `workspace_id` MEANS "org-wide", so two such rows are the same grant and a plain
+-- unique let them duplicate on re-runs. That is the opposite requirement to this
+-- one, where a NULL `externalId` means "no external identity" — and two groups with
+-- no external identity are two different groups. Same syntax, inverted meaning; the
+-- nearest example in the tree is the wrong model for this index.
+CREATE UNIQUE INDEX "groups_orgId_source_externalId_key"
+  ON "groups" ("orgId", "source", "externalId");
