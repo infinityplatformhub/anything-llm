@@ -1,0 +1,4 @@
+# QA-2 — #139 node guard — d7cebec82 (7c733f79d = +contract-135 doc) — PASS (written by PMO from QA-2's body)
+16/0 deterministic ×2. yarn --ignore-engines test (node 26): exit 1, guard msg, TypeErrors 0 · npx vitest --run (node 26): exit 1, guard msg, TypeErrors 0 (was 52, no msg) · node 22 yarn test: exit 0, 16 files/107. Guard imported into src/test/setup.js (setupFiles), throws not exit. Drift check positive across all four .nvmrc + engines.
+Mutants: M1 null guard CAUGHT; M2 major=20 CAUGHT; M4 drift disabled CAUGHT; M5 drift frontend-only CAUGHT; M6 drop setup.js check CAUGHT (npx reopens, 52); M3 process.exit(0) in CLI SURVIVES BY DESIGN — setupFiles still refuses (2 msgs, 0 TypeErrors); pretest = fast path, setupFiles = correctness boundary.
+Note: Dev2's "10 TypeErrors" vs QA-2's "52" = per-file vs per-occurrence counting; both 0 after fix. nvm not installed → `nvm use` not checked (contents asserted).
