@@ -69,3 +69,20 @@ at **2514 ms**, matching QA-2's 2518 ms baseline independently.
 | remove the cache read | `N reads derive the key ONCE, not N times`, `a cold cache derives exactly once`, `a fresh process starts with a cold cache`, `present and absent reads cost the same once the cache is warm`, `reading 97 credentials costs about one derivation, not 97` (4982 ms) |
 | cache keyed by nothing (`if (keyCache) return keyCache.key`) | `rotating SIG_KEY mid-process re-derives instead of reusing the old key`, `a value stored under a different SIG_KEY does not decrypt` |
 | move the guard below the cache read | **NONE — 25/25 green.** Equivalent, not a survivor; the comment was corrected rather than a test contrived to fail |
+
+## Two conditions on the above, recorded because nothing enforces them (TL-2)
+
+**The guard/cache equivalence holds ONLY while the cache key is exactly the material.** It is a
+single entry compared with `===`, so unvalidated material can never hit it. Add `KEY_VERSION` to the
+key, make it multi-entry, or relax the comparison in any way, and a lookup could succeed on input
+the guard has not seen — at which point guard-before-cache becomes load-bearing for real. **No test
+holds that boundary**: the mutation that moves the guard is green today and would stay green through
+the change that makes it matter. Whoever touches the cache key must re-run that mutation and expect
+a different answer.
+
+**The oracle is closed only AFTER the first derivation.** The first `get()` on a cold cache still
+costs ~28 ms more when a row exists than when it does not, so a process that has not yet derived is
+still measurable. In practice #115 hydrates credentials before `listen()`, which means the cache is
+warm before anything is reachable — but **that is a dependency between two issues with no test
+holding it**. If hydration is ever moved after `listen()`, or made lazy, the side channel reopens
+for the first request and nothing here would fail.
