@@ -5,3 +5,5 @@ docker/docker-entrypoint.sh
 server/__tests__/api/regression.test.js
 server/__tests__/envDumpGuardHttp.test.js
 server/__tests__/ssoIssuanceLockHttp.test.js
+server/utils/middleware/embedSessionToken.js
+server/__tests__/utils/middleware/embedSessionToken.test.js
