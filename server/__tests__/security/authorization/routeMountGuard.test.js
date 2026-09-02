@@ -306,14 +306,12 @@ describe("#98 (TL-2): the ways a mount can dodge a naive seal", () => {
   });
 });
 
-describe("#98: what the seal does NOT cover — recorded, not implied", () => {
-  // TL-2 drove these over real HTTP after boot and got 200s. Three of the four they
-  // found are now sealed (`app.all`, `apiRouter.all`, `.route()` — see the suite
-  // above). This one is not, and cannot be without breaking the app.
-  //
-  // These tests assert WHAT IS, not what should be. If someone later closes this
-  // hole, they go red and force a deliberate decision instead of leaving a stale
-  // claim about coverage lying around.
+describe("#119: use(subRouter) is sealed recursively; middleware is not", () => {
+  // The two tests below REPLACE assertions that said these mounts succeed. #98
+  // wrote them that way on purpose — "if someone later closes this hole, they go
+  // red and force a deliberate decision instead of leaving a stale claim about
+  // coverage lying around". This is that decision, and inverting them is how it
+  // is recorded.
 
   const loadReal = () => {
     jest.resetModules();
@@ -323,16 +321,11 @@ describe("#98: what the seal does NOT cover — recorded, not implied", () => {
     (app._router?.stack ?? []).find((l) => l.name === "router" && l.handle?.stack)
       ?.handle;
 
-  test("RESIDUAL: use(subRouter) mounts after boot, and its routes are reachable", () => {
-    // `use` is how ALL middleware mounts, so sealing it would refuse the express
-    // static handler, body parsers, and every legitimate late `app.use` — the guard
-    // would fire on correct code and be deleted within a week. A sub-router carries
-    // its own stack, and nothing in that stack passed through a sealed method.
-    //
-    // Mitigating, but not a fix: the routes inside are still ungated as far as the
-    // startup sweep is concerned, which is exactly the hole. Closing it means
-    // sealing recursively at mount time — issue #119, because it changes what `use`
-    // means rather than adding a refusal. When #119 lands, this assertion inverts.
+  test("a sub-router use()d after boot is refused, on app and on apiRouter", () => {
+    // Was: "RESIDUAL: use(subRouter) mounts after boot, and its routes are
+    // reachable". A sub-router carries its own stack, so nothing inside it ever
+    // crossed a sealed method and `routeGateSweep` cannot see it — the same
+    // invisibility a late direct mount has.
     const express = require("express");
     const { app } = loadReal();
     const apiRouter = apiRouterOf(app);
@@ -340,20 +333,92 @@ describe("#98: what the seal does NOT cover — recorded, not implied", () => {
     const sub = express.Router();
     sub.post("/inside", (_, response) => response.sendStatus(200));
 
-    expect(() => apiRouter.use("/late-sub", sub)).not.toThrow();
-    expect(() => app.use("/late-sub-app", sub)).not.toThrow();
+    expect(() => apiRouter.use("/late-sub", sub)).toThrow(/after boot/i);
+    expect(() => app.use("/late-sub-app", sub)).toThrow(/after boot/i);
 
-    // And it really did mount — this is a live bypass, not a theoretical one.
-    const mountedSub = (apiRouter.stack ?? []).some(
-      (layer) => layer.handle === sub
-    );
-    expect(mountedSub).toBe(true);
+    // and it did not mount despite throwing
+    expect((apiRouter.stack ?? []).some((l) => l.handle === sub)).toBe(false);
   });
+
+  test("ordinary middleware still mounts after boot", () => {
+    // The half that makes the naive fix wrong, so it gets the most explicit
+    // proof: `use` is how EVERY middleware mounts. A guard that refuses these
+    // fires on correct code and gets deleted within a week.
+    const express = require("express");
+    const { app } = loadReal();
+
+    expect(() => app.use(express.json())).not.toThrow();
+    expect(() => app.use(express.urlencoded({ extended: true }))).not.toThrow();
+    expect(() => app.use((_, __, next) => next())).not.toThrow();
+    // A mounted path plus a plain function — the shape index.js uses for the
+    // static handler and the SPA catch-all.
+    expect(() => app.use("/static-ish", (_, __, next) => next())).not.toThrow();
+  });
+
+  test("index.js's own post-boot mounts still work on the real app", () => {
+    // Not hypothetical middleware: the exact calls production makes after the
+    // seal point. If these throw, the app does not boot.
+    const express = require("express");
+    const { app } = loadReal();
+
+    expect(() =>
+      app.use(express.static(require("path").resolve(__dirname, "..")))
+    ).not.toThrow();
+    expect(() => app.get("/robots.txt", (_, r) => r.send("ok"))).not.toThrow();
+    expect(() => app.use("/", (_, r) => r.sendStatus(200))).not.toThrow();
+  });
+
+  test("DEPTH: a router mounted onto a router mounted after boot is sealed too", () => {
+    // One level is not the contract. Sealing only the router handed to `use`
+    // would leave `outer.use("/in", inner)` as the next bypass, one line longer
+    // than the one being closed.
+    const express = require("express");
+    const { app } = loadReal();
+
+    const outer = express.Router();
+    const inner = express.Router();
+
+    // The outer router is refused at mount — and the seal is applied to it on
+    // the way in, so writing to it afterwards is refused as well.
+    expect(() => app.use("/outer", outer)).toThrow(/after boot/i);
+    expect(() => outer.post("/direct", () => {})).toThrow(/after boot/i);
+    expect(() => outer.use("/in", inner)).toThrow(/after boot/i);
+  });
+
+  test("a router built and populated BEFORE being use()d is refused as a whole", () => {
+    // The realistic shape: nobody mounts an empty router. The routes are added
+    // first, then the router is mounted — so the seal has to refuse the MOUNT,
+    // not merely the writes.
+    const express = require("express");
+    const { app } = loadReal();
+
+    const sub = express.Router();
+    sub.post("/a", () => {});
+    sub.get("/b", () => {});
+    expect(() => app.use("/prebuilt", sub)).toThrow(/after boot/i);
+  });
+
+  test("read-only mounts are unaffected, since index.js depends on them", () => {
+    const { app } = loadReal();
+    expect(() => app.get("/manifest.json", (_, r) => r.json({}))).not.toThrow();
+  });
+});
+
+describe("#119: what remains uncovered — recorded, not implied", () => {
+  const loadReal = () => {
+    jest.resetModules();
+    return require("../../../index");
+  };
 
   test("RESIDUAL: a sub-router captured BEFORE the seal is still writable after it", () => {
     // The seal holds references to exactly two objects. Anything that grabbed a
-    // sub-router earlier keeps an unsealed handle to it. No module in the tree does
-    // this today; recorded so the guard's reach is not overstated.
+    // sub-router earlier keeps an unsealed handle to it. #119 does not close
+    // this: the router is never handed to `use` while the seal is armed, so
+    // there is no moment at which to seal it. Closing it means sealing at
+    // CONSTRUCTION, which is a different change.
+    //
+    // No module in the tree does this. Recorded so the guard's reach is not
+    // overstated — and it inverts, like the two above, if anyone closes it.
     const express = require("express");
     const sub = express.Router();
     loadReal();
