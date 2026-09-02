@@ -196,3 +196,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Delivery log (mockup B step 3) deferred to #107.
 - #115 hydrate window: GET /mailer/settings reports hasPassword:false right after boot; admin who retypes overwrites a working credential.
 - Test gaps: hostile-GET password render; main.jsx route-guard assert (next Dev4 SHA).
+
+## #112 residuals (O2b)
+- Fresh install with DB unreachable → preflight 403 by design (isConfirmedSingleUser fails closed); operator uses CLI doctor.
+- preUserOrGated catch block is unreachable (helper never throws) — comment or remove.
+- Synthetic check id in level test is load-bearing; do not "tidy" to a real id.
+- GET /setup-complete neighbour still unauth → #114.

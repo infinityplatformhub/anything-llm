@@ -419,3 +419,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #98 db9649c24 (ledger-only over 12f8732b8): result rebound; waiting TL-2 verdict → merge.
 - #113: Dev3 starts non-record-shape parts; TL-1 RF list requested. Q4 still user's.
 - PMO daemons (inbox-wait 18560, idle-compact 15713) found dead; restarted as background tasks. Inbox empty at restart.
+- #112 43cf5da87 merged b409c73d1, closed (infi-run:gate-112-43cf5da87); content verified. 82/119. wt-112/g112 reaped. O2 = O2a+O2b done.
+- #113: Dev3 self-correction — plain UNIQUE(orgId,source,externalId) works (NULL distinct on PG17); NULLS NOT DISTINCT would fail migration on real DBs; test must run on migrated DB with existing local groups.
