@@ -77,7 +77,33 @@ component, not a decision.
 (`|| !multiUserMode`), so a fixture without it is green under either guard and proves nothing —
 the accidentally-passing-fixture class from #94 and #49.
 
-## Residual
+## Residuals
+
+### Narrowed, not closed (TL-2 pre-read)
+
+The guard change moves the bug from `manager` to `setup_admin`; it does not eliminate it.
+Verified against seeded data rather than taken on report:
+
+```
+setup_admin:org -> settings.write        (and NOT system.read)
+```
+
+`AdminRoute` gates on `can("settings.write")` since #40 task 4, so a `setup_admin` principal
+passes the guard, reaches /settings/mobile-connections, and gets **403 from both routes** — the
+same "renders and cannot work" shape, one role narrower.
+
+Not a blocker, for three reasons, all checked: no legacy role string maps to `setup_admin`
+(`ORG_ROLE_FOR_LEGACY` is `admin → super_admin`, `manager|default → member`), so reaching this
+state requires a deliberate grant; the failure direction is a 403, which refuses rather than
+leaks; and the page shows no data before its calls return.
+
+**The real close is a client guard that asks `system.read` directly.** No such guard exists —
+`AdminRoute` and `ManagerRoute` are the only two, and neither maps 1:1 onto the permission this
+page needs. Building one is its own issue: today the route guards are a coarse two-tier
+approximation of a fine-grained permission model, and #127 fits the page to the closest
+available tier rather than inventing a third.
+
+### `system.read` is coarse
 
 `system.read` is still an ORG-scoped, all-or-nothing permission. A deployment wanting managers
 to see mobile devices without seeing everything else `system.read` covers has no way to express
