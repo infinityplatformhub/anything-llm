@@ -65,7 +65,7 @@
 - [→ #48] Stored credential cannot be cleared via updateENV: value validators reject "" before the delete branch runs; row stays decryptable. Needs explicit clear endpoint. (QA-1 #33p3 post-merge)
 - [→ #49] Embed widget must return x-allm-session-token; until it lands EMBED_REQUIRE_SESSION_TOKEN stays off on every deployment (#32 carve-out)
 - [→ backlog] require cycle actorResolver→systemSettings→utils/http→models/user still present after #39 (principals.js leaf fixed only SERVICE_PRINCIPALS); isConfirmedSingleUser catch should console.error (QA-2 #46)
-- [→ backlog] EMBED_REQUIRE_SESSION_TOKEN and EMBED_REQUIRE_ALLOWLIST are presence-based: `="false"` enables. Convert both to value-read in one change (#32 NIT-1).
+- [→ backlog] EMBED_REQUIRE_SESSION_TOKEN and EMBED_REQUIRE_ALLOWLIST are presence-based (repo convention, 9 sites): fix .env.example to `# X=1  # any value enables`, do not change code (#32 NIT-1, Techlead).
 - [→ backlog] regression.test.js "does not expose password in login response" flaked once in 4 runs at ee4be889 (QA-1); watch for recurrence.
 - [→ backlog] parseRetentionDays (server/utils/retention/purge.js:30) tests regex after trim: " 7 " and "07
 " accepted as 7; fix compare raw before trim + /^[1-9]\d*$/ (QA-2 post-merge probe, low, not fail-open)
