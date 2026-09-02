@@ -100,6 +100,30 @@ downstream.
 Boundaries that shape the tests more than the code: the driver decides no
 recipients, reads no app models, and **logs no body, token, or invite link**.
 
+## 5b. Saving a configuration requires a successful test (QA-3)
+
+Mockup B shows a setup that cannot be saved until it has actually sent a message.
+That gate must live in the **backend**, not in the wizard: the save endpoint is
+reachable without the page, so a client-side check protects nobody.
+
+The rule: the save endpoint refuses a configuration unless a successful test send
+is on record **for that exact configuration**. Binding it to the configuration
+rather than to the session is the whole point — otherwise an operator verifies
+one host, goes back, types a different one, and saves on the first one's
+evidence. A hash over the connection-determining fields (host, port, TLS mode,
+username, and the credential's identity — never its value) is enough to tie a
+test result to the settings it proved, and any edit to those fields invalidates
+the result by construction.
+
+Two consequences worth stating before implementation:
+
+- The mockup's `verified` flag is the visible half only. It must be *read*
+  before the save button acts (it now is), but the authoritative refusal is the
+  endpoint's.
+- Changing the encryption mode away from plaintext clears the operator's
+  acceptance of unencrypted sending. Consent is to a specific choice, not a
+  ticked box that survives changing the choice.
+
 ## 6. Configuration
 
 - `SMTP_PASSWORD` → `CredentialStore`, with a `KEY_MAPPING` entry marked

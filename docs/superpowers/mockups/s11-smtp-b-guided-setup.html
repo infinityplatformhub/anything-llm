@@ -66,16 +66,26 @@
         </select>
         <div id="tls-warn"
           class="hidden mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <b>Plaintext.</b> Password and invite links cross the network in the clear.
-          Refused unless <span class="font-mono text-xs">SMTP_ALLOW_INSECURE</span> is set.
+          <b>Plaintext.</b> The SMTP password and every message — invite links
+          included — cross the network unencrypted, readable by anything on the
+          path. Refused unless
+          <span class="font-mono text-xs">SMTP_ALLOW_INSECURE</span> is set on the
+          server, and logged loudly at every boot.
+          <label class="mt-2 flex items-start gap-2 font-medium">
+            <input id="tls-accept" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-amber-400" />
+            <span>I accept that mail from this server is sent unencrypted.</span>
+          </label>
         </div>
       </div>
     </div>
-    <div class="px-5 py-4 border-t border-slate-200">
+    <div class="px-5 py-4 border-t border-slate-200 flex items-center gap-3">
       <button id="next1"
         class="h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
         Continue
       </button>
+      <span id="next1-blocked" class="hidden text-sm text-amber-800">
+        Tick the box above to continue with an unencrypted connection.
+      </span>
     </div>
   </section>
 
@@ -164,12 +174,33 @@ function drawSteps() {
   $("s3").classList.toggle("hidden", step !== 3);
 }
 
-$("tls").addEventListener("change", e =>
-  $("tls-warn").classList.toggle("hidden", e.target.value !== "none"));
+$("tls").addEventListener("change", e => {
+  const plaintext = e.target.value === "none";
+  $("tls-warn").classList.toggle("hidden", !plaintext);
+  // Switching away from plaintext clears the acceptance: consent is to THIS
+  // choice, not a box that stays ticked from an earlier one.
+  if (!plaintext) $("tls-accept").checked = false;
+  $("next1-blocked").classList.add("hidden");
+});
 
-$("next1").addEventListener("click", () => { step = 2; verified = false; drawSteps(); });
+// QA-3 (1): plaintext needs an explicit acceptance, not a warning someone reads
+// past. The ruling is "refuse unless explicitly allowed" — a warning refuses
+// nothing.
+$("next1").addEventListener("click", () => {
+  if ($("tls").value === "none" && !$("tls-accept").checked) {
+    $("next1-blocked").classList.remove("hidden");
+    return;
+  }
+  step = 2;
+  verified = false;
+  drawSteps();
+});
 $("back2").addEventListener("click", () => { step = 1; drawSteps(); });
-$("reconf").addEventListener("click", () => { step = 1; drawSteps(); });
+// QA-3 (3): reconfiguring INVALIDATES the previous test. A passing test belongs
+// to the configuration it ran against, not to the session — otherwise someone
+// verifies one host, goes back, types another, and saves on the first one's
+// evidence.
+$("reconf").addEventListener("click", () => { step = 1; verified = false; drawSteps(); });
 
 $("run").addEventListener("click", () => {
   $("result").innerHTML = '<p class="text-sm text-slate-500">Connecting…</p>';
@@ -193,6 +224,18 @@ $("run").addEventListener("click", () => {
         Save and turn on
       </button>`;
     $("finish").addEventListener("click", () => {
+      // QA-3 (2): `verified` is READ here, not merely set. In the real thing
+      // this check lives in the BACKEND — the save endpoint refuses a
+      // configuration with no successful test bound to that exact config — and
+      // this button is only the visible half. A client-side gate protects
+      // nobody: the endpoint is reachable without the page.
+      if (!verified) {
+        $("result").innerHTML = `
+          <div class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+            <b>Not saved.</b> This configuration has not sent a message yet.
+          </div>`;
+        return;
+      }
       const host = $("host").value.trim(), port = $("port").value.trim();
       $("summary").textContent = `${host}:${port} · ${$("tls").value}`;
       step = 3; drawSteps();

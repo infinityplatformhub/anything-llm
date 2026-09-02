@@ -91,6 +91,10 @@ beforeEach(async () => {
 afterAll(async () => {
   await prisma.$disconnect();
   fs.rmSync(tempDir, { recursive: true, force: true });
+  // issue 77: hand the environment back — the limit is read per request now, so
+  // a leftover value is one another suite's limiters would read. Jest isolates
+  // the module registry per file, not `process.env`.
+  delete process.env.INVITE_RATE_LIMIT_MAX;
 });
 
 /** Start a login and return the request ID the IdP is expected to echo. */

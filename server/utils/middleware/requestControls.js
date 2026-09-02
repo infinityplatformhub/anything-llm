@@ -94,11 +94,26 @@ function integerEnv(name, fallback) {
 const requestControlStores = [];
 
 function limiter({ windowEnv, limitEnv, windowMs, limit, keyGenerator }) {
+  // ONE store per limiter, created here and never replaced. `resetRequestControls`
+  // holds this exact object, and other suites call it in `beforeEach` — hand out
+  // a fresh store per request and those resets would clear something nobody is
+  // counting in, leaving state to leak between tests.
   const store = new BoundedMemoryStore();
   requestControlStores.push(store);
   return rateLimit({
+    // issue 77: `windowMs` stays LOAD-TIME, deliberately. express-rate-limit
+    // passes it to the store's `init()`, and BoundedMemoryStore keeps it to
+    // compute every entry's `resetTime` — change it mid-flight and entries
+    // created before and after expire on different schedules, with nothing
+    // saying so. Restarting to change a window is an acceptable cost; windows
+    // change far less often than limits.
     windowMs: integerEnv(windowEnv, windowMs),
-    limit: integerEnv(limitEnv, limit),
+    // The LIMIT, by contrast, is read per request. Frozen, an operator who
+    // raises or lowers a ceiling sees no effect until the process restarts, and
+    // nothing tells them the setting is merely deferred rather than broken.
+    // Tightening a limit during an incident is exactly when waiting for a
+    // restart window is least acceptable.
+    limit: () => integerEnv(limitEnv, limit),
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator,
