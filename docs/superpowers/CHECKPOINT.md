@@ -276,3 +276,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - O5b recon merged; rulings: CLI-only, no migration/slot in this issue; --bundle JSON on stdout only.
 - #49 contract posted (EXPECT measured-at-close). Dev2 on 40-task1-rebased (inventory: 8 new routes, ldap login/enabled → allowlist ruling).
 - Post-merge main after #80 hotfix: **2587/2587** (runInBand, fresh STORAGE_DIR, real-store env) — main fully green.
+- #84 f309f1247 (final: + gate-equality test): gate PASS (check-local, contract 10/10, related 107/107, result bound). QA-2 PASS 17/17 (carries). Waiting TL-1 delta → close/merge. #91 rulings sent (all-or-nothing before preUpdate, code fields, 400 + fix 200-on-error → 500, update-password/enable-multi-user untouched).
