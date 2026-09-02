@@ -15,3 +15,4 @@
 - AMENDED (Techlead design check): GET /v1/document/:docName and generated-files → 404 on both mismatch and not-found (§3.4 user-chosen slug; resolve first, compare, no short-circuit, identical body). 403 ruling withdrawn.
 - Auto-attach must cover all 4 upload routes (upload, upload/:folderName, upload-link, raw-text via validateWorkspaceSlugQuery) and ship in the same PR as strict join (no window where a bound key uploads but cannot read).
 - #54 overlap: none — Actor = grants(creator) ∩ scopes(key), binding only narrows. Add test: remove creator from workspace → bound key 403 immediately (grant read at request time, not mint time).
+- generated-files has no owner row (flat disk, no table): bound key → 403 on the whole route (global-namespace class, like folders). Root fix (agent_generated_files table) → follow-up issue. 404 amendment applies to :docName only.
