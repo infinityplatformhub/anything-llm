@@ -854,3 +854,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - V8 contract + mockup LoadingChat note landed (Dev4 b493873ac).
 - #138 queue: suite 9/9 at 2cdb884ef; QM-1..5 killed with distinct sets (QM-5 = run-site-hardcoded reds RF-3b only → split justified). TL-1 blockers (2)/(3) were already fixed in 3836171c1/866d2db29. RULING → TL-1: sync-now endpoint permission (new seeded `directory.sync` vs reuse). Remaining: handler + schedule via materialization, RF-6 exact-N, _backoff skip + witness, ledger; ETA 45-60 min. #139 assigned to Dev2 (pretest node guard).
 - #132 TL-1 RED pre-read (6da7003ee): ready, no test changes; two contract items: (1) evidence contract names frontend suite AND systemReadCapabilityExposed.test.js; (2) #132 ships SystemReadRoute as-is (not the prop pattern) + residual line pointing at the audit issue.
+- Post-merge #138 (server log): 3292 passed / 1 failed = cacheIsolation.test.js — fails ALONE on main HEAD too (known #51 flake, in watchdog rules). Not a merge regression. Frontend pending from agent.
+- QA-1 dry-fire 2cdb884ef: 4/4 RF pass, Dev3 accurate. LATENT: tick claims every type at max lease → 30s jobs unclaimable for 160s after a claim-then-die → RULING (TL-1): accept + comment, or per-type claim; test pins it either way.
+- Dev1 /utils/metrics recon landed (98294de49).
