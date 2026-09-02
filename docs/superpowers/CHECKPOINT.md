@@ -203,3 +203,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 22cd99c9: gate PASS (check-local; 9 suites + #72 suites 115/115 --runInBand). Waiting QA-1/QA-3/TL-1/TL-2 + Dev3 `updated` contract/env → close/merge.
 - #30 slice 3 f77433728: TL-1 PASS (3 NIT → docs follow-up), QA-1 PASS. Waiting QA-2/QA-3/TL-2 + Dev4 contract/env.
 - #40: 73585b9b2 has freeze (array literal) + router walk in test; 6/7 attacks red, R-2 (deferred mount) open → ruling walk twice across event loop; >100 → exact relation. Waiting SHA.
+- #30 slice 3 f77433728: QA-3 PASS (3rd verdict). Waiting QA-2 + TL-2 + Dev4 contract comment.
+- #80 e1bf4adb8 (ledger-only over 22cd99c9): env rewritten to issue contract (9 suites --runInBand, 122 passed exact, credentialPersistence suite added); task.sh check running (monitor armed). Waiting 4 verdicts.
+- #40 9d949199c "trust permission gate identities" — no R-2 walk-twice yet; Dev2 has not declared.
