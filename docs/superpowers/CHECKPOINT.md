@@ -248,3 +248,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 a2bbb0de8: QA-2 PASS (37/37, lane excludes singleUserRouteShapeB), TL-1 PASS, QA-3 FAIL (SPA fallback), gate confirms 2 red in that suite. Waiting new SHA + TL-2.
 - #84 started (Dev1, impl84, recon ebbbf2ce, ruling ข whole route → system.write); #89 dup closed; contract on #84.
 - O5 recon merged; rulings: split O5a /metrics (mount /api, ipAllowlist, const labels) / O5b bundle CLI first (diagnostics.export, slot 100000, super_admin). Dev5 opens O5a issue.
+- Opened: updateENV unknown-key silent drop (QA-2 pre-read #84; Dev1 after #84) and validApiKey→locals.actor (TL-1 NIT-2 deferred; Dev4 after #49).
+- #30 follow-up 8e9e47ef9 gating (gate-30f); TL-1 quick read requested. Post-merge #80 suite running.
+- #40: a2bbb0de8 superseded by QA-3 blocker; waiting Dev2 SHA (add /api + content-type assert). TL-2 told to hold M-1..M-9 for new SHA.
