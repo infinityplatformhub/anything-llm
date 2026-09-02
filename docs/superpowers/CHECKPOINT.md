@@ -783,3 +783,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - preflight :413 addendum (TL-1, 9d32ae768): not a bypass; tooling gap → sidebar/route audit issue.
 - #138 QA-1 driver baseline (qa1-138-driver-baseline.md): A/B/D hang >20s on main, C rejects 2.5s (inherited). Floor = timeout+backoff not 4×timeout; token memo → fresh instance per case; 5 mutants with distinct red sets. Forwarded to Dev3.
 - O3 contract v2 (Dev2, contract-o3-v2 branch) landed if diff present.
+- #136 F1 shape (TL-2): refuse in User.update (not in cast, not a throw); suspended only; _update untouched; RED set "0","false","no",2,-1,null,undefined,[],{}; controls 0/1/true/false; never let undefined reach prisma. Forwarded to Dev5.
