@@ -110,6 +110,30 @@ workspace-scoped grant would not be counted at all, so control A would refuse be
 the actor holds NOTHING rather than because `document.share` is the wrong bar. Green
 for the wrong reason.
 
+## Follow-up: QA-1's residual on `6087af79c` — a guard I shipped untested
+
+I added `if (!grantPrincipal) return new Set()` while writing the expansion and never
+tested it. QA-1 deleted it and the suite stayed green 49/49, which is the §7.9 shape
+and mine: the line was reasoning I trusted, not behaviour anything checked.
+
+It is not a hypothetical branch. `engine.js:143` documents a null `grantPrincipal` as
+the state of a key whose creator can no longer be resolved, and the engine answers
+`no_grant_principal` for it. Without the guard, `grantPrincipalPairs` receives null,
+reads `principal.type`, and the caller gets a TypeError.
+
+Ruling: the test asserts a REFUSAL, not merely "does not crash". A thrown TypeError
+escapes the authorization decision entirely — `canAssignLegacyRole` never returns
+false, it rejects, and whether that surfaces as a 500 or an unhandled rejection is the
+caller's problem rather than a denial. Failing closed means answering "no", not
+exploding on the way to answering. Asserted on both paths a key takes: the boolean
+helper returns `false`, and `grantRole` rejects with `AuthorizationContractError` —
+which is what distinguishes a refusal from a crash, since a TypeError would satisfy a
+bare `rejects.toThrow()`.
+
+Measured: mutant M6 (guard deleted) now fails that test with exactly
+`TypeError: Cannot read properties of null (reading 'type')` — the failure mode QA-1
+predicted, reproduced rather than assumed.
+
 ## Residual risks
 
 1. Expansion adds one query per `heldPermissionIds` call for user actors. It is not on
