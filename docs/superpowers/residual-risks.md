@@ -273,3 +273,6 @@ Call-site guard strips only `//` comments; a `/* */` block containing the condit
 
 ## #128 (QA-1 NIT-1)
 `if (!grantPrincipal) return new Set()` in heldPermissionIds has no test (M6 delete survives 49/49); without it a null-creator api-key throws TypeError into guard callers (not fail-closed by construction). Unreachable today via resolveActor. One test: `canAssignLegacyRole({actor:{...keyActor, grantPrincipal:null}, targetRole:"admin"})` → false. Dev3 on next policyRepository touch.
+
+## #119 (TL-2 N6 NIT)
+`sealRoutes(undefined)` skip-guard is reachable but untested; add `expect(() => sealRoutes(undefined)).not.toThrow()`. N4 (`internalRouter !== target`) unreachable on express 4.22.1.
