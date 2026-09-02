@@ -35,7 +35,14 @@ const PLAN_FILE = path.join(
 );
 
 const { app, registrations, skipped } = buildRouter();
-const mountedRoutes = app._router.stack.filter((layer) => layer.route);
+
+function mountedRouteLayers(stack) {
+  return (stack || []).flatMap((layer) => [
+    ...(layer.route ? [layer] : []),
+    ...mountedRouteLayers(layer.handle?.stack),
+  ]);
+}
+const mountedRoutes = mountedRouteLayers(app._router?.stack);
 const mountedGates = mountedRoutes.flatMap((layer) =>
   layer.route.stack
     .map((handler) => handler.handle)

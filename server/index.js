@@ -99,7 +99,7 @@ if (!!process.env.ENABLE_HTTPS) {
 
 app.use("/api", ipAllowlist, apiRouter);
 apiRouter.use("/v1", apiIpRateLimit, apiKeyRateLimit);
-const ENDPOINT_REGISTRATIONS = [
+const ENDPOINT_REGISTRATIONS = Object.freeze([
   systemEndpoints,
   extensionEndpoints,
   workspaceEndpoints,
@@ -134,7 +134,7 @@ const ENDPOINT_REGISTRATIONS = [
   // Public embed and browser-extension routes remain last.
   embeddedEndpoints,
   browserExtensionEndpoints,
-];
+]);
 
 for (const entry of ENDPOINT_REGISTRATIONS) {
   const register = typeof entry === "function" ? entry : entry.register;

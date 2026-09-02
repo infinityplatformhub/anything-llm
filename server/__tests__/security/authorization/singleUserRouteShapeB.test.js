@@ -81,10 +81,18 @@ beforeAll(async () => {
   const { makeJWT } = require("../../../utils/http");
 
   const admin = await prisma.users.create({
-    data: { username: `sb-admin-${dbSuffix}`, password: "unused", role: "admin" },
+    data: {
+      username: `sb-admin-${dbSuffix}`,
+      password: "unused",
+      role: "admin",
+    },
   });
   const victim = await prisma.users.create({
-    data: { username: `sb-victim-${dbSuffix}`, password: "unused", role: "default" },
+    data: {
+      username: `sb-victim-${dbSuffix}`,
+      password: "unused",
+      role: "default",
+    },
   });
   // Shape (b): the setting says single-user, the user table disagrees.
   await prisma.system_settings.upsert({
@@ -106,7 +114,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   const built = buildRouter();
-  app._router = built.app._router;
+  app.use(built.app._router);
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -126,7 +134,9 @@ afterAll(async () => {
     const root = new PrismaClient({
       datasources: { db: { url: baseDatabaseUrl } },
     });
-    await root.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
+    await root.$executeRawUnsafe(
+      `DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`
+    );
     await root.$disconnect();
   }
 }, 60_000);

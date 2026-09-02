@@ -30,8 +30,20 @@ const path = require("path");
 const { parse } = require("hermes-eslint");
 const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
 const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
+const {
+  isOrgResolver,
+  isWorkspaceResolver,
+  isDynamicResolver,
+} = require("../../../utils/middleware/resourceResolvers");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
+
+function mountedRouteLayers(stack) {
+  return (stack || []).flatMap((layer) => [
+    ...(layer.route ? [layer] : []),
+    ...mountedRouteLayers(layer.handle?.stack),
+  ]);
+}
 
 const EXPECTED_SKIPPED_REGISTRARS = new Set(["agentWebsocket"]);
 
@@ -159,6 +171,49 @@ const SELF_SERVICE_ROUTES = new Set([
   "POST /web-push/subscribe",
 ]);
 
+// Routes outside the org/workspace permission model. Every entry names why its
+// own authentication boundary is intentional; unknown mutating routes fail.
+const INTENTIONAL_NON_PERMISSION_MUTATIONS = new Map([
+  ...[...SINGLE_USER_ONLY_ROUTES].map((route) => [
+    route,
+    "single-user deployment only; isSingleUserMode or handler shape refuses multi-user requests",
+  ]),
+  ...[...SELF_SERVICE_ROUTES].map((route) => [
+    route,
+    "self-service on caller account; requireSelfSession constrains identity",
+  ]),
+  ["POST /request-token", "unauthenticated login ingress"],
+  ["POST /system/recover-account", "unauthenticated account-recovery ingress"],
+  ["POST /system/reset-password", "recovery-token completion ingress"],
+  ["POST /invite/:code", "invite-code acceptance ingress"],
+  ["POST /mobile/register", "mobile registration token authenticates request"],
+  [
+    "POST /mobile/send/:command",
+    "registered mobile-device token authenticates request",
+  ],
+  ["POST /sso/saml/acs", "SAML identity-provider callback ingress"],
+  [
+    "POST /embed/:embedId/stream-chat",
+    "public embed configuration authenticates embed access",
+  ],
+  [
+    "DELETE /embed/:embedId/:sessionId",
+    "embed session access middleware owns authorization",
+  ],
+  [
+    "DELETE /browser-extension/disconnect",
+    "browser extension key middleware authenticates request",
+  ],
+  [
+    "POST /browser-extension/embed-content",
+    "browser extension key middleware authenticates request",
+  ],
+  [
+    "POST /browser-extension/upload-content",
+    "browser extension key middleware authenticates request",
+  ],
+]);
+
 module.exports = {
   SINGLE_USER_ONLY_ROUTES,
   SELF_SERVICE_ROUTES,
@@ -167,15 +222,14 @@ module.exports = {
 
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
+  const mountedRoutes = mountedRouteLayers(app._router?.stack);
 
   test("the sweep actually mounted the router (guards the guard)", () => {
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThanOrEqual(31);
-    expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(
-      100
-    );
+    expect(mountedRoutes.length).toBeGreaterThan(100);
     expect(
       skipped.filter(
         (entry) => !EXPECTED_SKIPPED_REGISTRARS.has(entry.split(":")[0])
@@ -317,9 +371,51 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     ]);
   });
 
+  test("every mounted mutating route has identity-verified authorization", () => {
+    const ungated = [];
+    for (const layer of mountedRoutes) {
+      // Express expands app.all("*") into every verb. This final 404 responder
+      // performs no application mutation and is not an endpoint authorization boundary.
+      if (layer.route.path === "*") continue;
+      const methods = Object.keys(layer.route.methods).filter(
+        (method) => method !== "get" && method !== "head"
+      );
+      for (const method of methods) {
+        const signature = `${method.toUpperCase()} ${layer.route.path}`;
+        const gated = layer.route.stack.some(
+          ({ handle }) =>
+            isApiKeyGuard(handle) ||
+            (handle?.action &&
+              [isOrgResolver, isWorkspaceResolver, isDynamicResolver].some(
+                (classify) => classify(handle.resolveResource)
+              ))
+        );
+        if (!gated && !INTENTIONAL_NON_PERMISSION_MUTATIONS.has(signature)) {
+          ungated.push(signature);
+        }
+      }
+    }
+    expect(ungated).toEqual([]);
+    for (const [signature, reason] of INTENTIONAL_NON_PERMISSION_MUTATIONS) {
+      expect(reason.length).toBeGreaterThan(10);
+      expect(
+        mountedRoutes.some(
+          (layer) =>
+            `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}` ===
+            signature
+        )
+      ).toBe(true);
+    }
+  });
+
+  test("production endpoint registration list is immutable", () => {
+    expect(Object.isFrozen(registrations)).toBe(true);
+    expect(() => registrations.push(() => {})).toThrow(TypeError);
+  });
+
   test("no mutating route carries validatedRequest alone", () => {
     const ungated = [];
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutes) {
       if (!layer.route) continue;
       const methods = Object.keys(layer.route.methods).filter(
         (m) => m !== "get" && m !== "head"
@@ -343,7 +439,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
   test("every mutating developer route carries validApiKey", () => {
     const ungated = [];
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutes) {
       if (!layer.route || !String(layer.route.path).startsWith("/v1/"))
         continue;
       const methods = Object.keys(layer.route.methods).filter(
@@ -380,22 +476,11 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     expect(globalThis[key]).toBe(registry);
   });
 
-  test("registration list discovers spacing and ungated probe functions", () => {
-    const probe = (router) =>
-      router.post("/hidden-sweep-probe", [function validatedRequest() {}]);
-    const { app: probeApp } = buildRouter([probe]);
-    expect(
-      probeApp._router.stack.some(
-        (layer) => layer.route?.path === "/hidden-sweep-probe"
-      )
-    ).toBe(true);
-  });
-
   test("the self-service routes really carry requireSelfSession", () => {
     // An allowlist entry alone would let someone remove the middleware and
     // stay green — the list would excuse the very route it names.
     const bySignature = new Map();
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutes) {
       if (!layer.route) continue;
       for (const method of Object.keys(layer.route.methods)) {
         bySignature.set(
@@ -426,7 +511,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
     const violations = [];
     let checked = 0;
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutes) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         const action = handler.handle?.action;
@@ -473,7 +558,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // route under a /workspace prefix. A grep-built expectation would have
     // asserted routes that are not there.
     const chatSendRoutes = [];
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutes) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         if (handler.handle?.action !== "chat.send") continue;
