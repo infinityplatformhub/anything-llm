@@ -228,6 +228,15 @@ const SidebarOptions = ({ user = null, t }) => (
               flex: true,
               roles: ["admin"],
             },
+            // S11b (#108). `roles: ["admin"]` matches the route's AdminRoute guard and the
+            // server's system.write gate; a manager entry here would advertise a page that
+            // 403s on every call.
+            {
+              btnText: t("settings.mailer"),
+              href: paths.settings.mailer(),
+              flex: true,
+              roles: ["admin"],
+            },
             {
               btnText: t("settings.vector-database"),
               href: paths.settings.vectorDatabase(),

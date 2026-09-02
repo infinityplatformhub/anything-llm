@@ -148,6 +148,9 @@ export default {
     security: () => {
       return "/settings/security";
     },
+    mailer: () => {
+      return "/settings/mailer";
+    },
     interface: () => {
       return "/settings/interface";
     },

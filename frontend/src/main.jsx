@@ -186,6 +186,20 @@ const router = createBrowserRouter([
         },
       },
       // Manager routes
+      // S11b (#108): AdminRoute, NOT ManagerRoute like /settings/security below it. All
+      // three mailer routes are gated `requirePermission("system.write", orgResource)`, and
+      // only super_admin holds that action — legacy `manager` maps to `member`, which does
+      // not. Under ManagerRoute a manager would see the page and get 403 from every call.
+      // Migrates to can("system.write") when #40 task 3 lands; noted on #66.
+      {
+        path: "/settings/mailer",
+        lazy: async () => {
+          const { default: GeneralMailer } = await import(
+            "@/pages/GeneralSettings/Mailer"
+          );
+          return { element: <AdminRoute Component={GeneralMailer} /> };
+        },
+      },
       {
         path: "/settings/security",
         lazy: async () => {
