@@ -97,3 +97,11 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - T-7 rulings: grants endpoint stays in #31; migrations → 070000/071000; frontend/src/models/system.js reserved for t7
 - ledger-46 reconstructed by PMO from commit bodies (QA-2 confirmed content)
 - RULE: main checkout is PMO-only; trial merges in detached /tmp worktrees (63beadd3 stray merge reset 2026-09-02)
+
+## In flight (2026-09-02, after 1c6d9bd1)
+- #30 slice 2 `4737f574`: gate PASS 1769/1769, Techlead-2 PASS (evidence committed). Waiting QA-1 + QA-2 → merge, keep #30 open for slice 3 (Dev4 recon; 2 TL-2 notes go to slice 3).
+- #64 `b542deba`: title fix only; regate in /tmp/wt-64c (gate-64c.report). QA-1/QA-3/TL-1 PASS on code. Merge on gate PASS.
+- #40 (Dev2): b55f0f4 has router-walk test; pending resolverName stamp + ORG_CAPS pin + MOCKUP_SHA from plan + bypass-4 fix (scopeOf must classify by resolverName, not catch). Gate task 1 with --no-contract + related tests (§7.14).
+- O2 (Dev5): mockups A/B at `24951395`, QA-3 recommends B. **User must choose A/B** → task.sh start.
+- S11 (Dev3): recon + 3 mockups at `031be4f5` (worktree s3-ldap). Dev3 recommends B. **User must choose A/B.** Invite-code leak into event_logs confirmed (inviteCode in ALLOWED_KEYS) → Dev3 opens bug issue first; QA-3 re-verifies.
+- #70 (Dev1 SDD): implementer running.
