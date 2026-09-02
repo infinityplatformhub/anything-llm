@@ -384,3 +384,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #112 43cf5da87 (both halves): gate PASS at wt-112 (g112) — check-local, contract 121/121 (6 suites), sweeps 63/63, ledger normalized /tmp/ledger-112.norm.md. Waiting QA-2 A–G + TL-1 RF-1..5 (auth). Sweep pin 317→318 (READ route). Post-merge after #40 t3 running (/tmp/postmerge-40t3.log).
 - #104 bd77c0411 (Dev1): gate running at wt-104 (g104); QA-3 + TL-1 dispatched (auth). #116 = update-password rollback. DB connection pressure noted (max 100, 55 in use) → gates runInBand.
 - #115: contract posted; measured hydrate 97 rows = 2.5s, 99% scryptSync per get() → memoize encryptionKey = separate auth issue (Dev2 opens); #115 stays move-before-listen. #98: contract posted, code done, sweep running → SHA.
+- #104 bd77c0411: gate PASS at wt-104 (g104) — check-local, contract persistCredentialFailureHttp 9/9, sweeps 63/63. Waiting QA-3 + TL-1 (auth).
+- #108 5992b34b9 (S11b): gate running at wt-108 (g108); QA-1 + TL-2 dispatched. #99/#100/#101 rulings: no checksum, [0-9０-９] class, long_digit_run last, one issue (Dev5).
+- #114 QA-3 baseline on main: unauth 200, 135 fields (env-dependent — tests must derive, not hardcode), 7 planted internal hosts leak; tier-1 types: SimpleSSONoLoginRedirect null, SSOProviders [] (not boolean).
