@@ -34,6 +34,9 @@ const context = (over = {}) => ({
   keyPrefix: "apw-key-x",
   scopes: ["document.read"],
   workspaceId: null,
+  // issue 45: keyKind is required — the resolver refuses a context that does not say which
+  // credential table its id came from.
+  keyKind: "api-key",
   ...over,
 });
 

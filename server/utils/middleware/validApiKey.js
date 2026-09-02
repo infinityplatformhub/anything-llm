@@ -110,6 +110,11 @@ function validApiKey(action, binding = null) {
       keyId: String(apiKey.id), keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes,
       workspaceId: apiKey.workspaceId ? String(apiKey.workspaceId) : null,
       expiresAt: apiKey.expiresAt, revokedAt: apiKey.revokedAt,
+      // issue 45: this id belongs to `api_keys`. Stated rather than left to be inferred —
+      // the resolver now refuses a context that does not say which credential table its id
+      // came from, because two tables with independent id sequences mean a wrong guess
+      // resolves to a real but unrelated row.
+      keyKind: "api-key",
     };
     response.locals.apiKeyContext = context;
     const scopeAllowed = context.scopes.includes("*") || context.scopes.includes(action);

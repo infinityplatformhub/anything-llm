@@ -9,6 +9,34 @@
 
 const prisma = require("../prisma");
 const { SystemSettings } = require("../../models/systemSettings");
+const { AuthorizationContractError } = require("./errors");
+
+/**
+ * issue 45: the credential tables an `apiKeyContext.keyId` may have come from.
+ * Adding a row here is a deliberate act — it declares a new id space the resolver must be
+ * taught to look up, which is exactly the review this guard exists to force.
+ */
+const KEY_KINDS = Object.freeze(["api-key", "browser-extension"]);
+
+/**
+ * Fail closed on an apiKeyContext whose provenance is missing or unrecognized.
+ *
+ * Throws rather than returning null on purpose. Returning null would DENY the request,
+ * which looks like correct behaviour from the outside and would hide a miswired ingress
+ * indefinitely; a throw surfaces it on the first request that ingress serves. Callers that
+ * turn AuthorizationContractError into a 500 (requirePermission.js) are doing the right
+ * thing here — this is a fault in the wiring, not a decision about a user.
+ *
+ * Compared exactly: no case folding, no trimming. "Almost the right provenance" is the
+ * same class of mistake as none at all.
+ */
+function assertKeyKind(keyKind) {
+  if (typeof keyKind !== "string" || !KEY_KINDS.includes(keyKind)) {
+    throw new AuthorizationContractError(
+      `apiKeyContext.keyKind must be one of ${KEY_KINDS.join(", ")}; received ${JSON.stringify(keyKind)}`
+    );
+  }
+}
 
 const SINGLE_USER_ACTOR = Object.freeze({
   type: "service",
@@ -38,6 +66,14 @@ async function resolveActor(request, response, { db = prisma } = {}) {
   // against `api_keys` would hand extension key 7 the grants of API key 7's creator, an
   // unrelated user. The extension already resolves its own user onto locals.user, so it
   // falls through to the user branch below, which is where its grants belong.
+  //
+  // issue 45: which table an id came from is DECLARED, never inferred. The branch used to
+  // be chosen by exclusion — "not browser-extension" meant api_keys — which held only
+  // because both existing ingresses happened to set the tag. A third ingress that wrote an
+  // apiKeyContext and forgot it would silently inherit api_keys grants by id collision:
+  // no throw, no log, a green suite. Unknown provenance is a contract violation, not a
+  // default, so it fails closed before either branch is chosen.
+  if (locals.apiKeyContext) assertKeyKind(locals.apiKeyContext.keyKind);
   if (locals.apiKeyContext && locals.apiKeyContext.keyKind !== "browser-extension") {
     const ctx = locals.apiKeyContext;
     // Key lifecycle is checked in full here, not half of it: an expired key must yield

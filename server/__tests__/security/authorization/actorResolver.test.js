@@ -31,7 +31,7 @@ describe("actorResolver — the only Actor construction point", () => {
   });
 
   test("row 3: PR-3 apiKeyContext (raw) becomes the service Actor — revoked key is null", async () => {
-    const base = { keyId: 7, keyPrefix: "apw-key-x", scopes: ["workspace.read"], workspaceId: 3 };
+    const base = { keyId: 7, keyPrefix: "apw-key-x", scopes: ["workspace.read"], workspaceId: 3, keyKind: "api-key" };
     const actor = await resolveActor({}, res({ apiKeyContext: { ...base } }));
     expect(actor).toMatchObject({
       type: "service",
@@ -48,7 +48,7 @@ describe("actorResolver — the only Actor construction point", () => {
   });
 
   test("F-20d: an expired key yields no actor — lifecycle is checked in full, not half", async () => {
-    const base = { keyId: 8, keyPrefix: "apw-key-y", scopes: ["workspace.read"], workspaceId: 3 };
+    const base = { keyId: 8, keyPrefix: "apw-key-y", scopes: ["workspace.read"], workspaceId: 3, keyKind: "api-key" };
     const expired = await resolveActor(
       {},
       res({ apiKeyContext: { ...base, expiresAt: new Date(Date.now() - 60_000) } })
