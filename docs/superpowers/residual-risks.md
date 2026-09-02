@@ -185,3 +185,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - A creator holding system.write only via group can now mint system.write API keys (ceiling asks engine).
 - groupIdsFor user-type guard is redundant for today's id shapes (G6); kept as NaN barrier for future numeric non-user principals.
 - Invariant: group expansion widens a key's deny, never its allow.
+
+## #104 residuals
+- update-password rotates AUTH_TOKEN + JWT_SECRET without rollback → #116.
+- A future postUpdate hook on a secret key would run after a failed persist (none today).
+- newValues key removal cannot suppress audit rows today (mapping has no secret keys).
+- process.env keeps the value on failed persist by design: live until restart, error names the key.
