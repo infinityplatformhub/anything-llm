@@ -178,3 +178,35 @@ green why: either way, a test that only checks the list is green under both ruli
         the discriminating assertion is on what the server does with the roles the
         field advertised.
 ```
+
+---
+
+## Addendum — ruling "way 1" adopted (no objection), two measured notes
+
+**No objection to way 1.** Computing `assignableRoles` only when the actor holds
+`user.manage`, else `[]`, is the right shape and is stronger than I asked for: it makes the
+field self-consistent without the UI joining anything.
+
+**N-1 — way 1 subsumes FINDING-3 for free.** Measured: `user.manage` is **not** in
+`READ_ACTIONS` (`engine.js:22-45` — the set is 18 read actions plus `org.member`), and
+`engine.authorize` returns `impersonated_mutation_denied` for any non-read action when
+`actor.impersonatedBy` is set (`engine.js:75`). So an impersonated actor fails the
+`user.manage` gate and gets `[]` with no impersonation branch written anywhere. Dev1 should
+**not** add a separate `impersonatedBy` guard — it would be dead code that hides where the
+answer actually comes from. RF-5 becomes: impersonated admin → `[]`, and the mutation that
+proves it red is **adding `"user.manage"` to `READ_ACTIONS`**, not removing a local guard.
+
+**N-2 — reuse the decision already in `decisions`, do not re-authorize.**
+The handler already computes `user.manage` as part of `ORG_CAPABILITIES`
+(`system.js:114`, batched at `:1846`). A second `engine.authorize` call for the gate would be
+a second decision that can disagree with the one in the same response body — the exact
+UI/server split way 1 exists to close, reintroduced one level down. Read the boolean out of
+`decisions` / `answer.capabilities` instead.
+```
+RF-6 : assert capabilities["user.manage"] === false AND assignableRoles === []
+        in the same response, for the same caller
+mut  : compute the gate with its own engine.authorize call
+why  : green under any consistent engine — it goes red only when combined with a
+        fixture where the two calls CAN differ (org scope resolved twice), so pair
+        it with a same-body invariant rather than a second stubbed call.
+```
