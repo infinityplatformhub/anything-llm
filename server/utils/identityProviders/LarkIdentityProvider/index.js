@@ -58,6 +58,14 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 // through a header. Clamped rather than ignored: waiting IS the correct response to
 // a shared tenant quota, and this only bounds how long.
 const MAX_RETRY_AFTER_MS = 30_000;
+// #138: the ceiling on our OWN backoff, as distinct from a Lark-advertised one. Named
+// rather than inline because slice 3's job lease is derived from these constants:
+//
+//   lease > (timeoutMs + max(BACKOFF_CEILING_MS, MAX_RETRY_AFTER_MS)) x (maxRetries + 1)
+//
+// A lease written as a literal stops being true the moment any of them moves, and
+// nothing would say so — the sync would just start losing its lease mid-run.
+const BACKOFF_CEILING_MS = 2_000;
 
 class LarkIdentityProvider {
   static providerId() {
@@ -277,7 +285,7 @@ class LarkIdentityProvider {
   }
 
   async _backoff(attempt, explicitMs = null) {
-    const ms = explicitMs ?? Math.min(2000, 100 * 2 ** attempt);
+    const ms = explicitMs ?? Math.min(BACKOFF_CEILING_MS, 100 * 2 ** attempt);
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -448,4 +456,14 @@ class LarkIdentityProvider {
   }
 }
 
-module.exports = { LarkIdentityProvider, MAX_PAGE_SIZE };
+// The timing constants are exported for ONE reason (#138): slice 3's job lease must
+// be computed from them rather than restated as a number. Anything that copies these
+// values into a literal has already broken the guarantee they exist to provide.
+module.exports = {
+  LarkIdentityProvider,
+  MAX_PAGE_SIZE,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_TIMEOUT_MS,
+  MAX_RETRY_AFTER_MS,
+  BACKOFF_CEILING_MS,
+};
