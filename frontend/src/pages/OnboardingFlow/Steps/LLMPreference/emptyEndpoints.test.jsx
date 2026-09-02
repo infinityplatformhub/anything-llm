@@ -89,7 +89,7 @@ function warningsFor(Component, settings) {
   return warnings.filter((line) => CONTROLLED.test(line));
 }
 
-describe("#114 R10: an empty endpoint renders no worse than a configured one", () => {
+describe("issue 114 R10: an empty endpoint renders no worse than a configured one", () => {
   test.each(COMPONENTS)(
     "%s warns no more on the pre-user body than on a populated one",
     (_name, Component) => {
