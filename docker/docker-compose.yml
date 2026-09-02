@@ -11,6 +11,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-approofworkspace}
       POSTGRES_USER: ${POSTGRES_USER:-approof}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-approof}
+      # O2 ruling Q4, belt-and-braces rather than the fix: postgres:16 already
+      # sets LANG=en_US.utf8, so initdb produces a UTF-8 cluster today and the
+      # bundled path is not affected. This pins it so a future base-image change
+      # cannot silently give the cluster LC_CTYPE=C, where pg_trgm produces zero
+      # trigrams for Thai and chat search loses its index while still returning
+      # correct rows (#61). A database's collation is fixed at creation, so
+      # there is no repair short of recreating it.
+      POSTGRES_INITDB_ARGS: "--locale=en_US.UTF-8"
     healthcheck:
       test:
         [

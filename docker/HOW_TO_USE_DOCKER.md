@@ -147,6 +147,28 @@ container rebuilds or pulls from Docker Hub.
 
 - The UID and GID are set to 1000 by default. This is the default user in the Docker container and on most host operating systems. If there is a mismatch between your host user UID and GID and what is set in the `.env` file, you may experience permission issues.
 
+- **On macOS, and on any Linux host whose user is not uid 1000, you must set them.** `docker-compose.yml` reads `${UID:-1000}`, and `UID` is a shell variable that the shell does not export — so Compose almost never sees it and the container runs as 1000 regardless of who you are. The mounted `docker/.env` then belongs to a user the container is not, the installer refuses to write instance secrets into a file it does not own, and the boot stops. Start it as:
+
+  ```bash
+  UID=$(id -u) GID=$(id -g) docker compose up
+  ```
+
+  or put `UID=` and `GID=` in `docker/.env` once. The preflight reports this by name (`env.writable`) with both uids, rather than leaving you to read a refusal message mid-boot.
+
+## Checking a machine before you start it
+
+`doctor` runs the same preflight the entrypoint runs on every boot, on demand:
+
+```bash
+docker compose run --rm --no-deps anything-llm doctor
+```
+
+It prints one line per check with a fix for anything that failed, and exits non-zero if something blocks the boot. A failing locale check (`db.locale`) is a warning: Thai chat search still returns correct results, it just scans instead of using its index.
+
+`--no-deps` matters when `DATABASE_URL` points at your own PostgreSQL. Without it Compose honours `depends_on: postgres condition: service_healthy` and waits on the bundled database's healthcheck — so you would watch a healthcheck for a database you are not using, instead of reading why the one you are using cannot be reached.
+
+The extension permission check is the one part of the doctor that is not read-only: on a database where `vector` or `pg_trgm` is not installed yet, it runs `CREATE EXTENSION` inside a transaction and rolls it back. Nothing is left behind, but the statement does reach your database.
+
 ## Build locally from source _not recommended for casual use_
 
 - `git clone` this repo and `cd anything-llm` to get to the root directory.
