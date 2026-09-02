@@ -150,3 +150,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 37712d41: TL-1 F1/F2/F3 + NITs done (flags split, notificationId idempotency success-only bounded+TTL, retryAfterMs deleted); gating partial. Route lane next.
 - #40 152cad912 still adds accepted shapes; ruling: full-tree require walk with default:fail, mutation table must name who ran each.
 - #86 opened (/v1 rate limit zero coverage). §7.1d, §7.9i, §7.6c note added.
+
+## 2026-09-02 — #78 TL-1 NOT MERGEABLE (F2/F3); #74 c0c6472b0 QA-3 PASS
+- #74 c0c6472b0: gate PASS + QA-3 PASS (92/92 on fresh and installed DB; citext fixture; SIG_SALT). Waiting TL-2 verdict → close/merge.
+- #78: rebased 5d47c31ab (has #72, 0 conflicts) but TL-1 on 3a10defc found: F2 three routes (`upload-logo`, `remove-logo`, `toggle-live-sync`) call `_updateSettings` below narrowing → manager writes 2 of the 23 forbidden keys; F3 manager + protected-not-supported key (`multi_user_mode`) → 200 silent drop. Rulings: bring 3 routes under same narrowing (keep keys in list); classify against protected ∪ supported (manager 403 / admin 400 / hub_api_key 403); `Object.create(null)`. Precedence: forbidden(403) → protected(400) → unknown(400). Waiting new SHA.
+- #84 ruling: fix system.js:672 route only; enable-multi-user out of scope.
+- #80 37712d41 gating (partial); Dev3 on route lane.
