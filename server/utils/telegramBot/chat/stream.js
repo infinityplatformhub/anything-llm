@@ -8,6 +8,9 @@ const {
   chatPrompt,
 } = require("../../chats");
 const { fillSourceWindow } = require("../../helpers/chat");
+const {
+  authorizedSimilaritySearch,
+} = require("../../authorization/retrievalFilter");
 const { AgentHandler } = require("../../agents");
 const {
   STREAM_EDIT_INTERVAL,
@@ -131,6 +134,8 @@ async function streamResponse({
     embeddingsCount,
     rawHistory,
     pinnedDocIdentifiers,
+    // T-5 (#30): the actor T-4b W-11 threaded here for exactly this purpose.
+    actor,
   });
 
   if (searchError) {
@@ -225,10 +230,16 @@ async function buildSearchContext({
   embeddingsCount,
   rawHistory,
   pinnedDocIdentifiers,
+  actor = null,
 }) {
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30) S-13: Telegram bypasses every HTTP middleware, so authorization
+        // cannot live in a route guard for this path. The filter is built from the
+        // channel's own principal, which streamResponse already requires.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          actor,
           namespace: workspace.slug,
           input: message,
           LLMConnector,
@@ -236,6 +247,7 @@ async function buildSearchContext({
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: message,
         })
       : { contextTexts: [], sources: [], message: null };
 

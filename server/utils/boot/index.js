@@ -19,6 +19,9 @@ const { loadStoredCredentials } = require("../helpers/updateENV");
 const {
   reportLegacyWildcardGrants,
 } = require("../apiKeySecurity/legacyWildcardReport");
+const {
+  reportRetrievalFilterSupport,
+} = require("../authorization/retrievalSupport");
 
 // Testing SSL? You can make a self signed certificate and point the ENVs to that location
 // make a directory in server called 'sslcert' - cd into it
@@ -63,6 +66,10 @@ function bootSSL(app, port = 3001) {
         await PushNotifications.setupPushNotificationService();
         await TelegramBotService.bootIfActive();
         await reportLegacyWildcardGrants();
+        // T-5 (#30): say at boot whether this deployment's vector provider can enforce
+        // the document ACL. Providers that cannot refuse retrieval rather than serve it
+        // unfiltered, and that refusal must not be first discovered by a user.
+        await reportRetrievalFilterSupport();
         console.log(`Primary server in HTTPS mode listening on port ${port}`);
       })
       .on("error", catchSigTerms);
@@ -108,6 +115,8 @@ function bootHTTP(app, port = 3001) {
       await PushNotifications.setupPushNotificationService();
       await TelegramBotService.bootIfActive();
       await reportLegacyWildcardGrants();
+      // T-5 (#30): see bootSSL.
+      await reportRetrievalFilterSupport();
       console.log(`Primary server in HTTP mode listening on port ${port}`);
     })
     .on("error", catchSigTerms);

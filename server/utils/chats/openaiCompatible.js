@@ -6,6 +6,9 @@ const { addChatCostToMetrics } = require("../helpers/modelPricing");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { chatPrompt, sourceIdentifier } = require("./index");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
+const {
+  authorizedSimilaritySearch,
+} = require("../authorization/retrievalFilter");
 
 const { PassThrough } = require("stream");
 
@@ -16,6 +19,10 @@ async function chatSync({
   prompt = null,
   attachments = [],
   temperature = null,
+  // T-5 (#30): resolved by the endpoint from the API key. A null actor yields a
+  // match-none filter, never an unrestricted read — so forgetting to pass it fails
+  // closed (empty results) rather than open.
+  actor = null,
 }) {
   const uuid = uuidv4();
   const chatMode = workspace?.chatMode ?? "automatic";
@@ -97,7 +104,13 @@ async function chatSync({
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): this route authenticates with an API key, so its actor is the key's
+        // grant principal, resolved by the endpoint and threaded in. Without it this path
+        // would read the whole namespace while every sibling path was filtered — a leak
+        // shaped like an integration convenience.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          actor,
           namespace: workspace.slug,
           input: String(prompt),
           LLMConnector,
@@ -105,6 +118,7 @@ async function chatSync({
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: String(prompt),
         })
       : {
           contextTexts: [],
@@ -233,6 +247,8 @@ async function streamChat({
   prompt = null,
   attachments = [],
   temperature = null,
+  // T-5 (#30): see chatSync.
+  actor = null,
 }) {
   const uuid = uuidv4();
   const chatMode = workspace?.chatMode ?? "automatic";
@@ -341,7 +357,13 @@ async function streamChat({
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): this route authenticates with an API key, so its actor is the key's
+        // grant principal, resolved by the endpoint and threaded in. Without it this path
+        // would read the whole namespace while every sibling path was filtered — a leak
+        // shaped like an integration convenience.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          actor,
           namespace: workspace.slug,
           input: String(prompt),
           LLMConnector,
@@ -349,6 +371,7 @@ async function streamChat({
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: String(prompt),
         })
       : {
           contextTexts: [],

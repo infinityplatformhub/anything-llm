@@ -8,6 +8,9 @@ const { writeResponseChunk } = require("../helpers/chat/responses");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
 const { grepAgents } = require("./agents");
 const {
+  authorizedSimilaritySearch,
+} = require("../authorization/retrievalFilter");
+const {
   grepCommand,
   VALID_COMMANDS,
   chatPrompt,
@@ -184,7 +187,12 @@ async function streamChatWithWorkspace(
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): the authorized path. The filter is built from `user`, so this
+        // reaches only what they may read — and an actor with no scope costs no
+        // embedding call at all.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          user,
           namespace: workspace.slug,
           input: updatedMessage,
           LLMConnector,
@@ -192,6 +200,7 @@ async function streamChatWithWorkspace(
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: updatedMessage,
         })
       : {
           contextTexts: [],

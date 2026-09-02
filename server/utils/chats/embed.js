@@ -9,6 +9,9 @@ const {
 } = require("../helpers/chat/responses");
 const { DocumentManager } = require("../DocumentManager");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
+const {
+  authorizedSimilaritySearch,
+} = require("../authorization/retrievalFilter");
 
 async function streamChatWithForEmbed(
   response,
@@ -113,7 +116,20 @@ async function streamChatWithForEmbed(
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): an embed is a service principal, not a user. Its reach is the embed's
+        // own workspace, resolved through the same filter every other path uses — an
+        // anonymous visitor must not inherit whatever the last authenticated caller could
+        // read (S-12).
+        await authorizedSimilaritySearch({
+          VectorDb,
+          // Passed as a REF, not an Actor: T-2 keeps Actor construction inside
+          // actorResolver, and a literal here would be a second definition of identity
+          // free to drift more generous than the real one.
+          actorRef: {
+            type: "embed",
+            id: String(embed.uuid),
+            workspaceIds: [String(embed.workspace_id)],
+          },
           namespace: embed.workspace.slug,
           input: message,
           LLMConnector,
@@ -121,6 +137,7 @@ async function streamChatWithForEmbed(
           topN: embed.workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: embed.workspace?.vectorSearchMode === "rerank",
+          query: message,
         })
       : {
           contextTexts: [],

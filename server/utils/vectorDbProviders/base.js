@@ -172,7 +172,21 @@ class VectorDatabase {
     topN = 4,
     filterIdentifiers = [],
   }) {
-    throw new Error("Must be implemented by provider");
+    // Fail CLOSED and say why. The default here is reached by a deployment whose provider
+    // has no ACL pushdown yet, and the two wrong answers are both tempting: falling back
+    // to an unfiltered search would silently serve every document in the namespace, and a
+    // generic "Must be implemented by provider" would read as a code bug rather than as a
+    // deployment that must change provider or wait for that driver.
+    //
+    // This error never resolves by retrying, which is what separates it from
+    // AuthorizationUnavailableError. `assertRetrievalSupport` warns about the same
+    // condition at boot, so an operator learns before their users do.
+    const {
+      RetrievalFilterUnsupportedError,
+    } = require("../authorization/errors");
+    throw new RetrievalFilterUnsupportedError(
+      `${this.name} cannot push an authorization filter into its query yet, so retrieval is refused rather than served unfiltered. Use a supported vector provider (LanceDB, PGVector, Milvus) until this driver lands.`
+    );
   }
 
   /**

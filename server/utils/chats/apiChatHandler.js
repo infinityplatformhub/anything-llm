@@ -6,6 +6,9 @@ const { addChatCostToMetrics } = require("../helpers/modelPricing");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
 const {
+  authorizedSimilaritySearch,
+} = require("../authorization/retrievalFilter");
+const {
   chatPrompt,
   sourceIdentifier,
   recentChatHistory,
@@ -121,6 +124,10 @@ async function chatSync({
   message = null,
   mode = null,
   user = null,
+  // T-5 (#30): on /v1 the caller is an API key, so `user` is null and the identity
+  // retrieval must be filtered by lives here — the key reads as its creator, narrowed by
+  // its own scopes. A null actor yields a match-none filter, never an unrestricted read.
+  actor = null,
   thread = null,
   sessionId = null,
   attachments = [],
@@ -326,7 +333,13 @@ async function chatSync({
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): filtered by the requesting user's own reach. A /v1 caller is not
+        // exempt from the ACL just because it authenticated with an API key — the key is
+        // a bearer credential for its creator, and this is where that resolves to scope.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          user,
+          actor,
           namespace: workspace.slug,
           input: message,
           LLMConnector,
@@ -334,6 +347,7 @@ async function chatSync({
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: message,
         })
       : {
           contextTexts: [],
@@ -495,6 +509,10 @@ async function streamChat({
   message = null,
   mode = null,
   user = null,
+  // T-5 (#30): on /v1 the caller is an API key, so `user` is null and the identity
+  // retrieval must be filtered by lives here — the key reads as its creator, narrowed by
+  // its own scopes. A null actor yields a match-none filter, never an unrestricted read.
+  actor = null,
   thread = null,
   sessionId = null,
   attachments = [],
@@ -714,7 +732,13 @@ async function streamChat({
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
+      ? // T-5 (#30): filtered by the requesting user's own reach. A /v1 caller is not
+        // exempt from the ACL just because it authenticated with an API key — the key is
+        // a bearer credential for its creator, and this is where that resolves to scope.
+        await authorizedSimilaritySearch({
+          VectorDb,
+          user,
+          actor,
           namespace: workspace.slug,
           input: message,
           LLMConnector,
@@ -722,6 +746,7 @@ async function streamChat({
           topN: workspace?.topN,
           filterIdentifiers: pinnedDocIdentifiers,
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: message,
         })
       : {
           contextTexts: [],

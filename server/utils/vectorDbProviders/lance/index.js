@@ -9,9 +9,12 @@ const { NativeEmbeddingReranker } = require("../../EmbeddingRerankers/native");
 const { VectorDatabase } = require("../base");
 const {
   assertFilter,
-  predicateFor,
+  constraintFor,
   isRowAllowed,
 } = require("../../authorization/vectorPredicate");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 const path = require("path");
 
 /**
@@ -244,11 +247,15 @@ class LanceDb extends VectorDatabase {
     similarityThreshold = 0.25,
     topN = 4,
     filterIdentifiers = [],
+    rerank = false,
+    query = null,
   }) {
     // Before any client work: an invalid filter is a caller bug, and connecting first
     // would let a miswired route make the database work on its behalf.
     assertFilter(aclFilter);
-    const predicate = predicateFor(aclFilter);
+    // LanceDB takes an SQL-ish expression string; the neutral constraint decides the
+    // MEANING and this only renders it.
+    const predicate = constraintFor(aclFilter).toSqlString();
 
     const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
     // No scope, no query. Skipping the round trip entirely is cheaper than issuing an
@@ -259,15 +266,46 @@ class LanceDb extends VectorDatabase {
     if (!(await this.namespaceExists(client, namespace))) return empty;
 
     const collection = await client.openTable(namespace);
+    // Reranking widens the candidate set before ranking it, so the ACL predicate must be
+    // attached to THAT query too — otherwise the wider net is the unfiltered one, which
+    // would make rerank mode a way around the seam rather than a retrieval-quality knob.
+    const searchLimit = rerank
+      ? Math.max(10, Math.min(50, Math.ceil((await this.namespaceCount(namespace)) * 0.1)))
+      : topN;
     const response = await collection
       .vectorSearch(queryVector)
       .distanceType("cosine")
       .where(predicate)
-      .limit(topN)
+      .limit(searchLimit)
       .toArray();
 
+    // Reranking runs over rows that already survived the ACL check, never before it: a
+    // reranker scoring forbidden chunks would both read them and let them displace
+    // permitted ones from the final topN.
+    const allowed = response.filter(({ vector: _, ...rest }) =>
+      isRowAllowed(rest, aclFilter)
+    );
+    const ranked =
+      rerank && query
+        ? await new NativeEmbeddingReranker()
+            .rerank(query, allowed, { topK: topN })
+            .catch((e) => {
+              // Degrading to distance order is SAFE — `allowed` has already passed the
+              // ACL check, so the fallback can only be worse-ranked, never
+              // over-permissive. But it is silent from the user's side: they get
+              // plausible results and no sign that reranking stopped working, so a
+              // persistently broken reranker would look like a gradual quality decline
+              // rather than a fault. Warn per occurrence so it is greppable.
+              // Accepted in the DoD as a degradation, not a failure.
+              console.warn(
+                `\x1b[33m[VectorDB::LanceDb]\x1b[0m rerank failed for namespace "${namespace}", falling back to distance order (results remain ACL-filtered): ${e.message}`
+              );
+              return allowed.slice(0, topN);
+            })
+        : allowed;
+
     const result = { contextTexts: [], sourceDocuments: [], scores: [] };
-    response.forEach((item) => {
+    ranked.forEach((item) => {
       const { vector: _, ...rest } = item;
       // Second layer, deliberately redundant with the predicate: a row that cannot be
       // proven allowed — including one written before the ACL backfill — is dropped here
@@ -281,12 +319,11 @@ class LanceDb extends VectorDatabase {
         return;
       }
 
+      const score =
+        item?.rerank_score ?? this.distanceToSimilarity(item._distance);
       result.contextTexts.push(rest.text);
-      result.sourceDocuments.push({
-        ...rest,
-        score: this.distanceToSimilarity(item._distance),
-      });
-      result.scores.push(this.distanceToSimilarity(item._distance));
+      result.sourceDocuments.push({ ...rest, score });
+      result.scores.push(score);
     });
 
     return result;
@@ -389,6 +426,12 @@ class LanceDb extends VectorDatabase {
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // T-5 (#30): stamp every vector with the fields the ACL filter reads. Without them
+      // a row cannot be proven readable, so once RETRIEVAL_FILTER_ENFORCE is on it is
+      // invisible to every search — written successfully and unreadable forever.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -403,7 +446,14 @@ class LanceDb extends VectorDatabase {
               const id = uuidv4();
               const { id: _id, ...metadata } = chunk.metadata;
               documentVectors.push({ docId, vectorId: id });
-              submissions.push({ id: id, vector: chunk.values, ...metadata });
+              // Cached chunks were embedded earlier and carry no ACL fields; they are
+              // stamped on the way in, so a cache hit is not a hole in the metadata.
+              submissions.push({
+                id: id,
+                vector: chunk.values,
+                ...metadata,
+                ...aclMetadata,
+              });
             });
           }
 
@@ -456,6 +506,10 @@ class LanceDb extends VectorDatabase {
             ...vectorRecord.metadata,
             id: vectorRecord.id,
             vector: vectorRecord.values,
+            // T-5 (#30): last, so document metadata can never shadow the ACL fields the
+            // filter reads — a document whose own metadata happened to carry `orgId`
+            // would otherwise decide its own tenancy.
+            ...aclMetadata,
           });
           documentVectors.push({ docId, vectorId: vectorRecord.id });
         }

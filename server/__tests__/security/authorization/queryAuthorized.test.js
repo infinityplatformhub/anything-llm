@@ -244,6 +244,19 @@ describe("T-5 S-12: matchNone means zero results and no query at all", () => {
 });
 
 describe("T-5 S-26 (G4): a row without ACL metadata is denied, never passed through", () => {
+  // Default state: unprovable rows are denied. The escape hatch
+  // (RETRIEVAL_FILTER_ALLOW_UNPROVABLE) is opt-in, so these cases assert the shipped
+  // default by explicitly ensuring it is unset rather than assuming it.
+  const ORIGINAL_ALLOW = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+  beforeEach(() => {
+    delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+  });
+  afterEach(() => {
+    if (ORIGINAL_ALLOW === undefined)
+      delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = ORIGINAL_ALLOW;
+  });
+
   let LanceDb;
   beforeAll(() => {
     // Instantiated, not used statically: helpers/index.js does `new LanceDb()` per call,

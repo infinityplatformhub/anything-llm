@@ -7,6 +7,12 @@ const { DocumentVectors } = require("../../../models/vectors");
 const { Workspace } = require("../../../models/workspace");
 const { WorkspaceChats } = require("../../../models/workspaceChats");
 const {
+  resolveActor,
+} = require("../../../utils/authorization/actorResolver");
+const {
+  authorizedSimilaritySearch,
+} = require("../../../utils/authorization/retrievalFilter");
+const {
   getVectorDbClass,
   resolveProviderConnector,
 } = require("../../../utils/helpers");
@@ -712,6 +718,11 @@ function apiWorkspaceEndpoints(app) {
           message,
           mode: resolvedMode,
           user: null,
+          // T-5 (#30): `user` is null on /v1 — the caller is an API key, and its identity
+          // lives in the Actor (the key reads as its creator, narrowed by its scopes).
+          // Retrieval is filtered by this; without it the request would have no principal
+          // and read nothing.
+          actor: await resolveActor(request, response),
           thread: null,
           sessionId: !!sessionId ? String(sessionId) : null,
           attachments,
@@ -874,6 +885,8 @@ function apiWorkspaceEndpoints(app) {
           message,
           mode: resolvedMode,
           user: null,
+          // T-5 (#30): see chatSync above — the key's identity is the Actor, not `user`.
+          actor: await resolveActor(request, response),
           thread: null,
           sessionId: !!sessionId ? String(sessionId) : null,
           attachments,
@@ -1006,13 +1019,19 @@ function apiWorkspaceEndpoints(app) {
           prompt: String(query),
         });
 
-        const results = await VectorDb.performSimilaritySearch({
+        // T-5 (#30) S-11: the highest-value leak surface in the recon. This route hands
+        // back raw chunk text rather than an LLM answer, so an unfiltered result is an
+        // immediate verbatim leak with nothing in between to blur it.
+        const results = await authorizedSimilaritySearch({
+          VectorDb,
+          actor: await resolveActor(request, response),
           namespace: workspace.slug,
           input: String(query),
           LLMConnector,
           similarityThreshold: parseSimilarityThreshold(),
           topN: parseTopN(),
           rerank: workspace?.vectorSearchMode === "rerank",
+          query: String(query),
         });
 
         response.status(200).json({

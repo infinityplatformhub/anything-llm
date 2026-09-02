@@ -4,6 +4,9 @@ const {
   resolveProviderConnector,
 } = require("../../../helpers");
 const { Deduplicator } = require("../utils/dedupe");
+const {
+  authorizedSimilaritySearch,
+} = require("../../../authorization/retrievalFilter");
 
 const memory = {
   name: "rag-memory",
@@ -90,13 +93,25 @@ const memory = {
                   prompt: query,
                 });
               const vectorDB = getVectorDbClass();
+              // T-5 (#30) S-13: an agent is not a private door into the index. It runs
+              // outside every HTTP middleware, so if authorization lived in a route guard
+              // this path would be unprotected; the filter is built from the invoking
+              // user's own identity instead. An agent invoked with no user resolves to a
+              // match-none filter rather than to everything.
+              const invokingUserId =
+                this.super.handlerProps.invocation?.user_id ?? null;
               const { contextTexts = [], sources = [] } =
-                await vectorDB.performSimilaritySearch({
+                await authorizedSimilaritySearch({
+                  VectorDb: vectorDB,
+                  actorRef: invokingUserId
+                    ? { type: "user", id: String(invokingUserId) }
+                    : null,
                   namespace: workspace.slug,
                   input: query,
                   LLMConnector,
                   topN: workspace?.topN ?? 4,
                   rerank: workspace?.vectorSearchMode === "rerank",
+                  query,
                 });
 
               if (contextTexts.length === 0) {

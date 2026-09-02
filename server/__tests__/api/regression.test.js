@@ -73,23 +73,39 @@ const mockVectorDb = {
       mockVectorRecords.filter((record) => record.namespace === namespace)
         .length
   ),
-  performSimilaritySearch: jest.fn(async ({ namespace }) => {
+  // T-5 (#30): retrieval goes through queryAuthorized now, and it REQUIRES a filter —
+  // there is no unfiltered entry point left. The mock asserts that rather than ignoring
+  // it, because a fake that accepts a null filter would let a regression in the real
+  // wiring pass this suite unnoticed.
+  queryAuthorized: jest.fn(async ({ namespace, aclFilter }) => {
+    if (!aclFilter)
+      throw new Error("queryAuthorized called without an aclFilter");
+    if (aclFilter.matchNone === true)
+      return { contextTexts: [], sourceDocuments: [], scores: [] };
+
     const records = mockVectorRecords.filter(
       (record) => record.namespace === namespace
     );
     return {
       contextTexts: records.map(({ document }) => document.pageContent),
-      sources: records.map(({ document }) => ({
+      sourceDocuments: records.map(({ document }) => ({
         title: document.title,
         chunk: document.pageContent,
         text: document.pageContent,
       })),
-      message: null,
+      scores: records.map(() => 1),
     };
   }),
+  curateSources: jest.fn((sources) =>
+    sources.map(({ metadata = {} }) => ({ ...metadata }))
+  ),
 };
 const mockLlm = {
   defaultTemp: 0,
+  // T-5 (#30): the query is embedded by the caller now, not inside the provider, so the
+  // ACL filter can be built and checked BEFORE any embedding work happens — an actor with
+  // no scope should not pay for an embedding call.
+  embedTextInput: jest.fn(async () => [0.1, 0.2, 0.3]),
   promptWindowLimit: jest.fn(() => 4096),
   compressMessages: jest.fn(async ({ contextTexts }) => contextTexts),
   getChatCompletion: jest.fn(async (messages) => ({
@@ -191,6 +207,17 @@ beforeAll(async () => {
   // which is exactly the drift this suite should catch, not reproduce.
   const { WorkspaceUser } = require("../../models/workspaceUsers");
   await WorkspaceUser.create(member.id, assignedWorkspace.id);
+  // T-5 (#30): the key's creator needs membership too, because retrieval is now filtered
+  // by the document ACL. T-4a made membership the thing that grants workspace access, and
+  // an org-wide grant resolves to "the workspaces you belong to" rather than "every
+  // workspace" (documentFilter readableScope) — so an admin who is not a member reads
+  // nothing here, even though upload still lets them write. That asymmetry is tracked as
+  // its own issue; the rule itself is intended and must not be reverted.
+  //
+  // Before T-5 this fixture passed without the row because retrieval consulted no filter
+  // at all. That is precisely the gap this issue closes, so the fixture now has to state
+  // the access it was silently relying on.
+  await WorkspaceUser.create(admin.id, assignedWorkspace.id);
   apiKey = "apw-key-test-api-key-secret";
   // PR-4c: keys no longer carry "*", so a fixture key must name what the suite exercises.
   const { digestSecret, keyPrefix } = require("../../utils/apiKeySecurity");

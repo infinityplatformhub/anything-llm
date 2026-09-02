@@ -6,9 +6,11 @@
 // Thirty seconds of reading a document you were just cut off from is not a caching
 // artifact; it is the authorization failure the seam exists to prevent.
 //
-// The version stamp in each filter is a backstop, not a substitute: consulting it costs a
-// database round trip per query, which is the cost the cache exists to avoid. Event-driven
-// invalidation is what makes the fast path correct rather than merely fast.
+// What the cache actually saves is the filter BUILD — several membership, group, ACL and
+// visibility queries inside one transaction. It does not save a database round trip:
+// `FilterCache.get` reads `currentPolicyVersion` on every call, by design. That version
+// check is what makes a missed invalidation safe rather than silently stale, so
+// invalidation and the version stamp are belt and braces, not alternatives.
 
 const { eventBus } = require("../events");
 const { FilterCache } = require("./cache");
