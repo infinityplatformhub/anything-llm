@@ -1,151 +1,193 @@
 # Ledger — #80 (S11a): mailer seam, invite email and expiry
 
 Branch `approof/s11a-mailer`, worktree `.claude/worktrees/s11a-mailer`, cut from
-`origin/approof/main`. Bootstrapped with `scripts/wt-bootstrap.sh s11a_mailer`
-(§7.6c — fresh deps, fresh DB, migrate, seed, generate).
+`origin/approof/main`, bootstrapped with `scripts/wt-bootstrap.sh s11a_mailer`.
 
-Commits so far: `5ac9facf` (NITs), `85617c79` (steps 2+3), `35c91ab0` (step 4).
-
-## Steps
-
-1. NITs carried from #77 and the mockup review — **done**
-2. Migration 093000, `invites.email` + `expiresAt` — **done**
-3. Expiry in `Invite.get`, O1 oracle, OBS-1 conditional claim — **done**
-4. Mailer seam: errors, fixture SMTP server, `SmtpNotificationDriver` — **done**
-5. Route + ingress validation — **pending scope answer (rulings A, D)**
-6. Backend save-gate bound to a config hash — **pending scope answer (ruling B)**
+| SHA | what |
+|---|---|
+| `5ac9facf` | the four NITs carried from #77 and the mockup review |
+| `85617c79` | migration 093000, expiry in `Invite.get`, the O1 oracle, OBS-1 |
+| `35c91ab0` | driver, fixture SMTP server, errors |
+| `37712d41` | TL-1 F1/F2/F3 and the header NITs |
+| `503916b0` | QA-1's two leaks, the save gate's fingerprint |
+| `719b7eee` | the route lane — mailing an invite |
+| `22cd99c9` | settings routes, save gate, listing mask, limiter mount |
 
 ## Rulings
 
-Ruling: `expiresAt` has NO column default. If this is wrong, nothing — the
-default lives in `Invite.create` and is testable there. If it were wrong the
-other way, the migration would have retired every invite already in the table at
-deploy time, and each one would fail indistinguishably from a code that was never
-real. Same reasoning as #71's: the failure mode is silent.
+Ruling: `expiresAt` has NO column default. If wrong, nothing — the default lives
+in `Invite.create` and is testable there. The other way round, the migration
+would have retired every invite already in the table at deploy time, each one
+failing indistinguishably from a code that was never real.
 
-Ruling: expiry is enforced inside `Invite.get`, which returns null. If this is
-wrong, `deactivate` and the admin listings would need their own handling — they
-already have it, because they read the table directly and should: "can this be
-redeemed" and "does this row exist" are different questions. The alternative was
-a third copy of the check at each route, and the two byte-identical copies
-already living in `endpoints/invite.js` are the evidence that copies get missed.
+Ruling: expiry is enforced inside `Invite.get`, returning null. If wrong,
+`deactivate` and the listings need their own handling — they already have it,
+because they read the table directly and should. The alternative was a third copy
+of the check per route, and the two byte-identical copies already in
+`endpoints/invite.js` are the evidence that copies get missed.
 
-Ruling: returning null for an expired invite is also the non-disclosing answer.
-Not a happy accident — it is the same response an unknown code receives, so the
-endpoint cannot be asked "was this code ever real?".
-
-Ruling: `email` implies `expiresAt`, enforced in `Invite.create`. If this is
-wrong, a route could create a mailed invite with no expiry; it cannot, because
-both creating routes come through this function and it is the only place that
-sees every creation. A CHECK constraint would also be right and is not a
-substitute — the model is what supplies the value.
+Ruling: `email` implies `expiresAt`, enforced in `Invite.create`. Both creating
+routes come through that function, so it is the only place that sees every
+creation.
 
 Ruling (QA-1 O1): every redemption failure past the lookup returns one body, and
-caller-fixable input is validated BEFORE the lookup. If this is wrong, a user
-retypes a password that can never be accepted with no explanation. The oracle it
-closes: reaching `User.create` at all proved the code was valid and pending, so a
-username collision answered differently from an unknown code — confirming a live
-invite to anyone willing to guess, without redeeming it.
+caller-fixable input is validated BEFORE the lookup. The oracle it closes:
+reaching `User.create` proved the code was valid and pending, so a username
+collision answered differently from an unknown code.
 
-Ruling: `User.validateNewCredentials` is pure BY REQUIREMENT, not by accident. It
-runs before any lookup, so it must not read a row, and it must never report that
-a username is TAKEN — that is a fact about the database and belongs behind the
-flat refusal. Stated in its docstring so the next person to extend it knows the
-constraint is load-bearing.
+Ruling: `User.validateNewCredentials` is pure BY REQUIREMENT. It runs before any
+lookup, so it must not read a row, and must never report that a username is
+TAKEN — that is a fact about the database and belongs behind the flat refusal.
 
-Ruling (TL-2 OBS-1): `markClaimed` is a conditional `updateMany` on status and
-expiry, with `count === 1` as the answer. If this is wrong we pay one extra
-`findUnique` per claim. If it were left unconditional, the route's
-read-create-claim spans three awaits and both racers win: two accounts from one
-invite, the second silently overwriting the first's `claimedBy`.
+Ruling (TL-2 OBS-1): `markClaimed` is a conditional `updateMany`, `count === 1`
+the answer. Unconditional, the route's read-create-claim spans three awaits and
+both racers win.
 
-Ruling: the route now checks `markClaimed`'s result. Found while making the claim
-conditional — it previously ignored it. Losing a race would create the user but
-grant none of the workspaces the invite promised, and answering `success: true`
-there is a lie about access.
+Ruling: a REAL fixture SMTP server, never `jest.mock("nodemailer")`. Mocking the
+transport removes the wire, and the wire is where the property lives.
 
-Ruling: a REAL fixture SMTP server, never `jest.mock("nodemailer")` (M6). If this
-is wrong we carry ~150 lines of fixture. Mocking the transport removes the wire,
-and the wire is where the property lives: this suite asserts what reached the
-relay against what reached a log, and a mock answers neither honestly.
+Ruling: connection config is separate fields, never a URL. A URL carries the
+credential as one string, and QA-3 measured that the redaction email pattern
+needs a `.` in the host — so `smtps://user:pass@smtp` and `@localhost` leak in
+full while an FQDN is scrubbed by accident.
 
-Ruling: connection config is separate fields — host, port, secure, username —
-never a URL. If this is wrong, an operator who thinks in connection strings has
-to decompose one. A URL would carry the credential as a single string, and QA-3
-measured that the audit redaction's email pattern needs a `.` in the host, so
-`smtps://user:pass@smtp` and `@localhost` leak in full while an FQDN is scrubbed
-by accident. A shape that cannot hold a credential cannot leak one.
+Ruling: tests use a DOTLESS host as the primary case, so a leak cannot be hidden
+by that same coincidence.
 
-Ruling: tests use a DOTLESS host as the primary case. If this is wrong, nothing.
-Using an FQDN would let the accidental pattern match hide a real leak — the test
-would pass because of a coincidence rather than because the driver is correct.
+Ruling: `status()` returns `queued` or `unknown`, never `delivered`. A 250 means
+the next hop accepted the message.
 
-Ruling: `status()` returns `queued` or `unknown` and never `delivered` (M8). If
-this is wrong an operator gets less information than the protocol could give.
-SMTP's 250 means the next hop accepted the message; a driver claiming delivery is
-trusted while mail bounces two hops away, which is worse than admitting the
-protocol does not know.
+Ruling: the transport's own error message is never propagated — it quotes the
+failing command, and AUTH is a command.
 
-Ruling: the transport's own error message is never propagated. If this is wrong,
-an operator loses the relay's wording and reads `cause` instead. nodemailer
-quotes the failing command, and for an auth failure that command IS the encoded
-credential.
+Ruling (TL-1 F1): plaintext and untrusted certificates are SEPARATE consents. One
+flag meant accepting "plaintext is fine on our LAN" also disabled certificate
+validation for every TLS connection — the case where the certificate is the only
+thing identifying the far end.
+
+Ruling (TL-1 F2): `notificationId` is the idempotency key, and only SUCCESSFUL
+sends are remembered. Recording failures would turn one outage into permanent
+silence, which is what the queue's retry exists to prevent.
+
+Ruling (TL-1 F3): `retryAfterMs` is REMOVED rather than declared. SMTP has no
+standard way to say "come back in N seconds", and `CoreJobWorker` falls back
+silently — the field would look respected while being undefined everywhere.
+
+Ruling: `persistCredential` returns its error as well as logging it. Existing
+callers ignore it and keep their behaviour; the mailer save path must not,
+because a verified hash written after a failed persist claims a credential the
+next boot cannot find.
+
+Ruling: `updateENV.js:1655` is NOT reordered. Considered and rejected —
+`persistCredential` cannot throw (`CredentialStore.set` catches and returns), the
+log line states the intent outright ("live for this process but was not
+persisted"), and reversing it would leave a failed persist with the credential
+neither stored nor live, stopping a working provider while the UI reports
+success. No RED could be written for the reported symptom, which was the tell.
+
+Ruling (ruling A): the mailer routes sit behind `system.write`, not
+`settings.write`. They carry a relay credential and open an outbound connection
+to a caller-named host.
+
+Ruling (ruling B): the save gate refuses BEFORE writing either table, and the
+hash is HMAC over the config AND the plaintext password. Unkeyed, a digest over a
+host, port and username is precomputable — anyone able to write one settings row
+could forge a "verified" marker for a configuration nobody tested. Including the
+password means rotating it invalidates the proof.
+
+Ruling (ruling D): mailing requires `user.manage`; `invite.create` alone keeps
+copy-link. One address per request. Channel off or unverified with an address is
+a 4xx, never a silent 200.
+
+Ruling: `/v1/admin/invite/new` REFUSES an address rather than ignoring it. The
+API-key scope vocabulary has no `user.manage` — it stops at `user.read` and
+`user.write` — so a key cannot demonstrate the permission the rule requires and
+there is no honest gate. Silently dropping the field would return 200 for an
+invitation nobody sent. Adding such a scope is a product decision, not this
+issue's.
+
+Ruling (TL-1): the recipient address is MASKED in both listings unless the caller
+holds `user.manage`. This branch created the exposure: `invites.email` was always
+null before, so returning whole rows was harmless. `/v1` never unmasks — an API
+key cannot hold that permission, and fail-closed is the honest default.
+
+Ruling (QA-2): the mail limiter is mounted on the REAL route, and only for
+requests carrying an address. A copy-link invite costs a database row and touches
+no relay; throttling it would slow ordinary admin work to protect a resource it
+never uses.
+
+Ruling (TL-1 OBS-2, corrected per C5): `actorKey` decodes the session `id`
+without verifying it. The safety comes from `validatedRequest` rejecting forged
+tokens before any handler — NOT from a property of the limiter. If this limiter
+is ever mounted on a route without that middleware, the reasoning does not hold.
+
+Ruling (ruling E): the mailer's non-secret settings join `supportedFields`.
+`updateSettings` silently drops unknown labels, so without this the save route
+wrote nothing and then 409'd against its own missing hash.
 
 ## What testing found that reading would not
 
-**AUTH PLAIN base64-encodes the credential** (RFC 4954). The first version of the
-password-leak test asserted the literal string appeared in the transcript and it
-failed — the wire carries `\0user\0pass` base64-encoded. That matters beyond the
-test: a leak check greping for the literal password would miss an encoded copy,
-which is exactly what a driver dumping a raw SMTP conversation into a log emits.
+**AUTH PLAIN base64-encodes the credential** (RFC 4954). The first
+password-leak test asserted the literal string on the wire and failed. A leak
+check greping the literal would miss the encoded copy a raw-transcript log emits.
 Both forms are now asserted against every log surface.
+
+**Quoted-printable wraps long lines.** Asserting the invite code against a raw
+message body fails on a perfectly correct message; the test decodes soft breaks
+first.
+
+**No seeded role holds `invite.create` without `user.manage`.** The permission
+test would have passed before the rule existed, because a lesser role is refused
+by the middleware first — green, proving nothing. It needed a purpose-built
+grant.
+
+**`nodemailer` quotes an injected address inside the display name**, where it is
+inert. The CRLF test originally asserted the string was absent, which would fail
+against correct behaviour; it now asserts no new header line and no second
+envelope recipient.
+
+**Suites contend on `prisma migrate deploy`.** In parallel, three suites fail to
+LOAD with zero test failures. The contract runs `--runInBand`.
 
 ## Mutation proof
 
-| step | mutant | result |
-|---|---|---|
-| 2+3 | M1: expiry removed from `Invite.get` | 2 failed (expiry + GET oracle) |
-| 2+3 | M3: `expiresAt: null` read as expired | 3 failed, incl. copy-link regression |
-| 2+3 | OBS-1: unconditional `update` | 2 failed (race + expired claim) |
-| 2+3 | **M2: `<` for `<=`** | **survived — equivalent** |
-| 4 | M6: `jest.mock("nodemailer")` | absent by construction |
-| 4 | M7: log the body on failure | 1 failed (invite-link test) |
-| 4 | M7b: interpolate the credential into the error | 1 failed (auth-leak test) |
-| 4 | M8: `status()` claims delivered | 2 failed (both status tests) |
-| 4 | M10: plaintext without consent | 1 failed |
+| mutant | result |
+|---|---|
+| expiry removed from `Invite.get` | 2 failed |
+| `expiresAt: null` read as expired | 3 failed, incl. copy-link regression |
+| `markClaimed` unconditional | 2 failed |
+| `<` for `<=` on expiry | **survived — equivalent** |
+| `jest.mock("nodemailer")` | absent by construction |
+| driver logs the body | 1 failed |
+| credential interpolated into the error | 1 failed |
+| `status()` claims delivered | 2 failed |
+| plaintext without consent | 1 failed |
+| TLS flags recoupled | 2 failed |
+| idempotency disabled | 1 failed |
+| `SMTP_PASSWORD` `secret: false` | 1 failed |
+| `user.manage` gate removed | 1 failed |
+| `isVerified` skipped | 1 failed |
+| **limiter mount removed** | 1 failed |
+| **UI listing unmasked** | 2 failed |
+| **`/v1` listing unmasked** | 2 failed |
+| **key deleted from `SETTING_KEYS`** | 1 failed (after GAP-1; 0 before) |
+| **invite code prefix changed** | 2 failed |
 
-M2 is a genuine equivalent mutant: `<` and `<=` differ only when `expiresAt`
-equals `now` to the millisecond, which needs frozen time to hit. Recorded as
+`<` versus `<=` is a genuine equivalent mutant: they differ only when `expiresAt`
+equals `now` to the millisecond, which needs frozen time to reach. Recorded as
 surviving rather than killed by a test that would prove nothing.
 
-## Rulings received, not yet implemented (A–E, TL-1 pre-read)
+## Residual risks
 
-Scope question raised with PMO before starting: three of these reach outside the
-mailer.
-
-- **A** mailer save/test route sits behind `system.write`, not `settings.write`.
-- **B** verified-hash = HMAC(SIG_KEY, envKey + plaintext + non-secret fields);
-  the gate refuses before writing either table; `process.env` is set only AFTER
-  `persistCredential` resolves. That last part is a real pre-existing bug —
-  `updateENV.js:~1655` sets it before the await, so a failed write still mutates
-  the environment. No `$transaction` spans the two tables; that goes to
-  residual-risks.
-- **C** admin invite listings mask the address unless the session holds
-  `user.manage`; `email`/`recipient` must NOT be added to the audit allowlist.
-- **D** invite-by-email is rate limited per key/org rather than per IP, requires
-  `user.manage` (plain `invite.create` stays copy-link), accepts one address per
-  request, and returns 4xx — never a silent 200 — when the channel is off.
-- **E** SMTP non-secret fields join `supportedFields`; #78's forbidden-count test
-  must assert a set relation rather than a hardcoded number (needs Dev1).
+- No `$transaction` spans `system_settings` and `credential_store`. The save path
+  orders the writes so the credential lands first and the hash last, but a crash
+  between them leaves settings saved and unverified — which fails closed.
+- Mailing an invite through the API is not possible until a `user.manage`-class
+  scope exists. A product decision, recorded on the issue.
+- Codes already exported in an audit feed before #71 cannot be recalled.
 
 ## Evidence
 
-Contract (posted on the issue, replacing `placeholder`):
-`__tests__/api/inviteExpiryHttp.test.js` + `__tests__/security/notifications/smtpDriver.test.js`
-+ `__tests__/requestControlsHttp.test.js` — Tests: 36 passed, 36 total.
-
-Per §7.14 this branch runs the named suites only; the full run is the gate's.
-
-`nodemailer@7.0.10` is now a direct dependency of `server/`, pinned exactly. It
-previously existed only in `collector/yarn.lock` as a transitive of `mailparser`
-(inbound parsing), which is not a transport the server could use.
+Contract: `inviteExpiryHttp` + `inviteCodeAuditHttp` + `inviteCreate` +
+`__tests__/security/notifications/` + `requestControlsHttp` +
+`credentialPersistence`, `--runInBand` — Tests: 122 passed, 122 total, 9 suites.
