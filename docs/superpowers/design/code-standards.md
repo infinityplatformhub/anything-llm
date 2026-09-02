@@ -898,3 +898,6 @@ A shorter pepper makes 8 authorization suites fail at import with a pepper error
 
 ### §7.12 every vector predicate renderer needs a real-store test
 Three renderers in one slice looked correct as strings and were rejected by the engine: LanceDB bare identifier (case-folded), pgvector placeholder numbering, Milvus `not exists a and not exists b` (precedence). A new provider or clause ships only with a test that executes the predicate against the real store (skip-if-unavailable is acceptable, string comparison is not). #30 slices 1a/1b.
+
+### §7.6b every worktree installs its own node_modules
+Never symlink to, or `yarn add` into, the main checkout's `server/node_modules`; it is shared by every worktree and a stray install breaks all of them. New deps from a merged branch (xml-crypto from #43) mean `yarn install` + `prisma generate` before any test run. (Dev3 on #60; Dev2/Dev4 hit the same on #50/#30 1b.)
