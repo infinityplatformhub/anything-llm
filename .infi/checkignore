@@ -35,3 +35,4 @@ server/__tests__/security/authorization/userDeleteRoutes.test.js
 server/__tests__/security/identity/directorySyncRoute.test.js
 server/__tests__/security/jobs/directorySyncConcurrency.test.js
 server/__tests__/security/authorization/directorySyncPermission.test.js
+server/__tests__/utils/test/ciPostgresImage.test.js
