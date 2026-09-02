@@ -144,3 +144,9 @@ Real Postgres, `migrate deploy` (code-standards §7.1a). No migration in this is
 
 Half a day of deletion, plus §2 and §3 which are the parts that need thought. The risk
 is not the work, it is deleting one export too many — §3 is the whole issue in miniature.
+
+### PMO rulings (2026-09-02, supersede §1/§4 on issue-auth-token)
+- Ruling: `GET /v1/users/:id/issue-auth-token` is removed with `/request-token/sso/simple`. The token it mints is only exchangeable at the simple route; OIDC uses `TemporaryAuthToken` in-process. A credential-minting endpoint with no exchange path is attack surface without a feature. T-4a's /v1 restriction covers live routes, not a route that `ssoIssuanceLock` has always closed.
+- Ruling: remove `scopes.js` mapping + `sso.issue` from issuable scope lists; existing keys holding `sso.issue` stay valid for other routes (test).
+- Ruling (a): `simpleSSOLoginDisabledMiddleware` raw-mode predicate (fail-open on shape (b)) → separate issue, not #50.
+- Ruling (c): `yarn swagger` regenerated output committed with the removal.
