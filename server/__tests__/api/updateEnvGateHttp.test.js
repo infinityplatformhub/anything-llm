@@ -68,6 +68,10 @@ const authFor = (user) =>
   `Bearer ${makeJWT({ id: user.id, username: user.username })}`;
 const update = (user, body) =>
   request(app).post("/api/system/update-env").set("Authorization", authFor(user)).send(body);
+const clearCredential = (user, envKey) =>
+  request(app)
+    .delete(`/api/system/credential/${envKey}`)
+    .set("Authorization", authFor(user));
 const hasNoHooks = ({ checks = [], preUpdate = [], postUpdate = [], postSettled = [] }) =>
   checks.length + preUpdate.length + postUpdate.length + postSettled.length === 0;
 const secretKeys = Object.keys(KEY_MAPPING).filter(
@@ -200,6 +204,29 @@ describe("issue 84 update environment authorization gate", () => {
     expect(response.status).toBe(200);
     expect(process.env[envKey]).toBe(ORIGINAL_SECRET);
     await expect(CredentialStore.get(envKey)).resolves.toBe(ORIGINAL_SECRET);
+  });
+
+  // Clearing a credential is the same authority as writing one: an actor who may not
+  // set OPEN_AI_KEY has no business revoking it. `INSTANCE_AUTH_KEYS` blocks only
+  // AUTH_TOKEN and JWT_SECRET, so under the weaker gate 90 of the 92 secret keys were
+  // a manager's to destroy -- a denial of service on every provider the instance uses.
+  it("refuses a manager clearing a stored credential", async () => {
+    await CredentialStore.set(secretEnvKey, ORIGINAL_SECRET);
+
+    const response = await clearCredential(manager, secretEnvKey);
+
+    expect(response.status).toBe(403);
+    await expect(CredentialStore.get(secretEnvKey)).resolves.toBe(ORIGINAL_SECRET);
+  });
+
+  it("lets an actor holding system.write clear the same credential", async () => {
+    await CredentialStore.set(secretEnvKey, ORIGINAL_SECRET);
+
+    const response = await clearCredential(admin, secretEnvKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ cleared: true });
+    await expect(CredentialStore.get(secretEnvKey)).resolves.toBeNull();
   });
 
   it("agrees with the API key surface scope", () => {

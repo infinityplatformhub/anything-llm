@@ -731,9 +731,13 @@ function systemEndpoints(app) {
   // validators. A separate route rather than a sentinel value in the update payload:
   // the update path is shared by all 213 settings, and a magic value there would be one
   // typo away from clearing a credential nobody meant to touch.
+  // issue 84: `system.write`, matching the update route above. Clearing a credential
+  // is the same authority as writing one -- an actor who may not set OPEN_AI_KEY has
+  // no business revoking it, and `INSTANCE_AUTH_KEYS` blocks only AUTH_TOKEN and
+  // JWT_SECRET of the 92 secret keys, leaving 90 clearable under the weaker gate.
   app.delete(
     "/system/credential/:envKey",
-    [validatedRequest, requirePermission("settings.write", orgResource)],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const { envKey } = request.params;

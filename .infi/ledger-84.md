@@ -31,9 +31,14 @@ Suite: **7/7**. Cases: premise guard, manager+secret refused with live and store
 
 The second mutation is why that test exists. The UI resubmits forms containing secrets it never received in cleartext, sending asterisks in place of the value, and `updateENV` strips them before writing. This change puts a new gate in front of that path; a suite testing only refusals would not have noticed the allowed path starting to write literal asterisks over a live credential.
 
+Ruling: **`DELETE /system/credential/:envKey` gets the same gate** (TL-1 FINDING-1). Raising only the write route left the mirror open: a manager who could not set `OPEN_AI_KEY` could still revoke it. Measured rather than assumed — `INSTANCE_AUTH_KEYS` holds five names, of which only `AUTH_TOKEN` and `JWT_SECRET` are among the 92 `secret: true` keys, so **90 credentials were a manager's to destroy**. Clearing a credential is the same authority as writing one, and a denial of service on every provider the instance uses is not a smaller harm than an unauthorized write.
+
+Its mutation: reverting that one gate fails `refuses a manager clearing a stored credential` and nothing else — 1 failed, 8 passed.
+
 ## Residuals
 
 - `setup_admin` can no longer set the 122 non-secret entries (no UI exercised this).
+- **30 keys carry `secret: "url"`**, not `secret: true`, and are outside every count in this ledger. They are endpoint URLs whose userinfo can hold a password (P0-4D(c) masks that portion). Whether they belong under the same gate is a separate question this issue did not ask.
 - `updateENV` silently drops keys absent from `KEY_MAPPING` — the same silent-drop class as #72, one layer over, deliberately out of scope here.
 
 ## Note on how this one was finished
