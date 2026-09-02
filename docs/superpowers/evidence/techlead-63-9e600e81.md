@@ -1,4 +1,8 @@
-# Techlead review — #63 `dabe635e` (grant `chat.read` to workspace roles)
+# Techlead review — #63 `9e600e81` (grant `chat.read` to workspace roles)
+
+> Reviewed at `dabe635e`; `9e600e81` is that commit amended with two `describe` title
+> renames (`#63:` -> `issue 63:`) for section 7.3a. No code, migration, seed or assertion
+> change - verified by diff. The verdict below is unchanged.
 
 **Verdict: PASS.** The ruling is correct as an authorization policy, the migration matches it
 exactly, and the test that overturned my own advance analysis is in the suite as a permanent
