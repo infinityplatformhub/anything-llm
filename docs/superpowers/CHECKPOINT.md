@@ -927,3 +927,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - 08:50 sweep: postmerge-139 stopped/reaped (main green 3316/1 flake). Requests: TL-2 ×3 one-liners; Dev3 + Dev1 #138 status; Dev4 audit prereq RED scratch; TL-1 V8 contract final read; QA-2 #141 oracle stage. Pending: Dev5 #135 (2 pings), postmerge-136s2, QA-3 #132 dry-fire, QA-1 RF-P harness, Dev2 #141 recon.
 - #141 recon (Dev2, c8cf89780) landed.
 - 09:05 #135 REASSIGNED to Dev2 (Dev5 silent 50 min, 3 pings; second silence today). Dev2 branches 135-callsites-dev2 off main. Dev5 told to stand down + report uncommitted work. #141 recon landed; migration shape → TL-1; secret key → QA-2.
+- #141 recon detail: identity_providers entityId/ssoUrl NOT NULL block a lark row (DROP NOT NULL = TL ruling); driver takes baseUrl not tenant; nothing in server/ reads identity_providers (no writer for "save a row"); registry null-prototype RF-6. Addendum sent to TL-1. §7.17 ×2.
