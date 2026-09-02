@@ -210,8 +210,8 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     {
       name: "alias",
       source:
-        'const { hiddenEndpoints: probe } = require("./endpoints/hidden");',
-      reason: "top-level unaliased destructuring",
+        '\nconst { hiddenEndpoints: probe } = require("./endpoints/hidden");',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "second declarator",
@@ -222,35 +222,40 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     },
     {
       name: "member access",
-      source: 'const probe = require("./endpoints/probe").mountProbeRoutes;',
-      reason: "top-level unaliased destructuring",
+      source: '\nconst probe = require("./endpoints/probe").mountProbeRoutes;',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "namespace/default binding",
-      source: 'const ep = require("./endpoints/probe");',
-      reason: "top-level unaliased destructuring",
+      source: '\nconst ep = require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "array binding",
-      source: 'const [probe] = require("./endpoints/probe");',
-      reason: "top-level unaliased destructuring",
+      source: '\nconst [probe] = require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "nested block",
       source:
-        'if (true) { const { probeEndpoints } = require("./endpoints/probe"); }',
-      reason: "top-level unaliased destructuring",
+        '\nif (true) { const { probeEndpoints } = require("./endpoints/probe"); }',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "assignment outside a declaration",
+      source: '\n({ probeEndpoints } = require("./endpoints/probe"));',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "computed require",
-      source: 'const { probeEndpoints } = require("./endpoints/" + name);',
-      reason: "Unsupported dynamic require",
+      source: '\nconst { probeEndpoints } = require("./endpoints/" + name);',
+      reason: "Unsupported dynamic require at line 2",
     },
     {
       name: "indirect require",
       source:
-        'const path = "./endpoints/probe"; const { probeEndpoints } = require(path);',
-      reason: "Unsupported dynamic require",
+        '\nconst path = "./endpoints/probe"; const { probeEndpoints } = require(path);',
+      reason: "Unsupported dynamic require at line 2",
     },
   ])("collectImports: $name", ({ source, expected, reason }) => {
     const collect = () =>
