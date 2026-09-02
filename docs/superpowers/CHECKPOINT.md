@@ -447,3 +447,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #116: QA-3 interim 7/7 vs baseline; self-caught fake pass (stub failed restore too → "green because nothing wrote"), fixed with failOnce + assert no "could not be restored"; mutations M1–M4 running. Waiting TL-1 + QA-3 verdict.
 - Post-merge-118 job was stuck in `while pgrep yarn test` loop (matches other sessions' runs) — killed, relaunched directly → /tmp/postmerge-118.log. Rule: never gate post-merge on pgrep of shared process names.
 - #114 fdb32d825 (Dev1): 14/14 + frontend R10 7/7, 5 mutations; two dev self-rulings (session beats pre-user; R10 relative-to-baseline warnings) flagged for TL-2. PGVectorConnectionString already booleanised (recon corrected). Gate running at wt-114 (g114); TL-2 + QA-3 dispatched.
+- #116: QA-3 PASS (A/B/C + restart, RF-2b, D/D2, M1–M4 both sides; stub failOnce fix self-caught). Store-read priors make #115 ordering moot. Waiting TL-1 only.
