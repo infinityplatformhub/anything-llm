@@ -540,4 +540,52 @@ describe("S12 slice 2: offboardUser", () => {
       await prisma.group_members.count({ where: { user_id: user.id } })
     ).toBe(1);
   });
+
+  test("F12: GRANT-ONLY offboard still runs revokeGrant's role.revoke guard", async () => {
+    // TL-2's NIT, and the exact mirror of F9. F9 covers a user whose only rows are a
+    // membership, so `removeGroupMember`'s guard is the only one that can refuse.
+    // This covers the other side: a user with a role grant and NO membership, where
+    // `revokeGrant`'s `role.revoke` check is the only thing standing between a
+    // content_moderator and stripping another user's org role.
+    //
+    // Measured by TL-2: with an exempt principal passed to `revokeGrant` alone, a
+    // content_moderator strips a role successfully and every other fixture here stays
+    // green — F8's user holds a membership, so its refusal comes from
+    // `refuseGroupEscalation` first and never reaches the grant guard.
+    const tag = `grantonly-${seq++}-${dbSuffix}`;
+    const user = await prisma.users.create({
+      data: { username: `${tag}@example.com`, password: "x", role: "default" },
+    });
+    const member = await prisma.roles.findFirstOrThrow({
+      where: { name: "member", scope: "org" },
+    });
+    await repository.grantRole({
+      actor: SETUP,
+      principalType: "user",
+      principalId: String(user.id),
+      roleId: member.id,
+      db: prisma,
+    });
+    expect(
+      await prisma.group_members.count({ where: { user_id: user.id } })
+    ).toBe(0);
+
+    const moderator = await makeActor("content_moderator");
+    await expect(
+      repository.offboardUser({ actor: moderator, userId: user.id, db: prisma })
+    ).rejects.toThrow(/role\.revoke/);
+    expect(
+      await prisma.principal_role_grants.count({
+        where: { principal_type: "user", principal_id: String(user.id) },
+      })
+    ).toBe(1);
+
+    // ...and the legitimate actor still gets through — a guard, not a wall
+    await repository.offboardUser({ actor: ACTOR, userId: user.id, db: prisma });
+    expect(
+      await prisma.principal_role_grants.count({
+        where: { principal_type: "user", principal_id: String(user.id) },
+      })
+    ).toBe(0);
+  });
 });

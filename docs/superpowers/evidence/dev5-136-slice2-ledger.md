@@ -118,3 +118,29 @@ Ruling: F10 asserts the scope KEYS a bump is published under, not how many bumps
 Ruling: F11 offboards a user that HAS rows rather than a bare id — because with `requireActor` deleted and a user holding nothing, the enumeration finds nothing, no primitive runs, and the function returns cleanly — if wrong, the actor refusal is proven only incidentally by whichever primitive happens to run first, and vanishes for exactly the user it matters least to catch.
 
 Ruling: run every full suite in the background logging to a file, never blocking inside the tool timeout — because a 10-minute timeout killed `yarn test` at 10:00 and produced no result at all, while three PMO pings went unanswered and slice 2 was reassigned — if wrong, the cost is not the wasted ten minutes but that the session goes silent and looks dead.
+
+---
+
+## TL-2 verdict follow-ups (711ad6108)
+
+**F12 — TL-2's NIT, the mirror of F9.** A user with a role grant and NO membership,
+offboarded by a `content_moderator`: `revokeGrant`'s `role.revoke` check is then the
+only guard that can refuse. F8's user holds a membership, so its refusal comes from
+`refuseGroupEscalation` first and never reaches the grant guard — which is why an exempt
+principal passed to `revokeGrant` alone was invisible to the suite.
+
+Ruling: F9 and F12 are a PAIR, not redundant — because each isolates one guard by
+removing the rows that would let the other refuse first — if wrong, either guard can be
+bypassed while eleven fixtures stay green (TL-2 measured a content_moderator stripping
+another user's org role under exactly that mutation).
+
+| mutant | result |
+|---|---|
+| M9b — exempt `{type:"service",id:"single-user"}` passed to `revokeGrant` only | **1 red (F12)** |
+
+**NOTE (TL-2, recorded not fixed): `makeActor` omits `workspaceIds`.** The fixture actors
+carry `{type, id, orgId}` only. Nothing on this path reads `workspaceIds` today —
+`revokeGrant`'s `heldPermissionIds(tx, actor, workspaceId)` takes the scope from its own
+argument, not from the actor — so the fixtures are honest about what they exercise. If a
+future guard reads it, these actors would silently exercise the empty-scope case; noted
+here so that is a decision rather than a discovery.
