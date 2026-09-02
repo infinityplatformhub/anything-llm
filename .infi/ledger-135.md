@@ -112,6 +112,29 @@ and not `role.revoke`; the actor's resolved permissions exclude `role.revoke`; a
 grant exists to revoke) so that a refusal for the wrong reason cannot read as
 success.
 
+## RF-K (TL-1 condition before merge)
+
+**Ruling: the regression I found by hand needed a test before merge, and did not
+have one.** — I fixed the `revokedAt` skip and reported it, but nothing asserted
+it: deleting `revokeCredentialsFor` from either route left every assertion in
+both new files green. `api_keys.createdBy` has no foreign key, so the row
+outlives its owner and the stamp is the only record of when the key stopped
+working. — **If wrong, the exact bug I introduced can be reintroduced by anyone,
+silently, with a green suite.**
+
+Added per route: the victim's keys all carry a non-null `revokedAt`, plus a
+control key belonging to another user that must stay untouched. The control is
+load-bearing — a route stamping EVERY key satisfies the first assertion alone.
+
+`endowed()` now creates a key for the victim; without one the loop iterates zero
+times and passes vacuously.
+
+| # | mutation | red |
+|---|---|---|
+| MK1 | drop `revokeCredentialsFor` from the ADMIN route (my exact regression) | 1 — the admin route test |
+| MK2 | drop it from the API route | 1 — the API route test |
+| MK3 | stamp EVERY key rather than the victim's | 1 — caught by the control, not by the loop |
+
 ## Out of scope, said explicitly
 
 Calling handlers off `app._router.stack` skips `validatedRequest`,

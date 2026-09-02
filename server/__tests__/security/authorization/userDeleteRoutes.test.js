@@ -113,8 +113,48 @@ async function endowed(label) {
     action: "document.read",
     db: prisma,
   });
+  // RF-K: a key of their own. `api_keys.createdBy` has no foreign key, so the row
+  // outlives its owner — the stamp is the only record of when it stopped working.
+  // Created directly rather than through `ApiKey.create`, which applies a scope ceiling
+  // this user deliberately cannot satisfy.
+  await prisma.api_keys.create({
+    data: {
+      secretDigest: Buffer.from(`i135r-vk-${tag}`.padEnd(32, "x").slice(0, 32)),
+      keyPrefix: `i135rv${seq}`,
+      scopes: "workspace.read",
+      createdBy: user.id,
+    },
+  });
   return user;
 }
+
+/**
+ * A key belonging to somebody else, as the control: a route that stamped EVERY key
+ * rather than the victim's would satisfy the RF-K assertions without it.
+ */
+async function bystanderKey() {
+  const owner = await prisma.users.create({
+    data: {
+      username: `i135r-bystander-${seq++}@example.com`,
+      password: bcrypt.hashSync("Pw123456!", 10),
+      role: "default",
+    },
+  });
+  return prisma.api_keys.create({
+    data: {
+      secretDigest: Buffer.from(`i135r-bk-${seq}`.padEnd(32, "x").slice(0, 32)),
+      keyPrefix: `i135rb${seq}`,
+      scopes: "workspace.read",
+      createdBy: owner.id,
+    },
+  });
+}
+
+const keyRevocations = async (userId) =>
+  prisma.api_keys.findMany({
+    where: { createdBy: Number(userId) },
+    select: { id: true, revokedAt: true },
+  });
 
 async function mkAdmin() {
   const user = await prisma.users.create({
@@ -197,6 +237,7 @@ describe("#135 route 1: DELETE /admin/user/:id (session actor)", () => {
 
     const victim = await endowed("admin-route");
     expect(await orphanCount(victim.id)).toBeGreaterThan(0);
+    const control = await bystanderKey();
 
     const handler = handlerFor(app, "delete", "/admin/user/:id");
     expect(handler).toBeTruthy(); // the route exists and was found
@@ -218,6 +259,19 @@ describe("#135 route 1: DELETE /admin/user/:id (session actor)", () => {
     expect(await prisma.users.findUnique({ where: { id: victim.id } })).toBeNull();
     // The point of the issue: the rows are gone, not merely the user row.
     expect(await orphanCount(victim.id)).toBe(0);
+
+    // RF-K (TL-1). `api_keys.createdBy` has no foreign key, so the key row outlives its
+    // owner and `revokedAt` is the only record of when it stopped working. Nothing
+    // asserted this before: deleting `revokeCredentialsFor` from this route left every
+    // other assertion in the file green — which is exactly how I broke it and had to
+    // find it by running the wider suite instead of by a failing test.
+    const keys = await keyRevocations(victim.id);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(key.revokedAt).not.toBeNull();
+    // ...and only theirs: a route stamping every key would pass the loop above.
+    expect(
+      (await prisma.api_keys.findUnique({ where: { id: control.id } })).revokedAt
+    ).toBeNull();
   }, 120000);
 
   test("the actor passed to offboardUser IS response.locals.actor, by identity", async () => {
@@ -432,6 +486,7 @@ describe("#135 route 2: DELETE /v1/admin/users/:id (API-key actor)", () => {
 
     const victim = await endowed("api-route");
     expect(await orphanCount(victim.id)).toBeGreaterThan(0);
+    const control = await bystanderKey();
 
     const handler = handlerFor(app, "delete", "/v1/admin/users/:id");
     expect(handler).toBeTruthy();
@@ -450,6 +505,15 @@ describe("#135 route 2: DELETE /v1/admin/users/:id (API-key actor)", () => {
 
     expect(seen.status).toBe(200);
     expect(await orphanCount(victim.id)).toBe(0);
+
+    // RF-K on this route too — the two sites revoke credentials independently, so a
+    // fixture on one says nothing about the other.
+    const keys = await keyRevocations(victim.id);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(key.revokedAt).not.toBeNull();
+    expect(
+      (await prisma.api_keys.findUnique({ where: { id: control.id } })).revokedAt
+    ).toBeNull();
 
     // The key's creator is a REAL user holding role.revoke, and that is the point:
     // `resolveActor` gives the key its creator's grantPrincipal, so the revoke guard is
