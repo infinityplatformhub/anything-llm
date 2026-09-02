@@ -784,3 +784,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #138 QA-1 driver baseline (qa1-138-driver-baseline.md): A/B/D hang >20s on main, C rejects 2.5s (inherited). Floor = timeout+backoff not 4×timeout; token memo → fresh instance per case; 5 mutants with distinct red sets. Forwarded to Dev3.
 - O3 contract v2 (Dev2, contract-o3-v2 branch) landed if diff present.
 - #136 F1 shape (TL-2): refuse in User.update (not in cast, not a throw); suspended only; _update untouched; RED set "0","false","no",2,-1,null,undefined,[],{}; controls 0/1/true/false; never let undefined reach prisma. Forwarded to Dev5.
+- 01:15 idle dispatch: Dev4 → sidebar→route-action audit recon; Dev2 → #135 contract draft; TL-1 → #137 RED pre-read; QA-3 → #137 mutant harness (loud-fail); QA-1 → #138 queue-half harness. Waiting: Dev5 #136 SHA, Dev3 #138 driver SHA, Dev1 #137 GREEN SHA, USER approvals (#121, V8, O3 SIG_KEY, #113 Q4, #107, +1 TL).
