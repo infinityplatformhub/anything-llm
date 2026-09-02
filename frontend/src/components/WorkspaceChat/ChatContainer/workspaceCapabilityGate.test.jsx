@@ -46,10 +46,12 @@ vi.mock("@/models/system", () => ({
     },
     keys: async () => ({}),
     getSystemSettings: async () => ({}),
-    // `ToolsMenu` mounts its slash-commands tab, which calls this on mount. A mock missing it
-    // does not fail a test — the call is inside an unawaited effect, so it surfaces as an
-    // UNHANDLED REJECTION and vitest exits 1 while reporting every test as passed. Green
-    // output, non-zero exit: the CI job fails and the report says nothing is wrong.
+    // `ToolsMenu` mounts its slash-commands tab, which calls this on mount
+    // (Tabs/SlashCommands/index.jsx:48). A mock missing it does not fail a test
+    // — the call is inside an unawaited effect, so it surfaces as an UNHANDLED
+    // REJECTION and vitest exits 1 while reporting every test as passed. Green
+    // output, non-zero exit: the CI job fails and the report says nothing is
+    // wrong, which is why counting passes is not enough to call a run green.
     getSlashCommandPresets: async () => [],
   },
 }));
@@ -293,6 +295,63 @@ describe("#40 task 4: ToolsMenu gates the agent-skills tab on workspace.write", 
 
   const agentSkillsTab = () =>
     screen.queryByText(/agent.?skills/i, { exact: false });
+
+  test("ToolsMenu reads `visible`, not only `can` (M3)", async () => {
+    // QA-3 M3, and it cannot be killed through the DOM. Dev4 established why
+    // for the picker and the same holds here: useWorkspaceCapabilities derives
+    // `can` from `state.workspace?.capabilities`, so an invisible workspace
+    // already forces can() false and both implementations hide the control. No
+    // fixture separates them by rendering — the hook makes them agree.
+    //
+    // The DOM test below documents the behaviour; THIS is what kills the
+    // mutant, so that dropping `visible` fails loudly rather than quietly
+    // becoming decorative against a future hook where the two can diverge.
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        "src/components/WorkspaceChat/ChatContainer/PromptInput/ToolsMenu/index.jsx"
+      ),
+      "utf8"
+    );
+    expect(source).toMatch(/visible && can\("workspace\.write"\)/);
+  });
+
+  test("an INVISIBLE workspace hides the tab even with an allowing map (M3)", async () => {
+    // QA-3 M3. `canConfigureWorkspace = !loading && visible && can(...)`, and
+    // removing `visible` survived every existing ToolsMenu test: with
+    // `workspace: null` the hook's own can() is false anyway, so the two are
+    // indistinguishable from outside.
+    //
+    // The fixture is contradictory on purpose — the server reports the
+    // workspace as invisible while the org map still allows — and the user is
+    // NOT single-user, so the `!user` shortcut cannot be what hides it. Only a
+    // gate that reads `visible` separately refuses this.
+    mockCapabilities.current = {
+      capabilities: { "workspace.write": true, "settings.write": true },
+      workspace: null,
+      error: null,
+    };
+    mockUser.current = { id: 1, role: "admin" };
+    render(
+      <MemoryRouter initialEntries={["/workspace/test"]}>
+        <ToolsMenu
+          workspace={{ id: WORKSPACE_ID, slug: "test" }}
+          showing={true}
+          setShowing={() => {}}
+          sendCommand={() => {}}
+          promptRef={{ current: null }}
+          highlightedIndexRef={{ current: -1 }}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() =>
+      expect(mockCapabilities.calls.length).toBeGreaterThan(0)
+    );
+    expect(agentSkillsTab()).toBeNull();
+  });
 
   test("a role-default user holding workspace.write SEES the agent-skills tab", async () => {
     renderTools({ workspaceCapabilities: { "workspace.write": true } });

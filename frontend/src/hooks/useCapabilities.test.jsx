@@ -16,16 +16,23 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const mockFetch = vi.hoisted(() => ({
   resolve: null,
   deferred: true,
+  rejectOnce: false,
+  calls: 0,
   value: { capabilities: { "settings.write": true }, workspace: null },
 }));
 
 vi.mock("@/models/system", () => ({
   default: {
     fetchMyCapabilities: async () => {
+      mockFetch.calls += 1;
       if (mockFetch.deferred) {
         await new Promise((resolve) => {
           mockFetch.resolve = resolve;
         });
+      }
+      if (mockFetch.rejectOnce) {
+        mockFetch.rejectOnce = false;
+        throw new Error("network");
       }
       return mockFetch.value;
     },
@@ -38,6 +45,45 @@ beforeEach(() => {
   resetCapabilities();
   mockFetch.deferred = true;
   mockFetch.resolve = null;
+  mockFetch.rejectOnce = false;
+  mockFetch.calls = 0;
+});
+
+describe("#40 M6: a failed fetch is not cached", () => {
+  // QA-3 M6. The cache is a module-level promise, so caching a REJECTED one
+  // answers every later mount in the tab with the same failure: can() stays
+  // false until a manual reload, and a transient network blip becomes
+  // indistinguishable from a revoked grant.
+  //
+  // Asserted through the hook rather than the raw cache, because the bug is
+  // only observable to a second reader.
+  test("a second mount refetches and gets the real answer", async () => {
+    mockFetch.deferred = false;
+    mockFetch.rejectOnce = true;
+
+    const first = renderHook(() => useCapabilities());
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    // Failed closed, as it must — but the question is what happens NEXT.
+    expect(first.result.current.can("settings.write")).toBe(false);
+    expect(mockFetch.calls).toBe(1);
+
+    const second = renderHook(() => useCapabilities());
+    await waitFor(() =>
+      expect(second.result.current.can("settings.write")).toBe(true)
+    );
+    // A second call actually happened: a cached rejection would have answered
+    // from the first without asking again.
+    expect(mockFetch.calls).toBe(2);
+  });
+
+  test("a successful fetch IS cached — the retry is not a request storm", async () => {
+    mockFetch.deferred = false;
+    const a = renderHook(() => useCapabilities());
+    await waitFor(() => expect(a.result.current.loading).toBe(false));
+    renderHook(() => useCapabilities());
+    renderHook(() => useCapabilities());
+    expect(mockFetch.calls).toBe(1);
+  });
 });
 
 describe("#40 RF-3: can() answers false for everything while loading", () => {

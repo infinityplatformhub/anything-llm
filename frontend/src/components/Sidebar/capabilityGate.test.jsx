@@ -39,7 +39,27 @@ vi.mock("@/hooks/useUser", () => ({
   default: () => ({ user: mockUser.current }),
 }));
 
-import { NewWorkspaceButton } from "@/components/Sidebar";
+// The full-Sidebar block below renders the real component, which pulls in the
+// logo context, the workspace list and the footer. Those are stubbed because
+// this file is about the two authorization sites; leaving them real would make
+// the tests fail for reasons that have nothing to do with capabilities.
+vi.mock("@/hooks/useLogo", () => ({
+  default: () => ({ logo: "logo.png", setLogo: () => {} }),
+}));
+vi.mock("@/components/Sidebar/ActiveWorkspaces", () => ({
+  default: () => <div>active-workspaces</div>,
+}));
+vi.mock("@/components/Footer", () => ({
+  default: () => <div>footer</div>,
+}));
+vi.mock("@/models/workspace", () => ({
+  default: { all: async () => [], searchWorkspaces: async () => ({ results: [] }) },
+}));
+
+import {
+  NewWorkspaceButton,
+  SidebarMobileHeader,
+} from "@/components/Sidebar";
 import useCapabilities, { resetCapabilities } from "@/hooks/useCapabilities";
 
 function renderNewWorkspaceButton({ capabilities, user }) {
@@ -117,15 +137,67 @@ describe("#40 task 4: NewWorkspaceButton gates on workspace.create", () => {
     await waitFor(() => expect(newWorkspaceControl()).toBeInTheDocument());
   });
 
-  test("workspace.create and settings.write are not interchangeable", async () => {
-    // The two sites in this file gate on different capabilities. Holding only
-    // settings.write must NOT reveal the create control -- otherwise the
-    // rewrite reproduced the role string's conflation in a new spelling.
+  test("holding settings.write does not reveal the create control", async () => {
+    // Renamed after QA-3 M4: the old name claimed the two SITES were not
+    // interchangeable, but this only ever rendered NewWorkspaceButton -- it
+    // said nothing about :166, which was never exercised at all. The claim now
+    // matches what is asserted, and the site-level version is below.
     renderNewWorkspaceButton({
       capabilities: { "settings.write": true, "workspace.create": false },
       user: { id: 1, role: "admin" },
     });
     await waitForCapabilitiesToLoad();
     expect(newWorkspaceControl()).toBeNull();
+  });
+});
+
+describe("#40 task 4 M4: SidebarMobileHeader, so :166 is actually exercised", () => {
+  // QA-3 M4. Every test above renders NewWorkspaceButton directly, so the
+  // SettingsButton wrapper had no coverage -- reverting it to the role string
+  // left the suite green.
+  //
+  // The wrapper lives in SidebarMobileHeader, NOT in the default Sidebar
+  // export: rendering `<Sidebar />` never reaches it, which is why the first
+  // attempt at this test still proved nothing about the site.
+  function renderSidebar({ capabilities, user }) {
+    mockCapabilities.current = { capabilities, workspace: null, error: null };
+    mockUser.current = user;
+    return render(
+      <MemoryRouter initialEntries={["/"]}>
+        <SidebarMobileHeader />
+      </MemoryRouter>
+    );
+  }
+
+  // SettingsButton renders a "Settings" cog outside /settings/* and a "Home"
+  // arrow within it, so matching only /settings/i finds nothing on the home
+  // route and every negative assertion would pass for free.
+  const settingsControl = () =>
+    screen.queryByLabelText("Settings") ?? screen.queryByLabelText("Home");
+
+  test("a principal holding workspace.create but NOT settings.write gets the create control and no settings", async () => {
+    // The fixture the role string could not express: one capability held, the
+    // other not. `role !== "default"` showed both or neither.
+    renderSidebar({
+      capabilities: { "workspace.create": true, "settings.write": false },
+      user: { id: 1, role: "default" },
+    });
+    await waitFor(() => expect(newWorkspaceControl()).toBeInTheDocument());
+    expect(settingsControl()).toBeNull();
+  });
+
+  test("the reverse: settings.write without workspace.create", async () => {
+    renderSidebar({
+      capabilities: { "workspace.create": false, "settings.write": true },
+      user: { id: 1, role: "default" },
+    });
+    await waitFor(() => expect(settingsControl()).toBeInTheDocument());
+    expect(newWorkspaceControl()).toBeNull();
+  });
+
+  test("single-user mode gets both", async () => {
+    renderSidebar({ capabilities: {}, user: null });
+    await waitFor(() => expect(settingsControl()).toBeInTheDocument());
+    expect(newWorkspaceControl()).toBeInTheDocument();
   });
 });

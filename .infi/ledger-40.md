@@ -341,3 +341,11 @@ Residual (task 4):
 - **gate ที่ transcribe** (`Home`, `SettingsSidebar`) พึ่ง drift check ไม่ใช่ render จริง · ทางที่ดีกว่าคือแตก gate เป็น component เล็กที่ render ได้ = follow-up issue
 - **14 site ที่เหลือ** → #121 (mapping ยังไม่ผ่าน review)
 - **3 site delegated admin** → รอ `assignableRoles` issue
+
+Ruling (gate แดง 2 จุด): (1) `yarn test` **exit 1** ทั้งที่ 75/75 ผ่าน — vitest นับ unhandled rejection เป็น failure · ผมประกาศ SHA โดยดูแค่จำนวน pass **ไม่ได้เช็ค exit code** · ต่อไปเช็ค exit code ทุกครั้ง (2) drift sweep `+2` **ไม่ใช่ caller ใหม่ มันคือคอมเมนต์** — `managerAllowedFieldsDrift.test.js:109` ใช้ `source.includes(...)` บนข้อความดิบ ไม่แยกโค้ด/คอมเมนต์ ไม่กรองไฟล์เทส · Dev4 เขียนคอมเมนต์อธิบายว่าทำไม Memories ใช้ `settings.write` แล้วโดนนับเป็น caller · **คลาสเดียวกับบทเรียนใหญ่ของ task 1** · PMO ruling (ก): strip คอมเมนต์ + ข้ามไฟล์เทส **ไม่ใช่** เพิ่มเข้า allowlist (allowlist จะบันทึกสิ่งที่เป็นเท็จ — ไฟล์พวกนั้นไม่ใช่ caller เลย — และรอบหน้าใครเขียนคอมเมนต์แบบเดียวกันก็ต้องเพิ่มอีก)
+
+Ruling (QA-3 M3): mutant `visible` ของ ToolsMenu **ฆ่าผ่าน DOM ไม่ได้** — hook คำนวณ `can` จาก `state.workspace?.capabilities` ดังนั้น workspace ที่มองไม่เห็นทำให้ `can()` false อยู่แล้ว ทั้งสอง implementation ซ่อนเหมือนกัน ไม่มี fixture แยกได้ · Dev4 พิสูจน์เรื่องนี้ไว้แล้วสำหรับ picker · ใช้ source assertion ฆ่า mutant + เทส DOM เก็บไว้บันทึกพฤติกรรม — ถ้าผิด: `visible` กลายเป็นของประดับที่ลบทิ้งได้เงียบ ๆ
+
+Ruling (QA-3 M4): site `:166` อยู่ใน **`SidebarMobileHeader` ไม่ใช่ default export `Sidebar`** · เทสรอบแรกของผม render `<Sidebar />` ซึ่ง**ไม่เคยไปถึง site นั้นเลย** — พิสูจน์ไม่ได้อะไร · แก้เป็น render `SidebarMobileHeader` แล้ว mutant (คืน role string ที่ :166) แดง · อีกจุด: query `queryByLabelText(/settings/i)` ไม่เจอเพราะ `SettingsButton` ใช้ label `"Home"` นอก `/settings/*` — selector ที่ไม่เจออะไรทำให้ assertion เชิงลบผ่านฟรี (§7.17 ซ้ำ)
+
+Ruling (QA-3 M6): เทส rejection ต้องวัดผ่าน **reader ตัวที่สอง** ไม่ใช่ผ่าน cache ตรง ๆ — บั๊กมองเห็นได้เฉพาะตอนมี mount ที่สอง · assert `mockFetch.calls` เพิ่มจาก 1 เป็น 2 (cache ที่เก็บ rejection จะตอบจากตัวเดิมโดยไม่ถามใหม่) + เทสคู่ว่า success **ยัง** cache อยู่ (ไม่ใช่ยิงรัวทุก mount)
