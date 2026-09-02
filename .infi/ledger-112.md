@@ -83,7 +83,99 @@ environment. Corrected in place with an `updated` note.
 | drop `VECTOR_DB` from `isLegacyOnboarded` | `treats VECTOR_DB as a legacy signal too` |
 | move the increment before `await original` | `does not increment chats_total when the connector rejects`, `does not increment embeddings_total when embedChunks rejects` |
 
-## Still to do in this issue
+## The auth half — `GET /system/preflight`
 
-The auth half: `GET /system/preflight` with the pre-user-or-`system.write` rule, `scrubText` over
-the whole response, and the React step. Waiting on TL-1's RF list.
+Ruling: the gate is `isConfirmedSingleUser()`, NOT `User.count()`. TL-1's pre-read had this
+inverted, and I stopped rather than implement it. Measured: `models/user.js:305` catches and returns
+**0**, so `User.count() === 0` is TRUE while the database is down — opening the route at exactly the
+moment its details are most revealing, since they name the host that cannot be reached.
+`actorResolver.js:317` catches and returns **false** — fails closed on both of its reads, and its
+own comment records that the swallowed-error version of this was already found and fixed once. PMO
+confirmed the correction. — ถ้าผิด: DB ล่ม = route เปิดให้ทุกคน ตอนที่ detail มีค่าที่สุด
+
+Ruling: the gate is evaluated PER REQUEST, never cached at module scope. The transition happens
+inside one process — the first `User.create` during onboarding closes the window with no restart —
+so a cached boolean leaves the route open for that process's life, and a restarted app would show
+nothing wrong. — ถ้าผิด: หน้าต่างเปิดค้างทั้งอายุโปรเซส
+
+Ruling: the chain is three middlewares — pre-user check, then `validatedRequest`, then
+`requirePermission("system.write")` — with the last two skipped when pre-user. `validatedRequest`
+populates `response.locals.user`, which is where `actorResolver` reads the principal from; without
+it a real admin resolves to no actor and the gate refuses them (measured: 403). It cannot run first,
+because on a pre-user instance there is no session and it would refuse the case the route exists to
+serve. — ถ้าผิด: admin จริงโดนปฏิเสธ หรือ pre-user โดนปฏิเสธ แล้วแต่ลำดับ
+
+Ruling: `system.write`, not `system.read`. `permissions.js:59` draws the line already, and F3's
+`config.metrics_exposure` in a `detail` is on the far side of it.
+
+Ruling (RESIDUAL, deliberate, recorded at the route and here): if the database is unreachable during
+a FRESH install, the gate fails closed and an anonymous operator gets 403 — so the preflight that
+would have named the unreachable database is the one they cannot reach. The answer is the CLI, which
+needs neither session nor database: `docker compose run --rm --no-deps anything-llm doctor`. Opening
+the gate to cover this would mean an unreadable users table grants access, which is the failure the
+rule exists to prevent. A documented second route, not a weaker first one.
+
+Ruling: `scrubText` (from `utils/diagnostics`, #94) is applied to `detail` AND `remedy` at this
+route. #94 scrubs on bundle ASSEMBLY, not at the check's source, so a string reaching HTTP has never
+been through it — and the pg driver quotes the connection string on a connection failure, which is
+the check an operator opens this for.
+
+Ruling: the RF-3 test table uses `postgres:5432` and `localhost:5432` and NOT `db.internal`. The
+dotted host is what made #94's first version pass by accident (the EMAIL pattern catches a password
+beside a dot). Same failure class, deliberately not repeated.
+
+Ruling: `mkSystemReader` builds a principal holding `system.read` and not `system.write`, because no
+stock role is shaped that way — measured: only `super_admin` carries either, and it carries both.
+Without building it, RF-2 would assert that a user with NO permissions is refused, which proves
+nothing about the gate's CHOICE of write over read. — ถ้าผิด: เทสที่ดูเหมือนพิสูจน์ RF-2 แต่ไม่ได้พิสูจน์
+
+Ruling (my own test was wrong, caught by mutation): the DB-down test induces the failure at the
+PRISMA layer (`prisma.users.count`), not by spying on `isConfirmedSingleUser`. The first version
+spied on the helper — so a gate rewired to `User.count()` never calls it, and the assertion passed
+on the exact mutation it exists to catch. Measured: mutation A stayed green. This is the
+test-the-mock shape, a cousin of the three the standing rule names. — ถ้าผิด: เทสที่เขียวบน mutation
+ที่มันมีไว้จับ
+
+## The React step
+
+Ruling: `level` is not re-derived in the component. `blockersOf` reads the server's field, the same
+one `exitCodeFor` reads for the CLI's exit code — a second classification would let the UI and the
+boot gate disagree about the same instance.
+
+Ruling: `System.preflight()` returns `null`, never `[]`, when the request fails or is refused. An
+empty array renders as "every check passed", which is the one answer a preflight must never give
+wrongly. The forward button is disabled while loading for the same reason.
+
+Ruling: the step is registered BEFORE `llm-preference` and both neighbours navigate through it. A
+preflight shown after the LLM is configured is a post-mortem — #74's entrypoint ordering exists to
+avoid exactly that.
+
+Ruling: the frontend has NO test runner (`frontend/package.json` has no test script; neither jest
+nor vitest is installed), so the component's RENDERING is not covered and this is stated rather than
+implied. The two decisions the step's correctness rests on — `blockersOf` and `dotFor` — are
+exported and tested from the server suite, reading the component file itself rather than a copy. —
+ถ้าผิด: อ้างว่าคลุม UI ทั้งที่ไม่ได้รัน component เลย
+
+Ruling: `routeGateSweep`'s pinned route count 317 → 318, with a comment saying why. That pin is
+designed to make a new route a deliberate edit, and it worked: it caught this route on the first
+`--findRelatedTests` run. `GET /system/preflight` is a READ, so the mutating-route sweep does not
+cover it and it needs no exemption there; its own gate is held by `preflightHttp.test.js`.
+
+## Evidence — auth half
+
+`preflightHttp.test.js` 9 · `preflightStepLogic.test.js` 9 · plus the plain half = **121 passed**
+across six suites.
+
+### Mutations — each named at the test it takes red (§7.9f)
+
+| mutation | test that goes red |
+|---|---|
+| gate → `User.count() === 0` | `still REFUSES an anonymous caller when users exist and the users table cannot be read` |
+| cache the pre-user boolean at module scope | `closes to anonymous callers the moment a user exists, in the SAME process` + 3 others |
+| remove `scrubText` from the response | `removes a password quoted in a check detail on host postgres:5432`, `… on host localhost:5432` |
+| gate → `system.read` | `refuses a caller holding system.read but NOT system.write, with no checks in the body` |
+| filter out checks that could not run | `reports every check id, with the downstream ones failed rather than absent` |
+| `blockersOf` ignores `level` | `does NOT treat a failed WARNING as a blocker`, `takes level from the SERVER, not from the id or the ok flag` |
+
+`--findRelatedTests endpoints/system.js`: 518 passed. `keyCeilingHttp` and `wildcardKeyDeniedHttp`
+failed only inside that 38-suite parallel run and pass 12/12 together — the #57 load flake.

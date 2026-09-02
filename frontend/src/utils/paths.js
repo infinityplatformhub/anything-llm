@@ -45,6 +45,9 @@ export default {
     survey: () => {
       return "/onboarding/survey";
     },
+    preflight: () => {
+      return "/onboarding/preflight";
+    },
     llmPreference: () => {
       return "/onboarding/llm-preference";
     },

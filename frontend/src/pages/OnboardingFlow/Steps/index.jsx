@@ -3,6 +3,7 @@ import { useState } from "react";
 import { isMobile } from "react-device-detect";
 import useRedirectToHomeOnOnboardingComplete from "@/hooks/useOnboardingComplete";
 import Home from "./Home";
+import Preflight from "./Preflight";
 import LLMPreference from "./LLMPreference";
 import UserSetup from "./UserSetup";
 import DataHandling from "./DataHandling";
@@ -10,6 +11,10 @@ import Survey from "./Survey";
 
 const OnboardingSteps = {
   home: Home,
+  // O2b (#112): BEFORE llm-preference. A preflight shown after the LLM is
+  // configured is a post-mortem — the same ordering mistake #74's entrypoint
+  // avoids by running the doctor before `prisma migrate deploy`.
+  preflight: Preflight,
   "llm-preference": LLMPreference,
   "user-setup": UserSetup,
   "data-handling": DataHandling,

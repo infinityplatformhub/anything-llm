@@ -395,7 +395,9 @@ export default function LLMPreference({
   }
 
   function handleBack() {
-    navigate(paths.onboarding.home());
+    // O2b (#112): back goes to the preflight, which now sits between home and
+    // this step.
+    navigate(paths.onboarding.preflight());
   }
 
   const handleSubmit = async (e) => {
