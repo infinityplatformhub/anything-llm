@@ -189,3 +189,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #87 e6908fd54: gate PASS, QA-3 PASS (50 resolves, 4 sites agree, mutation 5/5), TL-2 PASS (mutation 10/10). Residual: provider connect() raw guards. #74 residual closed.
 - #78 370258c30: behaviour proven by function run (unknown passthrough, union 403, route 4 system.write); 1 red = #72 test asserting old manager-silent contract → being updated to 400 unknown_keys keeping no-rows half. Gate early-run in flight; final SHA pending 80/80.
 - #30 slice 3 f77433728 gating (full suite real-store); QA-1/QA-3/TL-1/TL-2/QA-2 dispatched.
+- Post-merge main after #87: 2232/2232 (fresh STORAGE_DIR, real-store env).
+- #30 slice 3 f77433728 full run: 2013/2161, 5 suites red under load 25–30 (identity concurrency, auditRedaction, C-1); diff touches none of those areas; isolated --runInBand rerun in flight.
+- #78 7ae7ba763 (test contract update) forks before #87 → Dev1 asked to rebase onto 08bbb989b before declaring.
