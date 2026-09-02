@@ -12,6 +12,7 @@
 
 const prismaDefault = require("../prisma");
 const { deleteAuditEvents } = require("../events/AuditEventSubscriber");
+const { IdentityLoginState } = require("../../models/identityLoginState");
 
 const RETENTION_LABEL = "audit_retention_days";
 const DEFAULT_BATCH = 500;
@@ -56,9 +57,25 @@ async function purge({
   batchSize = DEFAULT_BATCH,
   now = () => new Date(),
 } = {}) {
+  // S1 (#36, Q-3): in-flight SSO logins expire on their OWN 15-minute clock, not
+  // the audit window, so this runs first and independently. It must survive an
+  // unusable audit window — the two are unrelated, and an operator who never set
+  // audit retention would otherwise grow this table on every login attempt,
+  // including unauthenticated ones.
+  const loginStatesPurged = await IdentityLoginState.purgeExpired({
+    db,
+    now: now(),
+  });
+
   const retentionDays = await readRetentionDays(db);
   if (retentionDays === null)
-    return { purged: 0, skipped: true, retentionDays: null, cutoff: null };
+    return {
+      purged: 0,
+      skipped: true,
+      retentionDays: null,
+      cutoff: null,
+      loginStatesPurged,
+    };
 
   const cutoff = new Date(now().getTime() - retentionDays * DAY_MS);
   let purged = 0;
@@ -91,6 +108,7 @@ async function purge({
     skipped: false,
     retentionDays,
     cutoff: cutoff.toISOString(),
+    loginStatesPurged,
   };
 }
 

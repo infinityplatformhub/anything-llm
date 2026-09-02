@@ -9,10 +9,10 @@ const handlers = {
   // T-6 Phase B (#28): the schedule already exists (retention-purge-daily,
   // 0 2 * * * UTC) — this fills the body it calls. The purge fails closed: an
   // unusable retention window returns skipped:true and deletes nothing.
-  "retention.purge@1": async ({ traceId }) => {
-    const result = await purge();
+  "retention.purge@1": async ({ traceId, db }) => {
+    const result = await purge(db ? { db } : {});
     console.log(
-      `[Retention purge] traceId=${traceId} purged=${result.purged} skipped=${result.skipped} retentionDays=${result.retentionDays}`
+      `[Retention purge] traceId=${traceId} purged=${result.purged} skipped=${result.skipped} retentionDays=${result.retentionDays} loginStates=${result.loginStatesPurged}`
     );
     return result;
   },
