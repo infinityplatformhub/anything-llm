@@ -5,11 +5,15 @@ const { Document } = require("../models/documents");
 const { emitAuditEvent } = require("../utils/events");
 const { Invite } = require("../models/invite");
 const { SystemSettings } = require("../models/systemSettings");
-const { User } = require("../models/user");
+const { User, revokeCredentialsFor } = require("../models/user");
 const prisma = require("../utils/prisma");
 const {
   removeGroupMember,
+  offboardUser,
 } = require("../utils/authorization/policyRepository");
+const {
+  AuthorizationContractError,
+} = require("../utils/authorization/errors");
 const { DocumentVectors } = require("../models/vectors");
 const { Workspace } = require("../models/workspace");
 const { WorkspaceChats } = require("../models/workspaceChats");
@@ -179,7 +183,30 @@ function adminEndpoints(app) {
         }
 
         await BrowserExtensionApiKey.deleteAllForUser(Number(id));
-        await User.delete({ id: Number(id) });
+        // #135: revoke the authority BEFORE the row goes, in ONE transaction with the
+        // delete. `principal_id` is TEXT with no foreign key in
+        // `principal_role_grants` and `document_acl`, so deleting the user leaves those
+        // rows behind — and ids are reused (sqlite-to-pg-import.js:102 calls setval),
+        // which hands the next account the old one's grants.
+        //
+        // One transaction rather than two sequential calls: a crash between them
+        // recreates the orphan by another route, which is the same bug arriving through
+        // a narrower window.
+        //
+        // The actor is this route's own session principal, the same one
+        // `validCanModify` was checked against above. A principal without `role.revoke`
+        // is refused, and the refusal aborts the delete — see the catch below.
+        await prisma.$transaction(async (tx) => {
+          await offboardUser({
+            actor: response.locals.actor,
+            userId: Number(id),
+            db: tx,
+          });
+          // The same credential revocation `User.delete` performs — reused, not
+          // reimplemented, so the stamp cannot drift between the two paths.
+          await revokeCredentialsFor(Number(id), tx);
+          await tx.users.delete({ where: { id: Number(id) } });
+        });
         await emitAuditEvent(
           "user_deleted",
           {
@@ -190,6 +217,25 @@ function adminEndpoints(app) {
         );
         response.status(200).json({ success: true, error: null });
       } catch (e) {
+        // #135: a refusal is a 403 that NAMES the missing permission, not a bare 500.
+        // "Internal server error" for "you may not revoke grants" sends the operator
+        // looking for an outage, and the transaction above already rolled back — the
+        // user and their grants are intact, which is what the message should say.
+        if (e instanceof AuthorizationContractError) {
+          // #135: 403, not the 500 `requirePermission` would produce for this error
+          // (middleware/requirePermission.js:92) — the request was understood and
+          // refused, and 500 sends the operator looking for an outage.
+          //
+          // The body is the same "Forbidden." every other route answers with. Which
+          // PERMISSION was missing is recorded server-side instead: telling an
+          // unauthorized caller exactly which grant would have let them through is a
+          // probing oracle, and the operator who needs it can read the log.
+          console.error(
+            `[#135] user deletion refused: ${e.message} (actor lacked role.revoke)`
+          );
+          response.status(403).json({ error: "Forbidden." });
+          return;
+        }
         console.error(e);
         response.sendStatus(500).end();
       }

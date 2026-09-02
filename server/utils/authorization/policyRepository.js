@@ -785,6 +785,57 @@ async function offboardUser({ actor, userId, reason = null, db = prisma }) {
   });
 }
 
+/**
+ * #135: remove EVERY user-principal authorization row, once, with one version bump.
+ *
+ * For the `/system/enable-multi-user` rollback and nothing else. That path deletes
+ * every user with `User.delete({})` because every user it deletes was created moments
+ * earlier by the operation that just failed, so "remove every user-principal grant" is
+ * exactly right there and is one statement.
+ *
+ * NOT a loop over `offboardUser`. Enumerating ids to offboard each adds a query per
+ * user to a path that is already failing, and the intermediate bumps buy nothing when
+ * every principal is going away regardless (TL-1, 5f051a2a8 ruling 4).
+ *
+ * The actor is a service principal because there is no human one: the rollback runs
+ * inside a `catch`, and the operation that would have produced an actor is the
+ * operation that failed. `requireActor` still applies — the caller names
+ * `SERVICE_PRINCIPALS.coreJobs` rather than the function defaulting to anything.
+ *
+ * Group memberships are not touched here: `group_members.user_id` has a real foreign
+ * key with `onDelete: Cascade`, so PostgreSQL removes them when the user rows go. The
+ * two tables below are `principal_id` TEXT with no FK, which is the whole orphan
+ * surface.
+ *
+ * @param {{actor: Object, db?: Object}} input
+ * @returns {Promise<{grantsDeleted: number, aclsDeleted: number, policyVersion: bigint}>}
+ */
+async function truncateUserPrincipalAuthorization({ actor, db = prisma }) {
+  requireActor(actor, "truncateUserPrincipalAuthorization");
+  return inTransaction(db, async (tx) => {
+    // ONE bump, before the deletes, under the org scope key: every cache entry in the
+    // instance is affected because every user is.
+    const version = await bumpVersion(
+      tx,
+      "grant",
+      SCOPE_KEY(1),
+      actorIdOf(actor),
+      []
+    );
+    const grants = await tx.principal_role_grants.deleteMany({
+      where: { principal_type: "user" },
+    });
+    const acls = await tx.document_acl.deleteMany({
+      where: { principal_type: "user" },
+    });
+    return {
+      grantsDeleted: grants.count,
+      aclsDeleted: acls.count,
+      policyVersion: version,
+    };
+  });
+}
+
 module.exports = {
   grantRole,
   canAssignLegacyRole,
@@ -801,4 +852,5 @@ module.exports = {
   addGroupMember,
   removeGroupMember,
   offboardUser,
+  truncateUserPrincipalAuthorization,
 };

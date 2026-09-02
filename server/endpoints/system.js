@@ -37,6 +37,10 @@ const {
 } = require("../utils/files/multer");
 const { v4 } = require("uuid");
 const { SystemSettings } = require("../models/systemSettings");
+const {
+  truncateUserPrincipalAuthorization,
+} = require("../utils/authorization/policyRepository");
+const { SERVICE_PRINCIPALS } = require("../utils/authorization/principals");
 const { User } = require("../models/user");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const {
@@ -1259,6 +1263,25 @@ function systemEndpoints(app) {
         // fails as well — an unchecked rollback reports itself as having run while the
         // instance is left in shape (b): user rows present, multi_user_mode false.
         await User.delete({});
+        // #135: the rollback removes every user, so every user-principal grant and ACL
+        // row is orphaned by it. One truncate with one version bump, rather than a
+        // per-user offboard on a path that is already failing.
+        //
+        // `coreJobs` because there is no human actor here: the operation that would
+        // have produced one is the operation whose failure put us in this catch. And
+        // the bump is the load-bearing half — without it a FilterCache built before the
+        // rollback keeps naming workspaces of users who no longer exist.
+        try {
+          await truncateUserPrincipalAuthorization({
+            actor: SERVICE_PRINCIPALS.coreJobs,
+          });
+        } catch (cleanupError) {
+          console.error(
+            `\x1b[31m[MULTI-USER ROLLBACK CLEANUP FAILED]\x1b[0m ${cleanupError.message} — ` +
+              "user rows were removed but their authorization rows remain; a recycled " +
+              "user id would inherit them."
+          );
+        }
         const rollback = await SystemSettings._updateSettings({
           multi_user_mode: false,
         });
