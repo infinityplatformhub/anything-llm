@@ -282,3 +282,6 @@ A refused plan still carries its additive lists (create/addMembership). Slice 2 
 
 ## #133 (QA-1 NITs, test-only follow-up)
 Cross-clear unpinned: `deactivate: refused ? []` vs `refusedDeactivations ? []` both green (no fixture with deactivate non-empty under a membership refuse). Deactivation ratio arm unpinned (no fixture above DEACTIVATION_FLOOR and below ratio; 11/100). R6 source grep breakable by dynamic require. All fail-safe; Dev3 test-only SHA.
+
+## S12 recon (Dev5, latent — no live exploit today)
+`User.delete` leaves `principal_role_grants` orphaned (String principal_id, no FK); a re-used user id inherits them silently. `api_keys.createdBy` has no relation → deleted owner's keys still resolve against orphaned grants. JWT 30d, no jti/denylist; suspend works only because validatedRequest re-reads the user per request. Suspend does not bump policy version. Rulings requested from TL-2; grants cleanup is Dev3's lane after S4b slice 2.
