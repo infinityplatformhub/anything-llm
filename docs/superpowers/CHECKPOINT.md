@@ -178,3 +178,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #78: waiting impl78 final dispatch / Dev1 self-write.
 - #80 719b7eee gate: task.sh stalled twice (0-byte report, no child); ran check-local (all passed) + contract suites directly (7 suites 85/85). TL-2 PASS w/ 3 test gaps → step 6. Final SHA = step 6 (limiter mount, email masking, gaps, NITs).
 - #78 e52553fc7 "close remaining manager settings bypasses" on branch (5 files) — awaiting Dev1 declaration + raw git proof before gate.
+- #80 719b7eee verdicts complete: QA-1 PASS (NIT-1/2 closed, 5-needle clean), QA-3 FAIL (limiter only), QA-2 FAIL (limiter), TL-1 blockers (limiter + email listing → #85 folded), TL-2 PASS w/ 3 gaps. Contract 85/85, check-local passed. All → step 6 final SHA.
+- #78 e52553fc7 NOT final: filter renamed to loop (manager+unknown still 200 empty), route 4 still settings.write. §7.9f evidence added. Waiting SHA with function-run proof.
+- #87 e6908fd54 on branch; Dev5 asked to declare + post contract.
