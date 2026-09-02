@@ -67,7 +67,10 @@ function outlookAgentEndpoints(app) {
           delete configUpdate.tokenExpiry;
         }
 
-        await outlookLib.OutlookBridge.updateConfig(configUpdate);
+        const persisted =
+          await outlookLib.OutlookBridge.updateConfig(configUpdate);
+        if (!persisted.success)
+          return response.status(500).json(persisted);
         outlookLib.reset();
 
         const redirectUri = getOutlookRedirectUri(request);

@@ -684,20 +684,46 @@ const SystemSettings = {
     }
   },
 
-  // Can take generic keys and will pre-filter invalid keys
-  // from the set before sending to the explicit update function
-  // that will then enforce validations as well.
+  // Reject the whole update when a caller sends refused keys so typos cannot
+  // silently turn a requested write into a partial write.
   updateSettings: async function (updates = {}) {
-    const validFields = Object.keys(updates).filter((key) =>
-      this.supportedFields.includes(key)
+    const keys = Object.keys(updates);
+    const protectedKeys = keys.filter(
+      (key) =>
+        this.protectedFields.includes(key) &&
+        !this.supportedFields.includes(key)
     );
+    if (protectedKeys.length) {
+      return {
+        success: false,
+        error: `Protected setting keys: ${protectedKeys.join(", ")}`,
+        code: "protected_keys",
+        protectedKeys,
+      };
+    }
 
-    Object.entries(updates).forEach(([key]) => {
-      if (validFields.includes(key)) return;
-      delete updates[key];
-    });
+    const unknownKeys = keys.filter(
+      (key) => !this.supportedFields.includes(key)
+    );
+    if (unknownKeys.length) {
+      const reflectedKeys = unknownKeys.slice(0, 50).map((key) => {
+        const characters = [...key];
+        return characters.length > 64
+          ? `${characters.slice(0, 64).join("")}…`
+          : key;
+      });
+      return {
+        success: false,
+        error: `Unknown setting keys: ${reflectedKeys.join(", ")}`,
+        code: "unknown_keys",
+        unknownKeys: reflectedKeys,
+        unknownKeyCount: unknownKeys.length,
+      };
+    }
 
-    return this._updateSettings(updates);
+    const safeUpdates = Object.create(null);
+    for (const key of keys) safeUpdates[key] = updates[key];
+    return this._updateSettings(safeUpdates);
   },
 
   delete: async function (clause = {}) {
@@ -1147,12 +1173,14 @@ const SystemSettings = {
    * @returns {string[]} provider ids, e.g. ["oidc"]
    */
   ssoEnabledProviders: function () {
-    const {
-      identityProviders,
-    } = require("../utils/identityProviders");
+    const { identityProviders } = require("../utils/identityProviders");
     const on = ["1", "true", "yes", "on"];
     return Object.keys(identityProviders).filter((id) =>
-      on.includes(String(process.env[`SSO_${id.toUpperCase()}_ENABLED`] ?? "").toLowerCase())
+      on.includes(
+        String(
+          process.env[`SSO_${id.toUpperCase()}_ENABLED`] ?? ""
+        ).toLowerCase()
+      )
     );
   },
 

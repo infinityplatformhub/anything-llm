@@ -749,7 +749,7 @@ function apiAdminEndpoints(app) {
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
-    #swagger.description = 'Update multi-user preferences for instance. Methods are disabled until multi user mode is enabled via the UI.'
+    #swagger.description = 'Update multi-user preferences for instance. Methods are disabled until multi user mode is enabled via the UI. Breaking behavior: unknown or protected keys reject the entire request with 400. Readable settings max_embed_chunk_size, imported_agent_skills, and feature_flags are not writable; multi_user_mode and onboarding_complete are protected.'
     #swagger.requestBody = {
       description: 'Object with setting key and new value to set. All keys are optional and will not update unless specified.',
       required: true,
@@ -790,8 +790,13 @@ function apiAdminEndpoints(app) {
         }
 
         const updates = reqBody(request);
-        const { success, error } = await SystemSettings.updateSettings(updates);
-        response.status(success ? 200 : 500).json({ success, error });
+        const result = await SystemSettings.updateSettings(updates);
+        const status = result.success
+          ? 200
+          : ["unknown_keys", "protected_keys"].includes(result.code)
+            ? 400
+            : 500;
+        response.status(status).json(result);
       } catch (e) {
         console.error(e);
         response.sendStatus(500).end();
