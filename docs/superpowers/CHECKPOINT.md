@@ -940,3 +940,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Gate-138p launched (fresh g138p; contract = new test + __tests__/prisma; ALL_ACTIONS dependents). TL-1 checklist verdict + QA-3 oracle dispatched. V8 F2 fix → Dev4; #141 rulings → Dev2.
 - QA-1: RF-2c RED (7/6, late writes land) = the concurrent-apply hole; M3 GREEN (heartbeat already checks expiry) → TL-2's NIT not reproduced, ask TL-2 to re-measure; RF-P harness staged with 3 exit codes. §7.17 ×2.
 - #142 Dev5: cannot reproduce SlowBuffer failure under the real jest config (node 22.23.1, testEnvironment node); separating stale node_modules vs per-file env. Dev3 asked for exact repro.
+- 09:50 requests: Dev2 #135 RED; Dev4 ×3 status; QA-2 #141 staging; postmerge-136s2 report. Pending: gate-138p, TL-1 #138-perm checklist, QA-3 #138-perm oracle, TL-2 M3 reply, Dev3 #138 final (~2h), Dev3→Dev5 #142 repro, USER approvals.
