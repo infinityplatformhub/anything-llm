@@ -189,3 +189,79 @@ same path hide each other unless a fixture reaches past the first.
 ## Evidence (after the rebuild)
 
 `__tests__/security` — Tests: 577 passed, 577 total, 54 suites.
+
+## Route + Login input (ruling 4)
+
+Ruling: `POST /sso/ldap/login` lives in its own file (`endpoints/identity/ldap.js`,
+the Q-1 pattern) and carries `inviteRateLimit` from the first commit. The route is
+unauthenticated and every call costs a directory round trip — without a limiter it
+is an unmetered password-guessing endpoint pointed at the CUSTOMER's directory,
+which is worse than one pointed at us. Removing the limiter kills exactly the
+ruling-4 test.
+
+Ruling: POST only, and a test pins that GET is a 404 (§7.9 — assert the method). A
+password in a query string lands in access logs, proxy logs and browser history,
+none of which we control.
+
+Ruling: `ldapIdentityEndpoints` mounts BEFORE `identityEndpoints`, the same
+mount-order rule that bit S2 in `cd4fda5e`.
+
+Ruling: S1's wildcard `/sso/:provider/login` now refuses any provider whose
+`capabilities().redirect === false`. Registering LDAP made that wildcard reachable
+for it, where it built a driver from OIDC-shaped configuration and returned 500.
+Added `providerCapabilities()` to the registry so a route can ask what a provider
+does WITHOUT constructing one — constructing it would need the very configuration
+the caller is deciding whether to look up.
+
+Ruling: plaintext `ldap://` without StartTLS is REFUSED unless `LDAP_ALLOW_INSECURE`
+is set, and when it is set the mount logs an error every boot. Checked in the route
+rather than the driver: it is a deployment decision, and the driver should not read
+environment variables.
+
+Ruling: the password is held in the narrowest scope that works and cleared in
+`finally`. The comment says plainly that this is best effort — JS cannot wipe a
+string, the engine may hold copies — because implying a guarantee the language
+cannot make is worse than stating the limit.
+
+Ruling: only `error.message` is logged, never the error object or the request body.
+A client library can carry the bind credential on the error it throws, and that
+line is the one that would print it.
+
+Ruling: `GET /sso/ldap/enabled` returns ONE boolean and nothing else. The login form
+must know where to post BEFORE anyone types — posting a directory password to the
+local endpoint would compare it against a local hash, putting the credential
+somewhere it was never meant to go. A URL, base DN or bind DN here would hand an
+unauthenticated caller the shape of the internal directory; a test asserts the
+response body has exactly one key.
+
+Ruling: the frontend fails CLOSED — `System.ldapEnabled()` returns false on any
+error and the state defaults to false, so a directory that is down renders the
+local form rather than one posting to a disabled route.
+
+Ruling: the password-recovery link is hidden when LDAP is on. Recovery resets a
+LOCAL password; under LDAP the password lives in the directory and this
+application cannot change it, so the link would send someone through a flow ending
+in a reset that changes nothing they can log in with.
+
+Ruling (NIT): `groups: []` is ALWAYS empty and the comment says so — not "not
+implemented yet". Populating it before S4's consumer exists would put a claim in
+front of core that nothing validates.
+
+### Mutation proof (route round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| drop `inviteRateLimit` from the route | the ruling-4 test | killed exactly that one |
+| zero-results gets its own message ("No such user") | the enumeration test | killed at the DRIVER (see below) |
+| leak the username in R1's 409 body | — | survived; EQUIVALENT — R1's 409 already discloses that the account exists, by design. The 401 path is where silence matters, and that is covered. |
+
+The enumeration mutant is worth recording carefully: run against the ROUTE tests
+alone it survived, because the route flattens every `IdentityAuthenticationError`
+to one message and cannot see a distinction the driver introduced. Run against the
+driver tests it dies immediately. The lesson is the §7.9c family again — a guard
+downstream of the one under test hides it, so the mutant has to be run against the
+layer that owns the property.
+
+## Evidence
+
+`__tests__/security` — Tests: 595 passed, 595 total, 55 suites.

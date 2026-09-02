@@ -338,8 +338,16 @@ class LdapIdentityProvider {
       // separate verified flag in LDAP, and the bind just proved the account.
       emailVerified: true,
       displayName: displayName ? String(displayName) : null,
-      // Observations, never authority: R2 keeps role assignment out of drivers
-      // and S4 owns group mapping.
+      // ALWAYS empty, deliberately — not "not implemented yet".
+      //
+      // LDAP group membership is a second query (memberOf, or a reverse search
+      // of groupOfNames), and this driver does not make it. Returning [] rather
+      // than omitting the field keeps the principal shape identical across all
+      // three drivers, so core never has to ask which one produced it.
+      //
+      // Ruling 5: S4 owns group→role mapping. Populating this before the code
+      // that consumes it exists would put a claim in front of core that nothing
+      // validates — and groups are observations, never authority (R2).
       groups: [],
       // Deliberately NOT the whole entry: it can carry attributes an operator
       // never meant to export, and the principal is logged and audited.

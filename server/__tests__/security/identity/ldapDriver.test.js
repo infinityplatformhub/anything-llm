@@ -322,6 +322,53 @@ describe("DN case", () => {
   });
 });
 
+describe("StartTLS", () => {
+  test("StartTLS is negotiated when configured, before any bind", async () => {
+    // The whole point of StartTLS is that it happens FIRST. Negotiating after
+    // the service bind would send that credential in the clear, and after the
+    // user bind would send theirs.
+    const directory = makeDirectory({ tls: false });
+    const instance = new LdapIdentityProvider({
+      url: "ldap://directory.example.com:389",
+      baseDn: DEFAULT_BASE_DN,
+      bindDn: SERVICE_DN,
+      bindPassword: SERVICE_PASSWORD,
+      startTls: true,
+      connect: async () => {
+        await directory.startTLS();
+        return directory;
+      },
+    });
+
+    await login(instance, "alice", "alice-correct-password");
+    expect(directory.calls.startTls).toBe(1);
+    // Every bind happened on an encrypted connection.
+    for (const call of directory.calls.binds) expect(call.tls).toBe(true);
+  });
+
+  test("a FAILED StartTLS aborts the login — never a plaintext fallback", async () => {
+    // The downgrade the requirement exists to prevent. Continuing here would
+    // send the user's directory password in cleartext, and the login would
+    // SUCCEED, so nothing would look wrong from either end.
+    const directory = makeDirectory({ tls: false, startTlsFails: true });
+    const instance = new LdapIdentityProvider({
+      url: "ldap://directory.example.com:389",
+      baseDn: DEFAULT_BASE_DN,
+      bindDn: SERVICE_DN,
+      bindPassword: SERVICE_PASSWORD,
+      startTls: true,
+      connect: async () => {
+        await directory.startTLS();
+        return directory;
+      },
+    });
+
+    await expect(login(instance, "alice", "alice-correct-password")).rejects.toThrow();
+    // And nothing was sent over the plaintext connection afterwards.
+    expect(directory.calls.binds).toHaveLength(0);
+  });
+});
+
 describe("transport", () => {
   test("a referral is refused, never followed", async () => {
     // Following one means authentication is answered by a host nobody chose.

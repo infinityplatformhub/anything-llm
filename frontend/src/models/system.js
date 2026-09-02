@@ -133,6 +133,51 @@ const System = {
     window.localStorage.setItem(AUTH_TIMESTAMP, Number(new Date()));
     return valid;
   },
+  /**
+   * S3 (#60): is LDAP login available?
+   *
+   * Asked before the login form renders, because the answer decides WHERE the
+   * password is posted. Getting it wrong sends a directory password to the local
+   * login endpoint, which compares it against a local password record — the
+   * credential would end up somewhere it was never meant to go.
+   *
+   * Fails CLOSED: any error means the local form, which is always safe to show.
+   * @returns {Promise<boolean>}
+   */
+  ldapEnabled: async function () {
+    return await fetch(`${API_BASE}/sso/ldap/enabled`)
+      .then((res) => res.json())
+      .then((res) => res?.enabled === true)
+      .catch(() => false);
+  },
+  /**
+   * S3 (#60): authenticate against the directory.
+   *
+   * A SEPARATE endpoint from `request-token`, not a flag on it. The two compare
+   * the password against different things — a directory bind versus a local
+   * hash — and merging them would mean one handler deciding which, with the
+   * credential already in hand.
+   */
+  requestLdapToken: async function (body) {
+    return await fetch(`${API_BASE}/sso/ldap/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body }),
+    })
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok && !body?.message && !body?.error)
+          throw new Error("Could not validate login.");
+        return {
+          ...body,
+          valid: body?.valid ?? false,
+          message: body?.message || body?.error,
+        };
+      })
+      .catch((e) => {
+        return { valid: false, message: e.message };
+      });
+  },
   requestToken: async function (body) {
     return await fetch(`${API_BASE}/request-token`, {
       method: "POST",

@@ -8,6 +8,7 @@
 const {
   getIdentityProvider,
   isKnownProvider,
+  providerCapabilities,
 } = require("../utils/identityProviders");
 const {
   IdentityConflictError,
@@ -62,6 +63,17 @@ function identityEndpoints(app) {
     try {
       const { provider } = request.params;
       if (!isKnownProvider(provider))
+        return response.status(404).json({ error: "Unknown identity provider." });
+
+      // S3 (#60): this wildcard is the REDIRECT flow. A registered provider that
+      // does not redirect — LDAP authenticates with a password and has no
+      // authorization URL — has no business here, and reaching it would build a
+      // driver from OIDC-shaped configuration and 500.
+      //
+      // A 404 rather than a 400: as far as this route is concerned the endpoint
+      // does not exist for that provider, and its own route (POST
+      // /sso/ldap/login) is where the flow lives.
+      if (providerCapabilities(provider).redirect === false)
         return response.status(404).json({ error: "Unknown identity provider." });
 
       const config = await providerConfig(provider);

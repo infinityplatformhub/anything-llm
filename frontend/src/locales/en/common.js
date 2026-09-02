@@ -126,6 +126,10 @@ const TRANSLATIONS = {
       login: "Login",
       validating: "Validating...",
       "forgot-pass": "Forgot password",
+      // S3 (#60): shown instead of the reset link when LDAP is enabled — the
+      // password lives in the directory and this application cannot change it.
+      "directory-credentials":
+        "Sign in with your organization directory credentials.",
       reset: "Reset",
     },
     "sign-in":
