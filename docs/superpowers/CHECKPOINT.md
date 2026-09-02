@@ -392,3 +392,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #98 71acf4173 gate running at wt-98 (g98); TL-2 verdict (plain) → merge.
 - #98 71acf4173: gate at wt-98 (g98) check-local + sweeps 63/63; contract 33 (recheck suite set at regate). TL-2 not PASS: fixture corrections (read-mount test must call app.get AFTER require; app.all bypasses seal in express 4.22.1) + A1 app.all probe, A2 capture real apiRouter via app._router.stack, A3 double-call → Dev3 amends.
 - scrypt memoize issue (Dev2 to open): TL-2 pre-ruling cache keyed by SIG_KEY material, module-scope let, RF (ก)-(ง).
+- Post-merge after #40 t3: 2898/2903, 5 red routeWiring + keyScopeCeiling → 21/21 ×2 alone, untouched → logged #106 (concurrent gates, DB pool pressure suspected). Frontend lines not captured (rerun with next post-merge). Main effectively green.
+- #108 ledger SHA 560e084b0 (ledger-only over 5992b34b9); wt-108 moved, result rebound. Waiting QA-1 + TL-2 → close/merge.
