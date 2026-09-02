@@ -1,4 +1,4 @@
-<title>Approof Phase 0 Board</title>
+<title>Approof Program Board</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
@@ -83,20 +83,47 @@ td.mono{white-space:nowrap}
 
 
 <section>
-  <h2 style="margin-bottom:10px">ภาพรวมทั้ง program (7 เดือน) — 59 issue ข้างล่างคือเดือน 1 + ของเดือน 2 ที่ดึงมาก่อน</h2>
+  <h2 style="margin-bottom:10px">Program 7 เดือน — เดือน 1 Phase 0 ปิดครบ (P0-1..P0-7) · backlog เดือน 2–7 ทั้ง 34 รายการ</h2>
   <div class="tbl"><table>
-    <thead><tr><th>เดือน</th><th>แผน</th><th>สถานะจริง (2 ก.ย.)</th></tr></thead>
+    <thead><tr><th>#</th><th>รายการ</th><th>เดือน</th><th>สถานะ 2 ก.ย.</th></tr></thead>
     <tbody>
-      <tr><td class="mono">1</td><td>Phase 0: P0-1 contracts · P0-2 Postgres · P0-3 tests/CI · P0-4 security · P0-5 authorization · P0-6 queue/bus · P0-7 de-brand</td><td><span class="chip ok">P0-1..P0-7 ปิดครบ</span> เหลือหางของ P0-5: T-5 retrieval filter (#30) + follow-up 10 ใบ (#40 #48 #49 #50 #51 #53–#57 #59) — gate เดือน 1 ยังไม่ปิดจน #30 จบ</td></tr>
-      <tr><td class="mono">2</td><td>S1 OIDC · S13 MFA เริ่ม · V1 ภาษาไทย · V9 chat search · V8 responsive · O2 installer · teardown</td><td><span class="chip wait">เริ่มก่อนกำหนด</span> S1 ปิด (#36) · V1-a splitter + V1-c eval ปิด (#37 #44) · S5/S6 บางส่วนผ่าน T-6 (#28) · S13 V9 V8 O2 ยังไม่เริ่ม</td></tr>
-      <tr><td class="mono">3</td><td>S2 SAML · S3 LDAP · S11 SMTP · S6 governance · V3 connectors · V2 Lark bot · V6 · O3 backup</td><td><span class="chip dim">S2 กำลังทำ (#43) ที่เหลือยังไม่เริ่ม</span></td></tr>
-      <tr><td class="mono">4</td><td>S4 Lark org sync · S12 offboarding · S7 LLM policy · V10 doc search · V11 RAG tuning · V4 templates · V12 · O4 O6</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
-      <tr><td class="mono">5</td><td>S8 guardrails · S9 air-gap · S10 budget · S13 จบ · V5 V13 V7 V14 · O1 O5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
-      <tr><td class="mono">6</td><td>ปิด feature + V15 sandbox · feature freeze สิ้นเดือน</td><td><span class="chip dim">—</span></td></tr>
-      <tr><td class="mono">7</td><td>Integration · security review · pen-test ภายนอก · POC playbook</td><td><span class="chip dim">—</span></td></tr>
+<tr><td class="mono">S1</td><td>OIDC generic (Google/Entra)</td><td class="mono">2</td><td><span class="chip ok">ปิด</span> ปิด #36</td></tr>
+<tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> กำลังทำ #43 (dab75e1a รอ Techlead)</td></tr>
+<tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S5</td><td>Audit ครบ + export + retention</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> บางส่วน: audit export + retention ผ่าน T-6 #28</td></tr>
+<tr><td class="mono">S6</td><td>Data governance PDPA redaction</td><td class="mono">3–4</td><td><span class="chip wait">บางส่วน</span> บางส่วน: redaction hook ผ่าน T-6 #28</td></tr>
+<tr><td class="mono">S7</td><td>LLM policy + model catalog</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S8</td><td>Guardrails + agent runtime policy</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S9</td><td>Air-gap switch</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S10</td><td>Analytics + token budget</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S11</td><td>SMTP/mailer</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">S13</td><td>MFA + session</td><td class="mono">2–5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V1</td><td>ภาษาไทยครบวงจร (UI th, embedding, eval, OCR)</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> บางส่วน: Thai splitter #37 + eval set #44 · UI th / OCR ยังไม่เริ่ม</td></tr>
+<tr><td class="mono">V2</td><td>Lark bot</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V3</td><td>Connectors Drive + Lark Docs</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V4</td><td>Assistant templates + governance</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V5</td><td>Answer quality + eval harness</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V6</td><td>แชร์บทสนทนาในทีม</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V7</td><td>Embed widget harden</td><td class="mono">5</td><td><span class="chip wait">บางส่วน</span> บางส่วน: session token #32 · widget PR → #49</td></tr>
+<tr><td class="mono">V8</td><td>Mobile responsive</td><td class="mono">2</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V9</td><td>ค้นหาประวัติแชท</td><td class="mono">2</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V10</td><td>Org-wide doc search + ACL</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> รอ T-5 #30 (ACL filter) ปิดก่อน</td></tr>
+<tr><td class="mono">V11</td><td>RAG tuning admin + reindex UI</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V12</td><td>Image generation</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V13</td><td>Knowledge curation</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">V14</td><td>Deep research</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> เปิดได้เมื่อ S10+O6 เสร็จ</td></tr>
+<tr><td class="mono">V15</td><td>Code interpreter sandbox</td><td class="mono">6</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O1</td><td>License per-seat</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O2</td><td>Installer/setup wizard</td><td class="mono">2–3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O3</td><td>Backup/restore</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O4</td><td>Model lifecycle</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O5</td><td>Diagnostic bundle + Prometheus</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+<tr><td class="mono">O6</td><td>GPU queue</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
     </tbody>
   </table></div>
-  <p class="note" style="margin-top:8px">backlog เดือน 2–7 มี 34 รายการ (S1–S13, V1–V15, O1–O6): ปิดแล้ว 1 (S1), ทำบางส่วน 3 (V1, S5, S6), กำลังทำ 1 (S2), ยังไม่แตะ 29</p>
+  <p class="note" style="margin-top:8px">ปิด 1 · กำลังทำ 1 · บางส่วน 4 · ยังไม่เริ่ม 28 — เดือน 6 feature freeze · เดือน 7 integration + pen-test ภายนอก (จองผู้ให้บริการภายในเดือน 5)</p>
 </section>
 
 <h2 style="margin-bottom:-14px">Phase 0 + follow-up — 59 issue</h2>
