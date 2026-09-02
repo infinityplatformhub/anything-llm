@@ -327,6 +327,11 @@ class ModelRouterService {
   static async gatherRoutingContext({
     workspace,
     user = null,
+    // An embed visitor has no `user`. Without threading its principal reference the
+    // prefetch runs as nobody and returns no pinned documents, which the chat path then
+    // reuses in place of fetching them itself — fail-closed, but the embed loses its own
+    // documents. See resolveProviderConnector.
+    actorRef = null,
     thread = null,
     message = "",
     chatHistoryOverride = null,
@@ -359,7 +364,7 @@ class ModelRouterService {
       rawHistory,
     });
 
-    const pinnedDocs = await authorizedPinnedDocs({ workspace, user });
+    const pinnedDocs = await authorizedPinnedDocs({ workspace, user, actorRef });
     const parsedFiles = await WorkspaceParsedFiles.getContextFiles(
       workspace,
       thread || null,

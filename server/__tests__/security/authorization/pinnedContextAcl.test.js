@@ -32,6 +32,7 @@ const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "t5s2-"));
 fs.mkdirSync(path.join(storageDir, "documents", "custom-documents"), {
   recursive: true,
 });
+fs.mkdirSync(path.join(storageDir, "direct-uploads"), { recursive: true });
 process.env.STORAGE_DIR = storageDir;
 const { PrismaClient } = require("@prisma/client");
 const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
@@ -43,6 +44,18 @@ const SCHEMA = path.join(SERVER_DIR, "prisma/schema.prisma");
 const dbSuffix = crypto.randomBytes(4).toString("hex");
 const testDb = `t5s2_${dbSuffix}`;
 const testUrl = baseDatabaseUrl?.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
+
+// Point the PROCESS at the test database before any application module is required.
+//
+// Models reach for the `utils/prisma` singleton rather than accepting a client, and that
+// singleton reads DATABASE_URL once at import. Passing `db: prisma` covers the code that
+// takes an injected client; `getContextFiles` does not. Without this, a row seeded through
+// the suite's client is invisible to the model under test, and an assertion about a filter
+// silently becomes an assertion that the table is empty — which is exactly how QA-1's M7
+// mutant survived.
+//
+// `baseDatabaseUrl` is kept for the admin connection that creates and drops the database.
+if (testUrl) process.env.DATABASE_URL = testUrl;
 
 let prisma;
 
@@ -308,6 +321,38 @@ describe("T-5 slice 2: parsed files require a user", () => {
   test("an explicit system actor gets [] rather than everything", async () => {
     // The escape for a genuinely user-less caller. It returns nothing, which is the safe
     // direction; returning everything is what the missing argument used to do.
+    //
+    // QA-1 M7: this assertion was VACUOUS before. W1 held no parsed files at all, so []
+    // came back whether the systemActor branch existed or not — removing the line left
+    // the suite green while `where({userId: undefined})` really did return another user's
+    // rows. An assertion about a filter has to be made against data the filter must
+    // exclude, or it is only asserting that the fixture is empty.
+    const owner = await prisma.users.create({
+      data: { username: `parsed-owner-${dbSuffix}`, password: "x" },
+    });
+    const location = `parsed-${dbSuffix}.json`;
+    fs.writeFileSync(
+      path.join(storageDir, "direct-uploads", location),
+      JSON.stringify({ pageContent: "CONTENT OF SOMEONE ELSE'S UPLOAD" })
+    );
+    await prisma.workspace_parsed_files.create({
+      data: {
+        filename: `parsed-${dbSuffix}.txt`,
+        workspaceId: W1.id,
+        userId: owner.id,
+        metadata: JSON.stringify({ location, title: "someone else's upload" }),
+        tokenCountEstimate: 10,
+      },
+    });
+
+    // The positive control: the owner DOES get their file. Without it, a getContextFiles
+    // that returned [] for everyone would pass the assertion below and prove nothing.
+    const theirs = await WorkspaceParsedFiles.getContextFiles(W1, null, owner);
+    expect(theirs.map((file) => file.pageContent)).toEqual([
+      "CONTENT OF SOMEONE ELSE'S UPLOAD",
+    ]);
+
+    // And the system actor gets nothing — with a row present that it would otherwise see.
     await expect(
       WorkspaceParsedFiles.getContextFiles(W1, null, { systemActor: true })
     ).resolves.toEqual([]);
@@ -542,5 +587,145 @@ describe("T-5 slice 2: a raw ACL write leaves caches stale", () => {
     const cache = new FilterCache({ db: prisma });
     // Still "fresh" — the deny exists in the database and no cache anywhere will notice.
     expect(await cache.isStale(before, prisma)).toBe(false);
+  });
+});
+
+describe("T-5 slice 2: pinned scope comes from the FILTER, not from the URL", () => {
+  // Techlead-2 BLOCKER, proven against real PostgreSQL. `pinnedDocs` read only the deny
+  // and allow lists, so the workspace it fetched from was whichever one the REQUEST
+  // addressed. The consequence, end to end:
+  //
+  //   a viewer of workspace A  ->  POST /workspace/<B's slug>/stream-chat
+  //
+  // `chat.send` is held org-wide, and validWorkspaceSlug is a LOADER rather than a gate
+  // (T-4a made that deliberate), so the request reaches the handler. The vector path then
+  // filtered correctly while this one handed back every pinned document in B, whole, in
+  // both the prompt and the citations.
+  //
+  // A deny list cannot close this. There is no deny row for a document in a workspace the
+  // actor was never supposed to reach — the absence of a deny is not evidence of a grant.
+  // Only the filter's POSITIVE scope carries that, which is why it must be read.
+
+  let W2;
+  let outsider;
+
+  beforeAll(async () => {
+    W2 = await prisma.workspaces.create({
+      data: { name: "w2", slug: `t5s2-w2-${dbSuffix}` },
+    });
+    const document = await prisma.documents.create({
+      data: {
+        orgId: 1,
+        filename: "w2-secret.txt",
+        dedupe_key: `/t5s2/${dbSuffix}/w2-secret.txt`,
+      },
+    });
+    // Pinned in W2, and readable BY W2 — a perfectly ordinary document. Nothing about it
+    // is denied; it simply belongs to a workspace the actor is not in.
+    await prisma.document_acl.create({
+      data: {
+        orgId: 1,
+        document_id: document.id,
+        principal_type: "workspace",
+        principal_id: String(W2.id),
+        action: READER,
+        source: "inherited_workspace",
+      },
+    });
+    await prisma.workspace_documents.create({
+      data: {
+        docId: crypto.randomUUID(),
+        filename: "w2-secret.txt",
+        docpath: writeDocFile("w2-secret", "CONTENT OF W2 SECRET"),
+        workspaceId: W2.id,
+        documentId: document.id,
+        pinned: true,
+      },
+    });
+    // Scope is W1 only. This is what `retrievalFilterFor` produces for a viewer of W1.
+    outsider = await actorFor(9301);
+  });
+
+  test("RED: an actor scoped to W1 gets nothing from W2, with no deny row anywhere", async () => {
+    const aclFilter = await retrievalFilterFor({
+      actor: outsider,
+      action: READER,
+      db: prisma,
+    });
+    // The filter is healthy and permissive — it is not match-none, and it denies nothing.
+    // That is the point: every field this path used to read says "allow".
+    expect(aclFilter.matchNone).toBe(false);
+    expect(aclFilter.deniedDocumentIds ?? []).toEqual([]);
+    expect(aclFilter.workspaceIds.map(String)).not.toContain(String(W2.id));
+
+    const docs = await new DocumentManager({
+      workspace: W2,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter, db: prisma });
+
+    expect(docs).toEqual([]);
+  });
+
+  test("the actor's OWN workspace still works — this is a scope check, not a blanket refusal", async () => {
+    // The boundary. A scope check that returned [] for everything would pass the test
+    // above and break every chat in the product.
+    const aclFilter = await retrievalFilterFor({
+      actor: outsider,
+      action: READER,
+      db: prisma,
+    });
+    const docs = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter, db: prisma });
+
+    expect(contentsOf(docs)).toContain("CONTENT OF READABLE");
+  });
+
+  test("an orgWide actor reads across workspaces, but only inside its own org", async () => {
+    // orgWide means "every workspace in YOUR org" (T-4a's rule, restated by documentFilter
+    // readableScope), so it legitimately passes the workspace check — and is still held to
+    // the org check underneath it.
+    const orgWideFilter = {
+      orgId: 1,
+      principalType: "service",
+      actorId: "svc-1",
+      workspaceIds: [],
+      orgWide: true,
+      deniedDocumentIds: [],
+      attributes: {},
+      matchNone: false,
+      policyVersion: "1",
+    };
+    const docs = await new DocumentManager({
+      workspace: W2,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter: orgWideFilter, db: prisma });
+    expect(contentsOf(docs)).toContain("CONTENT OF W2 SECRET");
+
+    // Same filter shape, different tenant: orgWide is not cross-org.
+    const otherOrg = await new DocumentManager({
+      workspace: W2,
+      maxTokens: 10_000,
+    }).pinnedDocs({
+      aclFilter: { ...orgWideFilter, orgId: 2 },
+      db: prisma,
+    });
+    expect(otherOrg).toEqual([]);
+  });
+
+  test("a document whose org cannot be read is unprovable, not admitted", async () => {
+    // The canonicalize job has not linked this row, so there is no `documents` row to take
+    // an orgId from. Same rule as an unlabelled vector (S-26/G4): unknown is not "yours".
+    const aclFilter = await retrievalFilterFor({
+      actor: await actorFor(9302),
+      action: READER,
+      db: prisma,
+    });
+    const docs = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter, db: prisma });
+    expect(contentsOf(docs)).not.toContain("CONTENT OF UNLINKED");
   });
 });

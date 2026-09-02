@@ -314,6 +314,16 @@ async function resolveLLMConnectorForEmbed({
       await resolveProviderConnector({
         workspace,
         prompt: message,
+        // The router PREFETCHES pinned documents, and this path has no `user` — so
+        // without the embed's own principal reference the prefetch resolved to nobody and
+        // returned []. The chat path then reuses that empty array instead of fetching,
+        // so a router-backed embed silently lost every pinned document it was entitled
+        // to. Fail-closed, but still wrong: it is the SAME ref the search path uses.
+        actorRef: {
+          type: "embed",
+          id: String(embed.uuid),
+          workspaceIds: [String(embed.workspace_id)],
+        },
         chatHistoryOverride: embedHistory,
         // +1 to include the current in-flight message to ensure routing rules are evaluated against the real total.
         messageCountOverride: embedMessageCount + 1,
