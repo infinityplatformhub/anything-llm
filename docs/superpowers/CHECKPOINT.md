@@ -424,3 +424,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #118 amend c16a1ee27 (comment+ledger only): order clause + separator residual (U+3000/U+FF0D → #120). Waiting QA-2 → close/merge.
 - #106 recon (Dev5): two regimes — partial pressure = shared-DB data collisions (few random 401 reds), saturation = too-many-clients (all red). 52/55 authz suites share schema, 28 never $disconnect. Ruling: (ง) connection_limit=5 in test DATABASE_URL + (ข) $disconnect afterAll first (plain), measure regime 1 after; (ก) per-suite schema only if still red.
 - #98 db9649c24 merged 53ee95219, closed (infi-run:gate-98-db9649c24); content verified. 83/120. wt-98/g98 reaped. Dev3 → #113.
+- #116 (Dev4): RF-1..5 + RF-2b green 12/12; #108 NITs folded (pick-by-BLANK, main.jsx source assert; fake hostile test self-caught → §7.17). JWTSecret-first reorder kept; #91 order-pinning test rewritten to key-set assertion (ruled OK). SHA pending full suite → TL-1 + QA-3.
+- Post-merge after #112 + #98 running (/tmp/postmerge-98.log), idle backends cleared first.
