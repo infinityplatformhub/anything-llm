@@ -72,3 +72,68 @@ onboard ไม่เสร็จก็คืนครบ 229 ให้ทุก�
 ยืนยันทีละตัวว่า option component อ่าน `*BasePath` ไปทำอะไร (แสดงค่าเดิมในช่อง input
 หรือแค่เช็คว่ามีค่า) — ถ้าเป็นอย่างแรก การ booleanise จะทำให้ค่าเดิมหายจากฟอร์ม
 ต้องดูก่อนตัดสิน
+
+---
+
+# audit รอบสอง — option component ทั้ง 37 ตัวที่ onboarding mount
+
+## วิธีวัด
+ไล่จาก `pages/OnboardingFlow/Steps/LLMPreference/index.jsx` หา `<X settings={settings}>`
+ได้ 37 ตัว แล้วเปิดไฟล์แต่ละตัวหาว่าฟิลด์ทรง endpoint
+(`BasePath|Endpoint|Url$|BaseUrl|ConnectionString|Address|ApiUrl`) ถูกใช้ยังไง — แยกเป็น
+"render ค่าดิบลง form control" กับ "ใช้แค่ presence"
+
+4 ตัวที่สคริปต์หาไฟล์ไม่เจอเป็น import alias (`AWSBedrockLLMOptions` → `AwsBedrockLLMOptions/`,
+`ApiPieLLMOptions` → `ApiPieOptions/`, `GiteeAiOptions` → `GiteeAIOptions/`,
+`XAILLMOptions` → `XAiLLMOptions/`) — ไล่มือแล้ว **ทั้งสี่ไม่มีฟิลด์ทรง endpoint เลย**
+ไม่ปล่อยเป็น "ไม่เจอ" เพราะช่องว่างในการสแกนหน้าตาเหมือนหลักฐานว่าไม่มี
+
+## ผล
+
+| | จำนวน |
+|---|---|
+| option component ที่ onboarding mount | 37 |
+| การใช้งาน endpoint-shaped ที่ render ค่าดิบลง form control | 22 |
+| ฟิลด์ไม่ซ้ำจาก 22 นั้น | **19** |
+| endpoint-shaped ที่ใช้แค่ presence | **0** |
+
+ไม่มีตัวไหนใช้แค่ presence — ทุกตัวเอาค่าไปใส่ input จริง สามรูปแบบ:
+`value={settings?.X}` (7), hook `initialBasePath: settings?.X` ผ่าน
+`useProviderEndpointAutoDiscovery` (12), `useState(settings?.X)` (0 ในชุดนี้)
+
+### 19 ฟิลด์ที่ onboarding render
+```
+AzureOpenAiEndpoint            EmbeddingBasePath
+GenericOpenAiBasePath          ImageGenerationLemonadeBasePath
+ImageGenerationLocalAiBasePath KoboldCPPBasePath
+LMStudioBasePath               LemonadeLLMBasePath
+LiteLLMBasePath                LlmmanBasePath
+LocalAiBasePath                NvidiaNimLLMBasePath
+OMLXLLMBasePath                OllamaLLMBasePath
+PrivateModeBasePath            STTLemonadeBasePath
+STTOpenAICompatibleEndpoint    TextGenWebUIBasePath
+WhisperGenericOpenAiBaseUrl
+```
+
+### 13 ฟิลด์ที่ mask ได้ทันที — onboarding ไม่อ่านเลย
+endpoint-shaped ทั้งหมดใน `currentSettings()` มี **32** ตัว หัก 19 ข้างบนเหลือ:
+```
+PGVectorConnectionString   ← DSN เต็ม พร้อม credential
+ChromaEndpoint  WeaviateEndpoint  QdrantEndpoint  MilvusAddress
+ZillizEndpoint  AstraDBEndpoint
+ImageGenerationOllamaBasePath  FoundryBasePath
+TTSOpenAICompatibleEndpoint  TTSKokoroEndpoint
+AgentSearXNGApiUrl  AgentCrwApiUrl
+```
+
+### บน fresh install ทั้ง 19 ฟิลด์นั้นมีค่า 0 ตัว
+ล้าง env provider ทั้งหมดแล้วเรียก `currentSettings()` — ทั้ง 19 เป็น `undefined`
+ฟอร์ม onboarding เริ่มจากช่องว่างอยู่แล้วโดยไม่ต้องแก้อะไร
+
+## ผลต่อการเลือก shape
+- **mask endpoint ตอน pre-user**: ราคาศูนย์บน install ใหม่ (ไม่มีค่าให้แสดงตั้งแต่แรก)
+  จ่ายเฉพาะกรณี instance ที่ตั้ง env ล่วงหน้า (docker-compose ที่ pin `OLLAMA_BASE_PATH`)
+  แล้ว admin เปิด onboarding — จะเห็นช่องว่างแทนค่าที่ตั้งไว้ ต้องพิมพ์ซ้ำ
+- **13 ฟิลด์ mask ได้ฟรีทุก shape** ไม่มีหน้าไหนใน onboarding อ่าน และมี
+  `PGVectorConnectionString` กับ vector DB endpoint ทั้งชุดอยู่ในนั้น ซึ่งเป็นของ
+  ที่แพงที่สุดในรายการรั่ว
