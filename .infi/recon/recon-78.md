@@ -83,3 +83,15 @@ setup_admin {"settings.write":"allow"}
 - `default_system_prompt` เขียนผ่าน `/system/default-system-prompt` คนละ route มี guard ของตัวเอง
 - `logo_filename`, `telemetry_id` อยู่ใน `supportedFields` แต่ไม่มี caller ไหนส่งผ่าน route นี้
 - คำถามว่า non-admin เขียน `memory_enabled` ผ่านทางอื่นได้ไหม เป็นคนละใบ (client-side gate ไม่ใช่ permission)
+
+## ruling ของ PMO (2026-09-02)
+
+Ruling: **`managerAllowedFields` ยกเป็น module-level const ตัวเดียว** ใช้ทั้งฝั่งอ่าน (`admin.js:465`) และฝั่งเขียน (`:594`) วันนี้เป็นคนละ literal ที่บังเอิญเหมือนกัน — แก้ที่หนึ่งไม่กระทบอีกที่ ถ้าผิดจะเสียตรงที่ manager อ่านคีย์ที่เขียนไม่ได้ หรือเขียนคีย์ที่อ่านไม่ได้ โดยไม่มีใครรู้
+
+Ruling: **drift test derive จากตัวแปรนั้น ห้าม copy literal ลงเทส** และต้องพิสูจน์ด้วย RED ก่อน: เพิ่มคีย์เข้าไปใน literal ตัวเดียวแล้วเทสต้องแดง — **ถ้าไม่แดงแปลว่ายังมีสองชุดอยู่** นี่คือ mutation ที่ตรวจว่าการยกค่าออกมาสำเร็จจริง ไม่ใช่แค่ดูโค้ดแล้วเชื่อ
+
+Ruling: option 3 — คีย์ใน `supportedFields` นอก `managerAllowedFields` ทั้ง 23 ตัว → 403 `forbidden_keys`
+Ruling: manager check ทำ **ก่อน** `updateSettings` (อำนาจก่อน vocabulary)
+Ruling: บอดี้ระบุเฉพาะคีย์ที่ผู้เรียกส่งมา ห้ามสะท้อน allow-list
+Ruling: `hub_api_key` — manager 403 `forbidden_keys` · admin 400 `protected_keys`
+Ruling: premise guard ใช้ `setup_admin` จาก grant จริง ไม่ใช่ role string
