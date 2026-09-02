@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 
-const SERVER_DIR = path.join(__dirname, "../../..");
+const SERVER_DIR = path.join(__dirname, "../..");
 
 function buildRouter() {
   const app = express();

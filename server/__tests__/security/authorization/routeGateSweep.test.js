@@ -27,7 +27,7 @@ process.env.JWT_SECRET =
 
 const fs = require("fs");
 const path = require("path");
-const { buildRouter } = require("./routeGateSweepHelper.cjs");
+const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
 
@@ -81,12 +81,14 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
-    expect(registrations.length).toBeGreaterThan(20);
+    expect(registrations).toHaveLength(31);
     expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(
       100
     );
     // Only the websocket registration may fail to mount.
-    expect(skipped.length).toBeLessThanOrEqual(1);
+    expect(
+      skipped.filter((entry) => !entry.startsWith("agentWebsocket"))
+    ).toEqual([]);
   });
 
   test("no mutating route carries validatedRequest alone", () => {

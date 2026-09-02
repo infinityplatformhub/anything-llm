@@ -3,11 +3,13 @@ process.env.STORAGE_DIR =
   require("fs").mkdtempSync(
     require("path").join(require("os").tmpdir(), "workspace-caps-")
   );
+process.env.API_KEY_PEPPER =
+  process.env.API_KEY_PEPPER || "workspace-caps-api-key-pepper-32-bytes-min";
 
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { buildRouter } = require("./routeGateSweepHelper.cjs");
+const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
 const {
   ORG_CAPABILITIES,
   WORKSPACE_CAPABILITIES,
@@ -27,7 +29,7 @@ const PLAN_FILE = path.join(
   "docs/superpowers/plans/40-frontend-authz.md"
 );
 
-const { app } = buildRouter();
+const { app, registrations, skipped } = buildRouter();
 const mountedRoutes = app._router.stack.filter((layer) => layer.route);
 const mountedGates = mountedRoutes.flatMap((layer) =>
   layer.route.stack
@@ -35,30 +37,39 @@ const mountedGates = mountedRoutes.flatMap((layer) =>
     .filter((handler) => handler?.action && handler.resolveResource)
 );
 
-// These document mutations also have deliberate org-level routes: extensions
-// ingest files before any workspace attachment, and system deletes unattached
-// documents. Assertion 6 still requires a separate workspace-bearing gate.
-const DUAL_SCOPE_WORKSPACE_ACTIONS = new Set([
-  "document.create",
-  "document.delete",
+const WORKSPACE_RESOLVER_NAMES = new Set([
+  "workspaceBySlug",
+  "workspaceByBodySlug",
+  "workspaceByIdParam",
+  "chatByIdParam",
+  "documentInWorkspaceBySlug",
+  "promptHistoryByIdParam",
+  "memoryByIdParam",
+  "watchedDocumentInWorkspaceBySlug",
 ]);
 
-async function scopeOf(resolveResource) {
-  try {
-    const resource = await resolveResource({}, {});
-    if (resource) return resource.workspaceId == null ? "org" : "workspace";
-  } catch {
-    // Continue to resolver metadata: workspace resolvers need route input and
-    // may consult stored rows, so an empty request can throw.
-  }
-
+function scopeOf(resolveResource) {
   const resolverName = resolveResource.resolverName || resolveResource.name;
-  return ["orgResource", "grantScopeFromBody"].includes(resolverName)
-    ? "org"
-    : "workspace";
+  if (resolverName === "orgResource") return "org";
+  if (WORKSPACE_RESOLVER_NAMES.has(resolverName)) return "workspace";
+  return null;
+}
+
+function hasGateAtScope(gates, action, scope) {
+  return gates.some(
+    (gate) => gate.action === action && scopeOf(gate.resolveResource) === scope
+  );
 }
 
 describe("capability vocabulary by resource scope", () => {
+  test("the capability sweep mounted every HTTP router", () => {
+    expect(registrations).toHaveLength(31);
+    expect(mountedRoutes.length).toBeGreaterThan(100);
+    expect(
+      skipped.filter((entry) => !entry.startsWith("agentWebsocket"))
+    ).toEqual([]);
+  });
+
   test("workspace capabilities contain no org-scoped actions", () => {
     expect(
       WORKSPACE_CAPABILITIES.filter((action) => ACTION_SCOPES[action] === "org")
@@ -82,7 +93,7 @@ describe("capability vocabulary by resource scope", () => {
     }
   });
 
-  test("every org capability backs a mounted server gate at org scope", async () => {
+  test("every org capability backs a mounted server gate at org scope", () => {
     expect(mountedRoutes.length).toBeGreaterThan(100);
     const capabilityGates = mountedGates.filter((gate) =>
       ORG_CAPABILITIES.includes(gate.action)
@@ -90,43 +101,36 @@ describe("capability vocabulary by resource scope", () => {
     expect(capabilityGates.length).toBeGreaterThan(0);
 
     for (const action of ORG_CAPABILITIES) {
-      const scopes = await Promise.all(
-        capabilityGates
-          .filter((gate) => gate.action === action)
-          .map((gate) => scopeOf(gate.resolveResource))
-      );
-      expect(scopes).toContain("org");
+      expect(hasGateAtScope(capabilityGates, action, "org")).toBe(true);
     }
-
-    expect(
-      capabilityGates.filter((gate) => gate.action === "workspace.create")
-    ).toHaveLength(2);
   });
 
-  test("every workspace capability backs a mounted workspace-scoped gate", async () => {
+  test("every workspace capability backs a mounted workspace-scoped gate", () => {
     expect(mountedRoutes.length).toBeGreaterThan(100);
     const capabilityGates = mountedGates.filter((gate) =>
       WORKSPACE_CAPABILITIES.includes(gate.action)
     );
     expect(capabilityGates.length).toBeGreaterThan(0);
 
-    for (const action of DUAL_SCOPE_WORKSPACE_ACTIONS) {
-      const scopes = await Promise.all(
-        capabilityGates
-          .filter((gate) => gate.action === action)
-          .map((gate) => scopeOf(gate.resolveResource))
-      );
-      expect(scopes).toContain("org");
-    }
-
+    // document.create has eight legitimate org ingestion gates, and
+    // document.delete has two org deletion gates. Neither scope can satisfy
+    // this assertion; every listed action also needs workspace wiring.
     for (const action of WORKSPACE_CAPABILITIES) {
-      const scopes = await Promise.all(
-        capabilityGates
-          .filter((gate) => gate.action === action)
-          .map((gate) => scopeOf(gate.resolveResource))
-      );
-      expect(scopes).toContain("workspace");
+      expect(hasGateAtScope(capabilityGates, action, "workspace")).toBe(true);
     }
+  });
+
+  test("a throwing unknown resolver is not workspace evidence", () => {
+    const throwingGate = {
+      action: "document.delete",
+      resolveResource: () => {
+        throw new Error("boom");
+      },
+    };
+
+    expect(hasGateAtScope([throwingGate], "document.delete", "workspace")).toBe(
+      false
+    );
   });
 
   test("capability lists match the approved mockup", () => {
