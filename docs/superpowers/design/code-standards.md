@@ -919,3 +919,6 @@ A hand-written source scanner for `requirePermission(...)` was bypassed twice un
 
 ### §7.14 one full suite per merge target
 Full `yarn test` (1,600+ tests, 5–10 min) runs **once**, by the PMO gate on the final merge target. Everyone else runs only what the diff touches: developers iterate with `jest --findRelatedTests <changed files>` and send a SHA once related suites are green; QA and Techlead probe and mutate, they do not rerun the suite. Running the suite four times per SHA was the largest single source of latency on 2026-09-02.
+
+### §7.6c every worktree starts with scripts/wt-bootstrap.sh
+One command: node 22 check, no symlinked node_modules, fresh DB + migrate deploy + seed + prisma generate. Replaces the four env failures seen on 2026-09-02 (node 26, missing deps after a merge, stale DB without a migration, unseeded baseline).
