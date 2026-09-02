@@ -582,3 +582,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 89f396381 QA-1 PASS (6 cases + 2 controls all correct; mutants a-e red per set; NIT-1 exempt-set not pinned → Dev3 in #128 lane). Both verdicts in; closing/merging after sweeps line.
 - #124 064f082c9 regate: frontend 96/96 exit 0, ledger 3 rulings, result written. Awaiting QA-3 re-fire (b) → close/merge.
 - Post-merge hotfix: 3024/3061, 1 red boundKeyDocumentsHttp → green alone 35/35 (#106 class). Frontend 92/92 exit 0. Main healthy.
+- #113 89f396381 MERGED (1ac806cfc): TL-1 + QA-1 PASS; contract 43/43, dirs 1050, sweeps 63/63; closed gate-113-89f396381. #129 closes with it. Dev3 → #128 (+ QA-1 NIT-1 test + ternary nit). Q4 record shape still open for user.
+- #124 064f082c9 QA-3 PASS (a/b/c/d all dead); regate 96/96 exit 0. Closing/merging next.
