@@ -61,7 +61,35 @@ that way deliberately — "if someone later closes this hole, they go red and fo
 decision instead of leaving a stale claim about coverage lying around". One is inverted here, and
 the inversion is the record of the decision. The other stays.
 
+## QA-2 round 2: `app` is a facade, `app._router` is the object
+
+QA-2 rejected `c44b059d3`. Reproduced exactly: with only the facade sealed,
+`app._router.post`, `.all`, `.route().post` and `.use(subRouter)` all mounted with no throw, and a
+handler forced on that way answered over HTTP with its own marker.
+
+Ruling: `_router` is sealed from INSIDE `sealRoutes`, not by adding it to the call site. No caller
+should have to know express keeps a second object, and a target whose `_router` does not exist yet
+(express creates it lazily on the first route) is skipped rather than crashing boot. — ถ้าผิด:
+call site ต้องรู้เรื่องภายในของ express และ app ที่ยังไม่มี route จะ boot ไม่ขึ้น
+
+Ruling: `_router.route()` is KEPT and hands back a SEALED Route, instead of being refused like
+`app.route()` is. TL-2 measured, and so did I, that the one-line
+`sealRoutes(app, app._router, apiRouter)` breaks the app: `app.get` is implemented as
+`this._router.route(path).get(...)`, so refusing `_router.route` refuses every read mount —
+`robots.txt`, `manifest.json` and the SPA catch-all (`index.js:171,175`, all after the seal) all
+throw. Reads mount; `_router.route("/x").post(h)` does not. — ถ้าผิด: guard ที่ทำให้ production ไม่ boot
+
+Ruling: probe `_router` only, never `target.router`. Express 4 defines `app.router` as a getter that
+THROWS a deprecation error the moment it is read (`application.js:131`) — measured: every seal test
+failed with that error until the probe was narrowed. — ถ้าผิด: guard พังตอน boot ด้วย error ที่ไม่
+เกี่ยวกับ guard เลย
+
 ## Residual, still open and still asserted as such
+
+**`param()` is not sealed**, on the app or on a router. It registers a callback for a route
+parameter — it mounts no route and adds no verb, so it cannot make an ungated endpoint reachable.
+Left alone rather than swept in for symmetry, with a test asserting it still mounts, so the claim
+inverts if anyone closes it.
 
 **A router captured BEFORE the seal, and never handed to `use` again, keeps an unsealed handle.**
 The seal holds references; a router grabbed earlier is outside it, and there is no moment at which
@@ -76,7 +104,7 @@ That one is CLOSED here, by sealing the object rather than walking its stack. F3
 
 ## Evidence
 
-`routeMountGuard.test.js` **38 passed**. With `routeGateSweep.test.js`: **71 passed**.
+`routeMountGuard.test.js` **44 passed**. With `routeGateSweep.test.js`: **77 passed**.
 
 RED against the seal as #98 shipped it: **8 failed**, each named —
 `a sub-router use()d after boot is refused`, `DEPTH: a router mounted onto a router mounted after
@@ -105,6 +133,14 @@ Real app boots under `NODE_ENV=production` with 16 top-level layers.
 | refuse the mount but do NOT seal the argument | 6 red, incl. `F3: a router mounted EMPTY and filled afterwards is refused at both moments`, `F9`, `F7`, `F4` |
 | drop the nested walk (seal only the argument handed to `use`) | `F7: nesting is sealed at depth, through a router that was ALREADY populated` |
 | leave the recursion armed when `ROUTE_MOUNT_GUARD=off` | `ROUTE_MOUNT_GUARD=off leaves a use()d sub-router mountable AND writable` |
+| do not seal `_router` at all (= `c44b059d3`, QA-2's finding) | `the four shapes QA-2 mounted are all refused`, `HTTP: a route forced onto _router does not answer with its own marker`, `a Route from the sealed factory takes reads and refuses writes` |
+| seal `_router` the ORDINARY way, refusing `.route()` (TL-2's rejected one-liner) | `production boots, and READ routes stay mountable on the real app afterwards`, `a READ route added after boot still works, on the real app`, `index.js's own post-boot mounts still work on the real app`, `read-only mounts are unaffected, since index.js depends on them`, `the legitimate post-boot mounts index.js makes all still work`, `a Route from the sealed factory takes reads and refuses writes` |
+| the sealed factory returns an UNSEALED Route | `the four shapes QA-2 mounted are all refused`, `a Route from the sealed factory takes reads and refuses writes` |
+
+The last one first appeared to SURVIVE. It had not run: the edit was applied at the wrong
+indentation and silently matched nothing. A mutation that does not change the file is not a
+survivor, and "all green" after one is worth exactly nothing — checked by grepping for the deleted
+line before trusting the result.
 
 Two of these — seal-only and refuse-only — are the halves of TL-2's proposal and of my first
 attempt respectively. Neither is sufficient alone, which is the finding.

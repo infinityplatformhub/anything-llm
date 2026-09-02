@@ -45,6 +45,12 @@
  * legitimately mounts `app.get("/robots.txt")`, `app.get("/manifest.json")` and
  * `app.use("/")` AFTER the seal point in production — sealing those would make the
  * guard fire on correct code, and a guard that cries wolf gets removed.
+ *
+ * That exemption is real on the APP. On a plain ROUTER, `get` and `head` are
+ * refused anyway, as a side effect of `.route()` being refused there — measured,
+ * not intended. It is safe because nothing mounts a read route on `apiRouter`
+ * after boot; if something ever needs to, that router wants the
+ * `keepRouteFactory` treatment the app's internal router gets, not a hole.
  */
 const SEALED_METHODS = Object.freeze([
   "post",
@@ -149,6 +155,132 @@ function guardDisabled(env = process.env) {
  * @param {...Object} targets express app / router instances
  * @returns {{sealed: boolean, reason: string}}
  */
+/**
+ * Seal ONE target.
+ *
+ * @param {Object} target express app / router / Route
+ * @param {{keepRouteFactory: boolean}} options
+ *   `keepRouteFactory` keeps `.route()` callable and makes it hand back a SEALED
+ *   Route, instead of refusing the call outright. Only an app's internal router
+ *   wants this — see the branch below.
+ */
+function sealTarget(target, { keepRouteFactory }) {
+  if (!target) return;
+  // QA-2 on `c44b059d3`: sealing `app` alone leaves `app._router` — the
+  // object express actually mounts on — completely unsealed. Measured on the
+  // real app: `app._router.post`, `.all`, `.route().post` and
+  // `.use(subRouter)` all mounted with no throw, and splicing the layer in
+  // front of the terminal `app.all("*")` served `POST /qa2-internal` with a
+  // 200 and the handler's own marker. `app` is a facade; this is the object.
+  //
+  // Sealed from HERE rather than from index.js so no call site has to know
+  // that express keeps a second object, and so a target whose `_router` does
+  // not exist yet (`lazyrouter` creates it on the first route) is simply
+  // skipped rather than crashing boot.
+  // `_router` only. Express 4 defines `app.router` as a getter that THROWS a
+  // deprecation error the moment it is read (`application.js:131`), so probing
+  // for it crashes boot on a plain app — measured: every seal test failed with
+  // that error before this was narrowed.
+  const internalRouter = target._router;
+  if (internalRouter && internalRouter !== target)
+    sealTarget(internalRouter, { keepRouteFactory: true });
+
+  // `.route(path)` returns a FRESH Route object whose own `.post`/`.all` were
+  // never wrapped, so `app.route("/x").post(h)` mounted straight past an earlier
+  // version of this seal — found by probing, not by reading. Sealing the factory
+  // is what closes it: no Route can be handed out after boot to write on.
+  // An app's INTERNAL router (#119, QA-2) needs the route FACTORY kept, not
+  // refused: `app.get` is implemented as `this._router.route(path).get(...)`,
+  // so refusing `_router.route` refuses every read mount too, and the app does
+  // not boot. What it gets instead is a factory that hands back a SEALED
+  // Route — reads still mount, `_router.route("/x").post(h)` does not.
+  if (keepRouteFactory && typeof target.route === "function") {
+    const originalRoute = target.route.bind(target);
+    target.route = function sealedRoute(path) {
+      // The Route itself is sealed: its mutating methods throw, `get`/`head`
+      // do not, which is what keeps `app.get` working.
+      const route = originalRoute(path);
+      sealTarget(route, { keepRouteFactory: false });
+      return route;
+    };
+  } else if (typeof target.route === "function") {
+    target.route = function refuseLateRoute(path) {
+      throw new Error(
+        `[route mount guard] .route(${String(path)}) was called after boot ` +
+          `completed. A Route obtained this way mounts without passing through ` +
+          `the sealed methods, so it would ship ungated and unnoticed. Register ` +
+          `it in ENDPOINT_REGISTRATIONS instead. If a deployment genuinely must ` +
+          `allow this, set ROUTE_MOUNT_GUARD=off — it logs an error every boot.`
+      );
+    };
+  }
+
+  // #119: `use` is sealed CONDITIONALLY — on what it is handed, not on the
+  // fact of being called.
+  //
+  // #98 left this open because `use` is how every middleware mounts: the
+  // static handler, the body parsers, the SPA catch-all. Sealing it outright
+  // refuses correct code, and a guard that fires on correct code is removed
+  // within a week. What makes it closeable is that a router is
+  // distinguishable from middleware at mount time — see `isSealable`.
+  //
+  // The argument is BOTH sealed AND refused, and both halves were measured to
+  // be necessary:
+  //
+  //   sealing alone is not enough — a router populated BEFORE the mount keeps
+  //   serving. Measured: seal the object, then `api.use("/x", sub)` where
+  //   `sub` already carried `POST /deep`, and that route answers 200 over
+  //   HTTP. Its routes never crossed a sealed method, so `routeGateSweep`
+  //   cannot see them; that invisibility is the whole hole.
+  //
+  //   refusing alone is not enough — a router mounted EMPTY and filled
+  //   afterwards has nothing to refuse at mount time, and its later `.post()`
+  //   still works. TL-2 drove exactly that shape to 200 over HTTP on the #98
+  //   SHA. Recursing into `.stack` at mount time cannot catch it either: the
+  //   stack is empty at the moment it is read.
+  //
+  // So the argument is sealed first — closing every later write to it, at any
+  // depth — and then the mount itself is refused.
+  if (typeof target.use === "function") {
+    const originalUse = target.use.bind(target);
+    target.use = function refuseLateRouterMount(...args) {
+      const sealables = args.filter(isSealable);
+      if (sealables.length === 0) return originalUse(...args);
+
+      for (const sealable of sealables)
+        sealRoutes(sealable, ...nestedSealables(sealable));
+      throw new Error(
+        `[route mount guard] a router or sub-app was mounted with use() after ` +
+          `boot completed. It carries its own stack, so nothing inside it ` +
+          `passes through the sealed methods and its routes are invisible to ` +
+          `the authorization sweep (routeGateSweep.test.js) — the same hole a ` +
+          `late direct mount leaves. Register it in ENDPOINT_REGISTRATIONS ` +
+          `instead. Ordinary middleware is unaffected and still mounts. If a ` +
+          `deployment genuinely must allow this, set ROUTE_MOUNT_GUARD=off — ` +
+          `it logs an error on every boot.`
+      );
+    };
+  }
+
+  for (const method of SEALED_METHODS) {
+    const original = target[method];
+    if (typeof original !== "function") continue;
+    // Plain assignment, not a Proxy: express reads these as own properties on an
+    // ordinary object, so a Proxy would add a trap to every property lookup on the
+    // router for no gain.
+    target[method] = function refuseLateMount(path) {
+      throw new Error(
+        `[route mount guard] ${method.toUpperCase()} ${String(path)} was mounted ` +
+          `after boot completed. Routes added after startup are invisible to the ` +
+          `authorization sweep (routeGateSweep.test.js), so this one would ship ` +
+          `ungated and unnoticed. Register it in ENDPOINT_REGISTRATIONS instead. ` +
+          `If a deployment genuinely must allow this, set ROUTE_MOUNT_GUARD=off — ` +
+          `it logs an error on every boot.`
+      );
+    };
+  }
+}
+
 function sealRoutes(...targets) {
   if (guardDisabled()) {
     // Every boot, not once: a protection that degrades quietly is worse than one
@@ -163,88 +295,7 @@ function sealRoutes(...targets) {
     return { sealed: false, reason: "disabled_by_env" };
   }
 
-  for (const target of targets) {
-    // `.route(path)` returns a FRESH Route object whose own `.post`/`.all` were
-    // never wrapped, so `app.route("/x").post(h)` mounted straight past an earlier
-    // version of this seal — found by probing, not by reading. Sealing the factory
-    // is what closes it: no Route can be handed out after boot to write on.
-    if (typeof target.route === "function") {
-      target.route = function refuseLateRoute(path) {
-        throw new Error(
-          `[route mount guard] .route(${String(path)}) was called after boot ` +
-            `completed. A Route obtained this way mounts without passing through ` +
-            `the sealed methods, so it would ship ungated and unnoticed. Register ` +
-            `it in ENDPOINT_REGISTRATIONS instead. If a deployment genuinely must ` +
-            `allow this, set ROUTE_MOUNT_GUARD=off — it logs an error every boot.`
-        );
-      };
-    }
-
-    // #119: `use` is sealed CONDITIONALLY — on what it is handed, not on the
-    // fact of being called.
-    //
-    // #98 left this open because `use` is how every middleware mounts: the
-    // static handler, the body parsers, the SPA catch-all. Sealing it outright
-    // refuses correct code, and a guard that fires on correct code is removed
-    // within a week. What makes it closeable is that a router is
-    // distinguishable from middleware at mount time — see `isSealable`.
-    //
-    // The argument is BOTH sealed AND refused, and both halves were measured to
-    // be necessary:
-    //
-    //   sealing alone is not enough — a router populated BEFORE the mount keeps
-    //   serving. Measured: seal the object, then `api.use("/x", sub)` where
-    //   `sub` already carried `POST /deep`, and that route answers 200 over
-    //   HTTP. Its routes never crossed a sealed method, so `routeGateSweep`
-    //   cannot see them; that invisibility is the whole hole.
-    //
-    //   refusing alone is not enough — a router mounted EMPTY and filled
-    //   afterwards has nothing to refuse at mount time, and its later `.post()`
-    //   still works. TL-2 drove exactly that shape to 200 over HTTP on the #98
-    //   SHA. Recursing into `.stack` at mount time cannot catch it either: the
-    //   stack is empty at the moment it is read.
-    //
-    // So the argument is sealed first — closing every later write to it, at any
-    // depth — and then the mount itself is refused.
-    if (typeof target.use === "function") {
-      const originalUse = target.use.bind(target);
-      target.use = function refuseLateRouterMount(...args) {
-        const sealables = args.filter(isSealable);
-        if (sealables.length === 0) return originalUse(...args);
-
-        for (const sealable of sealables)
-          sealRoutes(sealable, ...nestedSealables(sealable));
-        throw new Error(
-          `[route mount guard] a router or sub-app was mounted with use() after ` +
-            `boot completed. It carries its own stack, so nothing inside it ` +
-            `passes through the sealed methods and its routes are invisible to ` +
-            `the authorization sweep (routeGateSweep.test.js) — the same hole a ` +
-            `late direct mount leaves. Register it in ENDPOINT_REGISTRATIONS ` +
-            `instead. Ordinary middleware is unaffected and still mounts. If a ` +
-            `deployment genuinely must allow this, set ROUTE_MOUNT_GUARD=off — ` +
-            `it logs an error on every boot.`
-        );
-      };
-    }
-
-    for (const method of SEALED_METHODS) {
-      const original = target[method];
-      if (typeof original !== "function") continue;
-      // Plain assignment, not a Proxy: express reads these as own properties on an
-      // ordinary object, so a Proxy would add a trap to every property lookup on the
-      // router for no gain.
-      target[method] = function refuseLateMount(path) {
-        throw new Error(
-          `[route mount guard] ${method.toUpperCase()} ${String(path)} was mounted ` +
-            `after boot completed. Routes added after startup are invisible to the ` +
-            `authorization sweep (routeGateSweep.test.js), so this one would ship ` +
-            `ungated and unnoticed. Register it in ENDPOINT_REGISTRATIONS instead. ` +
-            `If a deployment genuinely must allow this, set ROUTE_MOUNT_GUARD=off — ` +
-            `it logs an error on every boot.`
-        );
-      };
-    }
-  }
+  for (const target of targets) sealTarget(target, { keepRouteFactory: false });
   return { sealed: true, reason: "sealed" };
 }
 

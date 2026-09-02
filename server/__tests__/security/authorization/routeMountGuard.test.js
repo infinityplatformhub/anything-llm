@@ -516,6 +516,113 @@ describe("#119: use(subRouter) is sealed recursively; middleware is not", () => 
   });
 });
 
+describe("#119 (QA-2): app._router is the object express actually mounts on", () => {
+  // `app` is a FACADE. QA-2 drove this on `c44b059d3`, where only the facade was
+  // sealed: `app._router.post`, `.all`, `.route().post` and `.use(subRouter)`
+  // all mounted with no throw, and splicing the new layer in front of the
+  // terminal `app.all("*")` served the handler's own marker with a 200.
+  const loadReal = () => {
+    jest.resetModules();
+    return require("../../../index");
+  };
+
+  test("the four shapes QA-2 mounted are all refused", () => {
+    const express = require("express");
+    const { app } = loadReal();
+    const internal = app._router;
+    expect(internal).toBeDefined(); // the object under test must exist
+
+    expect(() => internal.post("/qa2-post", () => {})).toThrow(/after boot/i);
+    expect(() => internal.all("/qa2-all", () => {})).toThrow(/after boot/i);
+    expect(() => internal.route("/qa2-route").post(() => {})).toThrow(
+      /after boot/i
+    );
+    expect(() => internal.use("/qa2-use", express.Router())).toThrow(
+      /after boot/i
+    );
+  });
+
+  test("HTTP: a route forced onto _router does not answer with its own marker", async () => {
+    // The assertion that matters, and it cannot be a status code: `index.js`
+    // mounts a terminal `app.all("*")` before the seal, so
+    // `POST /api/never-mounted` answers 200 too. Measured. The oracle is
+    // therefore the handler's own marker.
+    const request = require("supertest");
+    const { app } = loadReal();
+
+    expect(() =>
+      app._router.post("/qa2-internal", (_, response) =>
+        response.send("QA2-MARKER")
+      )
+    ).toThrow(/after boot/i);
+
+    const response = await request(app).post("/qa2-internal");
+    expect(response.text ?? "").not.toContain("QA2-MARKER");
+  });
+
+  test("the legitimate post-boot mounts index.js makes all still work", () => {
+    // The half that makes the naive fix wrong. `app.get` is implemented as
+    // `this._router.route(path).get(...)`, so sealing `_router.route` by
+    // REFUSING it refuses every read mount too and the app does not boot —
+    // measured: robots.txt, manifest.json and the SPA catch-all (index.js:171,
+    // 175, mounted after the seal) all threw. `_router.route` therefore hands
+    // back a SEALED Route instead of refusing the call.
+    const express = require("express");
+    const { app } = loadReal();
+
+    expect(() => app.get("/robots.txt", (_, r) => r.send("ok"))).not.toThrow();
+    expect(() => app.head("/robots.txt", (_, r) => r.end())).not.toThrow();
+    expect(() =>
+      app.use(express.static(require("path").resolve(__dirname, "..")))
+    ).not.toThrow();
+    expect(() => app.use("/", (_, r) => r.sendStatus(200))).not.toThrow();
+    // and plain middleware straight onto the internal router
+    expect(() => app._router.use((_, __, next) => next())).not.toThrow();
+  });
+
+  test("a Route from the sealed factory takes reads and refuses writes", () => {
+    // What "sealed Route" means, asserted directly rather than inferred from
+    // app.get working: the same object must accept `get` and refuse `post`.
+    const { app } = loadReal();
+    const route = app._router.route("/qa2-factory");
+    expect(() => route.get(() => {})).not.toThrow();
+    expect(() => route.post(() => {})).toThrow(/after boot/i);
+    expect(() => route.all(() => {})).toThrow(/after boot/i);
+  });
+
+  test("sealRoutes skips a target with no internal router, rather than throwing", () => {
+    // `_router` is created lazily by express on the first route, so an app
+    // sealed before it has any is a real shape — and a guard that crashes boot
+    // on it is worse than the hole it closes.
+    const express = require("express");
+    const fresh = express();
+    expect(fresh._router).toBeUndefined();
+    expect(() => sealRoutes(fresh)).not.toThrow();
+    expect(() => fresh.post("/late", () => {})).toThrow(/after boot/i);
+  });
+});
+
+describe("#119: what remains uncovered on _router — recorded, not implied", () => {
+  const loadReal = () => {
+    jest.resetModules();
+    return require("../../../index");
+  };
+
+  test("RESIDUAL: param() is not sealed, on the app or on a router", () => {
+    // `param` registers a callback for a route parameter; it mounts no route
+    // and adds no verb, so it cannot make an ungated endpoint reachable — which
+    // is why it is left alone rather than swept in for symmetry. Recorded so
+    // the guard's reach is not overstated, and it inverts if anyone closes it.
+    const express = require("express");
+    const { app } = loadReal();
+    expect(() => app.param("id", () => {})).not.toThrow();
+
+    const router = express.Router();
+    sealRoutes(router);
+    expect(() => router.param("id", () => {})).not.toThrow();
+  });
+});
+
 describe("#119: the escape hatch turns the recursion off too", () => {
   // An escape hatch that disables only the top layer leaves a deployment that
   // set the flag to get moving still throwing from a sealed sub-router, in a way
