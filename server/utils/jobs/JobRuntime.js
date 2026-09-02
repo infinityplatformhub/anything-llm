@@ -1,7 +1,7 @@
 const { PostgresJobQueue } = require("./PostgresJobQueue");
 const { PostgresJobScheduler } = require("./PostgresJobScheduler");
 const { CoreJobWorker } = require("./CoreJobWorker");
-const { handlers, registerCoreSchedules } = require("./handlers");
+const { handlers, registerCoreSchedules, leaseMsFor } = require("./handlers");
 // T-2 (#20): service Actor literals live only in utils/authorization/actorResolver.js
 // T-4b (#29) W-5: and so does Actor construction — resolveActorRef replaced the local
 // ActorIdentityStore, so a job and an HTTP request resolve the same user identically.
@@ -38,8 +38,23 @@ class JobRuntime {
     if (this.running) return;
     this.running = true;
     try {
-      const jobs = await this.worker.claim({ workerId: `core-${process.pid}`, types: Object.keys(handlers).map((key) => key.split("@")[0]), leaseMs: 30_000, limit: 10 });
-      await Promise.allSettled(jobs.map((job) => this.worker.run(job, `core-${process.pid}`, { leaseMs: 30_000 })));
+      // #138: the lease comes from the job TYPE, not from this line.
+      //
+      // One `claim` call covers every registered type, so it takes the LONGEST lease
+      // of the types it is asking for. That is the safe direction: a lease too long
+      // delays takeover of a genuinely dead worker, while a lease too short lets a
+      // second worker claim a job whose first worker is alive and mid-run — a
+      // concurrent apply, which for the directory sync is the failure the whole
+      // slice exists to prevent. Each job's own lease is then applied on `run`,
+      // where the type is known exactly.
+      const types = Object.keys(handlers).map((key) => key.split("@")[0]);
+      const claimLeaseMs = Math.max(...types.map(leaseMsFor));
+      const jobs = await this.worker.claim({ workerId: `core-${process.pid}`, types, leaseMs: claimLeaseMs, limit: 10 });
+      await Promise.allSettled(
+        jobs.map((job) =>
+          this.worker.run(job, `core-${process.pid}`, { leaseMs: leaseMsFor(job.type) })
+        )
+      );
     } finally {
       this.running = false;
     }

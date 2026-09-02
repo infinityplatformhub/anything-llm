@@ -22,10 +22,30 @@ const denyImpersonatedMutation = (actor, mutating) => {
 };
 
 class PostgresJobQueue {
-  constructor({ db = prisma, now = () => new Date(), random = Math.random, publishOperationalEvent } = {}) {
+  constructor({
+    db = prisma,
+    now = () => new Date(),
+    random = Math.random,
+    publishOperationalEvent,
+    // #138: a test seam, in the same spirit as `now`, and needed for the same reason.
+    //
+    // `claim` decides which worker wins a job, and the window where two claims can
+    // race is INSIDE `this.db.$transaction` — between reading the candidate rows and
+    // conditionally updating them. A concurrency test cannot open that window from
+    // outside: with no seam, the only lever is a sleep, and two runs that never
+    // actually overlap pass whatever the claim rule does. That is the fixture-never-
+    // reached-the-guard failure, in the one place where it would certify a
+    // concurrency guarantee that was never exercised.
+    //
+    // Awaited between the read and the update, so a test can latch both transactions
+    // open at once and assert they were BOTH there (`reached === 2`) rather than
+    // hoping. Production passes nothing and the await is on `undefined`.
+    afterCandidates,
+  } = {}) {
     this.db = db;
     this.now = now;
     this.random = random;
+    this.afterCandidates = afterCandidates;
     this.publishOperationalEvent = publishOperationalEvent || ((event, transaction) => require("../events").publishOperationalEvent(event, transaction));
   }
 
@@ -96,6 +116,12 @@ class PostgresJobQueue {
         orderBy: { runAt: "asc" },
         take: limit,
       });
+      // #138: the race window opens here — candidates are read, not yet claimed.
+      // Called rather than merely accepted: a hook that is stored and never invoked
+      // is indistinguishable from no seam at all to every test that depends on it,
+      // and would let RF-1 report a concurrency guarantee it never exercised.
+      if (this.afterCandidates) await this.afterCandidates(candidates);
+
       const claimed = [];
       for (const job of candidates) {
         const leaseUntil = new Date(now.getTime() + leaseMs);
