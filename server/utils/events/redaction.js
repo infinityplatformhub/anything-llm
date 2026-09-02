@@ -43,6 +43,11 @@ const ALLOWED_KEYS = new Set([
   "ip", "multiUserMode", "scopedKeyId", "keyPrefix", "action", "allowed", "denyReason", "orgId",
   // integrations
   "bot_username", "chatId", "feature", "reason",
+  // #48 credential revocation. The VALUE here is a KEY_MAPPING envKey — `OPEN_AI_KEY`,
+  // not the secret — and the route refuses anything that is not one, so it cannot carry
+  // caller-chosen free text. Naming which credential was revoked is the entire audit
+  // value of the event; without it the row says only that something was cleared.
+  "envKey",
 ]);
 
 // PDPA patterns. These four are the floor and cannot be disabled by config.

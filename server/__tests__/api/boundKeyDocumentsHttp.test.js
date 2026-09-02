@@ -622,3 +622,34 @@ describe("docpath comes from disk, not from the requested name", () => {
     }
   });
 });
+
+describe("issue 41 NIT-1: the join fails closed", () => {
+  it("an unreadable workspace_documents hides everything from a bound key", async () => {
+    // `boundDocpaths` catches a store failure and returns an empty set. Returning null
+    // instead — the "unbound, no restriction" value — would read as allow-all, and the
+    // suite above would still pass: every other case has a readable table. So this is
+    // the one case that pins the direction of the failure.
+    const spy = jest
+      .spyOn(prisma.workspace_documents, "findMany")
+      .mockRejectedValueOnce(new Error("workspace_documents unavailable"));
+
+    const response = await bound(request(app).get("/api/v1/documents"));
+
+    expect(response.status).toBe(200);
+    expect(namesIn(response.body.localFiles)).toEqual([]);
+    spy.mockRestore();
+  });
+
+  it("and the same failure does not restrict an unbound key", async () => {
+    // The join is never consulted for an unbound key, so a store failure must not turn
+    // into an empty listing for callers the binding does not apply to.
+    const spy = jest
+      .spyOn(prisma.workspace_documents, "findMany")
+      .mockRejectedValueOnce(new Error("workspace_documents unavailable"));
+
+    const response = await unbound(request(app).get("/api/v1/documents"));
+
+    expect(namesIn(response.body.localFiles)).toContain(A_DOC);
+    spy.mockRestore();
+  });
+});
