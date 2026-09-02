@@ -125,15 +125,23 @@ function systemEndpoints(app) {
     }
   });
 
-  app.post("/onboarding", [validatedRequest], async (_, response) => {
-    try {
-      await SystemSettings.markOnboardingComplete();
-      response.sendStatus(200).end();
-    } catch (e) {
-      console.error(e.message, e);
-      response.sendStatus(500).end();
+  // #52: writes `onboarding_complete` into system_settings, so it is
+  // settings.write like every other route that touches that table. It carried
+  // session auth alone, which meant nothing asked the engine and an
+  // impersonated session could mark onboarding complete.
+  app.post(
+    "/onboarding",
+    [validatedRequest, requirePermission("settings.write", orgResource)],
+    async (_, response) => {
+      try {
+        await SystemSettings.markOnboardingComplete();
+        response.sendStatus(200).end();
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
     }
-  });
+  );
 
   app.get("/setup-complete", async (_, response) => {
     try {
@@ -683,7 +691,10 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/enable-multi-user",
-    [validatedRequest],
+    // #52: flipping the instance into multi-user mode creates the first admin.
+    // It carried session auth alone; settings.write is what every other route
+    // that changes instance configuration asks for.
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         if (response.locals.multiUserMode) {
