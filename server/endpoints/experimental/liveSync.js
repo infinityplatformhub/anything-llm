@@ -37,9 +37,18 @@ function liveSyncEndpoints(app) {
             .json({ liveSyncEnabled: newStatus === "enabled" });
 
         // Already validated earlier - so can hot update.
-        await SystemSettings._updateSettings({
+        // #59: `_updateSettings` returns `{success:false}` on failure rather than
+        // throwing. Unchecked, a failed write fell straight through to the workers
+        // being started and a 200 saying live sync was enabled — the setting says
+        // disabled, the workers are running, and the operator was told it worked.
+        const update = await SystemSettings._updateSettings({
           experimental_live_file_sync: newStatus,
         });
+        if (!update.success)
+          return response.status(500).json({
+            liveSyncEnabled: currentStatus === "enabled",
+            error: update.error ?? "Failed to update live sync setting.",
+          });
         if (newStatus === "enabled") {
           await Telemetry.sendTelemetry("experimental_feature_enabled", {
             feature: "live_file_sync",
