@@ -144,6 +144,24 @@ describe("a metrics failure does not break the request (ruling 1)", () => {
     }
   });
 
+  it("says nothing at all on the paths that succeed (TL-2 NIT)", () => {
+    // The once-per-process memory makes a noisy wrapper hard to notice: it
+    // would log once and then go quiet, looking like a single stray line rather
+    // than a wrapper that complains about every valid call.
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      safeObserve("chats_total", { provider: "openai" });
+      safeObserve("embeddings_total", { provider: "native" });
+      safeObserve("documents_total", { outcome: "success" });
+      safeObserve("auth_attempts_total", { outcome: "failure" });
+      const said = warn.mock.calls.flat().join(" ");
+      expect(said).not.toContain("[metrics]");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("warns ONCE per metric and label name, not once per rejected value", () => {
     // Keyed on the label NAME: an install whose provider does not map would
     // otherwise log on every chat, and keying on the VALUE would make the
@@ -243,7 +261,62 @@ describe("the wiring sits where every path goes through it", () => {
     // per token.
     const source = read("utils/helpers/index.js");
     expect(source).toMatch(/getChatCompletion", "streamGetChatCompletion"/);
-    expect(source).toMatch(/const result = await original/);
+    // TL-2: count them. `toMatch` passes on ONE `await original`, so a wrapper
+    // that lost the embedding half would still look right here.
+    expect(source.match(/const result = await original/g) ?? []).toHaveLength(2);
+  });
+});
+
+describe("a rejected call is not a served one (TL-2 NIT)", () => {
+  // Behavioural, not a source read: the increment sits AFTER `await original`,
+  // so a rejection must skip it. Wired the other way round — count first, then
+  // await — chats_total would report every attempt as a completion, and an
+  // instance whose provider was refusing every request would look busy.
+  const { getLLMProvider, getEmbeddingEngineSelection } = require("../../../utils/helpers");
+
+  it("does not increment chats_total when the connector rejects", async () => {
+    const before = asNumber(await counterValue("chats_total", { provider: "openai" }));
+    process.env.LLM_PROVIDER = "openai";
+    process.env.OPEN_AI_KEY = "sk-not-a-real-key";
+    const connector = getLLMProvider();
+
+    // Replace the underlying call with one that rejects, THROUGH the wrapper
+    // the factory already installed.
+    const boom = new Error("provider refused");
+    connector.openai = {
+      chat: { completions: { create: () => Promise.reject(boom) } },
+    };
+
+    await expect(connector.getChatCompletion([], {})).rejects.toThrow();
+    expect(await counterValue("chats_total", { provider: "openai" })).toBe(
+      before === 0 ? null : before
+    );
+  });
+
+  it("does not increment embeddings_total when embedChunks rejects", async () => {
+    // Build the engine, then make the method the FACTORY WRAPPED reject, by
+    // replacing what the wrapper calls rather than the wrapper itself — the
+    // wrapper binds the original at construction, so this reaches through it.
+    const { NativeEmbedder } = require("../../../utils/EmbeddingEngines/native");
+    const boom = new Error("embedder refused");
+    const spy = jest
+      .spyOn(NativeEmbedder.prototype, "embedChunks")
+      .mockRejectedValue(boom);
+
+    try {
+      const engine = getEmbeddingEngineSelection();
+      const before = asNumber(
+        await counterValue("embeddings_total", { provider: "native" })
+      );
+
+      await expect(engine.embedChunks(["chunk"])).rejects.toThrow("embedder refused");
+
+      expect(
+        asNumber(await counterValue("embeddings_total", { provider: "native" }))
+      ).toBe(before);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

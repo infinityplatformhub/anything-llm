@@ -264,7 +264,14 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // than computed precisely so that adding a route is a deliberate edit here — this line
     // is the one that made me declare the new route's exemption instead of letting an
     // unauthenticated mutating route mount unnoticed.
-    expect(mountedRoutesAtTestLoad).toHaveLength(317);
+    //
+    // 317 -> 318 with O2b (#112): GET /system/preflight. It is a READ, so the
+    // mutating-route sweep below does not cover it and it needs no exemption
+    // there; its own gate — answer pre-user OR with system.write, never
+    // otherwise — is held by __tests__/endpoints/preflightHttp.test.js,
+    // including that the transition closes inside one process and that an
+    // unreadable users table fails closed.
+    expect(mountedRoutesAtTestLoad).toHaveLength(318);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );

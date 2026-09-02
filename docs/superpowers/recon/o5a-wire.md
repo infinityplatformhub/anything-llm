@@ -93,9 +93,14 @@ Two constraints in tension:
 - Swallowing the throw silently returns us to a counter that reports zero forever with nobody
   noticing, which is the exact condition this issue exists to end.
 
-**Resolution: every call site wraps `observe()` in a try/catch that logs once and continues.** The
-throw still fires in tests, where it is a hard failure, and in production it lands in the log rather
-than in the user's response. The catch logs the metric name and the rejected label, never the value
+**Resolution: every call site wraps `observe()` in a try/catch that logs once and continues.** In
+production the mistake lands in the log rather than in the user's response.
+
+> **updated:** "the throw still fires in tests, where it is a hard failure" was wrong as written.
+> `safeObserve` swallows the throw everywhere, tests included — there is no test-only mode. What
+> keeps a bad label a hard failure in tests is that the suites call `observe()` DIRECTLY for that
+> assertion, and separately assert that `safeObserve` does not throw. Two different functions, not
+> one function behaving differently by environment. The catch logs the metric name and the rejected label, never the value
 that was rejected — a rejected value is by definition one that was not supposed to be published, and
 writing it to a log to explain why it was not published is the same leak one file over.
 

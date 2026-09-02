@@ -263,6 +263,112 @@ function systemEndpoints(app) {
     }
   );
 
+  /**
+   * O2b (#112) — the preflight the installer step reads. Same `runChecks` as
+   * the `doctor` CLI (#74); a second copy would drift and the drift would be
+   * invisible until someone followed the wrong remedy.
+   *
+   * THE GATE: answer when the instance has no users yet, OR when the caller
+   * holds `system.write`. Nothing else.
+   *
+   * Evaluated PER REQUEST, never cached. The transition happens inside one
+   * process — the first `User.create` during onboarding closes the window with
+   * no restart — so a module-level boolean would leave the route open for the
+   * life of that process.
+   *
+   * `isConfirmedSingleUser` and NOT `User.count()`: `models/user.js:305`
+   * returns 0 when the query throws, so `User.count() === 0` is TRUE while the
+   * database is down — which would open this route at exactly the moment its
+   * `detail` strings are most revealing, since they name the host that cannot
+   * be reached. `isConfirmedSingleUser` fails closed on both of its reads, and
+   * its own comment says the swallowed-error version of this was already found
+   * and fixed once (`actorResolver.js:308`).
+   *
+   * RESIDUAL, deliberate and not to be softened: if the database is
+   * unreachable DURING a fresh install, `isConfirmedSingleUser` fails closed and
+   * this route answers 403 — so the one preflight that would have named the
+   * unreachable database is the one an anonymous operator cannot get. The
+   * answer is the CLI, which needs no session and no database to run:
+   *
+   *     docker compose run --rm --no-deps anything-llm doctor
+   *
+   * Opening the gate to cover that case would mean an unreadable users table
+   * grants access, which is the failure this rule exists to prevent. The trade
+   * is accepted: a documented second route, not a weaker first one.
+   *
+   * `system.write` rather than `system.read`: `prisma/seeds/permissions.js:59`
+   * already draws the line that a key which may read system status must not
+   * thereby read provider configuration. A check `detail` naming which database
+   * host is unreachable, or reporting `config.metrics_exposure`, is on the far
+   * side of that line.
+   */
+  app.get(
+    "/system/preflight",
+    // Two middlewares, not a hand-rolled bridge: the pre-user check runs first
+    // and calls next() to SKIP the gate, otherwise the ordinary
+    // requirePermission runs and answers 403/404/503 exactly as it does
+    // everywhere else. Reimplementing its refusals here would be a second
+    // answer to a question the engine already answers.
+    [
+      async function preUserOrGated(request, response, next) {
+        try {
+          const {
+            isConfirmedSingleUser,
+          } = require("../utils/authorization/actorResolver");
+          // Per request. The transition happens inside one process — the first
+          // User.create during onboarding closes the window with no restart —
+          // so a cached boolean would leave this open for the process's life.
+          request.__preflightOpen = await isConfirmedSingleUser();
+          return next();
+        } catch (e) {
+          // Fail closed: an unreadable users table is not evidence of a fresh
+          // install.
+          console.error(e.message, e);
+          return response.sendStatus(503);
+        }
+      },
+      function sessionUnlessPreUser(request, response, next) {
+        // `validatedRequest` populates response.locals.user, which is where
+        // actorResolver reads the principal from — without it, a real admin
+        // resolves to no actor and the gate below refuses them. It cannot run
+        // FIRST, because on a pre-user instance there is no session to validate
+        // and it would refuse the very case the route exists to serve.
+        if (request.__preflightOpen) return next();
+        return validatedRequest(request, response, next);
+      },
+      function gateUnlessPreUser(request, response, next) {
+        if (request.__preflightOpen) return next();
+        return requirePermission("system.write", orgResource)(
+          request,
+          response,
+          next
+        );
+      },
+    ],
+    async (_, response) => {
+      try {
+        const { runChecks } = require("../utils/doctor");
+        const { scrubText } = require("../utils/diagnostics");
+        const checks = await runChecks();
+
+        // #94's scrubText runs on BUNDLE ASSEMBLY, not at the check's source,
+        // so a `detail` reaching HTTP has never been through it. The pg driver
+        // quotes the connection string on a connection failure, which is
+        // exactly the check an operator opens this for.
+        response.status(200).json({
+          checks: checks.map((check) => ({
+            ...check,
+            detail: scrubText(String(check.detail ?? "")),
+            remedy: scrubText(String(check.remedy ?? "")),
+          })),
+        });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
   app.get("/onboarding", async (_, response) => {
     try {
       const results = await SystemSettings.isOnboardingComplete();

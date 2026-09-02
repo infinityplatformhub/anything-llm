@@ -54,7 +54,7 @@ export default function OnboardingHome() {
 
         <button
           type="button"
-          onClick={() => navigate(paths.onboarding.llmPreference())}
+          onClick={() => navigate(paths.onboarding.preflight())}
           className="relative border-none z-10 h-[36px] w-[300px] py-2.5 px-5 rounded-lg bg-slate-50 hover:bg-slate-300 font-medium text-sm mt-[42px] text-zinc-900 light:text-white light:bg-slate-900 light:hover:bg-slate-800 text-center flex justify-center items-center transition-colors duration-200"
         >
           {t("onboarding.home.getStarted")}

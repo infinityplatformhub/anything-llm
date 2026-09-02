@@ -46,6 +46,28 @@ const System = {
       .catch(() => false);
   },
   /**
+   * O2b (#112): the installer preflight — the same checks the `doctor` CLI runs
+   * (#74), so an operator sees them without reading `docker compose logs`.
+   *
+   * Returns `null`, never a fabricated list, when the request fails or is
+   * refused. An empty array here would render as "every check passed", which is
+   * the one wrong answer a preflight must never give; the caller distinguishes
+   * "could not ask" from "asked and all clear".
+   *
+   * @returns {Promise<{checks: Array}|null>}
+   */
+  preflight: async function () {
+    return await fetch(`${API_BASE}/system/preflight`, {
+      headers: baseHeaders(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Could not read the preflight checks.");
+        return res.json();
+      })
+      .then((res) => (Array.isArray(res?.checks) ? res : null))
+      .catch(() => null);
+  },
+  /**
    * Marks the onboarding as complete.
    * @returns {Promise<boolean>}
    */

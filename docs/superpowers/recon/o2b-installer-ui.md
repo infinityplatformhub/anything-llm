@@ -31,18 +31,33 @@ installing, in the flow they are already in.
 
 Reading a preflight is nominally a read, but `permissions.js:59` already draws the line that a key
 which may read system status must not thereby read provider configuration — and a `detail` string
-naming which database host is unreachable is exactly that. The people who need this hold
-`system.write` (they are configuring the instance); the people who hold only `system.read` are
-being told about an instance they do not administer.
+naming which database host is unreachable is exactly that.
 
-**The onboarding exception.** Onboarding runs before any user exists, so `validatedRequest` cannot
-apply on that path. `GET /onboarding` and `POST /onboarding` already live with this, and #52's
-comment on the POST records the reasoning. The preflight route must follow the SAME rule those two
-follow, whatever it is — and this is the part to read carefully rather than assume, because a route
-that is unauthenticated during onboarding and stays unauthenticated afterwards is a system-status
-leak that lasts the life of the instance.
+### the onboarding exposure — the tree's rule is BELOW the ceiling, so the ceiling wins
 
-This is the `auth` half of the issue and should be reviewed as such.
+Read rather than assumed:
+
+| route | middleware |
+|---|---|
+| `GET /onboarding` (`system.js:178`) | **none** |
+| `POST /onboarding` (`:193`) | `validatedRequest` + `requirePermission("settings.write")` |
+| `GET /setup-complete` (`:205`) | **none**, and it returns all of `currentSettings()` |
+
+So the tree's actual convention is "reads open, writes gated" — `POST` was tightened by #52 after
+an impersonated session could mark onboarding complete, and the reads were left alone.
+
+**Following that convention here would be wrong**, and this route does not follow it. A preflight
+that answers without authentication during onboarding and keeps answering afterwards is a
+system-status leak for the life of the instance. The rule instead:
+
+> answer when the instance has no users yet (onboarding genuinely incomplete), OR when the caller
+> holds `system.write`. Never otherwise.
+
+Both states need a test, and removing the user-count guard must go red — otherwise the route
+quietly degrades to the open convention it sits beside.
+
+`GET /setup-complete`'s missing middleware is a pre-existing exposure, raised as its own issue and
+untouched here.
 
 ## 2. The UI, from the approved mockup
 
@@ -69,19 +84,32 @@ Where it goes in `Steps/index.jsx`: **before `llm-preference`**, after `home`. A
 after the LLM is configured is a post-mortem, which is the same mistake #74's entrypoint ordering
 exists to avoid.
 
-## 3. The onboarding backfill
+## 3. The onboarding backfill — ALREADY EXISTS
 
-`onboarding_complete` is a `system_settings` row (`models/systemSettings.js:856-885`). An instance
-upgraded from before that row existed has no value, so `isOnboardingComplete()` returns false and a
-working installation is offered onboarding again.
+> **updated: this section was wrong when written.** I described the backfill as work to be built,
+> from the O2 3b ruling, without checking whether it had already been built. It has:
+> `server/utils/boot/markOnboarded.js`, called from `utils/boot/index.js:59` (bootSSL) and `:114`
+> (bootHTTP). Correcting in place with this note rather than rewriting silently, because the plan
+> and the issue were both scoped off the wrong claim.
 
-Ruling already given (O2 3b): a **boot-time one-shot with a guard row** — not a migration, because
-the condition ("does this instance already have users and workspaces") is a data question, and not
-a check on every boot, because it must not re-run once answered.
+What is there:
 
-The signal for "already installed" needs care: `User.count() > 0` is the obvious one, and it is the
-same signal `/request-token`'s ruling-C branch uses to decide an instance is multi-user whatever
-its setting says. Reusing that reasoning is better than inventing a second definition.
+- `markOnboarded()` returns immediately when `isOnboardingComplete()` is already true — the guard
+  row, exactly as the ruling asked.
+- `isLegacyOnboarded()` decides "already installed" from `LLM_PROVIDER`, `VECTOR_DB`,
+  `AUTH_TOKEN || JWT_SECRET`, or multi-user mode being on.
+- Both boot paths call it before `setupTelemetry()`.
+
+Note that the signal is NOT `User.count() > 0`, which is what this section originally proposed by
+analogy with `/request-token`'s ruling-C branch. The existing heuristic is broader — an
+`LLM_PROVIDER` in the environment marks a single-user instance onboarded, and no user rows are
+needed. Changing it is not in scope; a second definition of "already installed" alongside this one
+would be worse than the one that exists.
+
+**What is missing is test coverage.** Nothing exercises the guard row today, so the behaviour the
+ruling asked for is unverified: it is correct by reading, which is the state #59 was in when
+`markOnboardingComplete` was returning true for a write that never happened. Three tests, in this
+issue.
 
 ## 4. Tests
 
@@ -95,14 +123,16 @@ its setting says. Reusing that reasoning is better than inventing a second defin
 - a blocking failure prevents advancing; a warn does not — driven through the component, not by
   reading its source
 - remedies rendered are the ones `runChecks` returned, so a second copy in JSX fails
-- backfill: an instance with users and no `onboarding_complete` row gets one; an instance with the
-  row is untouched; it does not run twice
+- backfill guard row (the code exists, the coverage does not): a legacy instance with no
+  `onboarding_complete` row gets one; an instance that already has the row is not written again; a
+  second call after the first does nothing
 
 ## Scope
 
 **In:** `GET /system/preflight` with its permission and redaction, the React step wired into
-`Steps/index.jsx`, the boot-time backfill with its guard row, and the tests above.
+`Steps/index.jsx`, tests for the EXISTING backfill's guard row, and the tests above.
 
-**Out:** exposing `--bundle` over HTTP (its own issue if ever wanted); `diagnostics.export` and its
+**Out:** changing `markOnboarded`'s legacy heuristic (§3); `GET /setup-complete`'s missing
+middleware, which is a pre-existing exposure raised as its own issue; exposing `--bundle` over HTTP (its own issue if ever wanted); `diagnostics.export` and its
 migration (O5b-ui); changing what `runChecks` checks; the mockup's visual polish beyond the states
 it defines.
