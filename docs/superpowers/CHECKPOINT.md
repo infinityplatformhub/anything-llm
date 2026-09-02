@@ -237,3 +237,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge main after #30: 2385/2385 (runInBand, fresh STORAGE_DIR).
 - #78 follow-up 034243d1: gate PASS 88/88; waiting TL-1 quick read → merge.
 - #80 e1bf4adb8: 4/5 verdicts; waiting QA-1. #40 a2bbb0de8: gate bootstrapping; 3 reviewers on it.
+- #40 a2bbb0de8: TL-1 PASS (3 directions; X1–X7 red incl. X7 "correct import, ungated route"; push throws — frozen at language level; 2 NIT → task 2). Waiting QA-2 + TL-2 + gate-40c (yarn install slow). Task-1 contract 46 exact.
+- Post-merge #88 suite running.
