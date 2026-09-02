@@ -852,3 +852,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #126 s2 RED staged (Dev2, scratch): 9 tests, N6/N4/N1 red, gate fixtures green; P1 mutant reds 7/9; P8 proven (toBeInTheDocument passes for denied user). Holds for #121.
 - Node 26 vs .nvmrc 22 → jsdom localStorage undefined → merged adminRoute 9/9 red. Opened #139 (plain: pretest guard). §7.17.
 - V8 contract + mockup LoadingChat note landed (Dev4 b493873ac).
+- #138 queue: suite 9/9 at 2cdb884ef; QM-1..5 killed with distinct sets (QM-5 = run-site-hardcoded reds RF-3b only → split justified). TL-1 blockers (2)/(3) were already fixed in 3836171c1/866d2db29. RULING → TL-1: sync-now endpoint permission (new seeded `directory.sync` vs reuse). Remaining: handler + schedule via materialization, RF-6 exact-N, _backoff skip + witness, ledger; ETA 45-60 min. #139 assigned to Dev2 (pretest node guard).
