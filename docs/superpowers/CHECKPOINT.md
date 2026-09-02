@@ -572,3 +572,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Hotfix 52a802fa4 MERGED (plain, test-only move → __testHelpers__/authorization; authorization dir 53 suites 0 failed). Main post-merge should now be fully green except #106 flakes.
 - #126 slice 1 2286a997e TL-1 PASS (a31c68e34); nit: action string evaluated at caller (`can("workspace.create")` in Home) uncovered after extraction → ledger line + fixture in slice 2. Awaiting QA-3.
 - #113 89f396381 pushed (aclCount allow+deny, role.grant bar, RF-9 6+2, D4/D5/D6/C dead; 20/20). Regating /tmp/wt-113; TL-1 3-line re-read + QA-1 6 cases dispatched.
+- #124 ab11d35a8 QA-3 FAIL: mutant "delete aria-label" survives 4/4 (null===null; matcher hits fallback visible text). TL-1 PASS superseded. Dev4 fixing tests → new SHA → regate. §7.17 logged. QA-3 → #126 s1.
