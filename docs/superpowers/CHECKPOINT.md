@@ -171,3 +171,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #87 opened: VECTOR_DB normaliser (Dev5, option ข).
 - #78: waiting impl78 final dispatch / Dev1 self-write.
 - #30 slice 3: HTTP test written, hangs ~590s; Dev4 diagnosing (hints: /api/v1 path §7.15, separate DB per run).
+
+## 2026-09-02 — #80 719b7eee reviews; #85 folded into #80; #40 waiting declared SHA
+- #80 719b7eee: QA-2 FAIL (inviteMailRateLimit/mailerTestRateLimit defined+exported, 0 call sites = inert guard); TL-1 F1 same + F2 invites.email reaches both invite.read listings (this SHA creates the disclosure) → #85 closed, projection folded into #80 step 6. Step-6 rulings: mount limiter only when email present + 429 test on real route; mask email in listings (full only for user.manage session); /v1+email 400 test; partial failure `mailed:false`; OBS-2 comment fix; product note (API invite mail needs user.manage scope). Gate 719b7eee rerun after task.sh stall (report 0 bytes, no child process); monitor armed.
+- #40: 50550143b is old-ruling WIP (X1 inline route still green); Dev2 declares SHA only after freeze + router-walk + X1–X6 red. Process: PMO sends "stop" and waits ack before any structural ruling change. Task-1 CONTRACT_EXPECT will pin exact `Tests: N passed, N total`.
+- #78: waiting impl78 final dispatch / Dev1 self-write.
