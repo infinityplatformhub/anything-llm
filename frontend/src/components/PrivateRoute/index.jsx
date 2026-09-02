@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { FullScreenLoader } from "../Preloader";
+import useCapabilities from "@/hooks/useCapabilities";
 import validateSessionTokenForUser from "@/utils/session";
 import paths from "@/utils/paths";
 import { AUTH_TIMESTAMP, AUTH_TOKEN, AUTH_USER } from "@/utils/constants";
@@ -79,6 +80,7 @@ function useIsAuthenticated() {
 export function AdminRoute({ Component, hideUserMenu = false }) {
   const { isAuthd, shouldRedirectToOnboarding, multiUserMode } =
     useIsAuthenticated();
+  const { can, loading: capabilitiesLoading } = useCapabilities();
   if (isAuthd === null) return <FullScreenLoader />;
 
   if (shouldRedirectToOnboarding) {
@@ -86,7 +88,20 @@ export function AdminRoute({ Component, hideUserMenu = false }) {
   }
 
   const user = userFromStorage();
-  return isAuthd && (user?.role === "admin" || !multiUserMode) ? (
+  // #40 task 4: `|| !multiUserMode` is untouched — a single-user deployment has
+  // no principal and an empty map, and gating it on a capability would lock it
+  // out of its own settings. `loading` is checked so the route does not bounce
+  // to home before the answer arrives: a redirect, unlike a hidden button, is
+  // not recoverable by waiting.
+  // Reachable only if the session check settles BEFORE the capability map:
+  // `isAuthd === null` above holds the route through most of the window, so
+  // removing this line reds nothing today. It is kept because the two are
+  // independent async sources and neither orders the other — a slower
+  // /my-capabilities, or a cached session, puts this on the critical path.
+  // Deliberately unguarded by a test: reproducing the ordering would mean
+  // driving useIsAuthenticated's internals, which would test the mock.
+  if (multiUserMode && capabilitiesLoading) return <FullScreenLoader />;
+  return isAuthd && (can("settings.write") || !multiUserMode) ? (
     hideUserMenu ? (
       <KeyboardShortcutWrapper>
         <Component />
@@ -108,6 +123,7 @@ export function AdminRoute({ Component, hideUserMenu = false }) {
 export function ManagerRoute({ Component }) {
   const { isAuthd, shouldRedirectToOnboarding, multiUserMode } =
     useIsAuthenticated();
+  const { can, loading: capabilitiesLoading } = useCapabilities();
   if (isAuthd === null) return <FullScreenLoader />;
 
   if (shouldRedirectToOnboarding) {
@@ -115,7 +131,20 @@ export function ManagerRoute({ Component }) {
   }
 
   const user = userFromStorage();
-  return isAuthd && (user?.role !== "default" || !multiUserMode) ? (
+  // #40 task 4: ManagerRoute guards the user-administration pages, which the
+  // server gates on user.manage (admin.js:81,120,164,215). Not the same
+  // capability as AdminRoute's — the role check collapsed them into one
+  // spelling of "not default", which is why a principal granted one and not the
+  // other got the wrong answer for at least one route.
+  // Reachable only if the session check settles BEFORE the capability map:
+  // `isAuthd === null` above holds the route through most of the window, so
+  // removing this line reds nothing today. It is kept because the two are
+  // independent async sources and neither orders the other — a slower
+  // /my-capabilities, or a cached session, puts this on the critical path.
+  // Deliberately unguarded by a test: reproducing the ordering would mean
+  // driving useIsAuthenticated's internals, which would test the mock.
+  if (multiUserMode && capabilitiesLoading) return <FullScreenLoader />;
+  return isAuthd && (can("user.manage") || !multiUserMode) ? (
     <KeyboardShortcutWrapper>
       <UserMenu>
         <Component />
