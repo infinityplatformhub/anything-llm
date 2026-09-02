@@ -278,3 +278,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge main after #80 hotfix: **2587/2587** (runInBand, fresh STORAGE_DIR, real-store env) — main fully green.
 - #84 f309f1247 (final: + gate-equality test): gate PASS (check-local, contract 10/10, related 107/107, result bound). QA-2 PASS 17/17 (carries). Waiting TL-1 delta → close/merge. #91 rulings sent (all-or-nothing before preUpdate, code fields, 400 + fix 200-on-error → 500, update-password/enable-multi-user untouched).
 - #84 f309f1247 pre-verified on merged tree (main + branch): 57/57 incl. updateSettingsReturns + mailerSettingsRoutes — no rebase needed. Waiting TL-1 delta only.
+- #40 8fdb067dc (rebased on main): inventory 316 measured (8 new routes; ldap login/enabled allowlisted with reason, entry removal → red; chats/search workspace-bound), mount order 328 non-wildcard identical. Gating (contract 82 exact + sweeps); QA-3 + TL-2 dispatched.
+- #84 f309f1247: QA-3 found gate-equality test search unbounded (slice(at).match → next route's requirePermission) → Dev1 bounds to route block + delete-line mutation; TL-1 delta pending.
+- #91 started (impl91, contract on #91, #93 dup closed — 5th today). #94 O5b opened (CLI-only, no migration). #49 RED suite in progress.
