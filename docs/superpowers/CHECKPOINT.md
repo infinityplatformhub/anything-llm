@@ -617,3 +617,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #131 (Dev5): diagnostics/index.js inherits fix via scrubText→scrubValue, not edited; RF-4 gets own bundle.test.js + mutation; 3 files. Waits #119+#120 merge.
 - #119 0e2317834 QA-2 PASS (93/93, 6/6 mutants incl. plain-seal M5 and revert M6). Awaiting TL-2 re-verdict → close/merge (run-id gate-119-0e2317834).
 - #127 0e466bccd (test-only: offset asserts, R2 count) regating; QA-3 re-fire. #132 blocked on #121 (system.read → ORG_CAPABILITIES lands there); generic-vs-specific guard ruling → TL-2. §7.17 logged.
+- #119 0e2317834 MERGED (0931e830e): TL-2 PASS (4b0b46a2b, N1-N7) + QA-2 PASS (93/93, 6/6); contract 77/77, sweeps 63/63; closed gate-119-0e2317834. Post-merge after #128's finishes. Dev5 → #131 code after #120 merge.
+- #127 0e466bccd regate green (frontend 98/98 exit 0, drift 4/4, ledger 3); awaiting QA-3 re-fire → close/merge.
