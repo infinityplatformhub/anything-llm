@@ -98,3 +98,4 @@
 - **LanceDB `table.add()` silently drops fields not in the Arrow schema** — pre-T-5 tables never gain ACL metadata through normal ingest; unlabelled population grows after T-5 ships. Backfill must migrate/rewrite the schema, not update rows. Found by Techlead on #30 05e18e79. `[→ #56]`
 - **pre-T-5 LanceDB tables have no ACL column at all** — any predicate naming `orgId` throws; slice 1a handles via schema check (ruling B). `[→ #30 1a]`
 - **`validatedRequest` passthrough when AUTH_TOKEN/JWT_SECRET unset** is reachable in production via `update-password usePassword:false` and (before the #48 denylist) via credential clear. #48 blocks the new path only. Separate issue to open by Dev1. `[→ new issue]`
+- **`SSO_ACS_URL` vs `SSO_CALLBACK_BASE_URL` not canonical across saml.js / identity.js** — setting only SSO_ACS_URL leaves OIDC on Host fallback without warning. Techlead NOTE-A on #43 4765dbae. `[→ backlog]`
