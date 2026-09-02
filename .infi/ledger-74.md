@@ -111,6 +111,21 @@ Ruling: the spelling comparison trims. `VECTOR_DB=pgvector ` with a trailing spa
 Ruling: `getVectorDbClass` is not touched. Widening it to accept other spellings is a change to how every provider is selected, well outside this issue.
 ถ้าผิด: an installer issue quietly alters provider resolution for ten vector stores.
 
+Ruling: (TL-2 A) the `ext.permitted` tests CREATE AND DROP their own fixture extension instead of asserting against whatever the database happens to have. Which extensions are installed is a property of the database, and the two this suite meets disagree: a migrated one has `pg_trgm`, a fresh one — the very thing a preflight inspects — does not.
+ถ้าผิด: exactly what happened — three tests that passed only after migration, on a tool whose subject is the state BEFORE migration. A regex accepting both shapes would have gone green without proving the halves stay apart, so the fixture is created and dropped per test instead.
+
+Ruling: the fixture is `citext`, not `pg_trgm`. After migration `20260902100000` the trigram indexes depend on pg_trgm and `DROP EXTENSION` fails 2BP01 — measured, not assumed.
+ถ้าผิด: the test setup fails on precisely the databases the suite is meant to cover.
+
+Ruling: one test asserts the probe leaves the extension UNINSTALLED afterwards. The rollback disclosure in the detail is a claim about behaviour; this is what makes it true rather than stated.
+ถ้าผิด: the doctor creates extensions on the operator's database while telling them it does not.
+
+Ruling: one test asserts `CREATE EXTENSION` is never issued at all against an installed extension, by counting the statements. What upholds ruling 6 is the FILTER, not the keyword — measured with an unprivileged role on this server: `CREATE EXTENSION IF NOT EXISTS` on an installed extension SUCCEEDS (a no-op testing no permission), while plain `CREATE EXTENSION` fails 42710 "already exists", which is not a permission error either and would be reported as a denial.
+ถ้าผิด: both statements lie about an installed extension — one green, one red — and the guard that stops either being issued would go unprotected. This also explains why a keyword-swap mutant survives: with the filter in place the two statements are equivalent, so the filter is what the test must pin. Mutation-verified: probing everything including installed extensions turns 5 tests red.
+
+Ruling: (TL-2 B) `fails naming the missing key` deletes `SIG_SALT` from `process.env` and restores it in `finally`. The generated Prisma client loads dotenv from the `.env` of the tree it was generated in, with that path baked in, so a developer's own secrets are already in `process.env` when the test runs.
+ถ้าผิด: the test asserts on the harness rather than on the check, and passes or fails according to whose machine it is. Its sibling now SETS `API_KEY_PEPPER` explicitly for the same reason.
+
 ## Residual
 
 - **QA-3 ruling 1, the half that is not testable here.** `POST /system/update-password` with `usePassword:false` blanks `AUTH_TOKEN` and `JWT_SECRET` in memory only (`endpoints/system.js:705-707`) — no `updateENV` call, nothing written. Three tests cover what O2a controls: a restart finds no `AUTH_TOKEN`, `JWT_SECRET` is not rotated, and ensure-secrets never writes `AUTH_TOKEN` back. The in-memory/on-disk divergence itself is pre-existing behaviour outside this issue's diff; flagged for O2b, where the React step meets it.

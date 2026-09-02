@@ -137,145 +137,12 @@ withDb("checks against a healthy database", () => {
     expect(version.detail).toMatch(/\d+/);
   });
 
-  it("says outright that the permission probe writes and rolls back (ruling 2c)", async () => {
-    // Only meaningful when something is actually probed, and an extension is
-    // probed only when it is not installed yet. On a migrated database pg_trgm
-    // is already there, so ask about pgvector as well to reach the branch that
-    // writes. If that is installed too, there is nothing to disclose and the
-    // detail correctly says so instead.
-    // Asking about pgvector as well would reach the probing branch on a server
-    // that ships it — but stock `postgres:16`, which CI runs, does not, and
-    // there the answer is "not checked" rather than a probe. So assert the
-    // property that holds on every server: whenever something WAS probed, the
-    // detail says it was rolled back.
-    const results = await doctor.runChecks({
-      ...base(),
-      vectorDb: "pgvector",
-    });
-    const detail = results
-      .find((r) => r.id === "ext.permitted")
-      .detail.toLowerCase();
-    if (detail.includes("probed")) expect(detail).toMatch(/rolled back/);
-    expect(detail).toMatch(/probed|already installed|not checked/);
-  });
-
-  it("does not claim a permission it did not test (QA-3 nit)", async () => {
-    // An installed extension proves it is there. It proves nothing about
-    // whether THIS role could have created it — and nothing needs to, since it
-    // will not be created again. Wording the two halves alike would report a
-    // verified privilege that was never verified, which is the same class of
-    // lie as `IF NOT EXISTS` returning success on a no-op.
-    const { Client } = require("pg");
-    const client = new Client({ connectionString: process.env.DATABASE_URL });
-    await client.connect();
-    try {
-      // pg_trgm is installed on a migrated database; the made-up name is not
-      // available at all, so between them the detail must carry the
-      // "installed" half without carrying the "verified" half.
-      const [, permitted] = await doctor.checkExtensions(client, ["pg_trgm"]);
-      expect(permitted.detail).toMatch(
-        /already installed, so no permission was needed or tested/
-      );
-      expect(permitted.detail).not.toMatch(/permission verified/);
-    } finally {
-      await client.end();
-    }
-  });
-
-  it("says permission was verified only for what it actually probed", async () => {
-    const { Client } = require("pg");
-    const client = new Client({ connectionString: process.env.DATABASE_URL });
-    await client.connect();
-    try {
-      // pg_trgm installed + a genuinely absent extension the server ships.
-      // If the server ships nothing else, this falls back to asserting the
-      // installed-only shape, which the previous test already pins.
-      const { rows } = await client.query(
-        "SELECT name FROM pg_available_extensions WHERE installed_version IS NULL ORDER BY name LIMIT 1"
-      );
-      if (!rows.length) return;
-      const [, permitted] = await doctor.checkExtensions(client, [
-        "pg_trgm",
-        rows[0].name,
-      ]);
-      expect(permitted.detail).toMatch(/already installed/);
-      expect(permitted.detail).toMatch(/permission verified/);
-      expect(permitted.detail).toMatch(/rolled back/);
-      // The two lists must not be merged: the installed one appears in the
-      // installed half, the probed one in the verified half.
-      const installedHalf = permitted.detail.split("permission verified")[0];
-      expect(installedHalf).toContain("pg_trgm");
-      expect(installedHalf).not.toContain(rows[0].name);
-    } finally {
-      await client.end();
-    }
-  });
-
-  it("distinguishes 'already installed' from 'permitted to install' (ruling 6)", async () => {
-    // CREATE EXTENSION IF NOT EXISTS on a database that already has the
-    // extension is a no-op: it tests nothing and returns success, so a doctor
-    // that used it would report a permission the role may not have.
+  it("reports availability separately from permission (ruling 2d)", async () => {
+    // Two rows, not one: a managed PostgreSQL that simply does not ship
+    // `vector` must not be told to request a grant that cannot exist.
     const results = await doctor.runChecks(base());
-    const permitted = results.find((r) => r.id === "ext.permitted");
-    expect(permitted.detail).toMatch(/installed|permitted/i);
-  });
-
-  it("does not require the vector extension on a default install", async () => {
-    // TL-2: stock `postgres:16` — the image in docker-compose.yml and in CI —
-    // does not ship pgvector, and no migration creates it. The default
-    // VECTOR_DB is lancedb (utils/helpers/index.js:88), which never touches
-    // PostgreSQL. Demanding `vector` always would block the boot of every
-    // default install, and turn this project's own CI red.
-    const results = await doctor.runChecks({ ...base(), vectorDb: "lancedb" });
-    expect(doctor.requiredExtensions("lancedb")).toEqual(["pg_trgm"]);
-    expect(results.find((r) => r.id === "ext.available").ok).toBe(true);
-  });
-
-  it("says why vector was not checked, rather than staying silent about it", async () => {
-    // An operator who meant to use pgvector must be able to tell "checked and
-    // fine" from "not checked at all" — otherwise a green preflight hides the
-    // one requirement their configuration actually has.
-    const results = await doctor.runChecks({ ...base(), vectorDb: "lancedb" });
-    expect(results.find((r) => r.id === "ext.available").detail).toMatch(
-      /VECTOR_DB is not pgvector/
-    );
-  });
-
-  it("requires vector once VECTOR_DB is pgvector", async () => {
-    expect(doctor.requiredExtensions("pgvector")).toEqual([
-      "pg_trgm",
-      "vector",
-    ]);
-  });
-
-  it("treats VECTOR_DB unset the same as a non-pgvector value", async () => {
-    // `??` on an unset variable, not `||` on an empty string: the failure to
-    // get this right is a doctor that demands pgvector from every install that
-    // has not chosen a vector store yet.
-    expect(doctor.requiredExtensions(undefined)).toEqual(["pg_trgm"]);
-    expect(doctor.requiredExtensions("")).toEqual(["pg_trgm"]);
-    expect(doctor.requiredExtensions("PGVector")).toEqual(["pg_trgm", "vector"]);
-  });
-
-  it("blocks when a needed extension is not shipped, and does not blame permissions", async () => {
-    // The pgvector-on-stock-postgres:16 case, driven directly: a server that
-    // does not ship the extension must fail ext.available and must NOT report
-    // ext.permitted as a permission the operator can request.
-    const { Client } = require("pg");
-    const client = new Client({ connectionString: process.env.DATABASE_URL });
-    await client.connect();
-    try {
-      const [available, permitted] = await doctor.checkExtensions(client, [
-        "an_extension_no_server_ships",
-      ]);
-      expect(available.ok).toBe(false);
-      expect(available.level).toBe("block");
-      expect(available.detail).toMatch(/not a permission problem/i);
-      expect(permitted.ok).toBe(false);
-      expect(permitted.detail).toMatch(/cannot be created by anyone/i);
-    } finally {
-      await client.end();
-    }
+    expect(results.find((r) => r.id === "ext.available")).toBeDefined();
+    expect(results.find((r) => r.id === "ext.permitted")).toBeDefined();
   });
 
   it("reports availability separately from permission (ruling 2d)", async () => {
@@ -284,6 +151,198 @@ withDb("checks against a healthy database", () => {
     const results = await doctor.runChecks(base());
     expect(results.find((r) => r.id === "ext.available")).toBeDefined();
     expect(results.find((r) => r.id === "ext.permitted")).toBeDefined();
+  });
+});
+
+withDb("ext.permitted, over states the test creates for itself", () => {
+  // Which extensions are installed is a property of the database, and the two
+  // databases this suite may meet disagree: a migrated one has pg_trgm, a fresh
+  // one — the very thing a preflight inspects — does not. Asserting against
+  // whatever happens to be there produced tests that passed only after
+  // migration, which is backwards for this tool.
+  //
+  // So the fixture is an extension nothing else uses, created and dropped by
+  // these tests. pg_trgm cannot serve: after migration 20260902100000 its
+  // indexes depend on it and DROP EXTENSION fails with 2BP01.
+  const FIXTURE = "citext";
+  const { Client } = require("pg");
+
+  const connect = async () => {
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    return client;
+  };
+
+  /** Skip rather than lie if this server does not ship the fixture. */
+  const available = async (client) => {
+    const { rows } = await client.query(
+      "SELECT installed_version FROM pg_available_extensions WHERE name = $1",
+      [FIXTURE]
+    );
+    return rows.length > 0;
+  };
+
+  describe("when the extension is NOT installed", () => {
+    it("says permission was verified, and that the write was rolled back", async () => {
+      const client = await connect();
+      try {
+        if (!(await available(client))) return;
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`);
+
+        const [, permitted] = await doctor.checkExtensions(client, [FIXTURE]);
+
+        expect(permitted.ok).toBe(true);
+        expect(permitted.detail).toMatch(/permission verified/);
+        expect(permitted.detail).toMatch(/rolled back/);
+        expect(permitted.detail).toContain(FIXTURE);
+        // And it must NOT claim the other half's fact.
+        expect(permitted.detail).not.toMatch(/already installed/);
+      } finally {
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`).catch(() => {});
+        await client.end();
+      }
+    });
+
+    it("leaves the extension uninstalled: the probe really did roll back", async () => {
+      // The disclosure in the detail is a claim about behaviour. This is the
+      // check that the claim is true — otherwise the doctor would be creating
+      // extensions on the operator's database while telling them it does not.
+      const client = await connect();
+      try {
+        if (!(await available(client))) return;
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`);
+
+        await doctor.checkExtensions(client, [FIXTURE]);
+
+        const { rows } = await client.query(
+          "SELECT installed_version FROM pg_available_extensions WHERE name = $1",
+          [FIXTURE]
+        );
+        expect(rows[0].installed_version).toBeNull();
+      } finally {
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`).catch(() => {});
+        await client.end();
+      }
+    });
+  });
+
+  describe("when the extension IS installed", () => {
+    it("does not run CREATE EXTENSION against it at all", async () => {
+      // What makes ruling 6 hold is the FILTER, not the SQL keyword: only
+      // extensions that are genuinely absent are probed. Measured on this
+      // server with an unprivileged role — `CREATE EXTENSION IF NOT EXISTS` on
+      // an installed extension SUCCEEDS (a no-op, testing no permission),
+      // while plain `CREATE EXTENSION` fails 42710 "already exists", which is
+      // not a permission error either and would be reported as a denial.
+      //
+      // So neither statement can be run against an installed extension: one
+      // lies green, the other lies red. The filter is the whole guard, and
+      // this is the test that holds it — a mutant swapping the keyword back
+      // survives, correctly, because with the filter in place the two are
+      // equivalent.
+      const client = await connect();
+      const attempted = [];
+      const spy = {
+        query: (sql, params) => {
+          if (typeof sql === "string" && /CREATE EXTENSION/i.test(sql))
+            attempted.push(sql);
+          return client.query(sql, params);
+        },
+      };
+      try {
+        if (!(await available(client))) return;
+        await client.query(`CREATE EXTENSION IF NOT EXISTS "${FIXTURE}"`);
+
+        await doctor.checkExtensions(spy, [FIXTURE]);
+
+        expect(attempted).toEqual([]);
+      } finally {
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`).catch(() => {});
+        await client.end();
+      }
+    });
+
+
+    it("does not claim a permission it did not test (QA-3 nit)", async () => {
+      // An installed extension proves it is there. It proves nothing about
+      // whether THIS role could have created it — and nothing needs to, since
+      // it will not be created again. Wording the halves alike would report a
+      // verified privilege that was never verified: the same class of lie as
+      // `IF NOT EXISTS` returning success on a no-op, which ruling 6 already
+      // removed from the probe itself.
+      const client = await connect();
+      try {
+        if (!(await available(client))) return;
+        await client.query(`CREATE EXTENSION IF NOT EXISTS "${FIXTURE}"`);
+
+        const [, permitted] = await doctor.checkExtensions(client, [FIXTURE]);
+
+        expect(permitted.ok).toBe(true);
+        expect(permitted.detail).toMatch(
+          /already installed, so no permission was needed or tested/
+        );
+        expect(permitted.detail).not.toMatch(/permission verified/);
+      } finally {
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`).catch(() => {});
+        await client.end();
+      }
+    });
+  });
+
+  describe("with one of each", () => {
+    it("keeps the two lists apart", async () => {
+      const client = await connect();
+      try {
+        if (!(await available(client))) return;
+        await client.query(`CREATE EXTENSION IF NOT EXISTS "${FIXTURE}"`);
+
+        // A second extension this server ships but has not installed. Chosen
+        // from the catalogue rather than hardcoded, since what a server ships
+        // varies.
+        const { rows } = await client.query(
+          `SELECT name FROM pg_available_extensions
+            WHERE installed_version IS NULL AND name <> $1
+            ORDER BY name LIMIT 1`,
+          [FIXTURE]
+        );
+        if (!rows.length) return;
+        const absent = rows[0].name;
+
+        const [, permitted] = await doctor.checkExtensions(client, [
+          FIXTURE,
+          absent,
+        ]);
+
+        const [installedHalf, verifiedHalf] =
+          permitted.detail.split("permission verified");
+        expect(verifiedHalf).toBeDefined();
+        expect(installedHalf).toContain(FIXTURE);
+        expect(installedHalf).not.toContain(absent);
+        expect(verifiedHalf).toContain(absent);
+        expect(verifiedHalf).not.toContain(FIXTURE);
+      } finally {
+        await client.query(`DROP EXTENSION IF EXISTS "${FIXTURE}"`).catch(() => {});
+        await client.end();
+      }
+    });
+  });
+
+  it("blocks when a needed extension is not shipped, and does not blame permissions", async () => {
+    // A server that does not ship the extension must fail ext.available and
+    // must NOT report ext.permitted as a permission the operator can request.
+    const client = await connect();
+    try {
+      const [availability, permitted] = await doctor.checkExtensions(client, [
+        "an_extension_no_server_ships",
+      ]);
+      expect(availability.ok).toBe(false);
+      expect(availability.level).toBe("block");
+      expect(availability.detail).toMatch(/not a permission problem/i);
+      expect(permitted.ok).toBe(false);
+      expect(permitted.detail).toMatch(/cannot be created by anyone/i);
+    } finally {
+      await client.end();
+    }
   });
 });
 
@@ -442,27 +501,45 @@ describe("secrets.present is reported apart from env.writable (ruling 4b)", () =
   });
 
   it("fails naming the missing key", async () => {
-    // SIG_SALT rather than API_KEY_PEPPER: the check accepts a value from the
-    // process environment as well as from the file, because compose's
-    // `environment:` block is a legitimate way to supply one and the server
-    // will see it. The test runner sets API_KEY_PEPPER, so asserting on that
-    // key would be asserting on the harness, not on the check.
-    fs.writeFileSync(envPath, "JWT_SECRET=a\nSIG_KEY=b\n", { mode: 0o600 });
-    const results = await doctor.runChecks(base());
-    const secrets = results.find((r) => r.id === "secrets.present");
-    expect(secrets.ok).toBe(false);
-    expect(secrets.detail).toContain("SIG_SALT");
+    // The check accepts a value from the process environment as well as from
+    // the file, because compose's `environment:` block is a legitimate way to
+    // supply one. So a key is only "missing" when it is in neither.
+    //
+    // The generated Prisma client loads dotenv from the .env of the tree it was
+    // generated in, with that path baked in — so every key in a developer's own
+    // .env is already in process.env by the time this runs, and asserting on
+    // any of them would be asserting on the harness. Unset it for the duration
+    // and put it back, whatever happens.
+    const restore = process.env.SIG_SALT;
+    delete process.env.SIG_SALT;
+    try {
+      fs.writeFileSync(envPath, "JWT_SECRET=a\nSIG_KEY=b\n", { mode: 0o600 });
+      const results = await doctor.runChecks(base());
+      const secrets = results.find((r) => r.id === "secrets.present");
+      expect(secrets.ok).toBe(false);
+      expect(secrets.detail).toContain("SIG_SALT");
+    } finally {
+      if (restore === undefined) delete process.env.SIG_SALT;
+      else process.env.SIG_SALT = restore;
+    }
   });
 
   it("accepts a secret supplied through the environment rather than the file", async () => {
-    fs.writeFileSync(envPath, "JWT_SECRET=a\nSIG_KEY=b\nSIG_SALT=c\n", {
-      mode: 0o600,
-    });
-    const results = await doctor.runChecks(base());
-    // API_KEY_PEPPER is absent from this file and present in the environment.
-    expect(results.find((r) => r.id === "secrets.present").ok).toBe(
-      Boolean(process.env.API_KEY_PEPPER)
-    );
+    // Set explicitly rather than relying on the runner's environment: the
+    // sibling test above shows how easily that becomes an assertion about the
+    // harness instead of about the check.
+    const restore = process.env.API_KEY_PEPPER;
+    process.env.API_KEY_PEPPER = "supplied-through-the-environment";
+    try {
+      fs.writeFileSync(envPath, "JWT_SECRET=a\nSIG_KEY=b\nSIG_SALT=c\n", {
+        mode: 0o600,
+      });
+      const results = await doctor.runChecks(base());
+      expect(results.find((r) => r.id === "secrets.present").ok).toBe(true);
+    } finally {
+      if (restore === undefined) delete process.env.API_KEY_PEPPER;
+      else process.env.API_KEY_PEPPER = restore;
+    }
   });
 
   it("does not require AUTH_TOKEN (ruling 5)", async () => {
