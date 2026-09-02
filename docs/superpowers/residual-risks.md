@@ -179,3 +179,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 ## #102 residuals
 - safeObserve swallows in tests too; a call site passing a forbidden label goes silent, not red (NIT: spy console.warn).
 - chats_total source assert covers one wrapper (NIT: behavioural reject→+0 for both).
+
+## #96 residuals (group grants)
+- group_members writes do not bump policy version → documentFilter cache stale up to 30s (removed member keeps access) — S4a #113 owns the fix.
+- A creator holding system.write only via group can now mint system.write API keys (ceiling asks engine).
+- groupIdsFor user-type guard is redundant for today's id shapes (G6); kept as NaN barrier for future numeric non-user principals.
+- Invariant: group expansion widens a key's deny, never its allow.

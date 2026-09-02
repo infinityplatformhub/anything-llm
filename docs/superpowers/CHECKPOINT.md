@@ -355,3 +355,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 S4a TL-1 opinion: union_id as subject; checkpoint stores provider cursor/time not ours; emailVerified exemption via driver setting true, not core bypass; "Lark wins" over an already-federated account = takeover shape → USER DECISION pending.
 - Post-merge suite after #49: 2777/2777 green. Post-merge after #40 t2 + #102 running (/tmp/postmerge-102.log).
 - Post-merge after #40 t2 + #102: inviteMailRoutes red in full run, 28/28 ×3 alone, merges unrelated → logged #106. Waiting suite total.
+- #96 0fcf64da9 merged 334895e9b (authz files identical to branch), closed (infi-run:gate-96-0fcf64da9). 78/114. wt-96/g96 reaped. Dev3 → #98 (ROUTE_MOUNT_GUARD=off ruling) then S4a #113 after TL-1 RF + user Q4.
+- #112 plain half 259540acb gate running at /tmp/wt-112 (g112). #114 opened (GET /setup-complete raw env passthrough, auth).
