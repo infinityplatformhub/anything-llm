@@ -79,3 +79,4 @@
 - [→ backlog] BrowserExtensionApiKey.create bypasses scope ceiling; any role gaining browser-extension.write could mint document.write credentials without holding it (QA-1 #35 NIT-2)
 - [→ backlog] #35 empty-trim branch has no test reaching it (fixture dies at key.manage first); use key.manage-only principal, assert /nothing to mint/ (QA-1 NIT-1)
 - [→ #55] agent generated-files have no owner row; any principal with a valid uuid reads any tenant's file; #41 blocks bound keys only (Dev1)
+- [→ #53] view-as-user cannot GET /workspaces, search, or agent files (chat.send is a membership proxy denied by R5); #52 kept the 044000 wall instead of seeding workspace.read to member (Dev2 measured org-wide grant matches every workspace)
