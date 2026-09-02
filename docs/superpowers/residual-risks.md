@@ -234,3 +234,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 
 ## #122 (QA-1 NIT-1)
 `connectionBudget.test.js` guards the disconnect hook by source grep for `$disconnect()`; a literal kept behind `if (false)` survives 12/12 (M4). Fail-safe direction (broken guard = slow noisy gate, not wrong result). Fix: assert the effect in-process (pg_stat_activity backend count before/after hook, or spy on the real client's `$disconnect`). Also: two parallel gates while something holds 40 backends still exceed max_connections=100; two parallel gates alone are safe (peak 82/89).
+
+## #122 (QA-2)
+`connectionBudget.test.js:206` 500ms timeout is flaky (4/6 at 500ms, 6/6 at 1000ms). Raise to 2000ms in a follow-up; the behaviour it tests is correct.
+
+## #125 (TL-2 + QA-2)
+Guard-below-cache equivalence depends on cache key being exactly the material; adding KEY_VERSION or multi-entry makes guard-before-cache load-bearing with no test. Timing oracle closes only after the first derivation; relies on #115 hydrating before `listen()`, no test holds that coupling.
