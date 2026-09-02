@@ -107,12 +107,9 @@ describe("issue 52: every session-authenticated mutating route asks something", 
             "./endpoints/"
           )
       )
+      // Every destructured import from ./endpoints is registration-shaped.
+      // No spelling convention is trusted: aliases and non-Endpoints names stay visible.
       .flatMap((node) => node.declarations[0].id.properties)
-      .filter(
-        (property) =>
-          property.key.name.endsWith("Endpoints") ||
-          property.key.name === "agentWebsocket"
-      )
       .map((property) => ({
         exported: property.key.name,
         local: property.value.name,
