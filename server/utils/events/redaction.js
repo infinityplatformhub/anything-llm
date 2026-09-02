@@ -262,15 +262,68 @@ const PII_CHANGE_FIELDS = new Set([
 const MAX_DEPTH = 8;
 
 /** Replace every pattern hit in a string with its class marker. */
+/**
+ * #131: characters that are invisible in a value and defeat every pattern above.
+ *
+ * Measured on `da2cb0cd8`: a single one of these anywhere inside a value made it
+ * invisible to EVERY pattern here — national id, phone, card, credential, email —
+ * and the row then recorded `redactions: []`. Empty redactions is the sharp edge:
+ * it is positive evidence of cleanliness that is false, where a mangled value
+ * would at least look wrong.
+ *
+ * `\p{Cf}` carries the class; the extra list carries what the category misses.
+ * Measured: 11 of the 12 leaking codepoints are `Cf`, but U+034F COMBINING
+ * GRAPHEME JOINER is `Mn` and the category alone walks straight past it. A bare
+ * category is not enough, and a bare list is not future-proof — so both, with a
+ * test per listed codepoint.
+ *
+ * NOT NFKC, for the reason this file already gives one screen up: normalisation
+ * changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so scrub-then-map-offsets-back is
+ * unsound. Stripping is different in kind — measured, every codepoint here is
+ * length-reducing by exactly one and nothing is substituted.
+ */
+const INVISIBLE = /[\p{Cf}\u034F]/gu;
+
+/**
+ * Replace every pattern hit in a string with its class marker.
+ *
+ * The scan runs TWICE when the value carries invisible characters: once on the
+ * value as stored, and once on a stripped copy. The stripped copy is what the
+ * patterns get to see, and if it hits, the stripped text is what is kept.
+ *
+ * Keeping the stripped text on a hit is deliberate. A hit means the value was
+ * PII wearing a disguise, and preserving the disguise next to `[redacted:…]`
+ * keeps the evasion attempt in the log for no benefit. When nothing hits, the
+ * ORIGINAL is returned byte-identical: `utils/TextSplitter/index.js:176` inserts
+ * U+200B at ICU word boundaries because Thai has no spaces between words, so a
+ * strip that rewrote every value would corrupt our own output.
+ *
+ * The two steps are one function on purpose. Stripping without re-running the
+ * patterns removes the disguise and leaves the value — the worst of both.
+ */
 function scrubString(value, hits) {
-  let out = value;
-  for (const { name, re } of PATTERNS) {
-    out = out.replace(re(), () => {
-      hits.add(name);
-      return `[redacted:${name}]`;
-    });
-  }
-  return out;
+  const scan = (text) => {
+    let out = text;
+    let matched = false;
+    for (const { name, re } of PATTERNS) {
+      out = out.replace(re(), () => {
+        hits.add(name);
+        matched = true;
+        return `[redacted:${name}]`;
+      });
+    }
+    return { out, matched };
+  };
+
+  const direct = scan(value);
+  INVISIBLE.lastIndex = 0;
+  if (!INVISIBLE.test(value)) return direct.out;
+
+  // Strip from the ORIGINAL, not from `direct.out`: a marker already
+  // substituted in would hide the rest of the value from this second pass.
+  const stripped = scan(value.replace(INVISIBLE, ""));
+  if (stripped.matched) return stripped.out;
+  return direct.out;
 }
 
 function scrubValue(value, hits, depth) {

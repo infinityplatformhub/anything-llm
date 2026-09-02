@@ -435,6 +435,122 @@ describe("issue 71: invite codes never reach the audit log", () => {
       });
     });
 
+    describe("#131 — one invisible character defeated every pattern", () => {
+      // A single format character inside a value made it invisible to every
+      // pattern here, and the row then recorded `redactions: []` — positive
+      // evidence of cleanliness that was false. Twelve codepoints were measured
+      // leaking before the fix; each is named so a regression says WHICH one.
+      //
+      // Not NFKC. `redaction.js` rejects normalisation for a reason that still
+      // holds: NFKC changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so mapping a
+      // scrubbed offset back is unsound. Stripping these is different in kind —
+      // measured, every one is length-reducing by exactly 1 and nothing is
+      // substituted.
+      const INVISIBLE = [
+        ["U+200B zero-width space", "\u200B"],
+        ["U+200C zero-width non-joiner", "\u200C"],
+        ["U+200D zero-width joiner", "\u200D"],
+        ["U+2060 word joiner", "\u2060"],
+        ["U+FEFF byte-order mark", "\uFEFF"],
+        ["U+00AD soft hyphen", "\u00AD"],
+        ["U+180E Mongolian vowel separator", "\u180E"],
+        ["U+034F combining grapheme joiner", "\u034F"],
+        ["U+200E left-to-right mark", "\u200E"],
+        ["U+061C Arabic letter mark", "\u061C"],
+        ["U+2066 left-to-right isolate", "\u2066"],
+        ["U+FFF9 interlinear annotation anchor", "\uFFF9"],
+      ];
+
+      // The secret half of each value — what must not survive. Split at the
+      // point the character is inserted, so the assertion is about the VALUE
+      // rather than about the redaction marker.
+      const SECRETS = [
+        ["national id", "1234567", "890123", "thai_national_id"],
+        ["phone", "08123", "45678", "phone_th"],
+        ["card", "4111111111", "111111", "credit_card"],
+        ["credential", "apw-inv-ABCDEFGH", "IJKLMNOP", "credential"],
+      ];
+
+      describe.each(INVISIBLE)("%s", (_label, mark) => {
+        test.each(SECRETS)(
+          "a %s carrying it is redacted, and the digits are GONE",
+          async (_kind, head, tail, klass) => {
+            const row = await scrubbed(`${head}${mark}${tail}`);
+            // RF-2, as strengthened: `redactions` being non-empty is NOT the
+            // assertion. Measured on the unfixed code,
+            // `vic<ZWSP>tim@example.com` redacted the domain and left `vic`
+            // behind — the array was populated and the row looked handled while
+            // the value leaked. So the value is what gets asserted.
+            expect(row).not.toContain(head + mark + tail);
+            expect(row).not.toContain(tail);
+            expect(row).toContain(`[redacted:${klass}]`);
+          }
+        );
+
+        test("an email carrying it is redacted in BOTH halves", async () => {
+          // Split-local and split-domain are different failures and only one of
+          // them was in the original report. Measured before the fix:
+          // `vic<ZWSP>tim@example.com` -> `vic<ZWSP>[redacted:email]` (partial,
+          // and it LOOKS handled); `victim@exa<ZWSP>mple.com` -> untouched.
+          for (const value of [
+            `vic${mark}tim@example.com`,
+            `victim@exa${mark}mple.com`,
+          ]) {
+            const row = await scrubbed(value);
+            expect(row).not.toContain("victim");
+            expect(row).not.toContain("vic");
+            expect(row).toContain("[redacted:email]");
+          }
+        });
+      });
+
+      test("the nested `changes` path #71 exists to close is covered too", async () => {
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const { data, redactions } = redactEventData({
+          changes: { code: "apw-inv-ABCDEFGH\u200BIJKLMNOP" },
+        });
+        expect(JSON.stringify(data)).not.toContain("IJKLMNOP");
+        expect(redactions).toContain("credential");
+      });
+
+      describe("what must NOT change", () => {
+        test("Thai text carrying U+200B from TextSplitter is byte-identical", async () => {
+          // `utils/TextSplitter/index.js:176` inserts U+200B at ICU word
+          // boundaries on purpose, because Thai has no spaces between words. A
+          // strip that rewrote every value would corrupt our own output, so the
+          // stripped copy is used to MATCH and the original is what survives
+          // when nothing matches.
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const thai = "สวัสดี\u200Bครับ\u200Bยินดีต้อนรับ";
+          expect(scrubValue(thai, new Set(), 0)).toBe(thai);
+        });
+
+        test("a value with an invisible character but no PII is untouched", async () => {
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const value = "workspace\u200Bname\u00ADhere";
+          expect(scrubValue(value, new Set(), 0)).toBe(value);
+        });
+
+        test("a value with no invisible character at all is untouched", async () => {
+          const { scrubValue } = require("../../../utils/events/redaction");
+          expect(scrubValue("ordinary name", new Set(), 0)).toBe(
+            "ordinary name"
+          );
+        });
+
+        test("nothing is flagged merely for containing an invisible character", async () => {
+          // Proposed and declined. TextSplitter produces these legitimately, so
+          // the flag would fire on our own output — and #94's lesson is that a
+          // signal firing on correct input gets ignored. Recorded as a decision.
+          const { redactEventData } = require("../../../utils/events/redaction");
+          const { redactions } = redactEventData({
+            name: "สวัสดี\u200Bครับ",
+          });
+          expect(redactions).toEqual([]);
+        });
+      });
+    });
+
     describe("no checksum validation, deliberately", () => {
       // Thai mod-11 removes only ~9% of timestamp false positives (measured:
       // 18,184 of 200,000), and Luhn does not remove the migration-id one at
