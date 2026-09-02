@@ -839,3 +839,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #138 queue half SHA c3f5b9b6a (rebased on eaf910819; includes a8841bf86). Gate setup; TL-1 + QA-1 dispatch.
 
 - #136 SLICE 1 MERGED (f76172fec; gate PASS, TL-2 PASS 160ee0c15, QA-2 PASS, suite 3309/0). Issue OPEN for slice 2 (offboardUser).
+- #138 queue-half TL-1 harness ruling (f9d206ad8): afterCandidates in constructor ACCEPTED + RF-S (no production construction passes a hook; mutant JobRuntime passes one); RF-3 must split claim-side (:41) and run-side (:42); driver constants must be exported (or worstCaseRequestMs()) — literal copy rejected; heartbeat suppression honest (timers coalesce, measured); policy_versions delta EXACT on pinned baseline. Dev3: seam + lease written, QA-1's 4 probes pass (first lease was 320000 = 2× "headroom", caught by RF-3 recompute); jest suite + 5 mutants + handler/schedule/sync-now/_backoff skip remaining, ETA 60-75 min.
+- #136 slice 1 merged; wt-136 + g136 reaped. wt-138 → 3836171c1 (queue half in progress, not yet a gate target).
