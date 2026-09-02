@@ -199,6 +199,48 @@ describe("issue 49 TL-2: the stamps are integers this server could have written"
     ).toEqual({ valid: false, reason: "malformed" });
   });
 
+  // QA-1 NIT-1: the two skew bounds (embedSessionToken.js:206-209) were TESTING EACH OTHER.
+  // Every case above moves both stamps together — `mintSessionToken` defaults `firstIssuedAt`
+  // to `issuedAt`, so a future-stamped token is future in both fields and either bound alone
+  // refuses it. Removing one and running the suite left 37/37 green: two guards, one of them
+  // provably unasserted, and no way to tell which.
+  //
+  // The pair below diverges them. Each test moves ONE stamp past the skew and leaves the other
+  // in the past, so exactly one bound can refuse it — which is what makes each bound
+  // individually necessary rather than jointly sufficient.
+
+  test("a future issuedAt is refused even when firstIssuedAt is in the past", async () => {
+    const now = Date.now();
+    const token = mintSessionToken({
+      embedUuid: EMBED,
+      sessionId: SESSION,
+      issuedAt: now + 60 * 60 * 1000,
+      firstIssuedAt: now - 1000,
+    });
+
+    expect(
+      verifySessionToken({ token, embedUuid: EMBED, sessionId: SESSION, now })
+    ).toEqual({ valid: false, reason: "malformed" });
+  });
+
+  test("a future firstIssuedAt is refused even when issuedAt is in the past", async () => {
+    // The mirror, and the one that was actually unguarded. A session claiming to have OPENED
+    // in the future is nonsense the absolute ceiling would then compute against: with
+    // `firstIssuedAt` far enough ahead, `now - firstIssuedAt` is negative and the 7-day
+    // ceiling never trips, so the session never ends.
+    const now = Date.now();
+    const token = mintSessionToken({
+      embedUuid: EMBED,
+      sessionId: SESSION,
+      issuedAt: now - 1000,
+      firstIssuedAt: now + 60 * 60 * 1000,
+    });
+
+    expect(
+      verifySessionToken({ token, embedUuid: EMBED, sessionId: SESSION, now })
+    ).toEqual({ valid: false, reason: "malformed" });
+  });
+
   test("an unparseable firstIssuedAt is refused too, not only issuedAt", async () => {
     // Asserted separately because they are separate fields: a check written for the first
     // stamp and not the second leaves the ABSOLUTE ceiling computable from garbage.
