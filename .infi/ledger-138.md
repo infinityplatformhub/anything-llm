@@ -183,3 +183,138 @@ Fixed in three places:
   with no timeout — a dead port is not a substitute for a hung one.
 - `hangToken` is a separate switch because the token call precedes any page request,
   so `failOnPage` cannot reach it.
+
+---
+
+# S4b slice 3 — the QUEUE half (#138), second sitting
+
+The driver half merged at `1822da5d6`. This is the queue, the runner, the sync-now
+route, and the two review findings that landed on them.
+
+## Rulings
+
+Ruling: the lease is a DERIVED EXPRESSION on the driver's exported constants, never a
+literal — `(DEFAULT_TIMEOUT_MS + max(BACKOFF_CEILING_MS, MAX_RETRY_AFTER_MS)) *
+(DEFAULT_MAX_RETRIES + 1)` = 160000. A copied number stops being true the moment any
+constant moves and nothing says so; the sync would just start losing its lease mid-run.
+If it is wrong, a dead worker's job is either unclaimable too long or claimable while
+its worker is alive.
+
+Ruling: no multiplier on that ceiling. Doubling it looked prudent because a run does two
+enumerations and then an unbounded apply — but the heartbeat renews every `leaseMs / 2`
+for as long as the PROCESS lives, so the lease never has to span a run, only the longest
+gap in which a live worker might fail to renew. I had written 320000; QA-1's RF-3 probe
+caught it. If the reasoning is wrong, a genuinely dead worker's job waits twice as long
+as it needs to.
+
+Ruling: the provider is part of the job TYPE (`directory.sync:lark`), and both the
+handler map and the lease map are keyed by the BASE type through one shared
+`baseTypeOf`. One helper rather than two so the lookups cannot drift — a job leased for
+160s that then fails "No handler for ..." is the shape of that drift. If wrong, a new
+provider silently has no handler and a 30s lease.
+
+Ruling: `JobRuntime.tick` claims with the MAXIMUM lease over the registered types, and
+`run` renews with each job's own. Given one number for a mixed claim, too long delays
+takeover of a dead worker (bounded, visible, recoverable) while too short lets a second
+worker claim a job whose first worker is alive and mid-run — the concurrent apply this
+slice exists to prevent. The cost is stated at the tick site and pinned by RF-6: a
+`telemetry.flush` claimed alongside a sync wears 160s until its own first heartbeat.
+
+Ruling (ORG_CAPABILITIES, PMO item g): `directory.sync` stays OUT of ORG_CAPABILITIES
+and the literal stays 12. The trigger is a server route only; a capability in that list
+with no UI reading it is a claim nothing checks. If a UI trigger is added, it moves
+12→13 in the same commit as the UI.
+
+Ruling (RF-5 boundary assertion): `nextRunAt` is pinned on its WALL-CLOCK FIELDS
+(13:00:00) rather than an exact instant. `later` carries the millisecond of the instant
+it searches from, so the boundary returns 13:00:00.001 — a quirk of the library, not of
+the cron expression. A literal string would fail the day the library rounds differently
+while the behaviour under test is unchanged. Accepted by PMO.
+
+Ruling (TL-2's finding, option (a)): the lease predicate is re-checked at the APPLY
+site, between entities, using the claim's own predicate verbatim. Passing `lease` is
+optional and absent means unguarded — `applyDirectoryPlan` is called directly by tests
+and by any future non-job caller, and requiring a lease would make them invent one,
+which is a guard that always passes.
+
+## Two corrections to reviewers, both settled by MEASUREMENT
+
+**QA-1 on RF-2b: `policy_versions` cannot witness convergence.** The stated mechanism is
+right — `addGroupMember` bumps unconditionally on an upsert, so a worker re-deriving
+everything writes as many rows again. The conclusion does not follow. Mutant MB is
+exactly that worker (current memberships forced empty, so all 5 are re-applied): the
+version delta came back 18 against an expected 16, RED. An unconditional bump is what
+makes the count SENSITIVE to redundant work; what would hide it is asserting "more than
+before" instead of an exact delta. QA-1's `group_members` witness was kept as a PAIR,
+not a replacement: the delta sees redundant WRITES, the row set sees a broken END STATE,
+and neither implies the other.
+
+**#142 (SlowBuffer/jsonwebtoken) was MY ERROR — closed not-reproducible.** I reported
+that any suite importing `jsonwebtoken` dies under jest because `SlowBuffer` is
+undefined, and claimed to have verified it on an unmodified tree. The cause was my
+runner: `npx` re-resolves its own node, so even
+`/opt/homebrew/opt/node@22/bin/npx jest` ran under the machine default node 26, where
+`SlowBuffer` was removed. A probe printing `process.version` inside jest prints v26.7.0
+via npx and v22.23.1 via `/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/jest`.
+Dev5 could not reproduce it because there was nothing to reproduce.
+
+**Lesson (§7.17): an absolute path to `npx` does not pin the node it runs.** Invoke
+`<node-22>/bin/node ./node_modules/.bin/jest` directly. The failure is expensive because
+it looks like a codebase fault, reports "Test suite failed to run" with 0 tests, and
+survives being "verified on a clean tree" — the verification runs under the same wrong
+interpreter. It also HID a real bug of mine for an hour (see below).
+
+## What the wrong interpreter was hiding
+
+Running the route suite properly turned up a genuine defect in my own route:
+`jobs.traceId` is NOT NULL and I passed `request.id ?? undefined` — express has no
+`request.id`, so every enqueue violated the constraint and the route answered 500. The
+catch logged only `error.message`, which Prisma leaves empty on a constraint error, so
+its one real failure mode produced a blank log line. Both fixed: a generated uuid, and
+the log now carries name + code + message. The test caught it the moment it could run,
+which is the argument for the route suite existing at all.
+
+## Mutants fired (all killed unless noted)
+
+- MA takeover applies nothing (TL-2/TL-1's F2 mutant) · MB worker 2 re-derives from
+  empty current state · MC membership count not incremented · MD only the first
+  membership written.
+- M5A `nextRunAt = now + 1ms` instead of the cron boundary — **SURVIVED** the first
+  RF-5, exactly as QA-1 predicted; killed once the boundary itself was asserted.
+- M5B per-call UUID idempotency key · M5C registration enqueues directly (killed by
+  RF-5b alone — the runtime test cannot see it, which is why both halves exist).
+
+## Residuals
+
+1. **The lease guard is per ENTITY, not per write, and that is safe only because the
+   apply is IDEMPOTENT.** The window itself is small — a lease can expire in the
+   microseconds between the check and the write, and that one entity still lands — but
+   the window is not what makes it acceptable. What makes it acceptable is that every
+   entity write is idempotent on its natural key (#133/#134): `upsertGroup` and
+   `upsertUser` key on `(orgId, source, externalId)` and on the identity link, and
+   `addGroupMember`/`removeGroupMember` are an upsert and a `deleteMany`. So the one
+   entity that slips through is a write the winning worker either already made or is
+   about to make, and the end state is the same.
+
+   THE MOMENT THAT CHANGES, THIS BECOMES A REAL DEFECT. Any non-idempotent entity write
+   — an append, a counter, an increment, a "create without checking first", an outbound
+   notification — is a write that lands TWICE across two workers, and the per-entity
+   guard will not stop it. Whoever adds such a write owns closing this window first.
+
+   Follow-up: the claim predicate inside each `policyRepository` write, which makes the
+   check and the write one atomic step. Dev5's lane, after #136.
+2. **No registered provider is directory-sync-capable today.** oidc/saml/ldap all answer
+   `directorySync: false`, and `LarkIdentityProvider` is not in the registry
+   (`identity_providers` has no `appId`/`appSecret` columns either). So the sync-now
+   route's ALLOW path is unreachable in production — every real provider takes the 404
+   branch — and the scheduled sync cannot resolve a real driver. `runDirectorySync`
+   takes an injected driver and throws a named error otherwise. The route suite pins
+   both halves and registers a stub for the allow path; the `lark → 404` assertion is
+   written to be the one that flips when the S4a follow-up lands.
+3. **The route suite's grant is a FIXTURE, not the seed.** It creates the
+   `directory.sync` permission and its super_admin grant itself, because the seed slice
+   is Dev1's branch. Every assertion is about the ROUTE given a grant; a seed-only
+   install could hold no grant and this suite would stay green. QA-3 runs the holder
+   assertion on the merged pair — that is the only place it means anything.
+4. Carried from #134: status `'failed'` is still never written, and the membership
+   counts are still CALLS rather than net changes.

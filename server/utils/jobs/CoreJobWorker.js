@@ -1,4 +1,5 @@
 const { denyImpersonatedMutation } = require("./PostgresJobQueue");
+const { baseTypeOf } = require("./handlers");
 
 class CoreJobWorker {
   constructor({ queue, identityStore, handlers }) {
@@ -30,7 +31,11 @@ class CoreJobWorker {
   }
 
   async run(job, workerId, { leaseMs = 30_000 } = {}) {
-    const handler = this.handlers[`${job.type}@${job.payload.version}`];
+    // #138: `${type}@${version}`, where the type is the BASE type. A directory sync's
+    // type carries its provider (`directory.sync:lark`) so the queue gives
+    // per-provider exclusion for free, but the handler is per KIND of job — otherwise
+    // every new provider needs a handler entry of its own and silently has none.
+    const handler = this.handlers[`${baseTypeOf(job.type)}@${job.payload.version}`];
     if (!handler) throw new Error(`No handler for ${job.type}@${job.payload.version}`);
     const heartbeat = setInterval(() => {
       this.queue.heartbeat({ jobId: job.jobId, workerId, leaseMs }).catch((error) => {
@@ -40,7 +45,11 @@ class CoreJobWorker {
     heartbeat.unref?.();
     try {
       denyImpersonatedMutation(job.actor, job.payload.mutating !== false);
-      const result = await handler(job);
+      // #138 (TL-2): `workerId` reaches the handler so a long-running one can re-check
+      // its own lease while it works. The job object carries `jobId` already; the
+      // worker identity lives only here, and a handler that guessed it would guard
+      // against the wrong worker.
+      const result = await handler({ ...job, workerId });
       await this.queue.complete({ jobId: job.jobId, workerId, result });
       return result;
     } catch (error) {

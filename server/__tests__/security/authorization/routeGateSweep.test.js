@@ -271,7 +271,13 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // otherwise — is held by __tests__/endpoints/preflightHttp.test.js,
     // including that the transition closes inside one process and that an
     // unreadable users table fails closed.
-    expect(mountedRoutesAtTestLoad).toHaveLength(318);
+    //
+    // 318 -> 319 with S4b slice 3 (#138): POST /identity/directory/:provider/sync. It
+    // IS mutating, so it takes no exemption below — it carries
+    // `requirePermission("directory.sync", orgResource)` behind `validatedRequest`,
+    // which is what the sweep asks for. Declared here rather than silently absorbed,
+    // which is the whole point of this line.
+    expect(mountedRoutesAtTestLoad).toHaveLength(319);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );

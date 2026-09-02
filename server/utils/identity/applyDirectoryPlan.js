@@ -33,6 +33,16 @@
 //      first  apply: usersCreated 1, groupsCreated 1, membershipsAdded 1
 //      second apply: usersCreated 0, groupsCreated 0, membershipsAdded 1
 //    with `group_members` still holding exactly one row.
+//
+// 3. THE LEASE GUARD IS PER ENTITY, NOT PER WRITE (TL-2, #138). `lease` is checked
+//    BETWEEN entities, so a worker that loses its lease stops at the next boundary
+//    rather than mid-entity. Each entity's own write is already atomic — one
+//    `addGroupMember` is one transaction — so the guard cannot leave half an entity
+//    behind. What it does NOT do is make the check and the write one atomic step:
+//    a lease can expire in the microseconds between them, and that entity still
+//    lands. The window is one entity wide instead of a whole run, which is a
+//    reduction rather than an elimination. Closing it entirely needs the predicate
+//    inside each repository write — a policyRepository change, not this module's.
 
 const prisma = require("../prisma");
 const {
@@ -40,6 +50,7 @@ const {
   removeGroupMember,
 } = require("../authorization/policyRepository");
 const { usernameCandidates } = require("./deriveUsername");
+const { LeaseLostError } = require("../jobs/errors");
 
 class DirectoryApplyError extends Error {
   constructor(message) {
@@ -61,6 +72,7 @@ async function applyDirectoryPlan({
   orgId = 1,
   startedAt = new Date(),
   db = prisma,
+  lease = null,
 }) {
   if (!plan || typeof plan !== "object") {
     throw new DirectoryApplyError("applyDirectoryPlan requires a plan");
@@ -80,6 +92,40 @@ async function applyDirectoryPlan({
     groupsCreated: 0,
     membershipsAdded: 0,
     membershipsRemoved: 0,
+  };
+
+  // ---- the lease guard (TL-2, #138) ----------------------------------------
+  // Losing a lease used to be discovered at `complete()` — after the handler had run
+  // to the end and committed every row. So a worker that STALLED rather than died
+  // (a long GC pause, a throttled container, a wedged socket) would have its job taken
+  // over, and would then wake up and go on writing into a directory a second worker
+  // had already reconciled. Two applies in flight is precisely what this slice exists
+  // to prevent, and "worker 2 took over" never implied "only worker 2 wrote".
+  //
+  // The predicate is the CLAIM's own, verbatim: this row, this worker, still running,
+  // lease not yet expired. Reusing it is the point — a guard that asked a slightly
+  // different question would let exactly the rows through that the claim would refuse.
+  //
+  // Optional, and absent means unguarded. `applyDirectoryPlan` is called directly by
+  // tests and by any future caller that is not a job; requiring a lease would make
+  // them invent one, and an invented lease is a guard that always passes.
+  const assertLease = async () => {
+    if (!lease) return;
+    if (lease.beforeEntity) await lease.beforeEntity();
+    const held = await db.jobs.count({
+      where: {
+        id: lease.jobId,
+        workerId: lease.workerId,
+        state: { in: ["running", "cancelling"] },
+        leaseUntil: { gt: new Date() },
+      },
+    });
+    if (held !== 1) {
+      throw new LeaseLostError(
+        `directory sync lost its lease mid-apply (job ${lease.jobId}, worker ${lease.workerId}); ` +
+          `another worker has taken this run and the remaining writes were refused`
+      );
+    }
   };
 
   // ---- R1: a refused plan is not applied at all ----------------------------
@@ -123,6 +169,7 @@ async function applyDirectoryPlan({
   // read: two runs racing between the read and the write would both see "absent".
   const groupIdByExternalId = new Map();
   for (const group of plan.createGroups ?? []) {
+    await assertLease();
     const created = await upsertGroup({ db, orgId, provider, group });
     if (created.wasCreated) counts.groupsCreated += 1;
     groupIdByExternalId.set(group.externalId, created.id);
@@ -131,12 +178,14 @@ async function applyDirectoryPlan({
   // ---- users ---------------------------------------------------------------
   const userIdBySubject = new Map();
   for (const principal of plan.create ?? []) {
+    await assertLease();
     const created = await upsertUser({ db, provider, principal });
     if (created.wasCreated) counts.usersCreated += 1;
     userIdBySubject.set(principal.subject, created.id);
   }
 
   for (const user of plan.deactivate ?? []) {
+    await assertLease();
     const userId = await userIdForSubject({ db, provider, subject: user.subject });
     if (!userId) continue;
     // `suspended`, not a delete. `validatedRequest.js:114` rejects a suspended user
@@ -182,6 +231,7 @@ async function applyDirectoryPlan({
   // and observing it needs a conflict fixture. Recorded as a §7.9 survivor (M2/M3 in
   // .infi/ledger-134.md), not silently assumed to be covered.
   for (const membership of plan.addMembership ?? []) {
+    await assertLease();
     const ids = await membershipIds({ db, provider, membership, groupIdByExternalId, userIdBySubject });
     if (!ids) continue;
     await addGroupMember({ actor, groupId: ids.groupId, userId: ids.userId, db });
@@ -189,6 +239,7 @@ async function applyDirectoryPlan({
   }
 
   for (const membership of plan.removeMembership ?? []) {
+    await assertLease();
     const ids = await membershipIds({ db, provider, membership, groupIdByExternalId, userIdBySubject });
     if (!ids) continue;
     await removeGroupMember({ actor, groupId: ids.groupId, userId: ids.userId, db });
@@ -196,6 +247,11 @@ async function applyDirectoryPlan({
   }
 
   // ---- the checkpoint ------------------------------------------------------
+  // Guarded like every entity above: a checkpoint written by a worker that lost its
+  // lease would record a completed run on top of the one that actually happened, and
+  // it is the checkpoint that slice 3 reads to decide whether a sync is overdue.
+  await assertLease();
+
   // LAST, and only on success (R5, RF-7). If any write above threw, this line is
   // never reached and no 'completed' row exists — which is the honest record: a
   // crash mid-apply leaves a partially-applied sync that the NEXT run corrects by

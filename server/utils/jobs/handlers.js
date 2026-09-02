@@ -49,8 +49,23 @@ const LEASE_MS_BY_TYPE = {
   "directory.sync": DIRECTORY_SYNC_LEASE_MS,
 };
 
+/**
+ * The type without its instance suffix: `directory.sync:lark` -> `directory.sync`.
+ *
+ * #138: the provider is part of the job TYPE, because that is what gives per-provider
+ * exclusion for free — the queue serialises rows of one type and lets different types
+ * proceed together. But the handler map and the lease map are keyed by the KIND of
+ * job, not by each instance of it, and enumerating every provider in both maps would
+ * mean a new provider silently has no handler and a 30s lease.
+ *
+ * One helper rather than two, so the two lookups cannot drift: a job whose lease came
+ * from the map but whose handler did not (or the reverse) is the kind of mismatch that
+ * shows up as a job leased for 160s and then failing "No handler for ...".
+ */
+const baseTypeOf = (type) => String(type).split(":")[0];
+
 /** Lease per job type. Anything absent keeps the previous behaviour. */
-const leaseMsFor = (type) => LEASE_MS_BY_TYPE[type] ?? DEFAULT_LEASE_MS;
+const leaseMsFor = (type) => LEASE_MS_BY_TYPE[baseTypeOf(type)] ?? DEFAULT_LEASE_MS;
 
 const handlers = {
   "telemetry.flush@1": async () => {
@@ -64,6 +79,45 @@ const handlers = {
     const result = await purge(db ? { db } : {});
     console.log(
       `[Retention purge] traceId=${traceId} purged=${result.purged} skipped=${result.skipped} retentionDays=${result.retentionDays} loginStates=${result.loginStatesPurged}`
+    );
+    return result;
+  },
+  // S4b slice 3 (#138): the directory sync, as a core job.
+  //
+  // TL-1's ruling: `PostgresJobQueue.claim` already provides exclusion (a conditional
+  // update whose `count === 1` is the claim) and recovery (a lease that expires), so
+  // this slice adds NO lock, no `running` checkpoint status and no migration. One
+  // sync at a time per provider falls out of the job `type` — see the schedule below.
+  //
+  // The actor is resolved by `CoreJobWorker.claim` through `identityStore.resolveActor`
+  // before the handler runs, and arrives on `job.actor`. It is NOT reconstructed here:
+  // a handler that built its own actor would be a second answer to "who may change
+  // group membership", which is what #128's NIT-1 pinned.
+  //
+  // THE LEASE IS PASSED DOWN (TL-2, #138). Losing it was previously discovered at
+  // `complete()`, after every row had been written — so a worker that stalled past its
+  // lease had its job taken over and then went on writing beside the worker that took
+  // it. The applier re-checks the claim's own predicate between entities and refuses
+  // the rest of the run, which is why `jobId` and `workerId` have to reach it.
+  //
+  // `workerId` comes from the RUNTIME, not from the row: the row records who holds the
+  // lease, and reading it from there would make the guard compare a value against
+  // itself and pass for whoever wrote last.
+  "directory.sync@1": async ({ traceId, actor, payload, db, jobId, workerId }) => {
+    const { runDirectorySync } = require("../identity/runDirectorySync");
+    const result = await runDirectorySync({
+      provider: payload.provider,
+      actor,
+      ...(jobId && workerId ? { lease: { jobId, workerId } } : {}),
+      ...(db ? { db } : {}),
+    });
+    console.log(
+      `[Directory sync] traceId=${traceId} provider=${payload.provider} ` +
+        `status=${result.status} usersCreated=${result.usersCreated} ` +
+        `usersDeactivated=${result.usersDeactivated} ` +
+        `membershipsAdded=${result.membershipsAdded} ` +
+        `membershipsRemoved=${result.membershipsRemoved}` +
+        (result.refusedReason ? ` refusedReason=${result.refusedReason}` : "")
     );
     return result;
   },
@@ -81,9 +135,51 @@ async function registerCoreSchedules(queue, actor) {
   });
 }
 
+/**
+ * Register a directory sync schedule for one provider (#138 R4, R5).
+ *
+ * PER PROVIDER, and that is the whole exclusion mechanism: the provider is part of
+ * the job `type`, so the queue's per-row claim serialises two runs of the SAME
+ * provider while letting lark and ldap proceed together. A global lock would make a
+ * slow tenant delay everyone, and would HIDE the cross-provider identity collision
+ * (the Q4 case) rather than leaving it visible for slice 4 to solve.
+ *
+ * Through `queue.schedule` — the MATERIALIZATION path — never a direct `enqueue`.
+ * Materialization builds its idempotency key as `${scheduleId}:${runAt}` and the
+ * `@@unique([type, idempotencyKey])` index refuses the duplicate, so two schedulers
+ * racing cannot produce two runs of the same tick. A direct enqueue bypasses exactly
+ * that, which is the protection.
+ */
+async function registerDirectorySyncSchedule(queue, actor, { provider, cron = "17 * * * *", timezone = "UTC", enabled = true }) {
+  if (!provider) throw new Error("registerDirectorySyncSchedule requires a provider");
+  await queue.schedule({
+    scheduleId: `directory-sync-${provider}`,
+    type: directorySyncTypeFor(provider),
+    cron,
+    timezone,
+    payload: { version: 1, provider },
+    actor,
+    enabled,
+  });
+}
+
+/**
+ * The job type for one provider's sync.
+ *
+ * The provider is IN the type rather than only in the payload, because the queue
+ * claims per row within a set of types — two rows of the same type are serialised by
+ * the conditional update, and rows of different types are not. Putting the provider
+ * only in the payload would make every provider share one type and serialise them
+ * all, which is the global-lock behaviour R4 rejects.
+ */
+const directorySyncTypeFor = (provider) => `directory.sync:${provider}`;
+
 module.exports = {
   handlers,
   registerCoreSchedules,
+  registerDirectorySyncSchedule,
+  directorySyncTypeFor,
+  baseTypeOf,
   leaseMsFor,
   LEASE_MS_BY_TYPE,
   DEFAULT_LEASE_MS,
