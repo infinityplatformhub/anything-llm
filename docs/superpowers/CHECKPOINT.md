@@ -619,3 +619,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 0e466bccd (test-only: offset asserts, R2 count) regating; QA-3 re-fire. #132 blocked on #121 (system.read → ORG_CAPABILITIES lands there); generic-vs-specific guard ruling → TL-2. §7.17 logged.
 - #119 0e2317834 MERGED (0931e830e): TL-2 PASS (4b0b46a2b, N1-N7) + QA-2 PASS (93/93, 6/6); contract 77/77, sweeps 63/63; closed gate-119-0e2317834. Post-merge after #128's finishes. Dev5 → #131 code after #120 merge.
 - #127 0e466bccd regate green (frontend 98/98 exit 0, drift 4/4, ledger 3); awaiting QA-3 re-fire → close/merge.
+- Post-merge #128: server 222 suites / 3079 passed / 0 failed, frontend 101/101 exit 0. Post-merge #119 launched → /tmp/postmerge-119.log.
+- Dev3: null-principal test branch approof/128-null-principal-test (test-only, plain) incoming; S4b recon started with Q4 as (a)/(b) options, no contract until user answers.
