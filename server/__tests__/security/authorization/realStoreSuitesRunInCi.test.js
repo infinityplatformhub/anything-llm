@@ -59,7 +59,7 @@ const CI_EXEMPT = Object.freeze({});
 const SUITE_DIR = __dirname;
 const WORKFLOW = path.resolve(__dirname, "../../../../.github/workflows/ci.yml");
 
-describe("#73: real-store suites are not silently skipped in CI", () => {
+describe("issue 73: real-store suites are not silently skipped in CI", () => {
   test("every real-store suite in this directory is listed here", () => {
     // Guards the guard. A sixth provider suite added later must either appear in
     // REAL_STORE_SUITES or be exempted on purpose — otherwise it would skip in CI with
