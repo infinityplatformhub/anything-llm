@@ -108,6 +108,12 @@ const CHECKS = [
       "Create STORAGE_DIR and make it writable by the container's uid. Without it the instance cannot persist documents or vector data.",
   },
   {
+    id: "config.metrics_exposure",
+    level: "warn",
+    remedy:
+      "Set IP_ALLOWLIST to the addresses that may reach the API — your Prometheus server, and whatever else needs it. An empty allowlist means allow-everything, so /api/metrics is reachable from anywhere the port is. Metrics hold no secrets, but user counts, workspace counts and error rates are an inventory, and an inventory is reconnaissance.",
+  },
+  {
     id: "db.locale",
     level: "warn",
     remedy:
@@ -369,7 +375,29 @@ async function checkExtensions(client, needed) {
  * @param {{databaseUrl?: string, envPath?: string, storageDir?: string, uid?: number}} input
  * @returns {Promise<Array<{id:string,level:string,ok:boolean,detail:string,remedy:string}>>}
  */
+/**
+ * O5a (#90): /api/metrics is unauthenticated by design, protected by the IP
+ * allowlist — and `ipAllowlist` calls next() when the allowlist is EMPTY
+ * (utils/middleware/requestControls.js:223), which is the default install.
+ *
+ * A warning, not a blocker: an instance on a private network is fine as it is,
+ * and refusing to boot over a scrape endpoint would be worse than the exposure.
+ * But the operator should meet this here, while they are looking at their own
+ * configuration, rather than in a log line at boot.
+ */
+function checkMetricsExposure({ ipAllowlist }) {
+  const configured = String(ipAllowlist ?? "").trim() !== "";
+  return result(
+    "config.metrics_exposure",
+    configured,
+    configured
+      ? "IP_ALLOWLIST is set, so /api/metrics is reachable only from the addresses it names."
+      : "IP_ALLOWLIST is empty, which allows every address. /api/metrics is unauthenticated, so anything that can reach this port can read the instance's counts and error rates."
+  );
+}
+
 async function runChecks({
+  ipAllowlist = process.env.IP_ALLOWLIST,
   vectorDb = process.env.VECTOR_DB,
   databaseUrl = process.env.DATABASE_URL,
   envPath = process.env.ENV_FILE_PATH ||
@@ -378,6 +406,7 @@ async function runChecks({
   uid = typeof process.getuid === "function" ? process.getuid() : 0,
 } = {}) {
   const localChecks = [
+    checkMetricsExposure({ ipAllowlist }),
     checkEnvWritable({ envPath, uid }),
     checkSecrets({ envPath }),
     checkStorage({ storageDir }),

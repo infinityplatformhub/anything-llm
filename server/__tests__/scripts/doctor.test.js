@@ -62,9 +62,10 @@ const base = () => ({
 });
 
 describe("the check list itself", () => {
-  it("declares the eight checks the rulings name", () => {
+  it("declares the nine checks the rulings name", () => {
     expect(doctor.CHECK_IDS.sort()).toEqual(
       [
+        "config.metrics_exposure",
         "db.locale",
         "db.reachable",
         "db.version",
@@ -77,11 +78,16 @@ describe("the check list itself", () => {
     );
   });
 
-  it("marks db.locale as the only non-blocking check (ruling Q4)", () => {
+  it("keeps db.locale non-blocking, and lists every warning explicitly", () => {
+    // Enumerated rather than counted: a new check defaulting to "warn" when it
+    // should block would slip past a length assertion, and the whole point of
+    // the level being fixed per check is that adding one is a decision.
+    // O5a (#90) added config.metrics_exposure — an instance on a private
+    // network is correctly configured as it is, so it warns.
     const warnings = doctor.CHECK_IDS.filter(
       (id) => doctor.levelOf(id) === "warn"
-    );
-    expect(warnings).toEqual(["db.locale"]);
+    ).sort();
+    expect(warnings).toEqual(["config.metrics_exposure", "db.locale"]);
   });
 
   it("gives every check a remedy string", () => {
