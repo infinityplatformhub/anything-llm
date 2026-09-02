@@ -80,4 +80,4 @@ Ruling: the regression test opens a REAL LanceDB table (rows written via `aclMet
 
 Note (not a regression): `__tests__/jobs/providerDocIdCallSites.test.js` intermittently fails 3 tests with a 5s `beforeAll` timeout — its hook shells out to `prisma migrate deploy`. Reproduced identically on `aa437ade` with this fix stashed, and it passes when run alone. Environment timing, unrelated to this change; flagged so a recurrence is not read as new.
 
-SHA: 20988523 (branch approof/t5-vector-filter, base aa437ade)
+SHA: e1f257b2 (branch approof/t5-vector-filter, base aa437ade)
