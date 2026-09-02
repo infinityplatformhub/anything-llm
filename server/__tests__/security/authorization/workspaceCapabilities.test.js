@@ -42,14 +42,19 @@ const mountedGates = mountedRoutes.flatMap((layer) =>
     .filter((handler) => handler?.action && handler.resolveResource)
 );
 
-function scopeOf(resolveResource, classifiers = {}) {
-  const isOrg = classifiers.isOrgResolver || isOrgResolver;
-  const isWorkspace = classifiers.isWorkspaceResolver || isWorkspaceResolver;
-  const isDynamic = classifiers.isDynamicResolver || isDynamicResolver;
-  if (isOrg(resolveResource)) return "org";
-  if (isWorkspace(resolveResource)) return "workspace";
-  if (isDynamic(resolveResource)) return "dynamic";
+function scopeOfWith(resolveResource, classifiers) {
+  if (classifiers.isOrgResolver(resolveResource)) return "org";
+  if (classifiers.isWorkspaceResolver(resolveResource)) return "workspace";
+  if (classifiers.isDynamicResolver(resolveResource)) return "dynamic";
   return null;
+}
+
+function scopeOf(resolveResource) {
+  return scopeOfWith(resolveResource, {
+    isOrgResolver,
+    isWorkspaceResolver,
+    isDynamicResolver,
+  });
 }
 
 function hasGateAtScope(gates, action, scope) {
@@ -81,6 +86,14 @@ describe("capability vocabulary by resource scope", () => {
       (gate) => scopeOf(gate.resolveResource) === null
     );
     expect(unclassified).toEqual([]);
+    for (const gate of mountedGates) {
+      const memberships = [
+        isOrgResolver(gate.resolveResource),
+        isWorkspaceResolver(gate.resolveResource),
+        isDynamicResolver(gate.resolveResource),
+      ].filter(Boolean);
+      expect(memberships).toHaveLength(1);
+    }
   });
 
   test("dynamic resolvers cannot back fixed-scope capabilities", () => {
@@ -201,6 +214,7 @@ describe("capability vocabulary by resource scope", () => {
     const {
       orgResource,
     } = require("../../../utils/middleware/resourceResolvers");
+    expect(isOrgResolver(orgResource)).toBe(true);
     for (const resolver of [
       undefined,
       null,
@@ -238,7 +252,9 @@ describe("capability vocabulary by resource scope", () => {
 
     jest.resetModules();
     const freshClassifiers = require("../../../utils/middleware/resourceResolvers");
-    expect(scopeOf(knownWorkspaceResolver, freshClassifiers)).toBe("workspace");
+    expect(scopeOfWith(knownWorkspaceResolver, freshClassifiers)).toBe(
+      "workspace"
+    );
   });
 
   test("capability lists match the approved mockup", () => {

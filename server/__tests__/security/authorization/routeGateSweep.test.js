@@ -97,19 +97,18 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     const source = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
     const ast = parse(source, { sourceType: "script" });
     const imports = ast.body
+      .filter((node) => node.type === "VariableDeclaration")
+      .flatMap((node) => node.declarations)
       .filter(
-        (node) =>
-          node.type === "VariableDeclaration" &&
-          node.declarations[0]?.id.type === "ObjectPattern" &&
-          node.declarations[0]?.init?.type === "CallExpression" &&
-          node.declarations[0].init.callee?.name === "require" &&
-          node.declarations[0].init.arguments[0]?.value.startsWith(
-            "./endpoints/"
-          )
+        (declaration) =>
+          declaration.id.type === "ObjectPattern" &&
+          declaration.init?.type === "CallExpression" &&
+          declaration.init.callee?.name === "require" &&
+          declaration.init.arguments[0]?.value.startsWith("./endpoints/")
       )
       // Every destructured import from ./endpoints is registration-shaped.
-      // No spelling convention is trusted: aliases and non-Endpoints names stay visible.
-      .flatMap((node) => node.declarations[0].id.properties)
+      // No spelling or declarator-position convention is trusted.
+      .flatMap((declaration) => declaration.id.properties)
       .map((property) => ({
         exported: property.key.name,
         local: property.value.name,
@@ -138,8 +137,8 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       }
     };
     visit(ast);
-    // Any `probe (apiRouter)` or multiline direct registration bypasses the
-    // production list regardless of formatting and must fail here.
+    // Any direct registration bypasses the production list regardless of alias,
+    // spacing, line breaks, export name, or declarator position.
     expect(directCalls).toEqual([]);
   });
 
