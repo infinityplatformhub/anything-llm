@@ -29,8 +29,15 @@ class DocumentManager {
     // Selected through prisma rather than Document.where so `documentId` comes back: the
     // ACL keys on the canonical id, and the model's shape is not guaranteed to carry it.
     //
-    // `document.orgId` comes along for the tenancy check in pinnedDocs. Selecting it here
-    // rather than issuing a second query keeps the check on the same row it decides about.
+    // The `include` below is LOAD-BEARING, not an eager-load convenience: `pinnedDocs`
+    // reads `row.document.orgId` for its tenancy check, and that is its only source for it.
+    //
+    // Removing it does not throw. `row.document?.orgId` becomes `undefined`, which routes
+    // to the UNPROVABLE branch rather than to an error — so with
+    // RETRIEVAL_FILTER_ALLOW_UNPROVABLE set, every pinned document in the workspace is
+    // served regardless of which org owns it (a cross-org leak, silent), and without the
+    // flag every pinned document disappears (a total outage, also silent). Neither
+    // announces itself, and both look like something else.
     return await prisma.workspace_documents.findMany({
       where: { workspaceId: Number(this.workspace.id), pinned: true },
       include: { document: { select: { orgId: true } } },
@@ -96,6 +103,12 @@ class DocumentManager {
       : null;
     const allowUnprovable = allowUnprovableRows();
     let unprovable = 0;
+    // Counted SEPARATELY from `unprovable`, because they are different operator problems
+    // with different remedies: "cannot be proven" means run the canonicalize job, while
+    // "proven to belong to another org" means something is wrong — either a genuine
+    // cross-tenant attempt or a data fault where a workspace holds another org's document.
+    // Folding them together would hide the second behind the first.
+    let orgMismatch = 0;
 
     const readable = rows.filter((row) => {
       // `document_acl` keys on `documents.id` (Int), NOT on the legacy `docId` string,
@@ -118,7 +131,10 @@ class DocumentManager {
         unprovable += 1;
         return allowUnprovable;
       }
-      if (String(rowOrgId) !== String(aclFilter.orgId)) return false;
+      if (String(rowOrgId) !== String(aclFilter.orgId)) {
+        orgMismatch += 1;
+        return false;
+      }
 
       const documentId = String(row.documentId);
       if (denied.has(documentId)) return false;
@@ -129,6 +145,15 @@ class DocumentManager {
     if (unprovable > 0 && !allowUnprovable) {
       this.log(
         `${unprovable} pinned document(s) in workspace ${this.workspace.id} have no canonical documentId yet, so they cannot be proven readable and are EXCLUDED from context. They become available once the document canonicalize job has run.`
+      );
+    }
+
+    // Reported in EVERY state, unlike the unprovable count — the flag excuses missing
+    // evidence, never evidence of a mismatch. A silent zero here is indistinguishable from
+    // an empty workspace, which is what makes the count worth printing at all.
+    if (orgMismatch > 0) {
+      this.log(
+        `${orgMismatch} pinned document(s) in workspace ${this.workspace.id} belong to a DIFFERENT org than the requesting actor and were excluded. This is either a cross-tenant access attempt or a data fault — a workspace should not hold another org's documents.`
       );
     }
 

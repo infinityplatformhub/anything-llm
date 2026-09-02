@@ -11,18 +11,23 @@ const prisma = require("../utils/prisma");
 
 const BATCH = 1000;
 
-// GUARD (8b review, 2026-09-02): after this job rewrites document_vectors.docId to
-// canonical ids, every runtime caller still looking vectors up by the legacy uuid
-// (DocumentVectors.where({docId}) in 8 providers, Documents.removeDocuments,
-// deleteForWorkspace) silently matches nothing — deleted documents would leave
-// vectors behind. The job MUST NOT run until those call sites migrate.
+// HISTORY (8b review, 2026-09-02 — RESOLVED, kept for the reasoning): after this job
+// rewrites document_vectors.docId to canonical ids, any runtime caller still looking
+// vectors up by the legacy uuid silently matches nothing, and a deleted document would
+// leave its vectors behind. That is why the job was gated: not because rewriting is
+// risky, but because a lookup that matches nothing does not fail, it just quietly finds
+// no rows.
 //
-// C-1 (PMO ruling, superseding this file's original note): the flag is set by **T-6**, not
-// T-5. Seven of the legacy call sites are the non-Lance providers, which T-6 owns and which
-// are off the Phase 0 gate — enabling while they still read legacy uuids leaves vectors
-// behind on every non-Lance deployment. T-4b (#29) migrated its own two sites
-// (Documents.removeDocuments, DocumentVectors.deleteForWorkspace) to match on BOTH ids,
-// which is what makes them correct during the batched run as well as after it.
+// The condition is now MET, so this no longer says "MUST NOT run" — see the C-1 block
+// below, which is the operative text. T-4b (#29) migrated Documents.removeDocuments and
+// DocumentVectors.deleteForWorkspace to match on BOTH ids, and T-6 Phase B (#28) moved all
+// eight providers onto DocumentVectors.forDocument, which resolves the legacy uuid and the
+// canonical id together. Correct before, during and after the batched run.
+//
+// T-5 (#30) slice 3 kept this paragraph rather than deleting it: the file previously
+// asserted both "MUST NOT run until those call sites migrate" AND (below) "C-1 CLOSED,
+// default is now ON". A file that says both is worse than one merely out of date, because
+// a reader acts on whichever half they read first.
 class CanonicalizeNotEnabledError extends Error {}
 
 // C-1 CLOSED by T-6 Phase B (#28): the seven non-Lance providers now resolve

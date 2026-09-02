@@ -231,3 +231,126 @@ Residual: pinecone and astra remain rendered-but-unverified until someone runs a
 test against a hosted instance.
 
 SHA: 3cfdc70c (branch approof/t5-slice-1b, base 85ccf3b2)
+
+## Slice 3 — S-22 rehydration, S-25 cardinality, canonicalize comment
+
+Ruling: `fillSourceWindow` re-authorizes citations read back out of stored history. Its four
+filters (not pinned / has score / has text / not duplicate) contain no authorization check,
+so the ACL governing a rehydrated citation was the one in force when the ANSWER WAS WRITTEN.
+Cite, revoke, follow up in the same thread, and the revoked text returns. This path replays
+a past decision rather than making a new one — the only retrieval surface in T-5 whose data
+source is our own prior output, which is why slices 1 and 2 could not see it.
+
+Ruling: `isRowAllowed` is the FIRST condition inside `validSources.filter`, never a pass over
+the result. Filtering afterwards lets denied citations occupy window slots up to `nDocs` and
+then be removed, costing the actor their own readable citations (S-17 in a new place), and
+makes the shortfall a signal — the number returned would report how many denied citations
+existed. Same predicate as the vector rows, so no fourth definition of "readable".
+
+Ruling: `aclFilter` is REQUIRED and throws without one, matching `pinnedDocs` and
+`queryAuthorized`. An optional security filter is a filter plus a way to skip it, and the
+skip fails in the direction that returns more data.
+
+Ruling: `document.read`, not `document.search` — a rehydrated citation enters the prompt
+whole, like a pinned document. Slice 2's M8 proved the two actions genuinely diverge, so
+this is a real choice rather than a formality.
+
+Ruling: five call sites, not four — `apiChatHandler.js` has two. All go through one
+`rehydrationFilter` bridge; five inline builds would be five chances for one to differ. A
+guard test walks the tree and asserts every call passes a filter.
+
+Ruling (QA-1, and my guard was itself the bug it guards against): the call-site scan counts
+BRACES rather than matching a closing-paren indent. The first regex found 2 of the 5 sites
+and passed — a guard that silently inspects a subset, which is precisely the failure #73
+exists to prevent, one level up.
+
+Ruling (QA-1, conclusion right, mechanism different): the `curateSources` table enumerates
+providers from the DIRECTORY. `chromacloud` and `zilliz` do not define the method — they
+`extends Chroma` / `extends Milvus` and inherit it — but a hardcoded eight misses them
+either way, and a subclass that later overrides it would never appear in a list nobody
+remembered to update.
+
+Ruling (Techlead-2 measurement, accepted): a pure-function table replaces eight real-store
+suites. `curateSources` maps a plain object and never touches an engine — the distinction
+from the five predicate bugs, where only the engine could judge the predicate. It still
+needs the test: a rewrite to an explicit field pick makes every stored citation on that
+provider unprovable, which fails CLOSED and silently. Mutation-verified: qdrant picking
+named fields kills exactly its two rows.
+
+Ruling: `vector-search`'s `namespaceCount === 0` early return is DELETED, not made to match.
+It answered `{results: [], message: "No embeddings found..."}` while an ACL-filtered empty
+search answered `{results: []}` — so "holds content you may not read" and "holds nothing"
+were distinguishable, an existence oracle over workspace content (the #32 mint-oracle
+class). An empty namespace already flows through the search path, so the early return bought
+nothing except the leak.
+
+Ruling: scope is checked BEFORE the vector store is consulted. Not only for cost: if the
+refusal path queries the store and the not-found path does not, the two are distinguishable
+by TIMING even when their bodies are byte-identical.
+
+Ruling: out-of-scope returns null and the route answers 404, identical to a workspace that
+does not exist. A 403 confirms existence — the oracle in a different costume, and the rule
+`requirePermission` already applies through `NON_DISCLOSING`.
+
+Ruling: `/v1/system/vector-count` sums within ceiling(creator) ∩ binding(key), which arrives
+ALREADY intersected because `buildDocumentFilter` runs `narrowToKeyBinding` and a binding can
+only narrow. Re-checking here would be a second definition of the same rule.
+
+Ruling (PMO, superseding my first design): past 50 workspaces the count THROWS and the route
+answers 500. A `partial: true` key was withdrawn because a response shape that varies with
+the caller is itself a signal about the caller, and a silently-capped sum is a wrong number
+that looks exactly like a right one. It refuses BEFORE fanning out, asserted — a cap that
+queries 51 namespaces and then throws has prevented nothing. The loop exists only because
+`namespaceCount` is per-namespace across ten providers; #81 tracks batching it.
+
+Ruling (Techlead-2 E1): the `include` in `pinnedDocuments` is documented as load-bearing.
+Removing it does not throw — `row.document?.orgId` becomes undefined, routing to the
+UNPROVABLE branch: a cross-org leak under the flag, a total outage without it, both silent.
+Mutation kills 6 tests, so the claim is verified rather than asserted.
+
+Ruling (Techlead-2 E2): org mismatches are counted SEPARATELY from unprovable rows and
+reported in every state. Different operator problems with different remedies — "run the
+canonicalize job" versus "investigate a tenancy fault" — and the flag excuses missing
+evidence, never evidence of a mismatch.
+
+Ruling (QA-1 NIT-1): the behavioural M8b drives `authorizedPinnedDocs` with ALLOW-on-search /
+DENY-on-read, alongside the source grep. Mutating the bridge to `document.search` kills BOTH,
+for different reasons — the grep catches an edited string, the behavioural test catches a
+wrongly chosen action.
+
+Ruling (QA-1 ruling 10): the dedupe test asserts only that denied citations stay out, never
+that `seenChunks` exists. Dedupe is citation quality, not a security property; a test that
+died when it was removed would freeze an unrelated refactor and teach the next reader that
+dedupe is load-bearing for security.
+
+Ruling: `docVectorsCanonicalize.js` no longer asserts both "MUST NOT run until those call
+sites migrate" and "C-1 CLOSED, default is now ON". A file that says both is worse than one
+merely out of date, because a reader acts on whichever half they read first. The four T-5
+sites were already migrated by #29 and #28, so only the comment was outstanding.
+
+Ruling: the legacy `fillSourceWindow` suite supplies a filter and labelled sources. Those
+tests are about the source WINDOW; unlabelled sources are correctly unprovable now, which
+would have made every one of them assert against an empty window — passing for a reason
+that has nothing to do with what they test.
+
+### Mistakes worth recording
+
+The M8b behavioural test first passed for the wrong reason: `user: {id: 9404}` had no row in
+the database, so the bridge resolved no principal, returned a match-none filter, and gave
+`[]` — satisfying "the denied document is absent" without proving anything. The positive
+control caught it. A test that asserts only an ABSENCE cannot distinguish "the fix worked"
+from "nothing happened at all".
+
+The S-25 HTTP suite hung for two runs. Cause: `/v1` mounts under `/api` (`index.js:102-103`),
+so requests to `/v1/...` matched no route and supertest waited. Also `expect()`-adjacent:
+the vector-count handler's signature was `(_, response)`, so my `resolveActor(request, ...)`
+threw `ReferenceError: request is not defined` — a runtime error no static check sees, the
+same class as slice 2's Telegram blocker.
+
+The absent-vs-foreign test initially compared against a workspace the caller could
+legitimately read, because the suite's key belonged to an admin holding an org-wide grant —
+for which no workspace is foreign. The 403/200 split was the fixture being wrong, not the
+route. Fixed with a scoped key plus a positive control proving it can still reach its own
+workspace.
+
+SHA: b9bce7f (branch approof/t5-slice-2, base c7ef9d28b)

@@ -729,3 +729,211 @@ describe("T-5 slice 2: pinned scope comes from the FILTER, not from the URL", ()
     expect(contentsOf(docs)).not.toContain("CONTENT OF UNLINKED");
   });
 });
+
+describe("T-5 slice 3: what an operator is told about excluded pinned documents", () => {
+  // Techlead-2 E2 + QA-2. A refusal that produces no signal is indistinguishable from an
+  // empty workspace, so the counts are the difference between an operator who can act and
+  // one who never learns there was anything to act on.
+
+  test("E2: an org mismatch is COUNTED and reported, not silently dropped", async () => {
+    // A workspace holding another org's document is either a cross-tenant attempt or a
+    // data fault. Either way somebody needs to know; before this it returned `false` and
+    // said nothing.
+    const foreign = await prisma.documents.create({
+      data: {
+        orgId: 2,
+        filename: "foreign-org.txt",
+        dedupe_key: `/t5s3/${dbSuffix}/foreign-org.txt`,
+      },
+    });
+    await prisma.workspace_documents.create({
+      data: {
+        docId: crypto.randomUUID(),
+        filename: "foreign-org.txt",
+        docpath: writeDocFile("foreign-org", "CONTENT OF FOREIGN ORG"),
+        workspaceId: W1.id,
+        documentId: foreign.id,
+        pinned: true,
+      },
+    });
+
+    const logs = [];
+    const manager = new DocumentManager({ workspace: W1, maxTokens: 10_000 });
+    jest.spyOn(manager, "log").mockImplementation((text) => logs.push(text));
+
+    const docs = await manager.pinnedDocs({
+      aclFilter: await retrievalFilterFor({
+        actor: await actorFor(9401),
+        action: READER,
+        db: prisma,
+      }),
+      db: prisma,
+    });
+
+    expect(contentsOf(docs)).not.toContain("CONTENT OF FOREIGN ORG");
+    // The two counts are reported SEPARATELY. The shared fixture also has an unlinked row,
+    // so the canonicalize message legitimately appears too — what must not happen is the
+    // org mismatch being folded into it, since the remedies differ (investigate a tenancy
+    // fault vs. run a job).
+    const mismatch = logs.find((line) => /DIFFERENT org/i.test(line));
+    expect(mismatch).toBeDefined();
+    // The count itself, so "1 document" cannot degrade into "some documents".
+    expect(mismatch).toMatch(/\b1 pinned document/);
+    // The mismatch line carries its own remedy, not the canonicalize one.
+    expect(mismatch).not.toMatch(/canonicalize job/i);
+    expect(mismatch).toMatch(/cross-tenant|data fault/i);
+  });
+
+  test("E2: the org-mismatch report appears even with the unprovable flag SET", async () => {
+    // The flag excuses absence of evidence, never evidence of a mismatch. If the report
+    // were gated on the flag the way the unprovable one is, setting it would silence the
+    // more serious of the two signals.
+    const original = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = "1";
+    try {
+      const logs = [];
+      const manager = new DocumentManager({ workspace: W1, maxTokens: 10_000 });
+      jest.spyOn(manager, "log").mockImplementation((text) => logs.push(text));
+      await manager.pinnedDocs({
+        aclFilter: await retrievalFilterFor({
+          actor: await actorFor(9402),
+          action: READER,
+          db: prisma,
+        }),
+        db: prisma,
+      });
+      expect(logs.join("\n")).toMatch(/DIFFERENT org/i);
+    } finally {
+      if (original === undefined)
+        delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+      else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = original;
+    }
+  });
+
+  test("QA-2: a row whose org cannot be read follows the flag in BOTH directions", async () => {
+    // `rowOrgId == null` — the document row exists but its org is unreadable. That is
+    // absence of evidence, so it obeys the flag, unlike the mismatch above. Asserting only
+    // one direction would let an inert flag pass, which is the slice 1a lesson.
+    const orphan = await prisma.workspace_documents.create({
+      data: {
+        docId: crypto.randomUUID(),
+        filename: "no-org.txt",
+        docpath: writeDocFile("no-org", "CONTENT OF NO ORG"),
+        workspaceId: W1.id,
+        // No canonical link, so the joined `document` is null and orgId is unreadable.
+        documentId: null,
+        pinned: true,
+      },
+    });
+    expect(orphan.documentId).toBeNull();
+
+    const aclFilter = await retrievalFilterFor({
+      actor: await actorFor(9403),
+      action: READER,
+      db: prisma,
+    });
+    const read = async () =>
+      contentsOf(
+        await new DocumentManager({ workspace: W1, maxTokens: 10_000 }).pinnedDocs({
+          aclFilter,
+          db: prisma,
+        })
+      );
+
+    const original = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    try {
+      delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+      expect(await read()).not.toContain("CONTENT OF NO ORG");
+
+      process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = "1";
+      expect(await read()).toContain("CONTENT OF NO ORG");
+    } finally {
+      if (original === undefined)
+        delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+      else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = original;
+    }
+  });
+});
+
+describe("T-5 slice 3: the pinned bridge picks document.read by BEHAVIOUR", () => {
+  // QA-1 NIT-1 on slice 2: M8b greps the source for `action: "document.read"`, so it is
+  // tied to the spelling rather than to the effect — a change that kept the string and
+  // altered the behaviour would pass. This drives the bridge instead.
+  //
+  // M8b stays: the grep catches an accidental edit to the string, this catches a wrong
+  // action being chosen. Different failures, different tests.
+
+  test("a document ALLOWED on search but DENIED on read does not reach the prompt", async () => {
+    const document = await prisma.documents.create({
+      data: {
+        orgId: 1,
+        filename: "split-action-bridge.txt",
+        dedupe_key: `/t5s3/${dbSuffix}/split-action-bridge.txt`,
+      },
+    });
+    await prisma.workspace_documents.create({
+      data: {
+        docId: crypto.randomUUID(),
+        filename: "split-action-bridge.txt",
+        docpath: writeDocFile("split-action-bridge", "CONTENT OF SPLIT BRIDGE"),
+        workspaceId: W1.id,
+        documentId: document.id,
+        pinned: true,
+      },
+    });
+    await prisma.document_acl.create({
+      data: {
+        orgId: 1,
+        document_id: document.id,
+        principal_type: "workspace",
+        principal_id: String(W1.id),
+        action: READER,
+        source: "inherited_workspace",
+      },
+    });
+
+    // A REAL user row: the bridge resolves `{id}` through actorResolver against the
+    // database, so a synthetic id resolves to no principal and yields a match-none filter.
+    // That would make the "denied" assertion below pass for entirely the wrong reason —
+    // which is what the positive control caught.
+    const person = await prisma.users.create({
+      data: { username: `split-bridge-${dbSuffix}`, password: "x" },
+    });
+    const userId = person.id;
+    await actorFor(userId);
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "user",
+      principalId: String(userId),
+      action: "document.search",
+      effect: "allow",
+      db: prisma,
+    });
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "user",
+      principalId: String(userId),
+      action: READER,
+      effect: "deny",
+      db: prisma,
+    });
+
+    const {
+      authorizedPinnedDocs,
+    } = require("../../../utils/authorization/pinnedContext");
+    const docs = await authorizedPinnedDocs({
+      workspace: W1,
+      user: { id: userId },
+      maxTokens: 10_000,
+      db: prisma,
+    });
+
+    // If the bridge asked about `document.search` this would come back: the search grant
+    // allows it. Only asking about `document.read` excludes it.
+    expect(contentsOf(docs)).not.toContain("CONTENT OF SPLIT BRIDGE");
+    // Positive control: the bridge is not simply returning nothing.
+    expect(contentsOf(docs)).toContain("CONTENT OF READABLE");
+  });
+});

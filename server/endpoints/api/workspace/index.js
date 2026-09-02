@@ -13,6 +13,9 @@ const {
   authorizedSimilaritySearch,
 } = require("../../../utils/authorization/retrievalFilter");
 const {
+  buildVectorSearchResponse,
+} = require("../../../utils/authorization/cardinality");
+const {
   getVectorDbClass,
   resolveProviderConnector,
 } = require("../../../utils/helpers");
@@ -992,14 +995,17 @@ function apiWorkspaceEndpoints(app) {
           });
 
         const VectorDb = getVectorDbClass();
-        const hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
-        const embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
-
-        if (!hasVectorizedSpace || embeddingsCount === 0)
-          return response.status(200).json({
-            results: [],
-            message: "No embeddings found for this workspace.",
-          });
+        // T-5 (#30) slice 3 (S-25): the `namespaceCount === 0` early return used to answer
+        // with a DIFFERENT body — `{results: [], message: "No embeddings found..."}` —
+        // than an ACL-filtered search that matched nothing, which answers `{results: []}`.
+        // That made "this workspace holds content you may not read" distinguishable from
+        // "this workspace is empty": an existence oracle over workspace content, the same
+        // class as #32's mint oracle.
+        //
+        // The check is gone rather than made to match. An empty namespace already flows
+        // through the search path and returns the same empty shape, so the early return
+        // bought nothing except the leak. Costing one embedding call on an empty workspace
+        // is the price of having one code path instead of two.
 
         const parseSimilarityThreshold = () => {
           let input = parseFloat(scoreThreshold);
@@ -1034,25 +1040,9 @@ function apiWorkspaceEndpoints(app) {
           query: String(query),
         });
 
-        response.status(200).json({
-          results: results.sources.map((source) => ({
-            id: source.id,
-            text: source.text,
-            metadata: {
-              url: source.url,
-              title: source.title,
-              author: source.docAuthor,
-              description: source.description,
-              docSource: source.docSource,
-              chunkSource: source.chunkSource,
-              published: source.published,
-              wordCount: source.wordCount,
-              tokenCount: source.token_count_estimate,
-            },
-            distance: source._distance,
-            score: source.score,
-          })),
-        });
+        // One builder for every outcome, so an empty result is byte-identical whether the
+        // namespace was empty or the ACL removed everything (S-25).
+        response.status(200).json(buildVectorSearchResponse(results));
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();

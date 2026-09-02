@@ -3,6 +3,7 @@ const { getVectorDbClass, resolveProviderConnector } = require("../../helpers");
 const { addChatCostToMetrics } = require("../../helpers/modelPricing");
 const {
   authorizedPinnedDocs,
+  rehydrationFilter,
 } = require("../../authorization/pinnedContext");
 const {
   sourceIdentifier,
@@ -273,6 +274,10 @@ async function buildSearchContext({
     searchResults: vectorSearchResults.sources,
     history: rawHistory,
     filterIdentifiers: pinnedDocIdentifiers,
+    // T-5 (#30) slice 3 (S-22). `actor` is a PARAMETER of this function — the slice 2
+    // blocker was exactly this identifier read from an outer scope, which no static check
+    // can see and only executing the line reveals.
+    aclFilter: await rehydrationFilter({ actor }),
   });
 
   return {

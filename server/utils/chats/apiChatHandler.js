@@ -372,11 +372,17 @@ async function chatSync({
   }
 
   const { fillSourceWindow } = require("../helpers/chat");
+  const {
+    rehydrationFilter,
+  } = require("../authorization/pinnedContext");
   const filledSources = fillSourceWindow({
     nDocs: workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
     history: rawHistory,
     filterIdentifiers: pinnedDocIdentifiers,
+    // T-5 (#30) slice 3 (S-22). On /v1 the identity lives in the Actor, so it is passed
+    // alongside `user` exactly as the search path above does.
+    aclFilter: await rehydrationFilter({ user, actor }),
   });
 
   // Why does contextTexts get all the info, but sources only get current search?
@@ -773,11 +779,17 @@ async function streamChat({
   }
 
   const { fillSourceWindow } = require("../helpers/chat");
+  const {
+    rehydrationFilter,
+  } = require("../authorization/pinnedContext");
   const filledSources = fillSourceWindow({
     nDocs: workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
     history: rawHistory,
     filterIdentifiers: pinnedDocIdentifiers,
+    // T-5 (#30) slice 3 (S-22). On /v1 the identity lives in the Actor, so it is passed
+    // alongside `user` exactly as the search path above does.
+    aclFilter: await rehydrationFilter({ user, actor }),
   });
 
   // Why does contextTexts get all the info, but sources only get current search?

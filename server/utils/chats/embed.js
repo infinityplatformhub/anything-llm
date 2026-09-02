@@ -168,11 +168,23 @@ async function streamChatWithForEmbed(
   }
 
   const { fillSourceWindow } = require("../helpers/chat");
+  const {
+    rehydrationFilter,
+  } = require("../authorization/pinnedContext");
   const filledSources = fillSourceWindow({
     nDocs: embed.workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
     history: rawHistory,
     filterIdentifiers: pinnedDocIdentifiers,
+    // T-5 (#30) slice 3 (S-22). The embed's own principal, as everywhere else on this
+    // path — an anonymous visitor must not rehydrate what the embed itself cannot read.
+    aclFilter: await rehydrationFilter({
+      actorRef: {
+        type: "embed",
+        id: String(embed.uuid),
+        workspaceIds: [String(embed.workspace_id)],
+      },
+    }),
   });
 
   // Why does contextTexts get all the info, but sources only get current search?

@@ -46,4 +46,34 @@ async function authorizedPinnedDocs({
   });
 }
 
-module.exports = { authorizedPinnedDocs };
+/**
+ * The filter a rehydrated citation is judged by (T-5 #30 slice 3, S-22).
+ *
+ * Five call sites reach `fillSourceWindow`, and building the filter at each of them would
+ * be five chances for one to differ — the same reasoning that made `authorizedPinnedDocs`
+ * a bridge rather than ten inline builds.
+ *
+ * `document.read`, not `document.search`, matching the pinned path: a rehydrated citation
+ * is injected into the prompt wholesale rather than retrieved by a query, so reading it is
+ * the question being asked. Slice 2's M8 proved the two actions genuinely diverge — a
+ * document can be allowed on one and denied on the other — so this is a real choice.
+ *
+ * @param {Object} input same identity arguments as `authorizedPinnedDocs`
+ * @returns {Promise<Object>} a DocumentAclFilter — never null
+ */
+async function rehydrationFilter({
+  user = null,
+  actor = null,
+  actorRef = null,
+  db = undefined,
+} = {}) {
+  return retrievalFilterFor({
+    user,
+    actor,
+    actorRef,
+    action: "document.read",
+    db,
+  });
+}
+
+module.exports = { authorizedPinnedDocs, rehydrationFilter };
