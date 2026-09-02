@@ -1020,6 +1020,10 @@ function systemEndpoints(app) {
         if (narrowed.refusal)
           return response.status(403).json(narrowed.refusal);
         const result = await SystemSettings.updateSettings(narrowed.updates);
+        // Defensive and deliberately unreachable today: this route builds its own
+        // body from one fixed, supported key, so neither code can occur. It stays
+        // so the mapping is uniform across every route that calls updateSettings --
+        // the day someone widens this body, the refusal is already wired.
         if (["unknown_keys", "protected_keys"].includes(result.code))
           return response.status(400).json(result);
         if (!result.success)

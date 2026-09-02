@@ -741,6 +741,11 @@ const SystemSettings = {
   // Explicit update of settings + key validations.
   // Only use this method when directly setting a key value
   // that takes no user input for the keys being modified.
+  //
+  // This path skips `updateSettings`, so it also skips the manager narrowing.
+  // Callers reached from a request must decide authority first --
+  // see `utils/managerSystemPreferences.js` (issue 78 F2, where three routes
+  // wrote forbidden keys through here and bypassed the refusal entirely).
   _updateSettings: async function (updates = {}) {
     try {
       const updatePromises = [];
