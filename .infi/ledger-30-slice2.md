@@ -101,4 +101,4 @@ for a test; the test found the bug.
 Ruling (Techlead-2 NIT): `UNVERIFIED_PROVIDERS` is asserted non-empty, so emptying it
 cannot silently promote pinecone and astra to "supported".
 
-SHA: (final commit below)
+SHA: 58eafae7 (branch approof/t5-slice-2, base f738590e; code at dfde3672)
