@@ -251,7 +251,23 @@ describe("update environment unknown keys over HTTP", () => {
       source.indexOf('app.post(\n    "/system/disable-multi-user"')
     );
 
-    expect(passwordBranch).toMatch(/updateENV\(\s*\{\s*AuthToken: newPassword,\s*JWTSecret: v4\(\),\s*\}/);
+    // #116 reordered these two keys (JWTSecret first, so a store failing on its FIRST write
+    // leaves the recoverable half rather than the one that opens the instance). This test's
+    // subject is that the key set is FIXED and hardcoded — not caller-controlled — so it is
+    // asserted per key rather than as one ordered literal. Pinning the order here would make
+    // an unrelated safety improvement look like a regression.
+    expect(passwordBranch).toMatch(/updateENV\(\s*\{/);
+    expect(passwordBranch).toMatch(/AuthToken: newPassword,/);
+    expect(passwordBranch).toMatch(/JWTSecret: v4\(\),/);
+    // And nothing caller-derived reaches the key set: the only names passed are these two.
+    const passwordCall = passwordBranch.slice(
+      passwordBranch.indexOf("updateENV("),
+      passwordBranch.indexOf("true\n          );")
+    );
+    expect(passwordCall.match(/^\s*\w+:/gm).map((k) => k.trim()).sort()).toEqual([
+      "AuthToken:",
+      "JWTSecret:",
+    ]);
     expect(multiUserBranch).toMatch(/updateENV\(\s*\{\s*JWTSecret: process\.env\.JWT_SECRET \|\| v4\(\),\s*\}/);
   });
 });
