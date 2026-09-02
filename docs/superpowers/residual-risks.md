@@ -136,3 +136,6 @@ Why written down: SHA `3165b913a` passed a full green gate on Dev5's machine (pg
 What would close it: a CI job running `__tests__/scripts/doctor.test.js` against stock `postgres:16` (`.github/workflows/ci.yml:16`). Not done in #74 (scope = installer, not CI matrix).
 
 Until then: any change to `utils/doctor/index.js` touching required extensions or the version floor must be reviewed by someone whose database does *not* match the author's.
+
+## O2a (#74) — getVectorDbClass switches on the raw string
+`utils/helpers/index.js:88` compares `VECTOR_DB` raw; `PGVECTOR`/` pgvector ` silently fall back to LanceDB. Doctor now blocks boot on such spellings (c0c6472b0), so the app never reaches that fallback under doctor — but any boot path that skips doctor still does. Fix = normalize in `getVectorDbClass` (separate issue). TL-2 notes: M3 (`ext.permitted` forced ok) survives because test harness is superuser — closing needs a low-privilege role in-test; M10 (backup notice) needs `toContain("BACK THESE UP")` on the happy path.
