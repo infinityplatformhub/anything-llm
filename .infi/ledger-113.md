@@ -84,6 +84,50 @@ Identical on both. NULLs being distinct in a unique index is standard behaviour;
 `NULLS NOT DISTINCT` is the PG15+ addition, and the comment now says that instead of
 naming one patch version.
 
+## Slice 2 — the driver (RF-1, RF-2, RF-4, F2, F3)
+
+Ruling: a failed enumeration THROWS; it never returns a short list. Every `catch` in
+the driver either retries or rethrows, and none of them return. If wrong: the
+reconciler cannot distinguish a truncated directory from an organisation where those
+people left, so a single 500 on page 37 of 100 deactivates 3,200 people.
+
+Ruling: `emailVerified` is reported as `false`, not `true`. Neither `email` nor
+`enterprise_email` carries verified semantics in Lark, so claiming `true` would
+launder a directory record into a proven address. The trust decision (recon §7.3 —
+we trust the tenant administrator) belongs to core's sync path; the driver states
+facts. If wrong: the exemption stops being visible at the point where it is granted.
+
+Ruling: `memberExternalIds` on a department is EMPTY. Lark carries membership on the
+user record (`department_ids`), not the department. Cross-referencing to fill it in
+would make the driver a reconciler. If wrong: membership gets decided in the layer
+with the least review.
+
+### Evidence, slice 2
+
+15/15. Six mutants; five killed by their named tests, one defective:
+
+- L1 catch the page failure and return what was collected → **five tests**: every
+  RF-1 refusal plus the never-clearing 429. This is the defect the slice exists for.
+- L3 advance the cursor past a page → the full-enumeration test, the page-37 refusal,
+  the dropped-socket test, and the 429 retry. The named-id assertion is what catches
+  it: 5,000 rows is still 5,000 rows if you skip page 37 and read page 38 twice.
+- L4 take `subject` from `open_id` → the subject test AND the source grep.
+- L5 reverse the address precedence → the RF-4 selection test.
+- L6 claim `deltaSync: true` → the capability test.
+- **L2 SURVIVED, and was a bad mutant rather than a gap.** It set `cursor` inside the
+  retry loop, after the URL had already been built from it, so it changed nothing
+  that runs. Recorded rather than quietly dropped: a survivor is only meaningful once
+  you know whether it was reachable, and this one was not.
+
+### A false pass I found in my own test
+
+The app-secret test originally pointed a driver at `${baseUrl}/nonexistent` expecting
+the request to fail. The fixture matches paths with `includes`, so it answered anyway
+— the enumeration SUCCEEDED and the "no secret in the error" assertion passed with no
+error to inspect. Repointed at a dead port (`127.0.0.1:1`) so the failure is real, and
+the assertion now renders `cause` too, since that is where a fetch failure carries the
+request it was making.
+
 ## Residual risks
 
 1. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers
