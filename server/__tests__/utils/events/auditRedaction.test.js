@@ -235,6 +235,38 @@ describe("issue 71: invite codes never reach the audit log", () => {
     });
   });
 
+  // O5b (#94) FINDING: the same `\b` failure, one class over. The three NUMERIC
+  // patterns were anchored with `\b`, and `_` is a word character, so an
+  // identifier glued to an underscore kept its value in full. Found by the
+  // bundle's whole-string scan, where an event name `note_<13 digits>` survived
+  // while every other seeded marker was removed. These four hold the digit
+  // lookarounds that replaced it: three that must redact, one that must not,
+  // because a bound that matches everything is not a bound.
+  describe("PDPA numbers glued to an identifier (#94)", () => {
+    test("a Thai national ID after an underscore is redacted", async () => {
+      const row = await storedFor(auditEvent({ name: "note_1234567890123" }));
+      expect(row.metadata).not.toContain("1234567890123");
+      expect(row.metadata).toContain("[redacted:thai_national_id]");
+    });
+
+    test("a Thai phone number after an underscore is redacted", async () => {
+      const row = await storedFor(auditEvent({ name: "user_0812345678" }));
+      expect(row.metadata).not.toContain("0812345678");
+      expect(row.metadata).toContain("[redacted:phone_th]");
+    });
+
+    test("a card number concatenated onto a word is redacted", async () => {
+      const row = await storedFor(auditEvent({ name: "id4111111111111111" }));
+      expect(row.metadata).not.toContain("4111111111111111");
+      expect(row.metadata).toContain("[redacted:credit_card]");
+    });
+
+    test("an ordinary word with no digits is left alone", async () => {
+      const row = await storedFor(auditEvent({ name: "ordinary_workspace_name" }));
+      expect(row.metadata).toContain("ordinary_workspace_name");
+    });
+  });
+
   test("a code inside `changes` is redacted", async () => {
     // `changes` is scrubbed by scrubChanges, a different function from the one
     // every other key goes through — so it needs its own case or half the
