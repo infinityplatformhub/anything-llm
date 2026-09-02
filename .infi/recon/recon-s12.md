@@ -166,3 +166,91 @@ Two of these probes were wrong before they were right, and both would have produ
 
 Both were caught by the result looking wrong rather than by the probe reporting an error, which is
 the argument for asserting on setup rather than on the outcome alone.
+
+
+---
+
+# Addendum 2 — TL-2 ruling follow-up, measured
+
+Everything below was RUN on a FRESH database (`approof_o5_s12`, migrated and seeded), because the
+first attempt at the extension-key probe ran against a worktree DB holding four leftover users and
+therefore tested the wrong branch entirely.
+
+## TL-2 (4a) CONFIRMED — a suspended user's API key still authenticates
+
+Driven through the real `validApiKey` middleware, not by reading a column:
+
+    user suspended, key created before suspension
+    >>> status: null   next(): CALLED
+
+No status, no refusal, request continues. This is the blocker as TL-2 stated it, and it is the
+argument for `revokedAt` being set in the same transaction as `suspended` rather than in a
+follow-up job.
+
+## TL-2 (4b) NOT REPRODUCIBLE — the extension-key single-user hole is unreachable today
+
+The claim is that `validBrowserExtensionApiKey.js:27` checks `suspended` only inside
+`multiUserMode && …`, so a single-user instance skips it. The check is exactly as described, but
+the guard cannot be reached with a suspended user, and the reason is in `isConfirmedSingleUser`
+(`actorResolver.js:317`):
+
+    if (await SystemSettings.isMultiUserMode()) return false;
+    return (await db.users.count()) === 0;
+
+It requires **zero user rows**. The middleware's local is `!isConfirmedSingleUser()`, so:
+
+    any user row exists   ->  isConfirmedSingleUser() === false
+                          ->  multiUserMode === true
+                          ->  the suspended check RUNS
+
+and the only way to `multiUserMode === false` is `users == 0`, where there is no user to suspend and
+`apiKey.user_id` cannot resolve to one. Measured both ways:
+
+    4 leftover users, setting=false   ->  403, next() not called   (multi-user branch)
+    0 users, setting=false            ->  isConfirmedSingleUser() true, but no user to suspend
+
+The orphaned-key variant is closed too: `browser_extension_api_keys.user_id` is a REAL FK, so
+deleting the owner takes the key with it — measured, key rows 1 -> 0.
+
+**This is a residual, not a blocker.** The `multiUserMode &&` guard is load-bearing only because
+`isConfirmedSingleUser` is stricter than its name suggests; if that helper is ever relaxed to
+"exactly one user" — which is what the name implies and what a future reader may well take it to
+mean — the hole opens immediately, with no test to catch it. Recommend a test pinning the coupling
+rather than a code change, and I would rather state that than remove a guard I cannot demonstrate.
+
+## TL-2's `document_acl` finding CONFIRMED, and it is the same defect as Finding 2
+
+    document_acl before delete: 1  |  after delete: 1  |  inherited by recycled id: 1
+
+`document_acl.principal_id` is a String with no FK (`schema.prisma:880`), exactly like
+`principal_role_grants`. A user created at a recycled id inherits the deleted user's document
+permissions as well as their roles.
+
+## The full audit of user-referencing columns without a foreign key
+
+Queried from `information_schema` rather than by reading the schema file:
+
+    api_keys.createdBy            model_router_rules.created_by
+    document_acl.principal_id     model_routers.created_by
+    embed_configs.createdBy       principal_role_grants.granted_by
+    event_logs.userId             principal_role_grants.principal_id
+    grant_revocations.principal_id  invites.createdBy
+    workspaces.created_by
+
+Seventeen other user-referencing columns DO have real FKs and cascade correctly, including
+`workspace_users`, `identity_links`, `group_members`, `desktop_mobile_devices`,
+`browser_extension_api_keys`, `temporary_auth_tokens`, `recovery_codes` and
+`password_reset_tokens`.
+
+Two of these are load-bearing for offboarding — `document_acl.principal_id` and
+`principal_role_grants.principal_id` — because they decide authorization. `event_logs.userId` is
+TL-2's argument for the terminal state and needs no cleanup by design: an audit row must outlive its
+subject.
+
+## What this means for the contract
+
+The `document_acl` half means slice 1 cannot claim to revoke a user's access by clearing grants
+alone. Either document ACLs come into scope with the grants, or the contract says plainly that a
+suspended user retains document ACL rows and explains why that is safe — which it is today, because
+`actorResolver` returns `null` for a suspended user before any ACL is consulted. It stops being safe
+the moment anything answers an ACL question without going through the resolver.
