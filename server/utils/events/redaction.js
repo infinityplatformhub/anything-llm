@@ -37,8 +37,14 @@ const ALLOWED_KEYS = new Set([
   "prevSystemPrompt", "newSystemPrompt",
   // user updates
   "changes",
-  // invites, embeds, community hub
-  "inviteCode", "embedId", "itemId", "itemType",
+  // invites, embeds, community hub.
+  //
+  // #71: `inviteCode` is NOT here, and must not be added back. An invite code is
+  // a bearer credential — `POST /invite/:code` is public, creates an account and
+  // joins workspaces — and invites do not expire, so a code in an exported audit
+  // log stays redeemable indefinitely. `inviteId` names which invite without
+  // carrying anything redeemable, the same trade `keyPrefix` makes for API keys.
+  "inviteId", "embedId", "itemId", "itemType",
   // auth and keys
   "ip", "multiUserMode", "scopedKeyId", "keyPrefix", "action", "allowed", "denyReason", "orgId",
   // integrations
@@ -58,6 +64,34 @@ const PATTERNS = [
   { name: "credit_card", re: () => /\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{1,4}\b/g },
   { name: "email", re: () => /[\w.+-]+@[\w-]+\.[\w.]+/g },
   { name: "phone_th", re: () => /\b0\d{8,9}\b/g },
+  // #71. Not PDPA — a BEARER CREDENTIAL. Dropping `inviteCode` from the
+  // allowlist fixes ONE call site; this fixes the class. The allowlist filters
+  // top-level keys only, so a credential still reaches the row through
+  // `changes: {code}`, a nested object, an array element, or any allowlisted key
+  // that takes free text — `name`, `workspaceName`, and `link`, which carries
+  // document URLs at two LIVE call sites (`endpoints/workspaces.js` emitting
+  // `link_uploaded`, `endpoints/api/document/index.js` emitting
+  // `api_link_uploaded`) and so cannot be removed from the allowlist without
+  // losing those audit records. `scrubString` walks every string at every depth,
+  // so one value pattern closes all of those paths at once.
+  //
+  // ALL THREE issued prefixes, not just invites: `apw-key-` (API keys) and
+  // `apw-brx-` (browser extension) are the same shape and the same risk, and
+  // nothing was guarding them either. A pattern that covered only the credential
+  // that happened to be reported would leave its siblings live.
+  //
+  // The bound is 16 rather than the 43 these generate today: the `apw-*-` prefix
+  // already makes a false positive impossible, and a bound tied to the current
+  // length would stop matching the moment a code got shorter — failing open,
+  // silently. Kept last so the PDPA classes claim their matches first.
+  //
+  // NO `\b` ANCHOR, deliberately. `\b` needs a non-word character before the `a`,
+  // so a credential concatenated onto anything word-like slips through whole:
+  // `token${code}`, `id${code}`, and `_${code}` all survived it (`_` is a word
+  // character). Measured — four of five probe shapes leaked. The prefix is
+  // distinctive enough to need no anchor, and an anchor that fails open on
+  // string concatenation is worse than none.
+  { name: "credential", re: () => /apw-(?:inv|key|brx)-[A-Za-z0-9_-]{16,}/g },
 ];
 
 // Fields whose BEFORE value is as sensitive as its after value. `changes` stores

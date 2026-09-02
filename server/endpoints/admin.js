@@ -279,10 +279,14 @@ function adminEndpoints(app) {
           workspaceIds: body?.workspaceIds || [],
         });
 
+        // #71: the invite's ID, never its CODE. The code redeems an account
+        // through a public route and never expires, and audit rows are built to
+        // be exported — so a code here is a live credential leaving the system.
+        // The id says which invite without carrying anything redeemable.
         await emitAuditEvent(
           "invite_created",
           {
-            inviteCode: invite.code,
+            inviteId: invite.id,
             createdBy: response.locals?.user?.username,
           },
           response.locals?.user?.id

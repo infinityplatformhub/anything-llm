@@ -365,6 +365,17 @@ function apiAdminEndpoints(app) {
       const { invite, error } = await Invite.create({
         workspaceIds: body?.workspaceIds ?? [],
       });
+
+      // #71: this route created invites with NO audit record at all — the UI
+      // route emitted one, this one did not, so an invite minted through the API
+      // left no trace of who could now join the instance. `api_` prefix and no
+      // userId, matching `api_user_deleted` above: the actor is an API key, and
+      // claiming a user id it does not have would be worse than recording none.
+      //
+      // The invite's ID, never its CODE — see the note in endpoints/admin.js.
+      if (invite)
+        await emitAuditEvent("api_invite_created", { inviteId: invite.id });
+
       response.status(200).json({ invite, error });
     } catch (e) {
       console.error(e);
