@@ -270,15 +270,15 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 ## 2026-09-02 — #80 hotfix c6b56093 merged
 - gate PASS (137/137 incl. sweeps), TL-1 PASS (no NIT), QA-3 PASS. Clears main's sole red (updateSettingsReturns). Includes 5 follow-ups. Split-state residual (no cross-table transaction) stands.
 - Post-merge main after #90: 2583/2584 (sole red = updateSettingsReturns, fixed by hotfix now merged; rerun in flight).
-- #40 rebase inventory (Dev2): 8 new routes vs baseline — mailer ×3, metrics, ldap enabled/login, chats/search (#61), invite/new stack+1 (#80 limiter). Ruling: ldap login/enabled → allowlist with reason (no principal pre-auth); chats/search must be workspace-gated; re-pin with measured count. First real allowlist decision the walk forced.
+- #40 rebase inventory (Dev2): 7 new routes vs baseline — mailer ×3, metrics, ldap enabled/login, chats/search (#61), invite/new stack+1 (#80 limiter). Ruling: ldap login/enabled → allowlist with reason (no principal pre-auth); chats/search must be workspace-gated; re-pin with measured count. First real allowlist decision the walk forced.
 - #84 QA-2 PASS 14/14; waiting Dev1 FINDING-1 commit. O5b recon landed on approof/o5-recon.
 - #84 4a02b678 (FINDING-1: DELETE credential → system.write): gate PASS (check-local, contract 9/9; sweep red = updateSettingsReturns because branch base predates hotfix merge — not #84). Waiting QA-2 (17 cases) + TL-1 delta → close/merge. Gate-equality test (QA-2 case 3) asked of Dev1.
 - O5b recon merged; rulings: CLI-only, no migration/slot in this issue; --bundle JSON on stdout only.
-- #49 contract posted (EXPECT measured-at-close). Dev2 on 40-task1-rebased (inventory: 8 new routes, ldap login/enabled → allowlist ruling).
+- #49 contract posted (EXPECT measured-at-close). Dev2 on 40-task1-rebased (inventory: 7 new routes, ldap login/enabled → allowlist ruling).
 - Post-merge main after #80 hotfix: **2587/2587** (runInBand, fresh STORAGE_DIR, real-store env) — main fully green.
 - #84 f309f1247 (final: + gate-equality test): gate PASS (check-local, contract 10/10, related 107/107, result bound). QA-2 PASS 17/17 (carries). Waiting TL-1 delta → close/merge. #91 rulings sent (all-or-nothing before preUpdate, code fields, 400 + fix 200-on-error → 500, update-password/enable-multi-user untouched).
 - #84 f309f1247 pre-verified on merged tree (main + branch): 57/57 incl. updateSettingsReturns + mailerSettingsRoutes — no rebase needed. Waiting TL-1 delta only.
-- #40 8fdb067dc (rebased on main): inventory 316 measured (8 new routes; ldap login/enabled allowlisted with reason, entry removal → red; chats/search workspace-bound), mount order 328 non-wildcard identical. Gating (contract 82 exact + sweeps); QA-3 + TL-2 dispatched.
+- #40 8fdb067dc (rebased on main): inventory 316 measured (7 new routes; ldap login/enabled allowlisted with reason, entry removal → red; chats/search workspace-bound), mount order 328 non-wildcard identical. Gating (contract 82 exact + sweeps); QA-3 + TL-2 dispatched.
 - #84 f309f1247: QA-3 found gate-equality test search unbounded (slice(at).match → next route's requirePermission) → Dev1 bounds to route block + delete-line mutation; TL-1 delta pending.
 - #91 started (impl91, contract on #91, #93 dup closed — 5th today). #94 O5b opened (CLI-only, no migration). #49 RED suite in progress.
 - #40 8fdb067dc: gate PASS (check-local; contract 82/82 exact; authz+sweeps 664 pass 0 fail; result bound). Waiting QA-3 (SPA re-probe) + TL-2 (inventory diff 316/8 new) → close task 1 / merge → NIT-2 follow-up → task 2.
