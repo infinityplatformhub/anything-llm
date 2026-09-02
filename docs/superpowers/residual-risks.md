@@ -94,3 +94,4 @@
 
 - **ruling A (`validApiKey.js:111`) has no test** — QA-1 mutation M5 survived on #58; code verified correct by probe. Add test in approof/58-followup. `[→ #58 follow-up]`
 - **`websocket.js:17` `userCanToggleTools` bypasses engine in shape (b)** until reboot repairs it (QA-1 D1/D2 on #58). Deferred per ruling D. `[→ backlog]`
+- **chroma has no escape clause for unlabelled rows** (no `$exists`); `RETRIEVAL_FILTER_ALLOW_UNPROVABLE` is inert there and logged as such at boot. Unbackfilled chroma deployments get empty retrieval until #56. `[→ #56]`

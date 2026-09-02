@@ -97,3 +97,9 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Slice 1a BLOCKER (Dev4): ingest never wrote orgId/workspaceId/docId; ruling (ก) write path in 1a + RETRIEVAL_FILTER_ENFORCE flag default off with boot warning (legacy rows would zero out retrieval); backfill + flip → follow-up issue. pgvector bound params; NULL docId = deny.
 - REVISED flag (Techlead): RETRIEVAL_FILTER_ALLOW_UNPROVABLE, presence-based, lives only in isRowAllowed at the no-metadata decision; unset = fail-closed. Rows with metadata are filtered identically in both states. Boot report counts rows with orgId IS NULL per provider. #56 deletes the flag after backfill.
 - FAIL 52b3d176 (Techlead): flag was dead code — predicate `orgId = '1' ...` already excludes unlabelled rows before isRowAllowed. RULING (ก): when RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, constraintFor emits `((orgId IS NULL AND workspaceId IS NULL AND docId IS NULL) OR (<strict>))` in every dialect; isRowAllowed keeps its unlabelled branch. Unset = strict only. Test through queryAuthorized on a real provider with a legacy row, both states. Accepted cost: legacy rows compete for topN until #56 backfill. Boot message must match.
+
+### PMO rulings — slice 1b dialect table (2026-09-02)
+- Ruling: chroma has no `$exists`; `RETRIEVAL_FILTER_ALLOW_UNPROVABLE` is inert for chroma and must say so at boot (retrievalSupport diagnostic + console.error when the flag is set on chroma). Sentinel-value alternative rejected: rewriting every old row is the #56 backfill in disguise.
+- Ruling: chroma + flag → rendered predicate must equal strict exactly (test), boot log present (RED when removed).
+- Ruling: weaviate deny-list = `And[NotEqual docId …]`; the `Not` operator does not exist in its enum and must never be emitted (test on every path).
+- Ruling: weaviate OR-unlabelled = `Or[And[IsNull×3], strict]`.
