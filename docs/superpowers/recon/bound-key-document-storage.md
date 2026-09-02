@@ -12,3 +12,6 @@
 - GET /v1/document/:docName and generated-files: resolve, compare row workspaceId to binding, mismatch → 403 (org-level route, existence not secret).
 - Fix validApiKey.js:40-44 comment: boundKeyWorkspaceScope does not exist; the real guard is inline in endpoints/api/workspace/index.js:154 and :82.
 - HTTP RED per route with bound key of A against B's docs; unbound key positive control 200 on every route.
+- AMENDED (Techlead design check): GET /v1/document/:docName and generated-files → 404 on both mismatch and not-found (§3.4 user-chosen slug; resolve first, compare, no short-circuit, identical body). 403 ruling withdrawn.
+- Auto-attach must cover all 4 upload routes (upload, upload/:folderName, upload-link, raw-text via validateWorkspaceSlugQuery) and ship in the same PR as strict join (no window where a bound key uploads but cannot read).
+- #54 overlap: none — Actor = grants(creator) ∩ scopes(key), binding only narrows. Add test: remove creator from workspace → bound key 403 immediately (grant read at request time, not mint time).
