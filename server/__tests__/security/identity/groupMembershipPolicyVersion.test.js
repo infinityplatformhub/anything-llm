@@ -234,6 +234,44 @@ describe("S4a (#113) RF-5: membership changes reach a live FilterCache", () => {
     expect(await prisma.policy_versions.count()).toBe(before + 1);
   }, 120_000);
 
+  test("NIT-3: the bump names the GROUP's org, not a hardcoded org 1", async () => {
+    // `workspaceScopeKeysFor` read `orgId: 1` in two places: which group grants
+    // count, and which `org:` key the bump publishes under. Every other test in this
+    // file builds in org 1, so a hardcoded 1 is invisible to all of them — this one
+    // exists because the survivor proved it.
+    //
+    // The failure it guards is not cosmetic. `scopesFor` keys cache entries by the
+    // actor's own org, so a bump published under `org:1` for a change in org 2
+    // matches no entry there: the FilterCache keeps serving the old answer, which is
+    // the stale-authorization window RF-5 exists to close, reopened for every tenant
+    // that is not the first.
+    const otherOrg = 2;
+    const group = await prisma.groups.create({
+      data: {
+        orgId: otherOrg,
+        name: `nit3-${dbSuffix}`,
+        source: "lark",
+        externalId: `od-nit3-${dbSuffix}`,
+      },
+    });
+    const user = await prisma.users.create({
+      data: { username: `nit3-${dbSuffix}`, password: "x", role: "default" },
+    });
+
+    const { version } = await repository.addGroupMember({
+      actor: SYS, groupId: group.id, userId: user.id, db: prisma,
+    });
+    expect(version).toBeTruthy();
+
+    const event = await prisma.event_outbox.findFirst({
+      where: { type: "policy.changed" },
+      orderBy: { occurredAt: "desc" },
+    });
+    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    expect(data.scopeKeys).toContain(`org:${otherOrg}`);
+    expect(data.scopeKeys).not.toContain("org:1");
+  }, 120_000);
+
   test("a membership write demands an explicit actor", async () => {
     // Same rule as grantRole: a missing actor must never be a free pass, because
     // seeds and migrations are exactly the callers tempted to omit one.
@@ -241,5 +279,166 @@ describe("S4a (#113) RF-5: membership changes reach a live FilterCache", () => {
     await expect(
       repository.addGroupMember({ groupId: group.id, userId: user.id, db: prisma })
     ).rejects.toThrow(/requires an explicit actor/);
+  }, 120_000);
+});
+
+/**
+ * S4a (#113) RF-8 / TL-1 FINDING-3: membership is a GRANT PATH, so it carries the
+ * same escalation guard `grantRole` does.
+ *
+ * Since #96 the engine expands group membership when it evaluates grants. That made
+ * `addGroupMember` a way to hand someone every permission the group's roles carry —
+ * without ever calling `grantRole`, and therefore without ever meeting its
+ * set-containment check. An actor holding nothing but `member` could add themselves
+ * (or anyone) to a group that holds `super_admin` and inherit it whole.
+ *
+ * The guard is deliberately the SAME SHAPE as `grantRole:160-173` rather than a new
+ * rule: what may be delegated is bounded by what the actor holds. Writing a second,
+ * differently-worded check would let the two drift, and the weaker one becomes the
+ * way in.
+ *
+ * NOTE ON ACTORS. Every test above passes `SYS` (`SERVICE_PRINCIPALS.singleUser`),
+ * which is EXEMPT — so all six stay green whether or not this guard exists. That is
+ * exactly why they could not have caught FINDING-3, and why these tests use real
+ * user actors instead.
+ */
+describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard", () => {
+  /** A group holding an org-wide role, plus an actor holding `roleName` or nothing. */
+  async function escalationWorld(label, actorRoleName = null) {
+    const group = await prisma.groups.create({
+      data: {
+        orgId: 1,
+        name: `rf8-${label}-${dbSuffix}`,
+        source: "lark",
+        externalId: `od-rf8-${label}-${dbSuffix}`,
+      },
+    });
+    const superAdmin = await prisma.roles.findFirstOrThrow({
+      where: { name: "super_admin", scope: "org" },
+    });
+    await repository.grantRole({
+      actor: SYS,
+      principalType: "group",
+      principalId: String(group.id),
+      roleId: superAdmin.id,
+      db: prisma,
+    });
+
+    const victim = await prisma.users.create({
+      data: { username: `rf8-victim-${label}-${dbSuffix}`, password: "x", role: "default" },
+    });
+    const actorUser = await prisma.users.create({
+      data: { username: `rf8-actor-${label}-${dbSuffix}`, password: "x", role: "default" },
+    });
+    if (actorRoleName) {
+      const role = await prisma.roles.findFirstOrThrow({
+        where: { name: actorRoleName, scope: "org" },
+      });
+      await repository.grantRole({
+        actor: SYS,
+        principalType: "user",
+        principalId: String(actorUser.id),
+        roleId: role.id,
+        db: prisma,
+      });
+    }
+    const actor = { type: "user", id: String(actorUser.id), orgId: 1 };
+    return { group, victim, actor };
+  }
+
+  test("a `member` actor cannot add anyone to a group that holds super_admin", async () => {
+    // The attack FINDING-3 names. `grantRole` would refuse this outright; before the
+    // fix, routing it through membership succeeded and the victim inherited
+    // super_admin on their next evaluation.
+    const { group, victim, actor } = await escalationWorld("add", "member");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).rejects.toThrow(/does not hold/);
+
+    // And nothing was written: a refusal that still creates the row is not a refusal.
+    const membership = await prisma.group_members.findFirst({
+      where: { group_id: group.id, user_id: victim.id },
+    });
+    expect(membership).toBeNull();
+  }, 120_000);
+
+  test("REMOVAL is guarded too — taking someone out of a group is also authority", async () => {
+    // Removal is not the harmless direction. Membership can carry a DENY (deny-wins),
+    // and pulling someone out of the group that denies them widens what they may do.
+    // Guarding only `add` leaves the same hole with the sign flipped.
+    const { group, victim, actor } = await escalationWorld("remove", "member");
+    await repository.addGroupMember({
+      actor: SYS, groupId: group.id, userId: victim.id, db: prisma,
+    });
+
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).rejects.toThrow(/does not hold/);
+
+    // Still a member: the refusal did not half-apply.
+    const membership = await prisma.group_members.findFirst({
+      where: { group_id: group.id, user_id: victim.id },
+    });
+    expect(membership).not.toBeNull();
+  }, 120_000);
+
+  test("a super_admin actor may do both — the guard bounds, it does not forbid", async () => {
+    // Without this, "refuses everything" satisfies the two tests above. The guard is
+    // set containment, so an actor holding the group's permissions passes.
+    const { group, victim, actor } = await escalationWorld("allowed", "super_admin");
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).resolves.toMatchObject({ version: expect.anything() });
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("the exempt service principals still pass — coreJobs is the S4b reconciler", async () => {
+    // S4b syncs membership from Lark as `coreJobs`, and it holds no role grants at
+    // all. If the guard applied to it, directory sync would refuse every write.
+    // This is the same exemption `grantRole` gives, for the same reason (issue #20).
+    const { group, victim } = await escalationWorld("exempt");
+
+    await expect(
+      repository.addGroupMember({
+        actor: SERVICE_PRINCIPALS.coreJobs, groupId: group.id, userId: victim.id, db: prisma,
+      })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("a group holding nothing is addable by a `member` actor", async () => {
+    // The guard is about what the GROUP carries, not about membership being
+    // privileged in itself. A group with no grants confers nothing, so there is
+    // nothing to contain — a check that refused this would be measuring the wrong
+    // thing and would block ordinary directory sync from an ordinary admin.
+    const group = await prisma.groups.create({
+      data: {
+        orgId: 1, name: `rf8-empty-${dbSuffix}`,
+        source: "lark", externalId: `od-rf8-empty-${dbSuffix}`,
+      },
+    });
+    const victim = await prisma.users.create({
+      data: { username: `rf8-empty-victim-${dbSuffix}`, password: "x", role: "default" },
+    });
+    const actorUser = await prisma.users.create({
+      data: { username: `rf8-empty-actor-${dbSuffix}`, password: "x", role: "default" },
+    });
+    const member = await prisma.roles.findFirstOrThrow({
+      where: { name: "member", scope: "org" },
+    });
+    await repository.grantRole({
+      actor: SYS, principalType: "user", principalId: String(actorUser.id),
+      roleId: member.id, db: prisma,
+    });
+
+    await expect(
+      repository.addGroupMember({
+        actor: { type: "user", id: String(actorUser.id), orgId: 1 },
+        groupId: group.id, userId: victim.id, db: prisma,
+      })
+    ).resolves.toMatchObject({ version: expect.anything() });
   }, 120_000);
 });

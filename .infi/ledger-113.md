@@ -220,7 +220,93 @@ NIT-1: the staging directory is now removed in a `finally`. It lives under
 dangerous — but a failed `migrate deploy` would otherwise leave one behind on every
 run.
 
+## Slice 5 — TL-1 FINDING-3: membership writes were an ungated grant path (RF-8, NIT-3)
+
+TL-1 rejected `ebab66da9` on one blocker, and it is the real one. Since #96 the engine
+expands `group_members` when it evaluates grants — which is what slice 3 was built on
+— so `addGroupMember` hands a user everything the group's roles carry. It checked only
+`requireActor`. `grantRole` refuses to hand over a permission the actor does not hold;
+routing the same escalation through membership met no check at all, so an actor holding
+nothing but `member` could add anyone (themselves included) to a group holding
+`super_admin`.
+
+This is my own defect, and slice 3 is where it entered: I moved membership writes into
+`policyRepository` *because* they decide authorization, then gave them the version bump
+and not the guard that every other write in this file carries.
+
+Ruling: the guard is the SAME SHAPE as `grantRole:160-173` — `permissionIdsForGroup`
+minus what the actor holds minus the baseline; non-empty means refuse. Not a
+differently-worded second rule: two checks guarding one capability drift, and the
+weaker one becomes the way in. If wrong: the divergence is invisible until someone
+exploits the gap between them.
+
+Ruling: `permissionIdsForGroup` does NOT filter by workspace, and `heldPermissionIds`
+is read org-wide. Membership is not written into a scope — one `group_members` row
+activates every grant the group holds in every workspace at once, so the union is what
+is being delegated and the union is what must be contained. If wrong: a workspace-A
+admin activates a grant that reaches workspace B.
+
+Ruling: REMOVAL is guarded too. Removal looks like the harmless direction and is not —
+evaluation is deny-wins, so pulling someone out of a group that DENIES them widens what
+they may do. Guarding only `add` leaves the same hole with the sign flipped.
+
+Ruling: a group holding no grants is addable by anyone who may write membership at all.
+The guard is about what the GROUP carries, not about membership being privileged in
+itself; refusing here would measure the wrong thing and block ordinary directory sync
+from an ordinary admin.
+
+**KNOWN LIMIT, recorded rather than hidden (#128, queued).** This guard calls
+`heldPermissionIds`, which reads the actor's OWN grants and does not expand their group
+memberships — though the engine has since #96. A delegated admin who holds their role
+only through a group is therefore refused here. That is fail-closed (it denies a
+legitimate write, it does not allow an escalation) and #128 fixes it in
+`heldPermissionIds` itself, so `grantRole` and this get one answer instead of two.
+
+**#128 must not merge before this SHA** (TL-1 pre-read `techlead-128-preread.md` @
+`93c4103fb`). Expanding groups in `heldPermissionIds` while `addGroupMember` has no
+check completes a chain: add yourself to a group → inherit its permissions → satisfy
+the escalation guard → grant yourself directly. Each half is safe only with the other.
+
+### Why the existing six tests could not have caught this
+
+All six RF-5 tests pass `SYS` (`SERVICE_PRINCIPALS.singleUser`), which is EXEMPT — so
+every one of them is green whether or not the guard exists. A suite that cannot fail
+for the defect it covers is the §7.9 shape, and it was mine. The RF-8 tests use real
+user actors for exactly this reason.
+
+### Evidence, slice 5
+
+RED first: only the two escalation tests failed; the four controls and the original six
+passed, so the tests measure the defect rather than a broken suite. 12/12 green after.
+
+Five mutants, each killed by its named test:
+
+- G1 drop the guard from `removeGroupMember` → the removal test alone
+- G2 drop it from `addGroupMember` → the addition test alone
+- G3 drop the `isExemptPrincipal` bypass → the coreJobs test (S4b holds no grants at
+  all; a guard that applied to it would refuse every directory-sync write)
+- G4 `groupPerms.size >= 0` — the guard returns before it checks anything → BOTH
+  escalation tests
+- N3 hardcode `orgId = 1` → the NIT-3 test
+
+**N3 SURVIVED the first run**, and that was a gap rather than a bad mutant: every
+fixture in the file builds in org 1, so a hardcoded 1 is invisible to all of them.
+Written as a test (a group in org 2) and re-run until it died, rather than argued away.
+
+### NIT-3 was two places, not one
+
+TL-1 called `workspaceScopeKeysFor:415` a one-line fix. It is two: the hardcoded `1`
+filters which group grants count AND the callers publish under `SCOPE_KEY(1)`. Fixing
+only the filter would read the group's org while still publishing `org:1` — a key no
+cache entry in that org carries, which is precisely the defect the RF-5 scope test
+exists to catch. So the helper now returns `{ orgId, extra }` and both callers publish
+under the org they read.
+
 ## Residual risks
+
+0. **#128 is a dependency in both directions**, recorded on both issues: this guard is
+   incomplete without #128 (group-held admins are refused), and #128 is unsafe without
+   this guard (the escalation chain above). Neither is a reason to weaken either.
 
 1. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers
    both answers; (b) "Lark re-points every conflicting link" carries a shape

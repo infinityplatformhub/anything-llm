@@ -72,6 +72,71 @@ async function baselinePermissionIds(tx) {
   return new Set(rows.map((r) => r.id));
 }
 
+/**
+ * Permissions carried by every role a GROUP holds, org-wide or workspace-scoped.
+ *
+ * TL-1 FINDING-3 (#113). Since #96 the engine expands `group_members` when it
+ * evaluates grants, which made membership a GRANT PATH: adding a user to a group
+ * hands them everything the group's roles carry, without `grantRole` ever running
+ * and therefore without its set-containment check. An actor holding nothing but
+ * `member` could add anyone — themselves included — to a group holding `super_admin`.
+ *
+ * Workspace-scoped grants are counted here WITHOUT filtering by workspace, and that
+ * asymmetry is deliberate: membership is not written into a scope. One row in
+ * `group_members` activates every grant the group holds in every workspace at once,
+ * so the thing being delegated is the union, and the union is what must be contained.
+ */
+async function permissionIdsForGroup(tx, groupId) {
+  const grants = await tx.principal_role_grants.findMany({
+    where: {
+      principal_type: "group",
+      principal_id: String(groupId),
+      OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+    },
+    select: { role_id: true },
+  });
+  if (grants.length === 0) return new Set();
+  const rows = await tx.role_permissions.findMany({
+    where: { role_id: { in: grants.map((g) => g.role_id) }, effect: "allow" },
+    select: { permission_id: true },
+  });
+  return new Set(rows.map((r) => r.permission_id));
+}
+
+/**
+ * The escalation guard for membership writes — deliberately the SAME SHAPE as
+ * `grantRole`'s, not a second rule worded differently. Two checks guarding one
+ * capability drift, and the weaker one becomes the way in.
+ *
+ * Held permissions are read ORG-WIDE (`targetWorkspaceId: null`) for the reason
+ * above: membership is unscoped, so a workspace-A admin must not be able to activate
+ * a grant that reaches workspace B.
+ *
+ * Applied to REMOVAL as well as addition. Removal is not the harmless direction —
+ * evaluation is deny-wins, so pulling someone out of a group that DENIES them widens
+ * what they may do. Guarding only `add` leaves the same hole with the sign flipped.
+ *
+ * KNOWN LIMIT (#128, queued): `heldPermissionIds` reads the actor's OWN grants and
+ * does not expand their group memberships, though the engine has since #96. So a
+ * delegated admin who holds their role only through a group is refused here. That is
+ * fail-closed — it denies a legitimate write rather than allowing an escalation — and
+ * #128 closes it in `heldPermissionIds` itself, which fixes `grantRole` and this
+ * together rather than teaching one of them a private answer.
+ */
+async function refuseGroupEscalation(tx, actor, groupId, fn) {
+  if (isExemptPrincipal(actor)) return;
+  const groupPerms = await permissionIdsForGroup(tx, groupId);
+  if (groupPerms.size === 0) return; // A group that carries nothing confers nothing.
+  const held = await heldPermissionIds(tx, actor, null);
+  const baselineIds = await baselinePermissionIds(tx);
+  const missing = [...groupPerms].filter((p) => !held.has(p) && !baselineIds.has(p));
+  if (missing.length > 0) {
+    throw new AuthorizationContractError(
+      `${fn} refused: the group carries permissions the actor does not hold org-wide`
+    );
+  }
+}
+
 async function permissionIdsForRole(tx, roleId) {
   const rows = await tx.role_permissions.findMany({
     where: { role_id: roleId, effect: "allow" },
@@ -393,6 +458,18 @@ async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
 async function workspaceScopeKeysFor(tx, userId, groupId) {
   const keys = new Set();
 
+  // NIT-3 (TL-1): the org comes from the GROUP ROW, not from a hardcoded 1. The
+  // group is what is being changed, so it is the only thing that knows which org
+  // this write belongs to — and it decides BOTH halves: which grants count, and
+  // which `org:` key the bump is published under. Splitting those (filtering on the
+  // group's org while publishing `org:1`) would emit a key no cache entry in that
+  // org carries, which is the exact defect the RF-5 scope test exists to catch.
+  const group = await tx.groups.findUnique({
+    where: { id: Number(groupId) },
+    select: { orgId: true },
+  });
+  const orgId = group?.orgId ?? 1;
+
   // Workspaces the user is a direct member of.
   const memberships = await tx.workspace_users.findMany({
     where: { user_id: Number(userId) },
@@ -406,11 +483,11 @@ async function workspaceScopeKeysFor(tx, userId, groupId) {
   // Found by the RF-5 scope test, which asserted the emitted keys rather than
   // trusting that invalidation happened for some reason.
   //
-  // Org-wide grants (workspace_id NULL) need no key of their own — `org:1` is
+  // Org-wide grants (workspace_id NULL) need no key of their own — the `org:` key is
   // already published and every cache entry carries it.
   const grants = await tx.principal_role_grants.findMany({
     where: {
-      orgId: 1,
+      orgId,
       principal_type: "group",
       principal_id: String(groupId),
       workspace_id: { not: null },
@@ -419,7 +496,10 @@ async function workspaceScopeKeysFor(tx, userId, groupId) {
   });
   for (const row of grants) keys.add(`workspace:${row.workspace_id}`);
 
-  return [...keys];
+  // Returned WITH the org rather than as bare keys: the caller publishes under
+  // `SCOPE_KEY(orgId)`, and reading the org here but publishing `org:1` there would
+  // reintroduce the mismatch this fix exists to remove.
+  return { orgId, extra: [...keys] };
 }
 
 /**
@@ -442,11 +522,12 @@ async function workspaceScopeKeysFor(tx, userId, groupId) {
 async function addGroupMember({ actor, groupId, userId, db = prisma }) {
   requireActor(actor, "addGroupMember");
   return inTransaction(db, async (tx) => {
-    const extra = await workspaceScopeKeysFor(tx, userId, groupId);
+    await refuseGroupEscalation(tx, actor, groupId, "addGroupMember");
+    const { orgId, extra } = await workspaceScopeKeysFor(tx, userId, groupId);
     const version = await bumpVersion(
       tx,
       "group_membership",
-      SCOPE_KEY(1),
+      SCOPE_KEY(orgId),
       actorIdOf(actor),
       extra
     );
@@ -470,11 +551,12 @@ async function addGroupMember({ actor, groupId, userId, db = prisma }) {
 async function removeGroupMember({ actor, groupId, userId, db = prisma }) {
   requireActor(actor, "removeGroupMember");
   return inTransaction(db, async (tx) => {
-    const extra = await workspaceScopeKeysFor(tx, userId, groupId);
+    await refuseGroupEscalation(tx, actor, groupId, "removeGroupMember");
+    const { orgId, extra } = await workspaceScopeKeysFor(tx, userId, groupId);
     const version = await bumpVersion(
       tx,
       "group_membership",
-      SCOPE_KEY(1),
+      SCOPE_KEY(orgId),
       actorIdOf(actor),
       extra
     );
