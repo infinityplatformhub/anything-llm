@@ -418,3 +418,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #118: TL-1 PASS; Dev5 comment-only amend (residual names U+3000/U+FF0D separators; order clause). Waiting QA-2.
 - #98 db9649c24 (ledger-only over 12f8732b8): result rebound; waiting TL-2 verdict → merge.
 - #113: Dev3 starts non-record-shape parts; TL-1 RF list requested. Q4 still user's.
+- PMO daemons (inbox-wait 18560, idle-compact 15713) found dead; restarted as background tasks. Inbox empty at restart.
