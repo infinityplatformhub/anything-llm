@@ -59,11 +59,23 @@ const ALLOWED_KEYS = new Set([
 // PDPA patterns. These four are the floor and cannot be disabled by config.
 // Order matters: thai_national_id runs before credit_card so a 13-digit ID is
 // classified as an ID rather than swallowed by the card pattern.
+//
+// The three NUMERIC patterns are bounded by (?<!\d) / (?!\d), NOT by `\b`.
+// `\b` needs a non-word character next to the digits, and `_` is a word
+// character, so `user_1234567890123` and `note_0812345678` kept their values in
+// full — measured while building O5b's bundle scan (#94), where an event name
+// carried an ID past the whole-bundle assertion. It is the same failure the
+// `credential` pattern below already documents for its own anchor, one class
+// over: an anchor that fails open on string concatenation is worse than none.
+//
+// Digit lookarounds rather than no bound at all, because the bound is doing
+// real work: it stops a 16-digit card number from having its first 13 digits
+// claimed by thai_national_id and the remainder left in the clear.
 const PATTERNS = [
-  { name: "thai_national_id", re: () => /\b\d{13}\b/g },
-  { name: "credit_card", re: () => /\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{1,4}\b/g },
+  { name: "thai_national_id", re: () => /(?<!\d)\d{13}(?!\d)/g },
+  { name: "credit_card", re: () => /(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{1,4}(?!\d)/g },
   { name: "email", re: () => /[\w.+-]+@[\w-]+\.[\w.]+/g },
-  { name: "phone_th", re: () => /\b0\d{8,9}\b/g },
+  { name: "phone_th", re: () => /(?<!\d)0\d{8,9}(?!\d)/g },
   // #71. Not PDPA — a BEARER CREDENTIAL. Dropping `inviteCode` from the
   // allowlist fixes ONE call site; this fixes the class. The allowlist filters
   // top-level keys only, so a credential still reaches the row through
