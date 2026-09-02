@@ -937,3 +937,6 @@ PMO ต้อง publish approof/main ทันทีหลังทุก merge
 
 ### §7.14a post-merge suite log
 PMO post-merge suite ต้องเก็บบรรทัด `✕` และบล็อก `●` (grep -E "^(FAIL|Tests:|Test Suites:)|✕|●") ไม่ grep ทิ้ง — ครั้งแรกเสียชื่อเทสที่แดงไป (ldapRoutesHttp)
+
+### §7.9g trust by registry, not by property
+การตรวจใดที่อ่าน property/ชื่อจากฟังก์ชันเพื่อตัดสินความน่าเชื่อถือ (`resolverName`, `fn.name`, `isApiKeyGuard`) ปลอมได้โดยคนที่เขียนฟังก์ชันนั้นเสมอ — ใช้สมาชิกภาพใน registry (WeakSet บน globalThis symbol) ที่ endpoint file ใส่เองไม่ได้ · เจอ pattern นี้ = finding ทันที ไม่ต้อง mutation ก่อน (#40 bypass 4/5/7)
