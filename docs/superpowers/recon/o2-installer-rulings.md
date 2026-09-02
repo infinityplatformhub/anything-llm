@@ -6,3 +6,6 @@
 - Q5 O2 must not require network; offline bundle → O1.
 - Scope: secret generation, preflight (PG reachable, datctype UTF-8, CREATE EXTENSION rights, disk, port), wizard extends OnboardingFlow, `.env.required.example`.
 - Mockup: 2 variants (wizard vs checklist), preflight 4 states, user-confirmed before task.sh start.
+- (1) Secret generation runs in the docker entrypoint before node (script that does not import apiKeySecurity), via writeEnvFileAtomic, only for absent keys — dumpENV drops secret:true keys by design (#48).
+- (2) `doctor` is a standalone subcommand and also runs pre-boot in the entrypoint; non-zero exit with a checklist.
+- (3) Onboarded is a persisted flag, not inferred from AUTH_TOKEN/JWT_SECRET; legacy instances with secrets but no flag get a one-time backfill; 3-way test.
