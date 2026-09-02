@@ -609,3 +609,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Dev5 confirms #120 da2cb0cd8 (commas out, tests inverted, ledger in commit) + #119 0e2317834 (3 mutants: no-seal 3 red, plain-seal 6 red legit, unsealed Route 2 red). Both gated green; reviewers queued. §7.17 unapplied-mutation logged.
 - #127 2ba5ca93a TL-2 PASS (5689c8464); residual setup_admin gap → Dev4 ledger-only SHA. Awaiting QA-3 → close/merge. TL-2 → #119 then #120.
 - #128 6087af79c gate: check-local pass, authz+identity 1079/1115 (0 failed), sweeps 63/63, ledger 4 rulings; contract line rerunning alone. Awaiting TL-1 + QA-1.
+- #128 6087af79c TL-1 PASS (2011afd16): scope as AND sibling verified on real where; null guard before pairs; api-key never touches group_members; orgId not hardcoded. Contract 31/31. Awaiting QA-1 → close/merge (run-id gate-128-6087af79c).
