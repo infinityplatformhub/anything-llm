@@ -104,12 +104,44 @@ One equivalent mutant is documented rather than chased: the `!claims.nonce` half
 of the nonce check, since `completeLogin` already rejects an empty
 `expectedNonce`. Kept as defence-in-depth.
 
+## Review rounds
+
+**Techlead F1/F2** (JWKS) — both real, both reproduced RED before fixing. F2
+would have surfaced as an intermittent "bad signature" outage on every IdP key
+rotation.
+
+**Techlead, round 2** — `/sso/:provider/callback` had no rate limiter. A junk
+state is refused only after a database read, and the route is unauthenticated,
+so it was a free way to make the database work. Fixed; mutation-proved.
+
+**QA-2 probes** — six regression tests requested. Two arrived weaker than they
+looked, and mutation testing is what exposed it:
+
+- **QA-2.6 passed against a case-sensitive collision query.** The test
+  lowercased both sides, but `linkPrincipal` already lowercases the incoming
+  address, so plain equality satisfied it. The stored username now carries the
+  uppercase, and the test fails against that mutant.
+- **QA-2.3 signed nothing**, so its tokens failed on signature rather than on
+  the algorithm name — it proved nothing about the allowlist. Now genuinely
+  HMAC-signed, plus a valid RSA signature under a lowercase `alg`.
+
+- **Ruling (equivalent mutant): QA-2.3 still survives loosening our allowlist.**
+  `jsonwebtoken` refuses a lowercase `alg` at the key layer, so the guarantee is
+  defended twice. Documented in the test rather than left looking proved. The
+  allowlist stays because the second layer is not ours: a library swap, or a
+  verifier that normalizes case, would leave it as the only guard.
+- **Ruling: test URLs live in `__testHelpers__/identity/urls.js`.** The §7.4
+  gate exempts apex `example.com` but deliberately not subdomains, and
+  `idp.example.com` is one. Composing from the apex keeps the gate able to spot
+  a real host elsewhere instead of carving out an exception. The helper sits
+  outside `__tests__` because jest treats every file under it as a suite.
+
 ## Evidence
 
 ```
 cd server && yarn test
-→ Test Suites: 123 passed, 123 total
-→ Tests:       1269 passed, 1269 total
+→ Test Suites: 125 passed, 125 total
+→ Tests:       1296 passed, 1296 total
 ```
 
 Local runs need node@22, `API_KEY_PEPPER`, `STORAGE_DIR` and an empty
