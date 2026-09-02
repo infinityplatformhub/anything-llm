@@ -105,3 +105,4 @@ Half a day. The work is small; §1 is the whole risk, and the reason DoD 3 is wr
 ### PMO rulings (2026-09-02, pre-implementation re-measure by Dev2)
 - Ruling: `workspaces.js:798` keeps `chat.send` — it mutates the caller's own chat and its resolver returns a workspaceId; not a membership proxy. Proxy routes = 4 (workspaces.js:392,1027; agentFileServer.js:31,97).
 - Ruling: `permissions.scope` column + `evaluate()` scope check before R5 (throw AuthorizationContractError) ship in #53, not follow-up. Migration slot 102000, one file: org.member permission (scope='org') + scope column + grants. DoD-6 sweep test stays as second layer.
+- Ruling (correction): the scope check sits at the head of `evaluate()` right after the permission `findUnique`, before any grant read — not "before R5". R5 and key-binding stay blanket and DB-free in `authorize()`. Impersonated actor with a scope mismatch gets the R5 reason.
