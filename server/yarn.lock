@@ -6166,6 +6166,13 @@ lazystream@^1.0.0:
   dependencies:
     readable-stream "^2.0.5"
 
+ldapts@^9.0.0:
+  version "9.0.0"
+  resolved "https://registry.yarnpkg.com/ldapts/-/ldapts-9.0.0.tgz#45c104bc6f7e8c836c15340ab0aa83af6567cd97"
+  integrity sha512-OaaoYBSuan7g0Nm2e1wsRl+9xol41zY+pDlRRSsBq36iKCd2tG/K8WifevNRDjyEfhz4bvkxKdDvJ6xHXwj7+Q==
+  dependencies:
+    strict-event-emitter-types "2.0.0"
+
 leven@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/leven/-/leven-3.1.0.tgz#77891de834064cccba82ae7842bb6b14a13ed7f2"
@@ -8471,6 +8478,11 @@ streamx@^2.15.0, streamx@^2.16.1:
     queue-tick "^1.0.1"
   optionalDependencies:
     bare-events "^2.2.0"
+
+strict-event-emitter-types@2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/strict-event-emitter-types/-/strict-event-emitter-types-2.0.0.tgz#05e15549cb4da1694478a53543e4e2f4abcf277f"
+  integrity sha512-Nk/brWYpD85WlOgzw5h173aci0Teyv8YdIAEtV+N88nDB0dLlazZyJMIsN6eo1/AR61l+p6CJTG1JIyFaoNEEA==
 
 string-length@^4.0.1:
   version "4.0.2"

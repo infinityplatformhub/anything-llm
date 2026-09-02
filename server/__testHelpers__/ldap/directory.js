@@ -100,6 +100,12 @@ function makeDirectory(options = {}) {
     referral = null,
     requireTls = true,
     startTlsFails = false,
+    // A server that answers EVERY bind as an anonymous success. Real ones exist
+    // in this shape when misconfigured, and it is the case that proves a driver
+    // reads the authenticated flag rather than trusting the lack of an
+    // exception — the empty-password guard cannot cover it, because the password
+    // here is perfectly non-empty.
+    alwaysAnonymous = false,
   } = options;
 
   const calls = { binds: [], searches: [], startTls: 0 };
@@ -149,6 +155,11 @@ function makeDirectory(options = {}) {
 
       // RFC 4513 §5.1.2: DN present, password empty → anonymous bind, SUCCESS.
       if (allowAnonymous && (password === "" || password === undefined || password === null))
+        return { authenticated: false, anonymous: true };
+
+      // A misconfigured server that resolves every bind anonymously, whatever
+      // was sent. Nothing throws; only the flag distinguishes it.
+      if (alwaysAnonymous && dn !== SERVICE_DN)
         return { authenticated: false, anonymous: true };
 
       if (dn === SERVICE_DN && password === SERVICE_PASSWORD)

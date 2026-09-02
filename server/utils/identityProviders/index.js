@@ -6,6 +6,7 @@
 
 const { OidcIdentityProvider } = require("./OidcIdentityProvider");
 const { SamlIdentityProvider } = require("./SamlIdentityProvider");
+const { LdapIdentityProvider } = require("./LdapIdentityProvider");
 const { IdentityConfigurationError } = require("./errors");
 
 // Null-prototype: `provider` arrives from the URL, and a plain object would
@@ -13,6 +14,7 @@ const { IdentityConfigurationError } = require("./errors");
 const identityProviders = Object.assign(Object.create(null), {
   [OidcIdentityProvider.providerId()]: OidcIdentityProvider,
   [SamlIdentityProvider.providerId()]: SamlIdentityProvider,
+  [LdapIdentityProvider.providerId()]: LdapIdentityProvider,
 });
 
 /** @param {string} providerId @returns {boolean} */
