@@ -910,3 +910,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - QA-3 RF-C oracle (qa3-orgcaps-prereq-oracle.md): +10 to ORG_CAPABILITIES → visible sets byte-identical (27/25/1/0); literal 11→21 same commit; next re-gate commits need per-role before/after + M2.
 - #140 TL-1 RED pre-read (80e00e823): ready; fold (1) merge unauth status + key-list into one test; (2) engine + require to module scope. system.read-only principal = most valuable line.
 - #126 s2 GREEN in scratch (Dev2): 9/9 target, full 133/133 exit 0; P1–P9 fired (P8 smaller than oracle: 1 assertion); third file capabilityGate.test.jsx updated (approved); neighbours :302/:440 measured. Holds for #121.
+
+- #136 SLICE 2 MERGED (02778b133; gate PASS, TL-1 conditions, TL-2 PASS ×2, QA-2 PASS ×2). #136 CLOSED. #135 unblocked.
