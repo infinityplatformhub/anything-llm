@@ -29,51 +29,25 @@ const { thaiTrigramSupport } = require("../chatSearch/localeSupport");
 const ALWAYS_REQUIRED_EXTENSIONS = ["pg_trgm"];
 const PGVECTOR_EXTENSION = "vector";
 
-/** The one spelling `getVectorDbClass` accepts (utils/helpers/index.js:89). */
 const PGVECTOR_SELECTION = "pgvector";
-
-/** Did the operator MEAN pgvector, whatever they typed? */
-const meansPgvector = (vectorDb) =>
-  String(vectorDb ?? "").trim().toLowerCase() === PGVECTOR_SELECTION;
 
 /**
  * Which extensions this instance actually needs, given its configuration.
  *
- * Intent, not exact spelling: `VECTOR_DB=PGVECTOR` does not reach the pgvector
- * provider (see checkVectorDbSpelling) but it does tell us what the operator
- * wants, and the doctor's job is to check the install they are trying to build.
+ * #87 removed the `config.vector_db` check that used to live beside this. It
+ * existed because `getVectorDbClass` switched on the raw string, so
+ * `VECTOR_DB=PGVECTOR` silently resolved to LanceDB and only the installer
+ * could catch it. The resolver now normalises, so that spelling works — and a
+ * preflight still failing it would block a configuration the app itself
+ * honours. The same normaliser answers the question here.
  */
 function requiredExtensions(vectorDb = process.env.VECTOR_DB) {
-  return meansPgvector(vectorDb)
+  const { normalizeVectorDbKey } = require("../helpers");
+  return normalizeVectorDbKey(vectorDb) === PGVECTOR_SELECTION
     ? [...ALWAYS_REQUIRED_EXTENSIONS, PGVECTOR_EXTENSION]
     : [...ALWAYS_REQUIRED_EXTENSIONS];
 }
 
-/**
- * `getVectorDbClass` switches on the RAW string (utils/helpers/index.js:88-89),
- * so `VECTOR_DB=PGVECTOR` matches no case, falls to the default arm, and quietly
- * returns LanceDB — one `[ENV ERROR]` line at boot and then an instance storing
- * vectors somewhere the operator did not choose.
- *
- * Catching exactly this is what a preflight is for: the configuration is
- * plausible, the server starts, nothing throws, and the mistake only shows up
- * as documents that are not where they should be.
- */
-function checkVectorDbSpelling(vectorDb) {
-  const raw = String(vectorDb ?? "");
-  if (!meansPgvector(raw) || raw === PGVECTOR_SELECTION) {
-    return result(
-      "config.vector_db",
-      true,
-      raw === "" ? "VECTOR_DB is not set; the default vector store is LanceDB." : `VECTOR_DB is ${raw}.`
-    );
-  }
-  return result(
-    "config.vector_db",
-    false,
-    `VECTOR_DB is "${raw}", which no provider matches: the selection is compared as a raw string, so this falls through to the default and the app will silently store vectors in LanceDB instead of PostgreSQL.`
-  );
-}
 const REQUIRED_SECRETS = [
   "JWT_SECRET",
   "SIG_KEY",
@@ -132,11 +106,6 @@ const CHECKS = [
     level: "block",
     remedy:
       "Create STORAGE_DIR and make it writable by the container's uid. Without it the instance cannot persist documents or vector data.",
-  },
-  {
-    id: "config.vector_db",
-    level: "block",
-    remedy: `Set VECTOR_DB=${PGVECTOR_SELECTION} exactly — all lower case, no surrounding spaces. The provider selection is a raw string comparison, so any other spelling silently selects LanceDB.`,
   },
   {
     id: "db.locale",
@@ -409,7 +378,6 @@ async function runChecks({
   uid = typeof process.getuid === "function" ? process.getuid() : 0,
 } = {}) {
   const localChecks = [
-    checkVectorDbSpelling(vectorDb),
     checkEnvWritable({ envPath, uid }),
     checkSecrets({ envPath }),
     checkStorage({ storageDir }),
@@ -486,7 +454,6 @@ module.exports = {
   ALWAYS_REQUIRED_EXTENSIONS,
   PGVECTOR_EXTENSION,
   requiredExtensions,
-  meansPgvector,
   // Exported for the test that drives the "server does not ship it" branch:
   // reaching it through runChecks would need a PostgreSQL missing an extension
   // it actually has, which is the one situation a dev box cannot arrange.

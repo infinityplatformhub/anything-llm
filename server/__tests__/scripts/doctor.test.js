@@ -62,10 +62,9 @@ const base = () => ({
 });
 
 describe("the check list itself", () => {
-  it("declares the nine checks the rulings name", () => {
+  it("declares the eight checks the rulings name", () => {
     expect(doctor.CHECK_IDS.sort()).toEqual(
       [
-        "config.vector_db",
         "db.locale",
         "db.reachable",
         "db.version",
@@ -368,50 +367,34 @@ withDb("locale: two different failures that must not be conflated", () => {
   });
 });
 
-withDb("VECTOR_DB spelling (QA-3)", () => {
-  it("fails a spelling the app will not match", async () => {
-    // getVectorDbClass switches on the RAW string (helpers/index.js:88-89), so
-    // `PGVECTOR` matches no case, falls to the default arm, and returns
-    // LanceDB. One [ENV ERROR] line at boot, then an instance storing vectors
-    // somewhere the operator did not choose — a plausible configuration that
-    // starts cleanly and is wrong. Exactly what a preflight is for.
+withDb("VECTOR_DB spelling", () => {
+  // #87 retired the `config.vector_db` check that lived here. It existed
+  // because `getVectorDbClass` switched on the raw string, so `VECTOR_DB=
+  // PGVECTOR` reached LanceDB and only the installer could catch it. The
+  // resolver now normalises, so that spelling WORKS — a preflight still
+  // failing it would block a configuration the app itself honours.
+  //
+  // What survives is the part that was always about this tool: which
+  // extensions to check, decided from the operator's intent.
+  it("no longer reports a spelling the app now accepts", async () => {
     const results = await doctor.runChecks({ ...base(), vectorDb: "PGVECTOR" });
-    const check = results.find((r) => r.id === "config.vector_db");
-    expect(check.ok).toBe(false);
-    expect(check.level).toBe("block");
-    expect(check.detail).toMatch(/LanceDB/);
-    expect(check.remedy).toMatch(/VECTOR_DB=pgvector/);
+    expect(results.find((r) => r.id === "config.vector_db")).toBeUndefined();
+    expect(results.filter((r) => r.level === "block" && !r.ok)).toEqual([]);
   });
 
-  it("still checks the vector extension for a misspelled pgvector", async () => {
-    // The operator's intent is clear even when the spelling is not, and the
-    // extension they will need once the spelling is fixed is the one to report
-    // on now — otherwise fixing the spelling reveals a second problem that the
-    // preflight could have named in the same run.
-    expect(doctor.requiredExtensions("PGVECTOR")).toEqual([
-      "pg_trgm",
-      "vector",
-    ]);
-  });
-
-  it("passes the exact lower-case spelling", async () => {
-    const results = await doctor.runChecks({ ...base(), vectorDb: "pgvector" });
-    expect(results.find((r) => r.id === "config.vector_db").ok).toBe(true);
-  });
-
-  it("passes any other provider, and an unset value", async () => {
-    for (const value of ["lancedb", "chroma", "", undefined]) {
-      const results = await doctor.runChecks({ ...base(), vectorDb: value });
-      expect(results.find((r) => r.id === "config.vector_db").ok).toBe(true);
+  it("still checks the vector extension for any spelling of pgvector", async () => {
+    for (const spelling of ["pgvector", "PGVECTOR", "PgVector", " pgvector "]) {
+      expect(doctor.requiredExtensions(spelling)).toEqual([
+        "pg_trgm",
+        "vector",
+      ]);
     }
   });
 
-  it("catches surrounding whitespace, which is invisible in a .env file", async () => {
-    const results = await doctor.runChecks({
-      ...base(),
-      vectorDb: "pgvector ",
-    });
-    expect(results.find((r) => r.id === "config.vector_db").ok).toBe(false);
+  it("does not check it for another provider or an unset value", async () => {
+    for (const spelling of ["lancedb", "CHROMA", "", undefined]) {
+      expect(doctor.requiredExtensions(spelling)).toEqual(["pg_trgm"]);
+    }
   });
 });
 
