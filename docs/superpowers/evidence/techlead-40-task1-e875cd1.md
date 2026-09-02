@@ -15,11 +15,18 @@ Delta: WeakSet identity registry, `dynamic` bucket, zero-unclassified assertion,
 **1. The counting alternative is the same kind of thing, not a stronger kind.** A loose call-shape
 count over `index.js` is still a text scan of the same file — I ran it: `32`, identical to the current
 regex's yield. Swapping a tight regex for a loose one moves the blind spot rather than removing it.
-The genuinely stronger option is exporting the mount list from `index.js`, and the implementer's
-objection to that is right on the facts: `require("index.js")` executes boot side effects
-(`bootHTTP`/`bootSSL`, `CommunicationKey`, the model-pricing prefetch I saw run in my own probes).
-Making a security sweep depend on booting the server is a worse trade than a text scan with an
-assertion behind it.
+
+The genuinely stronger option is exporting the mount list from `index.js`. **Correction:** the
+implementer's stated objection — that requiring `index.js` boots the server — is wrong on the facts,
+and Dev2 measured it: `index.js:212` guards `bootHTTP` behind `require.main === module`, `:215`
+exports `{app}`, and a require costs ~1s without listening. I verified both lines. (`bootSSL` at `:96`
+is guarded by `ENABLE_HTTPS` rather than by `require.main`, so it is unreachable in a test
+environment too.)
+
+The reason to accept the regex anyway is different: exporting the real mount list means rewriting
+`index.js:103-134` into a loop — **changing the boot path so a test can inspect it more easily.** That
+is a cost task 1 should not pay, and the ~1s per require is a second, smaller reason. The objection
+was wrong; the conclusion it was offered for still holds on better grounds.
 
 **2. What actually closes the hole is the `/v1` guard, and it works.** Measured on the mounted router:
 
