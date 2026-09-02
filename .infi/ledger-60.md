@@ -93,6 +93,47 @@ Worth stating plainly, because it generalizes: layered defences hide each other
 from mutation testing. To prove the inner layer, either disable the outer one or
 find an input the outer layer lets through.
 
+## FINDING-5 + Techlead-1 NITs — deferred to slot 092000
+
+Recon: `docs/superpowers/recon/s3-ldap-finding5.md`. Deliberately NOT in the SHA
+at the gate; 092000 is its own commit on top of `17aadd2f` after the route merges.
+
+Ruling: the `identity_providers` CHECK is SHAPE-DERIVED, with no discriminator
+column — because `provider` is the UNIQUE registry key, not a type tag, and both
+schema tests write random values into it (`saml-${rand}`, `ldap-${rand}`). A CHECK
+on `provider = 'saml'` rejects every row the tests insert; `LIKE 'saml%'` would let
+a row select its own validation rules by its own name, which is the same class of
+error as reading a signed document's Subject document-wide. If this is wrong we
+pin two shapes in SQL and S4's provider edits the constraint — cheap, and visible
+when it happens.
+
+Ruling: `entityId = ''` / `ssoUrl = ''` meaning "not a SAML provider" is a
+DELIBERATE contract, not an accident to be cleaned up later. Under the
+shape-derived CHECK the empty string is load-bearing, so 092000 carries
+`COMMENT ON COLUMN` on both saying so, AND a test asserting
+`is_nullable = 'NO'` from `information_schema.columns`. If this is wrong someone
+later makes those columns nullable, writes NULL, and every clause of the
+constraint inverts in silence — the comment is documentation and can be ignored,
+so the test is the part that actually fails.
+
+Ruling: the constraint is added WITHOUT `NOT VALID` — it validates on apply. If
+this is wrong a deployment holding a half-configured row fails at migrate time
+rather than carrying it forward, which is the correct direction to fail; the
+table has one production row.
+
+Ruling: six tests, not the three the finding named. If this is wrong the
+constraint ships half-unproven — a CHECK reduced to `ldapUrl IS NOT NULL` passes
+all three obvious tests. The mixed row must be tested from BOTH directions, one
+case must insert `ldapUrl: ""` (since `IS NOT NULL` without `<> ''` survives
+everything that inserts NULL, and Prisma writes empty strings happily), and the
+sixth is the `is_nullable` assertion above.
+
+Techlead-1 PASS on `17aadd2f` with 3 NITs, all deferred to 092000 by PMO:
+NIT-1 adds an ip+username rate-limit bucket to `/sso/ldap/login` via the existing
+`loginKey`, matching local login; NIT-2 and NIT-3 are comments recording that
+`/sso/ldap/enabled` shares the bucket, and that `simpleSSOLoginDisabled`
+deliberately does not gate this route.
+
 ## Evidence
 
 `__tests__/security` (whole tree) — Tests: 547 passed, 547 total, 53 suites.
@@ -186,6 +227,47 @@ shadowed all over again.
 That is twice now in one issue. §7.9c is not a corner case: any two guards on the
 same path hide each other unless a fixture reaches past the first.
 
+## FINDING-5 + Techlead-1 NITs — deferred to slot 092000
+
+Recon: `docs/superpowers/recon/s3-ldap-finding5.md`. Deliberately NOT in the SHA
+at the gate; 092000 is its own commit on top of `17aadd2f` after the route merges.
+
+Ruling: the `identity_providers` CHECK is SHAPE-DERIVED, with no discriminator
+column — because `provider` is the UNIQUE registry key, not a type tag, and both
+schema tests write random values into it (`saml-${rand}`, `ldap-${rand}`). A CHECK
+on `provider = 'saml'` rejects every row the tests insert; `LIKE 'saml%'` would let
+a row select its own validation rules by its own name, which is the same class of
+error as reading a signed document's Subject document-wide. If this is wrong we
+pin two shapes in SQL and S4's provider edits the constraint — cheap, and visible
+when it happens.
+
+Ruling: `entityId = ''` / `ssoUrl = ''` meaning "not a SAML provider" is a
+DELIBERATE contract, not an accident to be cleaned up later. Under the
+shape-derived CHECK the empty string is load-bearing, so 092000 carries
+`COMMENT ON COLUMN` on both saying so, AND a test asserting
+`is_nullable = 'NO'` from `information_schema.columns`. If this is wrong someone
+later makes those columns nullable, writes NULL, and every clause of the
+constraint inverts in silence — the comment is documentation and can be ignored,
+so the test is the part that actually fails.
+
+Ruling: the constraint is added WITHOUT `NOT VALID` — it validates on apply. If
+this is wrong a deployment holding a half-configured row fails at migrate time
+rather than carrying it forward, which is the correct direction to fail; the
+table has one production row.
+
+Ruling: six tests, not the three the finding named. If this is wrong the
+constraint ships half-unproven — a CHECK reduced to `ldapUrl IS NOT NULL` passes
+all three obvious tests. The mixed row must be tested from BOTH directions, one
+case must insert `ldapUrl: ""` (since `IS NOT NULL` without `<> ''` survives
+everything that inserts NULL, and Prisma writes empty strings happily), and the
+sixth is the `is_nullable` assertion above.
+
+Techlead-1 PASS on `17aadd2f` with 3 NITs, all deferred to 092000 by PMO:
+NIT-1 adds an ip+username rate-limit bucket to `/sso/ldap/login` via the existing
+`loginKey`, matching local login; NIT-2 and NIT-3 are comments recording that
+`/sso/ldap/enabled` shares the bucket, and that `simpleSSOLoginDisabled`
+deliberately does not gate this route.
+
 ## Evidence (after the rebuild)
 
 `__tests__/security` — Tests: 577 passed, 577 total, 54 suites.
@@ -261,6 +343,47 @@ to one message and cannot see a distinction the driver introduced. Run against t
 driver tests it dies immediately. The lesson is the §7.9c family again — a guard
 downstream of the one under test hides it, so the mutant has to be run against the
 layer that owns the property.
+
+## FINDING-5 + Techlead-1 NITs — deferred to slot 092000
+
+Recon: `docs/superpowers/recon/s3-ldap-finding5.md`. Deliberately NOT in the SHA
+at the gate; 092000 is its own commit on top of `17aadd2f` after the route merges.
+
+Ruling: the `identity_providers` CHECK is SHAPE-DERIVED, with no discriminator
+column — because `provider` is the UNIQUE registry key, not a type tag, and both
+schema tests write random values into it (`saml-${rand}`, `ldap-${rand}`). A CHECK
+on `provider = 'saml'` rejects every row the tests insert; `LIKE 'saml%'` would let
+a row select its own validation rules by its own name, which is the same class of
+error as reading a signed document's Subject document-wide. If this is wrong we
+pin two shapes in SQL and S4's provider edits the constraint — cheap, and visible
+when it happens.
+
+Ruling: `entityId = ''` / `ssoUrl = ''` meaning "not a SAML provider" is a
+DELIBERATE contract, not an accident to be cleaned up later. Under the
+shape-derived CHECK the empty string is load-bearing, so 092000 carries
+`COMMENT ON COLUMN` on both saying so, AND a test asserting
+`is_nullable = 'NO'` from `information_schema.columns`. If this is wrong someone
+later makes those columns nullable, writes NULL, and every clause of the
+constraint inverts in silence — the comment is documentation and can be ignored,
+so the test is the part that actually fails.
+
+Ruling: the constraint is added WITHOUT `NOT VALID` — it validates on apply. If
+this is wrong a deployment holding a half-configured row fails at migrate time
+rather than carrying it forward, which is the correct direction to fail; the
+table has one production row.
+
+Ruling: six tests, not the three the finding named. If this is wrong the
+constraint ships half-unproven — a CHECK reduced to `ldapUrl IS NOT NULL` passes
+all three obvious tests. The mixed row must be tested from BOTH directions, one
+case must insert `ldapUrl: ""` (since `IS NOT NULL` without `<> ''` survives
+everything that inserts NULL, and Prisma writes empty strings happily), and the
+sixth is the `is_nullable` assertion above.
+
+Techlead-1 PASS on `17aadd2f` with 3 NITs, all deferred to 092000 by PMO:
+NIT-1 adds an ip+username rate-limit bucket to `/sso/ldap/login` via the existing
+`loginKey`, matching local login; NIT-2 and NIT-3 are comments recording that
+`/sso/ldap/enabled` shares the bucket, and that `simpleSSOLoginDisabled`
+deliberately does not gate this route.
 
 ## Evidence
 
