@@ -77,6 +77,30 @@ const isComplete = (enumeration) => enumeration?.[COMPLETE] === true;
 const DEACTIVATION_FLOOR = 10;
 const DEACTIVATION_RATIO = 0.5;
 
+// The SECOND scale guard (TL-1 F1). Mine was the defect it exists for: I guarded the
+// deactivation path and left the membership path open, in exactly the misconfiguration
+// the comment above names. Measured on the pre-fix code, 100 users all present with
+// `department_ids` empty:
+//
+//   deactivate: 0 · refused: false · removeMembership: 100
+//
+// Nobody looks departed, so the deactivation guard never fires — and since #96 group
+// membership carries grants, so that plan silently revokes group-derived access for
+// the whole organisation. A narrowed Lark scope produces exactly this shape.
+//
+// Separate constants, not shared with the deactivation guard: memberships are
+// many-per-user, so the two quantities are different in kind and a floor tuned for
+// headcount means nothing here.
+//
+// Ruling: MEMBERSHIP_FLOOR = 25. Below that, wholesale membership loss is a small
+// reorganisation rather than evidence of a broken directory app.
+//
+// Ruling: MEMBERSHIP_RATIO = 0.5. Same reasoning as the deactivation threshold: half
+// the organisation's memberships ending between two syncs is more likely a scope
+// change than a reorganisation everyone forgot to mention.
+const MEMBERSHIP_FLOOR = 25;
+const MEMBERSHIP_RATIO = 0.5;
+
 /**
  * @param {{enumeration: Object, current: {users: Array, groups: Array, memberships: Array}}} input
  * @returns {Object} the plan
@@ -139,12 +163,6 @@ function diffDirectory({ enumeration, current }) {
       )
     : [];
 
-  // ---- scale guard --------------------------------------------------------
-  const refused =
-    deactivate.length > DEACTIVATION_FLOOR &&
-    users.length > 0 &&
-    deactivate.length / users.length > DEACTIVATION_RATIO;
-
   // ---- groups -------------------------------------------------------------
   const currentGroupIds = new Set(currentGroups.map((g) => g.externalId));
   const snapshotGroupIds = new Set(groups.map((g) => g.externalId));
@@ -185,30 +203,63 @@ function diffDirectory({ enumeration, current }) {
   // Removal is only meaningful from a completed enumeration, for the same reason
   // deactivation is: a partial snapshot's silence about a membership is not a claim
   // that it ended.
+  //
+  // A QUARANTINED subject is excluded here exactly as it is from `deactivate` (TL-1
+  // F2). Its record is unusable, which is not a statement about its membership — the
+  // `groupExternalIds` on an invalid record cannot be trusted in either direction. A
+  // temporarily degraded directory record must not become a revocation; narrowing is
+  // damage too, not just deactivation.
   const removeMembership = complete
-    ? [...held].filter((k) => !desired.has(k)).map(split)
+    ? [...held]
+        .filter((k) => !desired.has(k))
+        .map(split)
+        .filter((m) => !quarantined.has(m.subject))
     : [];
+
+  // ---- scale guards -------------------------------------------------------
+  // TWO guards, on two different quantities. The deactivation guard alone was the F1
+  // defect: a narrowed Lark scope returns everyone (so nothing is deactivated) with
+  // no departments (so every membership ends), and the org loses its group-derived
+  // access without a single deactivation to trip the first guard.
+  const refusedDeactivations =
+    deactivate.length > DEACTIVATION_FLOOR &&
+    users.length > 0 &&
+    deactivate.length / users.length > DEACTIVATION_RATIO;
+
+  const refusedMemberships =
+    removeMembership.length > MEMBERSHIP_FLOOR &&
+    currentMemberships.length > 0 &&
+    removeMembership.length / currentMemberships.length > MEMBERSHIP_RATIO;
+
+  const refused = refusedDeactivations || refusedMemberships;
 
   return {
     // Reported so a caller can tell a BLOCKED plan from a no-op one. Slice 3 needs
     // that difference to alert instead of reporting a clean run.
     complete,
     refused,
-    refusedReason: refused
+    refusedReason: refusedDeactivations
       ? `scale guard: ${deactivate.length} of ${users.length} users would be ` +
         `deactivated (floor ${DEACTIVATION_FLOOR}, threshold ` +
         `${DEACTIVATION_RATIO * 100}%) — more likely a misconfigured directory app ` +
         `than attrition`
-      : null,
+      : refusedMemberships
+        ? `scale guard: ${removeMembership.length} of ${currentMemberships.length} ` +
+          `memberships would be removed (floor ${MEMBERSHIP_FLOOR}, threshold ` +
+          `${MEMBERSHIP_RATIO * 100}%) — a directory app whose scope was narrowed ` +
+          `returns everyone with no departments, which ends every membership while ` +
+          `deactivating nobody`
+        : null,
     create,
-    // A refused plan carries NO deactivations rather than carrying them with a flag
-    // set. A caller that forgets to check `refused` then does nothing, instead of
-    // doing the destructive thing.
+    // A refused plan carries NEITHER destructive list rather than carrying them with a
+    // flag set. A caller that forgets to check `refused` then does nothing, instead of
+    // doing the destructive thing — and BOTH are cleared whichever guard fired, since
+    // a run this wrong about one is not to be trusted about the other.
     deactivate: refused ? [] : deactivate,
     quarantine,
     createGroups,
     addMembership,
-    removeMembership,
+    removeMembership: refused ? [] : removeMembership,
     danglingGroupRefs,
   };
 }
@@ -220,4 +271,6 @@ module.exports = {
   DirectoryDiffError,
   DEACTIVATION_FLOOR,
   DEACTIVATION_RATIO,
+  MEMBERSHIP_FLOOR,
+  MEMBERSHIP_RATIO,
 };

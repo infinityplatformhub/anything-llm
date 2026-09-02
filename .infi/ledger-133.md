@@ -98,6 +98,67 @@ the guard it named (the first was #128's RF-2 refusing on containment rather tha
 scope). The pattern is the same both times: the fixture never reached the code the test
 claimed to exercise. Reading did not catch either; the mutant did.
 
+## TL-1 REJECT on `62b431ad9` — F1, and it was mine
+
+**F1 (blocker).** The scale guard counted deactivations only. I wrote a comment naming
+"a narrowed Lark scope" as the misconfiguration it protects against, and then guarded
+the wrong quantity — the narrowed-scope case does not deactivate anybody. Measured on
+the rejected code, 100 users all present with `department_ids` empty:
+
+```
+deactivate:       0
+refused:          false
+removeMembership: 100
+```
+
+Nobody looks departed, so the deactivation guard never fires. Since #96 group
+membership carries grants, so that plan silently revokes group-derived access for the
+entire organisation — the exact damage the guard exists to prevent, through the door I
+left open. The same probe after the fix: `refused: true`, both lists empty.
+
+Ruling: a SECOND guard on `removeMembership.length / currentMemberships.length`, same
+floor-plus-ratio shape but SEPARATE constants. Memberships are many-per-user, so the
+two quantities differ in kind and a floor tuned for headcount means nothing here.
+`MEMBERSHIP_FLOOR = 25`, `MEMBERSHIP_RATIO = 0.5`.
+
+Ruling: `refused` clears BOTH destructive lists, whichever guard fired. A run this
+wrong about one quantity is not to be trusted about the other, and a caller that
+forgets to check the flag should then do nothing rather than half the damage.
+
+**F2.** A quarantined subject is now excluded from `removeMembership` exactly as it is
+from `deactivate`. Its record is unusable, which is not a statement about its
+membership — `groupExternalIds` on an invalid record cannot be trusted in either
+direction. The narrowing direction is damage too, not just deactivation.
+
+My original quarantine test used a principal with NO memberships, so it was green
+whether or not this held. Third instance of the same shape in two issues.
+
+## QA-1's two arms with no witness
+
+**NIT-1.** The membership ratio arm had no test: every fixture clearing the floor also
+cleared the ratio, so the floor alone explained every result and `&& true` survived in
+its place. Fixed with a fixture in the band where the arms disagree — 30 of 100 (over
+the floor of 25, under 50%), where only the ratio can allow it.
+
+**NIT-2.** `removeMembership` was bound to `complete` in the code but nothing tested
+it: the incomplete-run fixtures carried no memberships, so unbinding it survived. T1
+and T3 now hold memberships and assert `removeMembership: []`. T3 is the sharper case —
+`listGroups` failing is precisely what makes every department look empty.
+
+## Evidence, second round
+
+RED before the fix: 3 failed, 17 passed — RF-6, RF-7 and RF-7's control. 21/21 green
+after. Full authorization+identity sweep green.
+
+Five further mutants, each killed by its named tests:
+
+- F1 count deactivations only (the rejected code, verbatim) → RF-6 alone
+- F2 drop the quarantine exclusion from removal → both RF-7 tests
+- F3 drop the membership floor → the small-org membership test and the
+  membership-removal test
+- D2 neuter the membership ratio arm (`&& true`) → NIT-1 alone
+- D7 unbind removal from completeness → T1 and T3
+
 ## Residual risks
 
 1. **The constructor is still reachable from the production path** (TL-1, and this
@@ -122,6 +183,18 @@ claimed to exercise. Reading did not catch either; the mutant did.
      tidy-up: slice 1's tests must be able to build a completed enumeration without a
      real driver, so removing the constructor with nowhere for tests to get one breaks
      all fifteen of them.
+1b. **The brand certifies PROVENANCE, not truth** (QA-1's wording, and it is the
+   precise statement). It records that a value came from `completedEnumeration`, not
+   that an enumeration actually finished. Slice 2 must therefore never unwrap a value
+   and re-wrap it: passing a failed run's data through the constructor produces a
+   value indistinguishable from a real completed one, and every guard in this file
+   then reasons from a lie it cannot detect.
+
+1c. NIT-3 (minor): R6's no-database rule is enforced by a source grep, which a dynamic
+   `require` built from a computed string would defeat. Recorded rather than fixed —
+   the grep catches the accident, and defeating it deliberately is not the failure
+   mode this slice is defending against.
+
 2. `danglingGroupRefs` is reported and otherwise inert. Slice 3 decides whether a run
    with dangling references alerts, and how loudly — recorded so it is not assumed
    handled.

@@ -69,7 +69,14 @@ describe("#133 R1/R2: completeness is a property of the value, not a flag", () =
   test("T1 interrupted: a user absent from an INCOMPLETE enumeration is not deactivated", async () => {
     // The destructive case. u-1 is genuinely gone from what came back, but the
     // enumeration did not finish — so absence carries no information at all.
-    const before = state({ users: [linkedUser("u-1"), linkedUser("u-2")] });
+    const before = state({
+      users: [linkedUser("u-1"), linkedUser("u-2")],
+      groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+      memberships: [
+        { subject: "u-1", groupExternalId: "d-1" },
+        { subject: "u-2", groupExternalId: "d-1" },
+      ],
+    });
 
     const plan = diffDirectory({
       enumeration: failedEnumeration({
@@ -80,6 +87,12 @@ describe("#133 R1/R2: completeness is a property of the value, not a flag", () =
     });
 
     expect(plan.deactivate).toEqual([]);
+    // QA-1 NIT-2: membership REMOVAL is bound to completeness too, and it needed its
+    // own witness — a mutant unbinding it survived, because the incomplete fixtures
+    // carried no memberships to remove. An incomplete run says nothing about
+    // membership either: since #96 those rows carry grants, so stripping them on a
+    // rate-limited page is the same org-wide revocation by a different route.
+    expect(plan.removeMembership).toEqual([]);
   });
 
   test("T2 completed, SAME fixture: the absent user IS deactivated", async () => {
@@ -118,7 +131,14 @@ describe("#133 R1/R2: completeness is a property of the value, not a flag", () =
     // R1's second call. listPrincipals succeeded and looks authoritative; the run is
     // still not complete, and conflating the two turns one Lark 500 into an org-wide
     // deactivation.
-    const before = state({ users: [linkedUser("u-1"), linkedUser("u-2")] });
+    const before = state({
+      users: [linkedUser("u-1"), linkedUser("u-2")],
+      groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+      memberships: [
+        { subject: "u-1", groupExternalId: "d-1" },
+        { subject: "u-2", groupExternalId: "d-1" },
+      ],
+    });
 
     const plan = diffDirectory({
       enumeration: failedEnumeration({
@@ -130,6 +150,10 @@ describe("#133 R1/R2: completeness is a property of the value, not a flag", () =
     });
 
     expect(plan.deactivate).toEqual([]);
+    // NIT-2 again, and this is the sharper case: `listGroups` is exactly the call
+    // whose failure makes every department look empty. Removing memberships here
+    // would revoke group-derived access for everyone the run happened to reach.
+    expect(plan.removeMembership).toEqual([]);
     // And it is not silently empty: the caller can tell a blocked plan from a
     // no-op one, which is what lets slice 3 alert instead of reporting success.
     expect(plan.complete).toBe(false);
@@ -229,6 +253,198 @@ describe("#133 R4: the scale guard needs a floor as well as a ratio", () => {
 
     expect(plan.refused).toBe(false);
     expect(plan.deactivate).toHaveLength(2);
+  });
+});
+
+describe("#133 RF-6: the scale guard covers membership, not just deactivation", () => {
+  test("a snapshot with everyone PRESENT but no departments refuses", async () => {
+    // TL-1 F1, and it is my defect: I guarded the deactivation path and left the
+    // membership path open, in exactly the misconfiguration the guard's own comment
+    // names. Measured on the pre-fix code:
+    //
+    //   deactivate: 0 · refused: false · removeMembership: 100
+    //
+    // A Lark app whose scope was narrowed returns every user (so nobody looks
+    // departed) with `department_ids` empty (so every membership looks ended). Since
+    // #96 group membership carries grants, so that plan silently revokes
+    // group-derived access for the whole organisation — and the deactivation guard
+    // never fires, because nothing was deactivated.
+    //
+    // The fixture is deliberately one where NOBODY LEFT. A guard counting only
+    // deactivations is green here, which is what makes this test measure the new one.
+    const users = Array.from({ length: 100 }, (_, i) => linkedUser(`u-${i}`));
+    const memberships = users.map((u) => ({
+      subject: u.subject,
+      groupExternalId: "d-1",
+    }));
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({
+        principals: users.map((u) => principal(u.subject, { groupExternalIds: [] })),
+        groups: [group("d-1")],
+      }),
+      current: state({
+        users,
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships,
+      }),
+    });
+
+    expect(plan.refused).toBe(true);
+    expect(plan.removeMembership).toEqual([]);
+    // And the deactivation list stays empty too — a refused plan carries neither
+    // destructive list, so a caller that forgets to check `refused` does nothing.
+    expect(plan.deactivate).toEqual([]);
+    expect(plan.refusedReason).toMatch(/membership/i);
+  });
+
+  test("a NORMAL number of membership changes is still allowed", async () => {
+    // The control. Without it, "refuse whenever memberships are removed" passes the
+    // test above and blocks every ordinary reorganisation — a guard that fires on
+    // normal operation gets disabled, and a disabled guard protects nothing.
+    const users = Array.from({ length: 100 }, (_, i) => linkedUser(`u-${i}`));
+    const memberships = users.map((u) => ({
+      subject: u.subject,
+      groupExternalId: "d-1",
+    }));
+    // Two people move out of the department; everyone else stays.
+    const principals = users.map((u, i) =>
+      principal(u.subject, { groupExternalIds: i < 2 ? [] : ["d-1"] })
+    );
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({ principals, groups: [group("d-1")] }),
+      current: state({
+        users,
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships,
+      }),
+    });
+
+    expect(plan.refused).toBe(false);
+    expect(plan.removeMembership).toHaveLength(2);
+  });
+
+  test("NIT-1: OVER the floor but UNDER the ratio is allowed — the ratio arm", async () => {
+    // QA-1: the ratio arm had no witness. A mutant replacing it with `&& true`
+    // survives if every fixture that clears the floor also clears the ratio — the
+    // floor alone would then explain every result, and the ratio would be decoration.
+    //
+    // So this sits in the band where the two arms DISAGREE: 30 of 100 memberships end
+    // — comfortably OVER MEMBERSHIP_FLOOR (25) and well UNDER MEMBERSHIP_RATIO (50%).
+    // The floor has already been cleared, so only the ratio can allow it.
+    //
+    // Same discipline as the deactivation floor test, and for the same reason: a
+    // fixture where both arms agree measures neither.
+    const users = Array.from({ length: 100 }, (_, i) => linkedUser(`u-${i}`));
+    const memberships = users.map((u) => ({
+      subject: u.subject,
+      groupExternalId: "d-1",
+    }));
+    // 70 keep the department, 30 drop it.
+    const principals = users.map((u, i) =>
+      principal(u.subject, { groupExternalIds: i < 30 ? [] : ["d-1"] })
+    );
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({ principals, groups: [group("d-1")] }),
+      current: state({
+        users,
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships,
+      }),
+    });
+
+    expect(plan.refused).toBe(false);
+    expect(plan.removeMembership).toHaveLength(30);
+  });
+
+  test("a SMALL org losing every membership is allowed — the membership floor", async () => {
+    // The floor for this guard is a different quantity from the deactivation floor
+    // (memberships are many-per-user), so it is a separate constant and needs its own
+    // test in the band where floor and ratio disagree: 100% of memberships gone, but
+    // only four of them.
+    const users = Array.from({ length: 4 }, (_, i) => linkedUser(`s-${i}`));
+    const memberships = users.map((u) => ({
+      subject: u.subject,
+      groupExternalId: "d-1",
+    }));
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({
+        principals: users.map((u) => principal(u.subject, { groupExternalIds: [] })),
+        groups: [group("d-1")],
+      }),
+      current: state({
+        users,
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships,
+      }),
+    });
+
+    expect(plan.refused).toBe(false);
+    expect(plan.removeMembership).toHaveLength(4);
+  });
+});
+
+describe("#133 RF-7: a quarantined record never causes a revocation", () => {
+  test("a quarantined subject's memberships are left alone", async () => {
+    // TL-1 F2. The existing quarantine test used a principal with no memberships, so
+    // it was green whether or not this held — the same "green for an unrelated
+    // reason" shape that has now bitten twice in this file.
+    //
+    // The ruling: a quarantined record is UNUSABLE, not a statement about membership.
+    // Its `groupExternalIds` cannot be trusted either way, so it must be excluded
+    // from `removeMembership` exactly as it is excluded from `deactivate`. A
+    // temporarily degraded directory record must not become a revocation — the
+    // narrowing direction counts as damage too.
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({
+        principals: [
+          principal("u-1", { email: null, groupExternalIds: [] }),
+          principal("u-2", { groupExternalIds: ["d-1"] }),
+        ],
+        groups: [group("d-1")],
+      }),
+      current: state({
+        users: [linkedUser("u-1"), linkedUser("u-2")],
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships: [
+          { subject: "u-1", groupExternalId: "d-1" },
+          { subject: "u-2", groupExternalId: "d-1" },
+        ],
+      }),
+    });
+
+    expect(plan.quarantine.map((q) => q.subject)).toEqual(["u-1"]);
+    expect(plan.removeMembership).toEqual([]);
+    expect(plan.deactivate).toEqual([]);
+  });
+
+  test("a NON-quarantined user in the same run still loses the membership it dropped", async () => {
+    // The control that keeps the test above from being satisfied by "never remove any
+    // membership". u-2's record is fine and no longer claims the department.
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({
+        principals: [
+          principal("u-1", { email: null }),
+          principal("u-2", { groupExternalIds: [] }),
+        ],
+        groups: [group("d-1")],
+      }),
+      current: state({
+        users: [linkedUser("u-1"), linkedUser("u-2")],
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships: [
+          { subject: "u-1", groupExternalId: "d-1" },
+          { subject: "u-2", groupExternalId: "d-1" },
+        ],
+      }),
+    });
+
+    expect(plan.removeMembership).toEqual([
+      { subject: "u-2", groupExternalId: "d-1" },
+    ]);
   });
 });
 
