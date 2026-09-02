@@ -220,7 +220,7 @@ class PineconeDB extends VectorDatabase {
     const { pineconeIndex } = await this.connect();
     if (!(await this.namespaceExists(pineconeIndex, namespace))) return;
 
-    const knownDocuments = await DocumentVectors.where({ docId });
+    const knownDocuments = await DocumentVectors.forDocument(docId);
     if (knownDocuments.length === 0) return;
 
     const vectorIds = knownDocuments.map((doc) => doc.vectorId);

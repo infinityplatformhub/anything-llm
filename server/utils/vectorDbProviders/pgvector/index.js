@@ -685,7 +685,7 @@ class PGVector extends VectorDatabase {
         );
 
       const { DocumentVectors } = require("../../../models/vectors");
-      const vectorIds = (await DocumentVectors.where({ docId })).map(
+      const vectorIds = (await DocumentVectors.forDocument(docId)).map(
         (record) => record.vectorId
       );
       if (vectorIds.length === 0) return;

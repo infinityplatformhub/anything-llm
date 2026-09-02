@@ -293,7 +293,7 @@ class Milvus extends VectorDatabase {
     const { DocumentVectors } = require("../../../models/vectors");
     const { client } = await this.connect();
     if (!(await this.namespaceExists(client, namespace))) return;
-    const knownDocuments = await DocumentVectors.where({ docId });
+    const knownDocuments = await DocumentVectors.forDocument(docId);
     if (knownDocuments.length === 0) return;
 
     const vectorIds = knownDocuments.map((doc) => doc.vectorId);
