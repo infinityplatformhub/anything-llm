@@ -977,3 +977,6 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 ### 7.9k mutation report ต้องบันทึก `git rev-parse HEAD` + baseline count ก่อน mutate
 #40: QA-2 รายงาน 42/42 บน revision ที่ label ว่า a2bbb0de แต่จริงเป็นตัวก่อน; Dev2 เจอแบบเดียวกันที่ 9d94919 · ทุกแถวใน mutation table ต้องมี SHA ที่วัดจริง + baseline count ก่อนแก้ ไม่งั้นแถวนั้นไม่นับ (§7.9f attribution)
+
+### 7.9l mutation harness ต้องพิสูจน์ว่า mutation ลงจริงและ suite รันจริง
+#40 TL-2: inject anchor ที่ไม่ตรง (`= [` vs `Object.freeze([`) = replace เงียบ; probe อ้าง symbol นอก scope = ReferenceError ตอน import → `Tests: 0 total` ซึ่งใต้ `grep ^Tests:` ดูเหมือน "จับได้" · กฎ: ทุก mutation row ต้อง (1) assert diff ไม่ว่าง (2) assert `Tests: N total` ของ run นั้น ≥ baseline − expected-failures (หรือ `Test Suites: 0 failed`) ก่อนนับว่า caught · `0 total` = harness พัง ไม่ใช่ finding (คู่กับ §7.9k)
