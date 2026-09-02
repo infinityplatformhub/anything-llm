@@ -141,3 +141,6 @@ returns. That is the "fixture reaches a sibling, not the gate" failure in its mo
 expensive form: the suite would stay green through a missing `system.js` change. I will
 check whether the new suite mocks the hook or the endpoint, and if it mocks the hook, fire
 one case with the real `ORG_CAPABILITIES` list to prove the pairing.
+
+## Addendum — Dev4 independent verification of 6e205d79b (21:55)
+Set-intersection by running: ORG_CAPABILITIES (11) ⊇ sidebar asks (8 distinct / 26 entries); MISSING none; dead-in-prod 0/26 (was 13/26 at 7b3063bee). Mutation: delete `system.read` → F-A sidebar-derived test RED reporting [system.read]; literal 11-entry test RED on toEqual + toHaveLength. Extraction regex cross-checked (both forms yield the same 8). Stop on 7b3063bee withdrawn.
