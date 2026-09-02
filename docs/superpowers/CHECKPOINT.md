@@ -1034,3 +1034,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 
 - #146 MERGED e66ccbebd (plain).
 - #146 MERGED 4e0fa2b01, closed (infi-run:146-e66ccbebd); PR #148 closed. #150 opened (Model Router gate, auth tier, code parked 0e9722774 unverified). Dev5 #149 at 2b714f8e6.
+- #149 75d30834e (3 commits: prettier 43 files, globals.jest + env assertion, delete run-tests.yaml + widen ci.yml). PMO pushed + draft PR for CI; gate-149 spawned; CI monitor armed. Merge via merge-plain.sh after gate + CI run URL recorded on #149.
