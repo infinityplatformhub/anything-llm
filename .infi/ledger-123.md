@@ -54,3 +54,32 @@ actor `type:"user"` รูปเดียวกันว่า **ไม่** ไ
 เมื่อ #121 เอา field นี้ไปใช้ legacy manager จะเห็น dropdown ว่างแทน `["manager","default"]`
 ที่ `ModMap` แสดงอยู่ — เป็นการแก้ ไม่ใช่ regression (ตัวเลือกเดิม 403 อยู่แล้ว) แต่ต้องอยู่ใน
 release note เพราะผู้ใช้จะสังเกตเห็นความต่าง
+
+## TL-1 REJECT รอบแรก — type guard ตัด SINGLE_USER_ACTOR
+
+blocker จริง ยืนยันด้วยการรัน: `assignableRolesFor({actor: SERVICE_PRINCIPALS.singleUser,
+canManageUsers: true})` คืน `[]` ทั้งที่ `canAssignLegacyRole` ตอบ true ทั้งสาม
+single-user install จะได้ `capabilities["user.manage"] === true` คู่กับ `assignableRoles: []`
+ในบอดี้เดียวกัน — ขัด RF-6 ตรง ๆ
+
+**ทำไม RF-4 เดิมไม่จับ** ผมเขียนให้มันเรียก `canAssignLegacyRole` ตรง ๆ ไม่ผ่าน helper
+มันจึงพิสูจน์กฎ ไม่ได้พิสูจน์โค้ดที่ใช้กฎ — เป็นความผิดชนิดเดียวกับ RF-3 ที่ผมจับได้เอง
+ด้วย mutation รอบก่อน แต่รอบนี้ผมไม่ได้ mutate `assignableRolesFor` ทั้งฟังก์ชัน จึงหลุด
+
+Ruling (TL-1): `if (actor.type !== "user" && !isExemptPrincipal(actor)) return [];`
+export `isExemptPrincipal` จาก `policyRepository` แทนที่จะเขียนกฎซ้ำ — สำเนาที่สองของกฎ
+คือทางที่คำตอบสองชุดแยกจากกัน (อันตรายเดียวกับที่คอมเมนต์ S-9 อธิบายไว้คนละทิศ)
+
+### Mutation ของ fix ทั้งสองทิศ
+
+| mutation | ผล |
+|---|---|
+| M-F กลับไป type guard เปล่า (ตัว blocker) | 2 failed — single-user, core-jobs |
+| M-G over-correct: exempt ทุก `type:"service"` | 1 failed — api-key |
+
+**M-G รอบแรกเขียว** เพราะ fixture api-key ที่ผมเขียนเป็น actor ปลอมที่ไม่มี grant row —
+`heldPermissionIds` resolve จาก `actor.id` ตรง ๆ (ไม่สน `grantPrincipal`) จึงได้เซตว่าง
+และเทสผ่านไม่ว่าจะ exempt กว้างแค่ไหน · พิสูจน์แล้วว่า service principal **ถือ grant row
+ได้จริง** (สร้าง `principal_role_grants` ให้ `api-key:99` แล้ว `canAssignLegacyRole` ตอบ
+true ทั้งสาม) จึงเปลี่ยน fixture ให้ key มี super_admin grant ของตัวเองระหว่างเทส —
+`[]` จึงอธิบายได้ทางเดียวคือ exempt-set check ทำงาน

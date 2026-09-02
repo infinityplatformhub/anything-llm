@@ -14,6 +14,7 @@
  */
 const {
   canAssignLegacyRole,
+  isExemptPrincipal,
 } = require("../authorization/policyRepository");
 
 /**
@@ -32,12 +33,15 @@ async function assignableRolesFor({ actor, canManageUsers, db }) {
   // it would start offering roles the moment key or service principals gained a grant,
   // and nothing would have decided that.
   //
-  // Removing this line leaves the whole suite green TODAY — verified by mutation — 
-  // because the `user.manage` gate below returns first for every non-user principal
-  // any current ingress can build. That makes it a guard against a future ingress, not
-  // against one that exists, which is why the test for it calls this function directly
-  // with the one combination nothing produces yet: not a user, but past the gate.
-  if (!actor || actor.type !== "user") return [];
+  // The exemption is NOT a special case bolted on here: `canAssignLegacyRole` already
+  // answers true for these principals, and excluding them by type would make this
+  // function disagree with the very helper it delegates to. A single-user install runs
+  // as `SINGLE_USER_ACTOR` — a service actor holding super_admin — so a bare type check
+  // hands its only operator an empty dropdown while the same response reports
+  // `user.manage: true`. Scoped API keys are service actors too and stay excluded,
+  // which is why this tests membership of the exempt set rather than the type alone.
+  if (!actor) return [];
+  if (actor.type !== "user" && !isExemptPrincipal(actor)) return [];
 
   // The admin routes that consume this are gated on `user.manage`
   // (endpoints/admin.js), so a caller without it cannot assign anything regardless of

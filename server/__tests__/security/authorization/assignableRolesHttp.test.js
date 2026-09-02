@@ -304,28 +304,91 @@ describe("RF-3: a non-user principal is excluded by a type guard", () => {
   });
 });
 
-describe("RF-4: the single-user principal is not narrowed", () => {
-  it("an exempt principal may assign every role", async () => {
-    // Single-user installs run as an exempt service principal; narrowing there would
-    // leave the only operator unable to create their first users.
-    const {
-      canAssignLegacyRole,
-    } = require("../../../utils/authorization/policyRepository");
+describe("RF-4: an exempt service principal is not narrowed", () => {
+  // Through `assignableRolesFor`, NOT through `canAssignLegacyRole` directly. The first
+  // version of this test called the repository helper and passed while the endpoint
+  // returned [] for the same actor — it proved the rule, not the code that uses it.
+  // (TL-1 found that; the type guard was cutting SINGLE_USER_ACTOR out.)
+  const exempt = () => {
     const {
       SERVICE_PRINCIPALS,
     } = require("../../../utils/authorization/actorResolver");
+    return SERVICE_PRINCIPALS;
+  };
 
-    const answers = await Promise.all(
-      ["admin", "manager", "default"].map((role) =>
-        canAssignLegacyRole({
-          actor: SERVICE_PRINCIPALS.singleUser,
-          targetRole: role,
-          db: prisma,
-        })
-      )
-    );
+  it("single-user may assign every role", async () => {
+    // A single-user install IS this actor. Narrowing here leaves its only operator
+    // with an empty dropdown while the same response says user.manage is true.
+    const {
+      assignableRolesFor,
+    } = require("../../../utils/helpers/assignableRoles");
 
-    expect(answers).toEqual([true, true, true]);
+    const roles = await assignableRolesFor({
+      actor: exempt().singleUser,
+      canManageUsers: true,
+      db: prisma,
+    });
+
+    expect(roles.sort()).toEqual(["admin", "default", "manager"]);
+  });
+
+  it("core-jobs may too", async () => {
+    const {
+      assignableRolesFor,
+    } = require("../../../utils/helpers/assignableRoles");
+
+    const roles = await assignableRolesFor({
+      actor: exempt().coreJobs,
+      canManageUsers: true,
+      db: prisma,
+    });
+
+    expect(roles.sort()).toEqual(["admin", "default", "manager"]);
+  });
+
+  it("but a scoped api-key service actor still gets nothing", async () => {
+    // In the SAME test file as the two above, because the risk of that fix is
+    // over-correction: exempting every `type: "service"` actor would let a scoped key
+    // — also a service actor — be offered admin, which is the S-9 hole the policy
+    // repository's own comment describes.
+    //
+    // The key is given its OWN super_admin grant row for the duration of this test.
+    // Without one, `heldPermissionIds` resolves nothing for it — every target role
+    // comes back false from the permission comparison itself, and the test passes
+    // whether or not the exemption is widened. Verified: with a fabricated actor
+    // holding no grant, exempting every `type: "service"` left the suite green.
+    //
+    // With the grant, the set comparison would answer "all three", so `[]` can only
+    // be the exempt-set check doing its job.
+    const {
+      assignableRolesFor,
+    } = require("../../../utils/helpers/assignableRoles");
+    const superAdmin = await prisma.roles.findFirstOrThrow({
+      where: { name: "super_admin", scope: "org" },
+    });
+    await prisma.principal_role_grants.create({
+      data: {
+        orgId: 1,
+        principal_type: "service",
+        principal_id: "api-key:99",
+        role_id: superAdmin.id,
+        workspace_id: null,
+      },
+    });
+
+    try {
+      const roles = await assignableRolesFor({
+        actor: { type: "service", id: "api-key:99", orgId: 1, workspaceIds: [] },
+        canManageUsers: true,
+        db: prisma,
+      });
+
+      expect(roles).toEqual([]);
+    } finally {
+      await prisma.principal_role_grants.deleteMany({
+        where: { principal_id: "api-key:99" },
+      });
+    }
   });
 });
 
