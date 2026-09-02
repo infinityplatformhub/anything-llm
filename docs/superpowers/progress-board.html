@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">d8b4ba143</span> · 2026-09-03 01:30</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">5b0b4de89</span> · 2026-09-03 01:50</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -73,7 +73,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="legend">
       <span><i style="background:var(--done)"></i>ปิดแล้ว 103</span>
-      <span><i style="background:var(--gate)"></i>รอ review 1</span>
+      <span><i style="background:var(--gate)"></i>รอ review 4</span>
       <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
       <span><i style="background:var(--queue)"></i>คิว 5</span>
       <span>· merge วันนี้ 30 issue · เทสบน main <span class="mono">server 3268 · frontend 107</span> เขียวหมด</span>
@@ -99,7 +99,7 @@ td.mono{white-space:nowrap}
 <h2 style="margin-bottom:-14px">งานที่ยังเปิดอยู่</h2>
 <section class="lanes">
   <div class="lane" style="--c:var(--gate)">
-    <h2>รอ review / merge <span class="mono">1</span></h2>
+    <h2>รอ review / merge <span class="mono">4</span></h2>
   </div>
 
   <div class="lane" style="--c:var(--dev)">
@@ -110,8 +110,8 @@ td.mono{white-space:nowrap}
       <div class="chips"><span class="chip ok">frontend 124</span><span class="chip ok">authz 757</span><span class="chip ok">TL-1 PASS</span><span class="chip ok">QA-3 PASS</span><span class="chip no">รออนุมัติ mockup เท่านั้น</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · 49f7a0cd9</span></div>
-      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน fix ใกล้เสร็จ: reader check + sweep level-triggered + 17 fixtures, collateral 7 suite เขียว · TL-2 FAIL รอบแรกเพิ่ม 4 ข้อ (cast "0"→1 ทำ un-suspend กลายเป็น revoke ถาวร, groupId มั่ว → 200+bump) กำลัง fold</p>
+      <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · de7b19136 ใน review</span></div>
+      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน fix SHA แล้ว: reader 3 สถานะ (null/dangling/present), sweep level-triggered, cast suspended แบบ explicit set, groupId 404 ก่อน bump, delete path stamp revokedAt · 24/24 + 14 mutants · gate + TL-2 + QA-2 กำลังตรวจ</p>
     </div>
     <div class="card">
       <div class="top"><span class="id">V8 mobile</span><span class="who">Dev4 · หลัง #132</span></div>
