@@ -348,3 +348,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #104 ruling (TL-1 confirmed): (1) updateENV:1687 accumulate persistCredential error, no break, fix #80 comment; (2) enable-multi-user throw → rollback. RF-1..3. Tier auth, reviewers TL-1 + QA-3.
 - #112: preflight ceiling stands (unauth only while no user); backfill already exists (markOnboarded) → tests only; GET /setup-complete unauth full settings → separate auth issue.
 - #40 task 2 3e121b3b4 merged (issue open for task 3) + #102 fbef8c6bf merged, closed → main d631cc056. 77/113. wt-40t2/g40t2, wt-102/g102 reaped. Dev2 → task 3 (plain). Dev5 → O2b #112 (+ #102 NITs).
+- PMO ERROR: #40 t2 merge hit a ledger conflict; the `&&` chain stopped but the docs commit still pushed and #102 was closed before its merge existed. Fixed: #102 merged b5129f86b (content verified: providerLabel in metrics/index.js, safeObserve ×2 in system.js). Rule: merge chains stop on conflict; never close an issue in the same command as its merge.
+- #96 dadac7b3c: TL-1 PASS (evidence c4382df25); QA-3 mutations G1–G6 in progress → close/merge.
+- #98 recon merged (Dev3): setTimeout late mount escapes sweep; arm guard after :208 (dev branch mounts after loop); seal mutating methods only; adminEndpoints(app) actually receives apiRouter.
