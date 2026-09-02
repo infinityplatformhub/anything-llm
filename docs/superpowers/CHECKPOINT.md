@@ -283,3 +283,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #91 started (impl91, contract on #91, #93 dup closed — 5th today). #94 O5b opened (CLI-only, no migration). #49 RED suite in progress.
 - #40 8fdb067dc: gate PASS (check-local; contract 82/82 exact; authz+sweeps 664 pass 0 fail; result bound). Waiting QA-3 (SPA re-probe) + TL-2 (inventory diff 316/8 new) → close task 1 / merge → NIT-2 follow-up → task 2.
 - #84 c22939503 (final: bounded gate-equality scan; delete-line mutation now red 2, move-both stays green on relation test): gating (gate-84d); QA-3 point-2 + TL-1 one-line delta requested → close/merge.
+- #84 c22939503: gate PASS (check-local; contract 10/10; related 107/107; result bound). Close on QA-3 + TL-1 delta.
