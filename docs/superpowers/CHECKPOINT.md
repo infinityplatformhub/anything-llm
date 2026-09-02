@@ -590,3 +590,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #126 s1 df7d54f72 TL-1 PASS (N4 count-based text guard accepted, fail-loud). Awaiting QA-3 re-fire → close/merge. §7.17 logged.
 - #126 slice 1 df7d54f72 MERGED (ff858e18f): TL-1 + QA-3 PASS (N1/N4/N6/ACT/P1 dead, P2a/P2b strip verified); closed gate-126-s1-df7d54f72. Issue #126 stays OPEN for slice 2 (SettingsSidebar, after #121). .closed marker deliberately not copied.
 - #120 caccf5514: gate green (203/203, sweeps 63/63) but ledger missing from commit → Dev5 pushing ledger-only SHA. TL-2 pre-read pending.
+- Post-merge #113 (+#124 pending own run): server 221 suites / 3068 passed / 0 failed (--forceExit, no hang), frontend 101/101 exit 0. Main fully green.
+- #121 e3fbcf775 (Dev1, 3 files SettingsSidebar/): gate /tmp/wt-121 running; TL-1 verdict + QA-3 probe dispatched. wt-113/124/hf reaped.
