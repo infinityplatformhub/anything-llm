@@ -1,113 +1,105 @@
-// #40 task 4 — the "no workspaces assigned" dead end.
+// #126 — the "no workspaces assigned" gate, RENDERED.
 //
-// This site is NOT a pure capability swap. The condition is `!workspace &&
-// <cannot create>`: a user with no workspace who *can* create one is not
-// stranded, they simply have not made one yet, and showing them the dead-end
-// screen hides the button that would fix it. So `!workspace` stays and only the
-// role half moves.
+// #40 task 4 could not render this: the decision was inline in Home, which
+// mounts the whole chat surface, so the test transcribed the gate's source
+// instead. That catches a deliberate edit but not drift, and the drift check it
+// relied on is now gone (RF-3) because these tests exercise the real component.
+//
+// The gate takes its decision entirely as props, so there is no app tree here
+// and no mocking: what is asserted is what renders.
 
-import { readFileSync } from "fs";
-import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, test } from "vitest";
 
-const mockCapabilities = vi.hoisted(() => ({
-  current: { capabilities: {}, workspace: null, error: null },
-}));
-const mockUser = vi.hoisted(() => ({ current: { id: 1, role: "default" } }));
-const mockWorkspace = vi.hoisted(() => ({ current: null }));
+import WorkspaceGate from "./WorkspaceGate";
 
-vi.mock("@/models/system", () => ({
-  default: { fetchMyCapabilities: async () => mockCapabilities.current },
-}));
-vi.mock("@/hooks/useUser", () => ({
-  default: () => ({ user: mockUser.current }),
-}));
+const DEAD_END = <div>no-workspaces-assigned</div>;
+const SURFACE = <div>workspace-surface</div>;
 
-import useCapabilities, { resetCapabilities } from "@/hooks/useCapabilities";
-
-// The gate in isolation. Home itself pulls in the whole chat surface, so
-// rendering it here would test twenty other things and fail for reasons that
-// have nothing to do with authorization.
-function DeadEndGate() {
-  const { can, loading } = useCapabilities();
-  const user = mockUser.current;
-  const workspace = mockWorkspace.current;
-  if (!workspace && user && (loading || !can("workspace.create")))
-    return <div>no-workspaces-assigned</div>;
-  return <div>workspace-surface</div>;
+function renderGate({
+  workspace = null,
+  user = { id: 1, role: "default" },
+  canCreate = false,
+  loading = false,
+} = {}) {
+  return render(
+    <WorkspaceGate
+      workspace={workspace}
+      user={user}
+      canCreate={canCreate}
+      loading={loading}
+      fallback={DEAD_END}
+    >
+      {SURFACE}
+    </WorkspaceGate>
+  );
 }
 
 const deadEnd = () => screen.queryByText("no-workspaces-assigned");
 const surface = () => screen.queryByText("workspace-surface");
 
-const HOLDS_CREATE_ONLY = {
-  "settings.write": false,
-  "workspace.create": true,
-};
-const HOLDS_SETTINGS_ONLY = {
-  "settings.write": true,
-  "workspace.create": false,
-};
+describe("#126 RF-1: the four states, rendered", () => {
+  test("holds workspace.create with no workspace yet — not a dead end", () => {
+    // RF-4 positive control, and the bug #40 fixed: a `default` user who may
+    // create a workspace is not stranded. Without this a gate that renders the
+    // dead end for everyone satisfies every negative assertion below.
+    renderGate({ canCreate: true });
+    expect(surface()).toBeInTheDocument();
+    expect(deadEnd()).toBeNull();
+  });
 
-function renderGate({ capabilities, user, workspace = null }) {
-  mockCapabilities.current = { capabilities, workspace: null, error: null };
-  mockUser.current = user;
-  mockWorkspace.current = workspace;
-  return render(<DeadEndGate />);
-}
+  test("lacks workspace.create with no workspace — dead end", () => {
+    renderGate({ canCreate: false });
+    expect(deadEnd()).toBeInTheDocument();
+    expect(surface()).toBeNull();
+  });
 
-beforeEach(() => resetCapabilities());
-afterEach(() => vi.clearAllMocks());
+  test("single-user mode is never sent to the dead end", () => {
+    // No user row means no principal and an empty map. A gate that only asked
+    // the capability would lock a single-user deployment out of its own app.
+    renderGate({ user: null, canCreate: false });
+    expect(surface()).toBeInTheDocument();
+  });
 
-describe("#40 task 4: Home's dead-end screen asks whether you can create", () => {
-  test("the transcribed gate still matches the one in Home", () => {
-    // DeadEndGate above is a transcription: rendering Home itself would pull in
-    // the entire chat surface and fail for twenty unrelated reasons. That makes
-    // every assertion below conditional on the transcription staying true --
-    // the failure mode of #115, where a test drove a local helper and the
-    // production path went unguarded. This is the guard: if Home's condition
-    // changes, these tests stop describing it and say so here.
-    // vitest gives __dirname in this environment; import.meta.url is not a
-    // file: URL here.
-    const source = readFileSync(`${__dirname}/index.jsx`, "utf8");
-    expect(source).toContain(
-      'if (!workspace && user && (loading || !can("workspace.create")))'
+  test("loading hides the surface, and that differs from the resolved answer", () => {
+    // `loading` and `denied` are the SAME value out of can(), so asserting the
+    // loading state alone proves nothing — it is the TRANSITION that shows the
+    // gate distinguishes them. A gate ignoring `loading` renders the surface in
+    // the first assertion and this fails there.
+    const view = renderGate({ canCreate: true, loading: true });
+    expect(deadEnd()).toBeInTheDocument();
+
+    view.rerender(
+      <WorkspaceGate
+        workspace={null}
+        user={{ id: 1, role: "default" }}
+        canCreate={true}
+        loading={false}
+        fallback={DEAD_END}
+      >
+        {SURFACE}
+      </WorkspaceGate>
     );
+    expect(surface()).toBeInTheDocument();
+    expect(deadEnd()).toBeNull();
   });
+});
 
-  test("a default-roled user holding workspace.create is not sent to the dead end", async () => {
-    // The bug: `role === "default"` showed this screen to a user who can create
-    // a workspace, hiding the control that would resolve it.
-    renderGate({
-      capabilities: HOLDS_CREATE_ONLY,
-      user: { id: 1, role: "default" },
-    });
-    await waitFor(() => expect(surface()).toBeInTheDocument());
+describe("#126 RF-5: `!workspace` is a condition in its own right", () => {
+  test("having a workspace is never a dead end, whatever the capability", () => {
+    // A caller who cannot create but already HAS a workspace must reach it.
+    // Collapsing the two conditions into one capability check strands them.
+    renderGate({ workspace: { id: 7, slug: "existing" }, canCreate: false });
+    expect(surface()).toBeInTheDocument();
     expect(deadEnd()).toBeNull();
   });
 
-  test("a user who cannot create and has no workspace sees the dead end", async () => {
+  test("having a workspace beats loading too", () => {
     renderGate({
-      capabilities: HOLDS_SETTINGS_ONLY,
-      user: { id: 1, role: "admin" },
-    });
-    await waitFor(() => expect(deadEnd()).toBeInTheDocument());
-  });
-
-  test("having a workspace never shows the dead end, whatever the capability", async () => {
-    // `!workspace` is load-bearing on its own: a user who cannot create but
-    // already has a workspace must reach it.
-    renderGate({
-      capabilities: HOLDS_SETTINGS_ONLY,
-      user: { id: 1, role: "default" },
       workspace: { id: 7, slug: "existing" },
+      canCreate: false,
+      loading: true,
     });
-    await waitFor(() => expect(surface()).toBeInTheDocument());
-    expect(deadEnd()).toBeNull();
-  });
-
-  test("single-user mode never sees the dead end", async () => {
-    renderGate({ capabilities: {}, user: null });
-    await waitFor(() => expect(surface()).toBeInTheDocument());
+    expect(surface()).toBeInTheDocument();
   });
 });

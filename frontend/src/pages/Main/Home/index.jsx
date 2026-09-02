@@ -23,6 +23,7 @@ import { safeJsonParse } from "@/utils/request";
 import QuickActions from "@/components/lib/QuickActions";
 import SuggestedMessages from "@/components/lib/SuggestedMessages";
 import useCapabilities from "@/hooks/useCapabilities";
+import WorkspaceGate from "./WorkspaceGate";
 import useUser from "@/hooks/useUser";
 import ChatSettingsMenu from "@/components/WorkspaceChat/ChatContainer/ChatSettingsMenu";
 import WorkspaceModelPicker from "@/components/WorkspaceChat/ChatContainer/WorkspaceModelPicker";
@@ -145,18 +146,24 @@ export default function Home() {
     );
   }
 
-  // #40 task 4: "no workspace AND cannot make one" is the dead end. `!workspace`
-  // is unchanged — only the second half moves off the role string, because a
-  // `default` user holding workspace.create is not stranded, they just have not
-  // created one yet. `loading ||` is redundant against can() as written today
-  // (an empty map answers false) and kept as an independent defence; the hook's
-  // side of that contract lives in hooks/useCapabilities.test.jsx.
-  if (!workspace && user && (loading || !can("workspace.create"))) {
-    return <NoWorkspacesAssigned />;
-  }
+  // #126: the decision lives in WorkspaceGate so a test can render it without
+  // mounting the chat surface. Behaviour is unchanged — see that file for why
+  // `!workspace` is a condition in its own right. The condition is not repeated
+  // here: a second copy would drift from the one that decides.
+  const gate = (children) => (
+    <WorkspaceGate
+      workspace={workspace}
+      user={user}
+      canCreate={can("workspace.create")}
+      loading={loading}
+      fallback={<NoWorkspacesAssigned />}
+    >
+      {children}
+    </WorkspaceGate>
+  );
 
   if (workspace && threadSlug) {
-    return (
+    return gate(
       <DnDFileUploaderProvider workspace={workspace} threadSlug={threadSlug}>
         <HomeContent
           workspace={workspace}
@@ -168,7 +175,7 @@ export default function Home() {
     );
   }
 
-  return (
+  return gate(
     <DndUploaderContext.Provider
       value={{
         files: [],
