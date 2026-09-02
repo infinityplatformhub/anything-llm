@@ -264,3 +264,6 @@ Call-site guard strips only `//` comments; a `/* */` block containing the condit
 
 ## #121 (QA-3 on e3fbcf775, carried to next SHA)
 `capabilities.some()` OR-semantics has no caller in this slice (M6 some→every survives); parent-honours-child-`hidden` unproven (M7 survives, fixture requested). Both must be closed in the next #121 SHA or slice 2.
+
+## #127 (TL-2)
+`setup_admin:org` holds `settings.write` (passes AdminRoute) but not `system.read` → renders mobile-connections page, 403 on both routes. Same defect narrowed from manager to setup_admin. No client guard maps 1:1 to `system.read`; closing needs a guard asking `system.read` directly (separate issue). Not reachable via legacy roles.
