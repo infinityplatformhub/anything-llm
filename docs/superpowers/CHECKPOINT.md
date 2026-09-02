@@ -707,3 +707,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #134 53524e57f = fe6d92e69 + ledger rulings (F1 finding, M2/M3 survivors). Gate retargeted.
 - #130 TL-2 ruling (0242fd65a): (1) stale, close with reason; (2) add capture-and-invoke test in connectionBudget.test.js (M4 + empty body + typo all die in 0.3s), keep source-grep (answers "file registered"), fix comment :60-65, residual = jest's own afterAll contract. Not A/B/C. Dev1 after #121 F-B fix.
 - #121 gate step 8: commented-code detector false positive on workspaceScopedCapabilities.test.js:237,271 (prose comments) → checkignore. Rerun on 6e205d79b in progress.
+- #121 final SHA 5c9ea893d (F-B fix + 2 RF-7 tests, frontend 124/124 exit 0). Server authz on 6e205d79b 757/0 stands (no server change). Gate retargeted; TL-1 confirm; QA-3 probing. Dev1 starts #130 on separate branch. Merge held: user mockup approval.
+- #134 gate: bootstrap + migration applied, check-local 0, lane OK, contract 37/37; neighbours/drift/sweeps/frontend running.
