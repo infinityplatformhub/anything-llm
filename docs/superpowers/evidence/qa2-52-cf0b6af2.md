@@ -1,0 +1,2 @@
+# QA-2 #52 single-user probe — cf0b6af2 (2026-09-02) — PASS scoped 4; NEW HIGH on 17
+1209/1209. 4 routes 403 + DB unchanged + audited; controls 200/201; (a) true single-user 0 users: 401 all; (b) multi_user_mode=false + user rows: self-service 403 OK, BUT isSingleUserMode (raw setting) says single-user → 3 of 17 SINGLE_USER_ONLY_ROUTES write with impersonated JWT (telegram/disconnect, scheduled-jobs delete, outlook/revoke). Root: isSingleUserMode ≠ isConfirmedSingleUser. Sweep test is static grep, no shape (b) case. → #52 addendum 7.
