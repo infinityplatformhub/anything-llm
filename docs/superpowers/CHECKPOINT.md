@@ -562,3 +562,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #126 slice 1 2286a997e (Dev2, Home only, lane clean): gate /tmp/wt-126 running; TL-1 pre-read + QA-3 queued after #124. Slice 2 (SettingsSidebar PrivacyLinkGate) waits for #121.
 - #126 slice 1 2286a997e gate GREEN: check-local pass, frontend 93/93 exit 0, capabilities PASS, Home 6/6; ledger 4 rulings; result file written (run-id gate-126-s1-2286a997e). Awaiting TL-1 + QA-3 (after #124).
 - #124 ledger-only SHA ab11d35a8 accepted (delta = .infi/ledger-124.md only, 3 rulings). Close target = ab11d35a8, run-id gate-124-ab11d35a8. Residual LLMSelector aria-label logged.
+- Assignments 19:45: Dev5 starts #120 recon/contract (redaction lane) while #119 in review. #127 reassigned Dev1 → Dev4 (main.jsx guard, TL-2 ruling in evidence; Dev1 asked to flag if #121 touches main.jsx). Dev1 = hotfix then #121 only. wt-40t4 reaped.
+- In review: #119 c44b059d3 (TL-2+QA-2), #124 ab11d35a8 (TL-1+QA-3), #126 s1 2286a997e (TL-1+QA-3 after #124). Waiting SHA: #113 (Dev3, role.grant + aclCount), hotfix (Dev1).
