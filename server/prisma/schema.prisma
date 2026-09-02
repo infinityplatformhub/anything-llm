@@ -828,6 +828,15 @@ model groups {
   members    group_members[]
 
   @@unique([orgId, name])
+  // S4a (#113): one row per external department. The S4b reconciler matches on
+  // `externalId`, and two rows claiming one department leave it with no correct
+  // answer — picking either silently splits that department's membership.
+  //
+  // Plain unique, deliberately: Postgres treats NULLs as DISTINCT, so the local
+  // groups (all NULL here) are unaffected, while two 'lark' rows on one id are
+  // refused. `NULLS NOT DISTINCT` would fail at index creation on any database
+  // that already holds two local groups.
+  @@unique([orgId, source, externalId])
 }
 
 model group_members {
