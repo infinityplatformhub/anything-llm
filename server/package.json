@@ -15,7 +15,8 @@
     "lint": "eslint --fix .",
     "lint:check": "eslint .",
     "swagger": "node ./swagger/init.js",
-    "test": "prisma generate && jest --runInBand"
+    "test": "prisma generate && jest --runInBand",
+    "eval:thai": "node scripts/eval-thai-retrieval.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
