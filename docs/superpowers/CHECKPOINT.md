@@ -689,3 +689,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - V8: Dev4's 78 correct. Ruling: (ก) three surfaces + (ข) convert 52× height idiom to one Tailwind class `h-full md:h-[calc(100%-32px)]` in one slice + (ค) residual ~19 accepted with lint allowlist. Dev4 writes contract + mockup after #132.
 - #134 Dev3: impl drafted, RF-1..7 not written, ETA 60-90 min, mutants before push. Two structural rulings (orgId INTEGER no widen; enumerateDirectory in directoryDiff.js) sent to TL-1 for confirmation.
 - #121 Dev1: pinged 21:15, no reply yet; local branch still e3fbcf775.
+- #134 TL-1: both Dev3 rulings accepted. Condition: docblock says enumerateDirectory calls driver; T7 widened to pin no concrete driver import (driver as argument only). Relayed to Dev3.
