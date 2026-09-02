@@ -87,3 +87,32 @@ the guard that makes it correct is pinned.
 `requestControlsHttp` + `__tests__/security/identity` (23 suites): **308/308**.
 
 Per §7.14 the full suite is the gate's single run, not QA's.
+
+---
+
+# Addendum — S11 mockup B on merge target `a004eee3`
+
+`a004eee3` carries `docs/superpowers/mockups/s11-smtp-b-guided-setup.html` and
+`recon/s11-smtp-mailer.md` alongside the #77 code, so merging #77 lands them too.
+All three fixes QA-3 asked for are present and behave. Exercised by driving the
+mockup's own script against a stub DOM — clicked, not read.
+
+| fix | result |
+|---|---|
+| (1) plaintext needs explicit acceptance | `TLS=none`, Continue without ticking → **stays on step 1**, the blocked message appears. Tick the box → advances. |
+| (1b) consent does not survive changing the choice | Back to step 1, switch to `tls` → `tls-accept` is **unchecked** again. |
+| (3) reconfiguring invalidates the previous test | Test passes → save → Reconfigure → change host → Continue → the result panel still renders the OLD success text, so the stale "Save and turn on" button is still clickable — clicking it now yields **"Not saved. This configuration has not sent a message yet."** and stays on step 2. |
+| (2) `verified` is read, not merely set | The refusal above is that read. Before the fix the same click would have saved the new host on the old host's evidence. |
+
+Worth noting for whoever builds the real step: the stale success panel is still
+on screen at the moment the refusal happens, so the operator sees a green
+"Accepted by the server" box and a red "Not saved" box at once. The gate is
+correct; the screen briefly contradicts itself. Clearing `#result` in the
+`reconf` handler would close that, and costs nothing.
+
+`recon/s11-smtp-mailer.md` §5b now states the part that matters most: the gate is
+the **backend's**, the save endpoint must refuse a configuration with no
+successful test bound to that exact config, and the binding is a hash over the
+connection-determining fields — never the credential's value. The mockup's flag
+is named as the visible half only. That is the right shape, and it is written
+where the implementer will read it rather than left in a review thread.
