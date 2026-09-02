@@ -91,3 +91,4 @@ Frontend caches per session and asks `can("user.manage")` instead of `role === "
 - (3) One-page persona-switch mockup (5 personas × org / workspace-A member / workspace-B outsider) committed under docs/superpowers/mockups/, SHA in contract, PMO confirms before implementation.
 - (4) PrivateRoute:118 included.
 - Flow: `task.sh start --type change` → SDD with Sonnet implementer + Sonnet reviewer (model stated) → `task.sh check` → SHA.
+- (1) correction: `ACTION_SCOPES` is a constraint (which scope an action may NOT be asked at), not a catalog. `WORKSPACE_CAPABILITIES` is a separate list beside `ORG_CAPABILITIES`; tests use `ACTION_SCOPES` as a checker (no org-only action in the workspace list and vice versa, non-empty, every entry in seed vocabulary).
