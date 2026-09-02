@@ -576,3 +576,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 89f396381 TL-1 PASS (865da0cf6): aclCount both effects + orgId from group, role.grant bar fail-closed, guard first in both tx; control A real owner. Nit → residual. Gate: contract 43/43, dirs 1050/1086 green, sweeps pending. task-113.env written from contract paths. Awaiting QA-1 → close/merge. §7.17 delete-line-first logged.
 - #113 89f396381 regate: contract 43/43, authz+identity 1050/1086, sweeps running; ledger 19 rulings normalized; env written. Close on QA-1 PASS (run-id gate-113-89f396381).
 - Post-merge after hotfix (main 95340bfa4+): in progress, 1 red so far = boundKeyDocumentsHttp.test.js → rerun alone after run completes (same DB).
+- #126 s1 QA-3 FAIL: Home call site untested (N1/N4/N6 survive; RF-3 removed the guard = coverage regression vs parent). Ruling: restore comment-stripped call-site assertion (no 2nd copy, both returns via gate(), action string) → Dev2 new SHA. TL-1 PASS superseded.
+- #119: TL-2 reverses to FAIL (agrees with QA-2); one-liner seal of app._router breaks app.get/SPA (4 red). Ruling: sealRoutes mode keeping .route() usable on _router with mutating methods sealed; skip null targets; param residual+test. Dev5 reworking.
+- #124 064f082c9 (Dev4 test fix): regating. Dev4 resumes #127.
