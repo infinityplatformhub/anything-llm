@@ -71,11 +71,55 @@ const ALLOWED_KEYS = new Set([
 // Digit lookarounds rather than no bound at all, because the bound is doing
 // real work: it stops a 16-digit card number from having its first 13 digits
 // claimed by thai_national_id and the remainder left in the clear.
+//
+// #99: `\d` does not match FULLWIDTH digits (`１２３`), so a national ID typed on
+// a Japanese or Chinese IME reached the audit log intact. The classes below
+// match `[0-9０-９]` directly rather than normalising the string first.
+//
+// NFKC normalisation is the obvious fix and is NOT used: it CHANGES STRING
+// LENGTH. Measured — `ﬁ` → `fi` (1→2), `㍿` → `株式会社` (1→4). So "normalise,
+// scrub, map the offsets back" is unsound, because the offsets do not
+// correspond and a mapping that drifts silently redacts the wrong span of
+// someone's text. Storing the normalised form instead would change stored
+// values beyond redaction, on a path whose contract is "redact PII, otherwise
+// store what happened".
+//
+// Other Unicode digit families (Arabic-Indic, Devanagari) remain unmatched.
+// Adding them is a one-line change here when someone needs it; guessing at
+// which ones matter today would be inventing scope.
+//
+// RESIDUAL, measured and deliberately left: the DIGITS are handled, the
+// SEPARATORS are not. `credit_card`'s `[ -]?` is ASCII-only, so a card written
+// with fullwidth punctuation is not redacted even though every digit in it now
+// matches:
+//
+//   １２３４ ５６７８ ９０１２ ３４５６   (ASCII space)      → redacted
+//   １２３４　５６７８　９０１２　３４５６   (U+3000)          → NOT redacted
+//   1234－5678－9012－3456              (U+FF0D)          → NOT redacted
+//
+// Closing it means widening the separator class, which is a different change
+// from widening the digit class and deserves its own fixture — a number where
+// the separator is the only variable. Raised as its own issue rather than
+// folded in here.
+const D = "[0-9０-９]";
+const NOT_D = "(?<![0-9０-９])";
+const NOT_D_AFTER = "(?![0-9０-９])";
+
 const PATTERNS = [
-  { name: "thai_national_id", re: () => /(?<!\d)\d{13}(?!\d)/g },
-  { name: "credit_card", re: () => /(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{1,4}(?!\d)/g },
+  { name: "thai_national_id", re: () => new RegExp(`${NOT_D}${D}{13}${NOT_D_AFTER}`, "g") },
+  {
+    name: "credit_card",
+    re: () =>
+      new RegExp(`${NOT_D}${D}{4}[ -]?${D}{4}[ -]?${D}{4}[ -]?${D}{1,4}${NOT_D_AFTER}`, "g"),
+  },
   { name: "email", re: () => /[\w.+-]+@[\w-]+\.[\w.]+/g },
-  { name: "phone_th", re: () => /(?<!\d)0\d{8,9}(?!\d)/g },
+  // The leading zero is a CLASS too, not a literal `0`: a fullwidth phone
+  // number starts with `０`, and a pattern that matched fullwidth digits
+  // everywhere except the anchor character would miss the whole number.
+  {
+    name: "phone_th",
+    re: () => new RegExp(`${NOT_D}[0０]${D}{8,9}${NOT_D_AFTER}`, "g"),
+  },
   // #71. Not PDPA — a BEARER CREDENTIAL. Dropping `inviteCode` from the
   // allowlist fixes ONE call site; this fixes the class. The allowlist filters
   // top-level keys only, so a credential still reaches the row through
@@ -110,6 +154,34 @@ const PATTERNS = [
   // distinctive enough to need no anchor, and an anchor that fails open on
   // string concatenation is worse than none.
   { name: "credential", re: () => /apw-[a-z]{3}-[A-Za-z0-9_-]{16,}/g },
+  // #101. `thai_national_id` demands exactly 13 and `credit_card` tops out at
+  // 16, so a run of 17 or more digits matched NOTHING and was stored verbatim.
+  // That is reachable by construction: anyone who knows these patterns can pad
+  // an identifier past 16 digits.
+  //
+  // Deliberately makes NO semantic claim. The marker says a long run of digits
+  // was here, not what it was, because not knowing is the whole situation.
+  //
+  // Placed last for readability. THIS pattern's position is not load-bearing:
+  // measured, it and the classified ones are disjoint, because the digit
+  // lookarounds mean `credit_card` cannot match inside a run of 17+ (a digit
+  // follows its last group) and this cannot match 16 or fewer. Moving it to
+  // the front changes no outcome — verified by mutation, which is how an
+  // earlier version of this comment was found to be wrong.
+  //
+  // ORDER ELSEWHERE IN THIS LIST IS LOAD-BEARING, and the qualifier matters:
+  // `credit_card` DOES match a 13-digit run (`1234567890123` satisfies
+  // 4+4+4+1 with the separators absent — measured). `thai_national_id` runs
+  // first and claims it, which is the only reason a national id is labelled as
+  // one rather than as a card. Swapping those two mislabels every Thai id.
+  //
+  // What this pattern's disjointness DEPENDS ON is those lookarounds. Relax
+  // them and it starts eating the tail of every card number, which is why the
+  // tests pin the specific labels rather than only the fact of redaction.
+  {
+    name: "long_digit_run",
+    re: () => new RegExp(`${NOT_D}${D}{17,}${NOT_D_AFTER}`, "g"),
+  },
 ];
 
 // Fields whose BEFORE value is as sensitive as its after value. `changes` stores

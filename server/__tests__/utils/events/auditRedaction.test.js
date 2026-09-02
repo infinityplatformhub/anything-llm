@@ -235,6 +235,127 @@ describe("issue 71: invite codes never reach the audit log", () => {
     });
   });
 
+  // #118 (closing #99 and #101). The numeric classes again, and the negative
+  // fixtures carry the weight: three of the four findings were about matching
+  // too much or too little, so a test that only asserts redaction proves
+  // nothing about either.
+  describe("numeric PII: fullwidth digits and long runs (#118)", () => {
+    const scrubbed = async (value) =>
+      (await storedFor(auditEvent({ name: value }))).metadata;
+
+    describe("#99 — fullwidth digits", () => {
+      test.each([
+        ["national id", "１２３４５６７８９０１２３", "thai_national_id"],
+        ["phone number", "０８１２３４５６７８", "phone_th"],
+        ["card number", "４１１１１１１１１１１１１１１１", "credit_card"],
+      ])("redacts a fullwidth %s", async (_label, value, klass) => {
+        const row = await scrubbed(value);
+        expect(row).not.toContain(value);
+        expect(row).toContain(`[redacted:${klass}]`);
+      });
+
+      test("redacts a number mixing fullwidth and ASCII digits", async () => {
+        // Nothing forces a typist to be consistent, and a pattern that only
+        // handled uniform runs would miss the realistic case.
+        const row = await scrubbed("０81234567８");
+        expect(row).toContain("[redacted:phone_th]");
+      });
+
+      test("leaves fullwidth TEXT alone", async () => {
+        // The classes were widened; the string is not normalised. A workspace
+        // named in fullwidth letters is stored as the user typed it.
+        const row = await scrubbed("ｆｕｌｌｗｉｄｔｈ");
+        expect(row).toContain("ｆｕｌｌｗｉｄｔｈ");
+      });
+    });
+
+    describe("#101 — runs longer than any classified length", () => {
+      test.each([
+        ["17 digits", "12345678901234567"],
+        ["20 digits", "12345678901234567890"],
+        ["32 digits", "12345678901234567890123456789012"],
+        ["17 fullwidth digits", "１２３４５６７８９０１２３４５６７"],
+      ])("redacts %s", async (_label, value) => {
+        const row = await scrubbed(`id ${value} end`);
+        expect(row).not.toContain(value);
+        expect(row).toContain("[redacted:long_digit_run]");
+      });
+
+      test("does NOT swallow a 16-digit card — the specific label wins", async () => {
+        // Not an ordering test: measured, the two patterns are disjoint,
+        // because the digit lookarounds stop `credit_card` matching inside a
+        // 17+ run and stop this one matching 16 or fewer. Moving it to the
+        // front changes nothing, and the first version of this comment claimed
+        // otherwise until a mutation showed it.
+        //
+        // What it DOES pin is the label, which is what breaks if someone
+        // relaxes those lookarounds.
+        const row = await scrubbed("4111111111111111");
+        expect(row).toContain("[redacted:credit_card]");
+        expect(row).not.toContain("long_digit_run");
+      });
+
+      test("does NOT swallow a 13-digit national id", async () => {
+        const row = await scrubbed("1234567890123");
+        expect(row).toContain("[redacted:thai_national_id]");
+        expect(row).not.toContain("long_digit_run");
+      });
+    });
+
+    describe("no checksum validation, deliberately", () => {
+      // Thai mod-11 removes only ~9% of timestamp false positives (measured:
+      // 18,184 of 200,000), and Luhn does not remove the migration-id one at
+      // all — `20260902050000` passes it. What a checksum WOULD do is make the
+      // pattern fail open on real PII that is mistyped, and a national id with
+      // one digit wrong is still a national id someone typed about themselves.
+      //
+      // These two tests fail loudly if a checksum is ever added.
+      test("redacts a Thai national id with a VALID checksum", async () => {
+        const row = await scrubbed("1101700000001");
+        expect(row).toContain("[redacted:thai_national_id]");
+      });
+
+      test("redacts a Thai national id with an INVALID checksum", async () => {
+        const row = await scrubbed("1234567890123");
+        expect(row).toContain("[redacted:thai_national_id]");
+      });
+
+      test("redacts a card number failing Luhn", async () => {
+        const row = await scrubbed("4111111111111112");
+        expect(row).toContain("[redacted:credit_card]");
+      });
+    });
+
+    describe("known false positives, asserted so the decision is pinned (#100)", () => {
+      // #100 stays OPEN. These assert what happens TODAY, so the deferral is
+      // recorded rather than assumed — and so that whoever implements the
+      // key-context fix sees exactly which tests they are changing.
+      test("a 13-digit ms timestamp is still redacted as a national id", async () => {
+        const row = await scrubbed(`createdAt ${Date.now()}`);
+        expect(row).toContain("[redacted:thai_national_id]");
+      });
+
+      test("a 14-digit migration id is still redacted as a card", async () => {
+        // Residual declared on #118: narrowing the 13-16 card range to exclude
+        // 14 would stop matching real cards.
+        const row = await scrubbed("20260902100000_add_index");
+        expect(row).toContain("[redacted:credit_card]");
+      });
+    });
+
+    describe("negative control — a redactor that matches everything is not a redactor", () => {
+      test.each([
+        ["an ordinary word", "ordinary_workspace_name"],
+        ["a version string", "release 1.16.1 shipped"],
+        ["a uuid", "550e8400-e29b-41d4-a716-446655440000"],
+        ["a short number", "port 3001"],
+        ["a year", "since 2026"],
+      ])("leaves %s untouched", async (_label, value) => {
+        expect(await scrubbed(value)).toContain(value);
+      });
+    });
+  });
+
   // O5b (#94) FINDING: the same `\b` failure, one class over. The three NUMERIC
   // patterns were anchored with `\b`, and `_` is a word character, so an
   // identifier glued to an underscore kept its value in full. Found by the
