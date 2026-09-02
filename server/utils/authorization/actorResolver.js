@@ -314,6 +314,10 @@ module.exports = {
   // Exported for validatedRequest (#46): session auth had the same swallowed-error hole,
   // and two different answers to "is this single-user?" is how the halves drift apart.
   isConfirmedSingleUser,
+  // Exported for the PR-4d scope ceiling (#35): key minting asks the same question the
+  // request path asks — which principal do this key's grants resolve against — and a
+  // second answer to it is a second place the single-user gate can be forgotten.
+  keyGrantPrincipal,
   SINGLE_USER_ACTOR,
   SERVICE_PRINCIPALS,
 };

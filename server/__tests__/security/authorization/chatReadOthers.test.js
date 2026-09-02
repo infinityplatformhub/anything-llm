@@ -136,19 +136,40 @@ beforeAll(async () => {
   // Two API keys carrying the SAME scope and differing only in whose grants
   // stand behind them. Effective permission is grants(creator) INTERSECT
   // scopes(key), and a test where the scopes differ proves only the scope half.
-  const { ApiKey } = require("../../../models/apiKeys");
+  // PR-4d (#35): ApiKey.create now refuses a creator who does not hold key.manage, and
+  // plainAdmin deliberately holds only `member` — that is the whole point of the pair
+  // below. Minting it through the model would refuse at creation and the suite would
+  // never reach the question it asks, so the rows go in directly. The subject here is
+  // the GRANT half at REQUEST time; the mint-time ceiling is keyScopeCeiling.test.js.
+  const { digestSecret, keyPrefix } = require("../../../utils/apiKeySecurity");
   const keyScopes = [
     "chat.read",
     "document.bulk_export",
     "workspace.read",
     "system.read",
   ];
-  plainKeySecret = (
-    await ApiKey.create(plainAdmin.id, "plain-admin key", { scopes: keyScopes })
-  ).apiKey.secret;
-  adminKeySecret = (
-    await ApiKey.create(exporter.id, "super-admin key", { scopes: keyScopes })
-  ).apiKey.secret;
+  const seedKey = async (secret, creatorId, name) => {
+    await prisma.api_keys.create({
+      data: {
+        name,
+        secretDigest: digestSecret(secret),
+        keyPrefix: keyPrefix(secret),
+        scopes: JSON.stringify(keyScopes),
+        createdBy: creatorId,
+      },
+    });
+    return secret;
+  };
+  plainKeySecret = await seedKey(
+    `apw-key-plain-${dbSuffix}-AAAAAAAAAAAAAAAAAAAA`,
+    plainAdmin.id,
+    "plain-admin key"
+  );
+  adminKeySecret = await seedKey(
+    `apw-key-super-${dbSuffix}-AAAAAAAAAAAAAAAAAAAA`,
+    exporter.id,
+    "super-admin key"
+  );
 
   await prisma.system_settings.upsert({
     where: { label: "multi_user_mode" },
