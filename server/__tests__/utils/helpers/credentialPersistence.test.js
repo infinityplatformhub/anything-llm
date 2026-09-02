@@ -187,9 +187,13 @@ describe("both boot paths load credentials", () => {
   // before markOnboarded there. `__tests__/utils/boot/credentialsBeforeListen.test.js`
   // now asserts the real property by timing an HTTP request against both boot
   // functions, which a text match cannot do.
-  test("each boot path calls it exactly once", () => {
-    // Kept as a cheap duplicate/omission check only: it says nothing about
-    // WHERE the call sits, which is the part that mattered.
+  test("the loader is referenced from both boot functions", () => {
+    // QA-1 NIT-1: this counts REFERENCES in the source, which is all a text
+    // scan can do. It deliberately does not claim "each path calls it once" —
+    // that is a runtime property this cannot see: bootSSL's fallback runs the
+    // loader twice in one boot, and a call routed through an alias would not
+    // match at all. The behaviour is asserted by timing an HTTP request against
+    // both boot functions in __tests__/utils/boot/credentialsBeforeListen.test.js.
     expect(source.match(/await loadStoredCredentials\(/g)).toHaveLength(2);
   });
 });
