@@ -506,3 +506,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 ebab66da9: gate running at wt-113 (g113); TL-1 + QA-1 dispatched (auth); record shape frozen on Q4.
 - Post-merge after #122 launched (/tmp/postmerge-122.log) — first main run under connection_limit=5.
 - Queue order for reviewers: #113 → #40 t4 → #123 fix SHA → #121 contract.
+- #40 t4 b6ed23711 gate RED (deterministic ×2): managerAllowedFieldsDrift +2 (MemoriesContext.jsx + memoriesCapabilityGate.test.jsx unclassified updateSystemPreferences callers); vitest exit 1 with 3 unhandled `getSlashCommandPresets is not a function` from the Memories test mock. Both Dev4 lane → fix local → Dev2 merge → new SHA. Reviewers hold; #113 first. wt-40t4/g40t4 kept.
