@@ -44,11 +44,16 @@ async function main() {
 }
 
 if (require.main === module) {
+  // exitCode, not an immediate exit: the checklist is the whole output of this
+  // command, and exiting before the stream drains truncates it whenever stdout
+  // is a pipe. The process ends on its own once the database client is closed.
   main().then(
-    (code) => process.exit(code),
+    (code) => {
+      process.exitCode = code;
+    },
     (error) => {
       console.error(`[doctor] Could not complete the checks: ${error.message}`);
-      process.exit(1);
+      process.exitCode = 1;
     }
   );
 }

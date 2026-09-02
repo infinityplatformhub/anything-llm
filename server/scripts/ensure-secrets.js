@@ -114,7 +114,10 @@ function main() {
 // ENSURE_SECRETS_NOOP lets a test require this file to prove it imports
 // cleanly with API_KEY_PEPPER unset, without it writing anything.
 if (require.main === module && !process.env.ENSURE_SECRETS_NOOP) {
-  process.exit(main());
+  // exitCode rather than an immediate exit: this script's last act is to print
+  // the backup notice, and exiting mid-flush truncates it when stdout is a pipe
+  // — which it is, under `docker compose logs` and under the entrypoint.
+  process.exitCode = main();
 }
 
 module.exports = { main, GENERATED_KEYS };

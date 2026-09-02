@@ -351,7 +351,7 @@ describe("ensure-secrets appends, it does not rewrite (TL-2 OBS-1)", () => {
     expect(lines[lines.length - 1]).toMatch(/^API_KEY_PEPPER=[0-9a-f]{64}$/);
   });
 
-  it("does not disturb a value containing a # character", () => {
+  it("does not disturb a value with a hash character inside it", () => {
     fs.writeFileSync(envPath, `${AWKWARD}\n`, { mode: 0o600 });
     run();
     expect(fs.readFileSync(envPath, "utf8")).toContain(
