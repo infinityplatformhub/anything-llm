@@ -88,3 +88,56 @@ asserted explicitly, not assumed.
 PMO's latest message calls #121 **auth** tier; the original dispatch called it `plain`.
 Taking `auth` — §7.11a says merge waits on my verdict and a Techlead's. Flagging the change
 so the ledger records which tier it was contracted at.
+
+---
+
+## Addendum — checked against the new base `9cf7b6fae` (before the final SHA)
+
+**The oracle above still holds.** `git diff 2ba5ca93a 9cf7b6fae` touches
+`server/prisma/schema.prisma`, one new migration, and `policyRepository.js`. The migration
+is a single unique index:
+
+```sql
+CREATE UNIQUE INDEX "groups_orgId_source_externalId_key"
+  ON "groups" ("orgId", "source", "externalId");
+```
+
+`server/prisma/seed.js` is **unchanged** (`git diff --stat` empty), and nothing in the diff
+writes `permissions`, `roles` or `role_permissions`. So the holder table measured on
+`qa3_127` is still the right oracle for the final SHA. I will re-measure on the SHA anyway
+rather than carry this forward on inference.
+
+### `ORG_CAPS 7 → 11` — the arithmetic checks out, and it is a hard dependency
+
+`ORG_CAPABILITIES` (`server/endpoints/system.js:115`) currently has **7** entries:
+`chat.read_others`, `document.bulk_export`, `user.manage`, `settings.write`, `key.manage`,
+`access.diagnose`, `workspace.create`.
+
+#121's sidebar needs **8** actions. Four are missing from that list:
+
+| missing | used by |
+|---|---|
+| `system.write` | llm, vector-database, embedder, text-splitting, image-generation, voice-speech, transcription, model-router, security |
+| `system.read` | default-system-prompt, event-logs, mobile-app |
+| `user.read` | users |
+| `invite.read` | invites |
+
+7 + 4 = **11**, matching the announced repin. This matters for the probe: `useCapabilities`
+can only answer `true` for actions the endpoint actually batches, so **without the
+`system.js` half, every one of those 13 entries is invisible to `super_admin` too** — not
+just to `setup_admin`. A frontend-only SHA would look like a much larger regression than
+the permission model implies.
+
+Consequence for my sweep: the exact-visible-set assertions in step (2) are only meaningful
+on the **paired** SHA (frontend + `system.js`). If the pair arrives split, I will report the
+frontend half's numbers as provisional and say so, rather than record 13 false regressions
+against `super_admin`.
+
+### Fixture caveat this creates
+
+A fixture that mocks `useCapabilities` directly (as `e3fbcf775`'s did) bypasses
+`ORG_CAPABILITIES` entirely and will answer `true` for actions the real endpoint never
+returns. That is the "fixture reaches a sibling, not the gate" failure in its most
+expensive form: the suite would stay green through a missing `system.js` change. I will
+check whether the new suite mocks the hook or the endpoint, and if it mocks the hook, fire
+one case with the real `ORG_CAPABILITIES` list to prove the pairing.
