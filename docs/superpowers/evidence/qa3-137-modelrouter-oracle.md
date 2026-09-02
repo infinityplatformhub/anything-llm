@@ -20,6 +20,8 @@ actions the endpoint never batches, which is the #121 failure exactly.
 
 ## Results
 
+**Metric: visible sidebar ENTRIES** (labels rendered and not `hidden`), not actions held per role.
+
 | variant | `setup_admin` | Model Router | `super_admin` | Model Router |
 |---|---|---|---|---|
 | **BASE** (today) | 24 | **visible** | 26 | visible |

@@ -12,6 +12,12 @@ Visible sets before and after are **byte-identical** for every role:
 diff <(before) <(after)  →  no differences
 ```
 
+**Metric: visible sidebar ENTRIES** — labels rendered and not `hidden`, from a fixed list of
+27 (including `settings.privacy`). *Not* the count of actions a role holds, which is a
+different measurement of the same fixtures: `super_admin` 11 held actions, `setup_admin` 4,
+`content_moderator` 3, `member` 0 (Dev4's numbers, also correct). Quote the metric with the
+number — 27 entries and 11 actions describe the same role.
+
 | role | entries visible, before | after |
 |---|---|---|
 | `super_admin` | 27 | **27** |
