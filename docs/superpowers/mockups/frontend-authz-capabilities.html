@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>#40 — capability-gated UI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .hidden-slot { outline: 1px dashed #cbd5e1; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-semibold">#40 — capability-gated UI</h1>
+    <p class="text-sm text-slate-600 mt-1">
+      Throwaway mockup for step 1.5. Switch persona and context; every gated element
+      appears or disappears from the same capability map the real endpoint returns.
+      Nothing here becomes production code.
+    </p>
+  </header>
+
+  <!-- controls -->
+  <section class="bg-white rounded-xl p-4 shadow-sm space-y-4">
+    <div class="flex flex-wrap gap-6">
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Persona</div>
+        <div id="personas" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Context</div>
+        <div id="contexts" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+    <p id="persona-note" class="text-sm text-slate-600 border-l-2 border-slate-300 pl-3"></p>
+  </section>
+
+  <div class="grid md:grid-cols-2 gap-6">
+    <!-- the UI -->
+    <section class="bg-white rounded-xl p-4 shadow-sm">
+      <h2 class="font-semibold mb-3">What the user sees</h2>
+
+      <div class="border rounded-lg overflow-hidden">
+        <!-- sidebar strip -->
+        <div class="flex">
+          <div class="w-48 bg-slate-800 text-slate-100 p-3 space-y-3 min-h-[320px]" data-slot="sidebar">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm">Approof</span>
+              <span data-cap="settings-button" class="text-xs bg-slate-700 px-2 py-1 rounded">⚙</span>
+            </div>
+            <button data-cap="new-workspace"
+              class="w-full bg-white text-slate-800 rounded px-2 py-1.5 text-sm font-medium">
+              New Workspace
+            </button>
+            <div class="text-xs text-slate-400 uppercase tracking-wide pt-2">Workspaces</div>
+            <div class="space-y-1 text-sm">
+              <div class="px-2 py-1 rounded bg-slate-700">Workspace A</div>
+              <div data-cap="ws-settings-gear" class="px-2 py-1 text-xs text-slate-400">⚙ workspace settings</div>
+            </div>
+          </div>
+
+          <!-- main -->
+          <div class="flex-1 p-4 space-y-3">
+            <div data-slot="admin-area">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Admin</div>
+              <div class="flex flex-wrap gap-2 mt-1">
+                <span data-cap="users" class="text-xs bg-slate-200 px-2 py-1 rounded">Users</span>
+                <span data-cap="api-keys" class="text-xs bg-slate-200 px-2 py-1 rounded">API keys</span>
+                <span data-cap="settings" class="text-xs bg-slate-200 px-2 py-1 rounded">System settings</span>
+                <span data-cap="chat-history" class="text-xs bg-slate-200 px-2 py-1 rounded">All chat history</span>
+                <span data-cap="export" class="text-xs bg-slate-200 px-2 py-1 rounded">Bulk export</span>
+                <span data-cap="diagnose" class="text-xs bg-slate-200 px-2 py-1 rounded">Access diagnostics</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">In this workspace</div>
+              <div class="flex flex-wrap gap-2 mt-1">
+                <span data-cap="ws-read" class="text-xs bg-emerald-100 px-2 py-1 rounded">Open workspace</span>
+                <span data-cap="ws-write" class="text-xs bg-emerald-100 px-2 py-1 rounded">Edit settings</span>
+                <span data-cap="doc-create" class="text-xs bg-emerald-100 px-2 py-1 rounded">Upload document</span>
+                <span data-cap="doc-delete" class="text-xs bg-emerald-100 px-2 py-1 rounded">Delete document</span>
+                <span data-cap="chat-send" class="text-xs bg-emerald-100 px-2 py-1 rounded">Send message</span>
+              </div>
+            </div>
+
+            <div id="empty-state" class="hidden text-sm text-slate-500 border rounded p-3">
+              No workspaces yet. Ask an administrator for access.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <label class="flex items-center gap-2 mt-3 text-sm text-slate-600">
+        <input type="checkbox" id="show-hidden" class="rounded" />
+        Outline what is hidden (so you can see the difference)
+      </label>
+    </section>
+
+    <!-- the answer -->
+    <section class="bg-white rounded-xl p-4 shadow-sm">
+      <h2 class="font-semibold mb-3">What the endpoint answered</h2>
+      <div id="state-line" class="text-xs text-slate-500 mb-2"></div>
+      <div id="loading" class="hidden text-sm text-slate-500 py-8 text-center">Loading capabilities…</div>
+      <div id="error" class="hidden text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
+        Could not load capabilities. Nothing is offered — the UI fails closed.
+      </div>
+      <pre id="caps" class="text-xs bg-slate-50 border rounded p-3 overflow-x-auto"></pre>
+      <div class="mt-3 flex gap-2">
+        <button id="btn-loading" class="text-xs border rounded px-2 py-1">Show loading state</button>
+        <button id="btn-error" class="text-xs border rounded px-2 py-1">Show error state</button>
+        <button id="btn-ok" class="text-xs border rounded px-2 py-1">Show data state</button>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">
+        Two requests: one at org scope, one with <code>?workspaceId=</code>. The org answer is
+        cached once per session; the workspace answer is cached per workspace id and both are
+        dropped when <code>policyVersion</code> changes.
+      </p>
+    </section>
+  </div>
+
+  <section class="bg-white rounded-xl p-4 shadow-sm">
+    <h2 class="font-semibold mb-2">The bug this fixes</h2>
+    <p class="text-sm text-slate-700">
+      Pick <strong>member + editor of A</strong> in context <strong>workspace A</strong>. Today
+      <code>Sidebar/index.jsx:193</code> reads <code>user.role === "default"</code> and hides the
+      whole sidebar — the person is an editor of this workspace and sees nothing. With
+      <code>can("workspace.read")</code> asked at workspace scope, the sidebar appears.
+      Switch context to <strong>workspace B</strong> (not a member) and it correctly goes away again.
+    </p>
+  </section>
+</div>
+
+<script>
+// Permission sets copied verbatim from server/prisma/seeds/permissions.js on f704874a.
+const ORG_ROLE = {
+  super_admin: null, // every action
+  setup_admin: ["settings.write","user.manage","key.manage","workspace.read","access.diagnose","role.grant","role.revoke","org.member"],
+  content_moderator: ["chat.read_others","document.read","document.search","document.update","document.delete","document.bulk_export","access.diagnose","org.member"],
+  member: ["chat.send","org.member"],
+};
+const WS_ROLE = {
+  owner: ["workspace.read","workspace.write","workspace.delete","workspace.members.manage","chat.send","document.create","document.read","document.search","document.update","document.delete","document.pin","document.watch"],
+  editor: ["workspace.read","workspace.write","chat.send","chat.read","document.create","document.read","document.search","document.update","document.delete","document.pin","document.watch"],
+  viewer: ["workspace.read","document.read","document.search","chat.send","chat.read"],
+};
+const ORG_CAPS = ["chat.read_others","document.bulk_export","user.manage","settings.write","key.manage","access.diagnose","workspace.create"];
+const WS_CAPS  = ["workspace.read","workspace.write","workspace.delete","workspace.members.manage","document.create","document.delete","chat.send"];
+
+const PERSONAS = [
+  { id:"super_admin", label:"super_admin", org:"super_admin", ws:{A:"owner"},
+    note:"Holds every action org-wide. Sees everything, in every context." },
+  { id:"setup_admin", label:"setup_admin", org:"setup_admin", ws:{},
+    note:"T-7's shape: admin duties split. Holds user.manage and settings.write but NOT chat.read_others — a state no role string can express, which is the whole reason for this issue." },
+  { id:"content_moderator", label:"content_moderator", org:"content_moderator", ws:{},
+    note:"Holds chat.read_others and bulk export, but cannot manage users or create workspaces. Today the UI has no way to show this combination." },
+  { id:"member_editor", label:"member + editor of A", org:"member", ws:{A:"editor"},
+    note:"THE BUG. role === 'default' org-wide, but an editor of workspace A. Today the sidebar is hidden from them entirely." },
+  { id:"member_bare", label:"member (no workspaces)", org:"member", ws:{},
+    note:"A principal of the org with no workspace membership. Correctly sees almost nothing — this is the control that proves the fix is not just 'show everything'." },
+];
+const CONTEXTS = [
+  { id:"org", label:"Org (no workspace)" },
+  { id:"A", label:"Workspace A" },
+  { id:"B", label:"Workspace B (not a member)" },
+];
+
+// data-cap -> the action that gates it, and the scope it is asked at
+const GATES = {
+  "settings-button": ["settings.write","org"],
+  "new-workspace":   ["workspace.create","org"],
+  "users":           ["user.manage","org"],
+  "api-keys":        ["key.manage","org"],
+  "settings":        ["settings.write","org"],
+  "chat-history":    ["chat.read_others","org"],
+  "export":          ["document.bulk_export","org"],
+  "diagnose":        ["access.diagnose","org"],
+  "ws-settings-gear":["workspace.write","ws"],
+  "ws-read":         ["workspace.read","ws"],
+  "ws-write":        ["workspace.write","ws"],
+  "doc-create":      ["document.create","ws"],
+  "doc-delete":      ["document.delete","ws"],
+  "chat-send":       ["chat.send","ws"],
+};
+
+let persona = PERSONAS[3], context = CONTEXTS[1], view = "ok";
+
+function holds(list, action) { return list === null || list.includes(action); }
+
+function capabilitiesFor(p, ctx) {
+  const orgPerms = ORG_ROLE[p.org];
+  const org = {};
+  for (const a of ORG_CAPS) org[a] = holds(orgPerms, a);
+
+  let ws = null;
+  if (ctx.id !== "org") {
+    const wsRole = p.ws[ctx.id];
+    ws = {};
+    for (const a of WS_CAPS) {
+      // Org-wide grants also match a workspace resource, which is exactly why
+      // org.member had to be scope-restricted (#53).
+      ws[a] = holds(orgPerms, a) || (wsRole ? WS_ROLE[wsRole].includes(a) : false);
+    }
+  }
+  return { org, ws };
+}
+
+function render() {
+  document.getElementById("personas").innerHTML = PERSONAS.map(p =>
+    `<button data-p="${p.id}" class="text-xs px-2 py-1 rounded border ${p.id===persona.id?"bg-slate-800 text-white border-slate-800":"bg-white"}">${p.label}</button>`
+  ).join("");
+  document.getElementById("contexts").innerHTML = CONTEXTS.map(c =>
+    `<button data-c="${c.id}" class="text-xs px-2 py-1 rounded border ${c.id===context.id?"bg-slate-800 text-white border-slate-800":"bg-white"}">${c.label}</button>`
+  ).join("");
+  document.getElementById("persona-note").textContent = persona.note;
+
+  const caps = capabilitiesFor(persona, context);
+  const showHidden = document.getElementById("show-hidden").checked;
+  const ok = view === "ok";
+
+  for (const [slot, [action, scope]] of Object.entries(GATES)) {
+    const el = document.querySelector(`[data-cap="${slot}"]`);
+    if (!el) continue;
+    let allowed = false;
+    if (ok) allowed = scope === "org" ? caps.org[action] === true
+                                      : caps.ws?.[action] === true;
+    el.style.visibility = allowed ? "visible" : (showHidden ? "visible" : "hidden");
+    el.style.opacity = allowed ? "1" : (showHidden ? "0.25" : "0");
+    el.classList.toggle("hidden-slot", !allowed && showHidden);
+  }
+
+  const sidebar = document.querySelector('[data-slot="sidebar"]');
+  const sidebarVisible = ok && (context.id === "org"
+    ? caps.org["workspace.create"] === true || caps.org["user.manage"] === true
+    : caps.ws?.["workspace.read"] === true);
+  sidebar.style.opacity = sidebarVisible ? "1" : (showHidden ? "0.25" : "0.05");
+  document.getElementById("empty-state").classList.toggle("hidden", sidebarVisible || !ok);
+
+  document.getElementById("loading").classList.toggle("hidden", view !== "loading");
+  document.getElementById("error").classList.toggle("hidden", view !== "error");
+  const pre = document.getElementById("caps");
+  pre.classList.toggle("hidden", view !== "ok");
+  pre.textContent = JSON.stringify({
+    policyVersion: "41",
+    scope: context.id === "org" ? "org" : `workspace:${context.id}`,
+    capabilities: context.id === "org" ? caps.org : { ...caps.org, ...caps.ws },
+  }, null, 2);
+  document.getElementById("state-line").textContent =
+    `GET /system/my-capabilities${context.id === "org" ? "" : "?workspaceId=" + context.id}`;
+}
+
+document.addEventListener("click", (e) => {
+  const p = e.target.closest("[data-p]"), c = e.target.closest("[data-c]");
+  if (p) { persona = PERSONAS.find(x => x.id === p.dataset.p); view = "ok"; render(); }
+  if (c) { context = CONTEXTS.find(x => x.id === c.dataset.c); view = "ok"; render(); }
+});
+document.getElementById("show-hidden").addEventListener("change", render);
+document.getElementById("btn-loading").addEventListener("click", () => { view="loading"; render(); });
+document.getElementById("btn-error").addEventListener("click", () => { view="error"; render(); });
+document.getElementById("btn-ok").addEventListener("click", () => { view="ok"; render(); });
+render();
+</script>
+</body>
+</html>
