@@ -211,3 +211,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #30 slice 3: QA-2 PASS (4/5 verdicts). Waiting TL-2 + Dev4 contract comment.
 - #80 e1bf4adb8: gate PASS via direct run (check-local; exact contract 122/122 --runInBand). Waiting QA-1/QA-3/TL-1/TL-2 → close/merge.
 - #88 36976c14c declared (8 connect() guards normalised incl. zilliz; 62 new tests RED-first; related 1587 green; mutation 3/3). Recon require-cycle claim corrected on main. Gate + QA-3/TL-2 dispatched.
+- #88 36976c14c: gate PASS (check-local; connectGuards 62/62). Waiting QA-3 + TL-2.
+- #30 slice 3 fc182d413 (env commit over f77433728): contract posted (6 suites, 102 exact); PMO contract run + check-local (see gate-30s3c). Verdicts 4/5; waiting TL-2 → close/merge.
+- #78 86d2fe96: TL-1 PASS (2 NIT → post-merge commit). Waiting QA-2.
+- #80 e1bf4adb8: TL-1 PASS (3 NIT → follow-up) + TL-2 PASS. Waiting QA-1 + QA-3.
+- #40 a2bbb0de8: exact snapshot 309 pinned, no R-2 walk-twice yet; Dev2 has not declared.
