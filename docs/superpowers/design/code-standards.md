@@ -877,3 +877,6 @@ enforces this; do not register a route as `app.get(path, handler)` with no array
 ### 7.11 A requested review is a merge gate
 - When PMO has asked QA for a verdict on a SHA, the merge waits for that verdict even if the automated gate passes (T-7 #31 merged 20 minutes before QA-1's FAIL arrived; the hole went live on main → #52).
 - Engine blanket denies only protect routes that reach the engine; every mutating route must carry `requirePermission` or an explicit guard, and "a route that forgets to check is still safe" is never a true comment.
+
+### §7.9a summary line is not the verdict
+A Jest run whose `Tests: N passed` line is green while any suite failed to load (e.g. `jsonwebtoken` import error under Node 26) is a FAIL. Gate reads `Test Suites:` too; evidence must run under node@22. Found on #43 dab75e1a.
