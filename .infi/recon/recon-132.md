@@ -46,7 +46,11 @@ One guard parameterised by action, replacing the two-tier approximation with the
 
 **Cost.** The component is small — the same body as `AdminRoute` with `can(action)` in place of
 `can("settings.write")`. The risk is not the code, it is the invitation: there are **26
-`AdminRoute` and 10 `ManagerRoute` call sites** in `main.jsx`. A generic guard makes converting
+`AdminRoute`, 10 `ManagerRoute` and 3 `SingleUserRoute` call sites** in `main.jsx` — counted
+three ways with line comments stripped, since a naive grep also matches the guard names inside
+comments (the trap from #40 task 4's sweep). TL-2's ruling records 25 + 11; the measured figures
+are 26 + 10, which does not change the argument (36 sites either way) but is the number a later
+reader will quote. A generic guard makes converting
 all 36 look obvious and cheap, and each conversion is a separate authorization decision that
 needs its own answer to *"which action does this page actually need?"* — the same question #40
 task 4 spent an issue answering for 25 sites, four of which turned out unanswerable.

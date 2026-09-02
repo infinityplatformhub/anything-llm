@@ -90,3 +90,6 @@ recon ครบผิดปกติ (RED `setup_admin`, positive control `super
 recon เสนอ `plain` ถ้า #121 landed และแตะเฉพาะ guard · **เห็นด้วย** — แต่ถ้าระหว่างทำ
 พบว่าต้องแตะ `endpoints/system.js` หรือ capability list ด้วยเหตุใดก็ตาม **ต้องเลื่อนเป็น
 `auth` ทันที** ตาม §7.11a ไม่ใช่ตัดสินเองว่ายังเล็กอยู่
+
+---
+**PMO note (Dev4 measured, comments stripped):** call-site counts are 26 AdminRoute / 10 ManagerRoute / 3 SingleUserRoute on main. The 25/11 above came from a grep that also matched guard names inside comments. Total 36 unchanged; ruling unaffected.

@@ -628,3 +628,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - 14a4df287 (Dev5 seal-nil, test-only, #119 N6 NIT) MERGED 4cea57a0d; routeMountGuard+routeGateSweep 79/79. #119 residual N6 closed.
 - S4b recon b9a05d945 landed (.infi/recon/recon-s4b.md): slices (1) diff (2) apply+checkpoint (3) job handler start now; (4) identity match Q4-blocked. Dev3 opens contract for slice 1; TL-1 pre-read queued.
 - Lesson (PMO harness): `git diff --quiet <sha> HEAD -- <dir>` after a merge fails when main already had other changes in that dir; verify by file, not directory.
+- #132 contract posted (Dev4), recon corrected 81aeeee39 (26/10/3 counts, comments stripped). Code waits #121 merge signal. Post-merge #119 jest hung after inviteMailRoutes red (#106 class) → killing to let frontend half run.
