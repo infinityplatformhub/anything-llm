@@ -597,3 +597,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 2ba5ca93a (Dev4, local, plain): main.jsx ManagerRoute→AdminRoute + F1/F2/F7 (server drift). Gate /tmp/wt-127 running; TL-2 pre-read + QA-3 dispatched. managerForbiddenKeysHttp → #106.
 - #121 TL-1 pre-verdict: F-A BLOCK (system.read not added to ORG_CAPABILITIES; 3 entries vanish for all in prod; client mock hid it), F-B comment on hidden-vs-parent, F-C unused capabilities[] → all folded into Dev1's next SHA with mock gap + ledger. §7.17 logged.
 - #131 (Dev2 recon): invisible format chars (9 codepoints) defeat every redaction pattern, audit + O5b bundle; redactions:[] gives false clean evidence. Auth tier → Dev5 after #119.
+- #120 caccf5514 TL-2 pre-read (75a1b0757): PASS except ASCII comma creates new FP (id lists/CSV redacted). PMO comma ruling reversed → drop both commas (option 1). Dev5 new SHA + ledger (add -f). §7.17 logged. #131 zero-width → Dev5 after #119.
