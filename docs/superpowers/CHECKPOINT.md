@@ -365,3 +365,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #104: QA-3 pre-review confirms RF-1..3 broken on main; rulings: newValues drops failed key; update-password no rollback (residual + separate issue).
 - #111 20ba4712b (plain, TL-2 pre-read done): gate running at /tmp/wt-111 (g111) — frontend vitest + server frontendTestsRunInCi guard. Merge on PASS without verdicts (§7.11a).
 - F-2 (Dev4): loadStoredCredentials runs inside listen() callback → secret:true keys absent from env while port accepts requests (mailer hasPassword false, admin overwrites working credential). Dev4 opening auth-tier issue. Dev4 → S11b #108 (N6–N10; password in wizard state only, never rendered/persisted).
+- #112 TL-1 accepted correction; residual: fresh install with DB down → preflight 403 by design (use CLI doctor); RF-1 split into DB-down fixture + in-process transition fixture. Forwarded to Dev5.
