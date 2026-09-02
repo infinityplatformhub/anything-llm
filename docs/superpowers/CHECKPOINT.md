@@ -964,3 +964,22 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #142 MERGED 4c08b150b (plain): hookTimeouts structural guard; TL-2 PASS b94e31f27; QA-2 shapes 88/2/0/9; follow-ups: hook-scanner-shapes, 403-seam. Prose-describe false positive → .infi/checkignore.
 
 - #142 MERGED b40c0faec; follow-ups #143 (hook-scanner shapes), #144 (403 seam). #138-perm 46eb6256f gating (gate-138p-3). #138 queue 4c01ac1ca gating (gate-138q), TL-1/TL-2 verdicts + QA-1 RF-2c + QA-2 probe dispatched. #135 789e524f3 gating (gate-135), TL-1/TL-2/QA-2 dispatched. TL-1 rulings 214d39041: all-actions fix stays in #138; five sidebar rows gate on write action. QA-1 post-merge: doctor.test.js needs pgvector, ci.yml:16 postgres:16 → TL ruling pending. Still pending user: #121 approval (blocks #137→#138-perm merge, #132, #126s2, #140, audit).
+
+## CHECKPOINT — 2026-09-02 23:35 (user pausing, machine shutdown)
+
+**main approof/main @ 2200888d4+ (pushed).** Merged today late: #142 (b40c0faec). Opened: #143 hook-scanner shapes, #144 403 seam, #145 check-db-push prose, #146 ci.yml pgvector.
+
+**Resume order after reboot:**
+1. `cd ~ && ./.warroom/inbox-wait.sh` + `idle-compact.sh` as background tasks; drain `~/.warroom/inbox/`.
+2. Team sessions (Opus) may be gone: Dev1=13, Dev2=6f, Dev3=3d, Dev4=ff, Dev5=7c, QA-1=af, QA-2=e6, QA-3=ea, TL-1=b2, TL-2=10. ListAgents; re-spawn missing with role + this checkpoint.
+3. **USER decision still pending: อนุมัติ #121** → `sh /tmp/merge-121.sh` (SHA 5c9ea893d, gate PASS). Unblocks chain #137 (2686be136, Dev1 rebase → pin 64 / POLICY_VERSION_ROWS 13 → `/tmp/merge-137.sh <sha>`) → #138-perm → #138-queue → #132 (Dev4) / #126 s2 (Dev2) / #140 (Dev1, GREEN parked /tmp/red140) / audit issue (Dev4 ad03eadc8, TL-1 accepted entry-only for vector-database/transcription 87f1606bd → `gh issue create` from branch approof/sidebar-audit-recon).
+   Also pending user: V8 mockup, O3 SIG_KEY, #113 Q4, #107 mail log, +1 Techlead.
+
+**In flight (auth tier):**
+- #135 Dev2 789e524f3 (135-callsites-dev2): gate-135 report /tmp/gate-135.report (was at neighbours). QA-2 PASS (35d266660). TL-1 PASS conditional RF-K (assert revokedAt per route + control key) — Dev2 dispatched, waiting SHA. TL-2 verdict pending. Then `sh /tmp/merge-135.sh` (edit SHA var first). Ledger norm /tmp/ledger-135.norm.md (5 rulings).
+- #138 queue Dev3 4c01ac1ca (approof/134-apply-checkpoint, pushed): gate-138q /tmp/gate-138q.report (M7C 3 red/68, at task check). TL-1 PASS conditional RF-R (grant directory.sync to setup_admin fixture → 202) — Dev3 dispatched, waiting SHA. TL-2, QA-1 run-all + RF-2c, QA-2 sync-now probe pending. Ledger /tmp/ledger-138q.norm.md (15).
+- #138 perm Dev1 46eb6256f (+34a44ea2b recon-only): gate-138p-3 /tmp/gate-138p-3.report (contract 49/49, neighbours 1229 pass, seed-only psql both shapes scope=org). QA-3 PASS (683f1987a). TL-1 ruled all-actions fix stays (214d39041). Ledger /tmp/ledger-138p.norm.md (6). Merge only after #137: `sh /tmp/merge-138.sh <queue> <perm>`.
+- #146 ci.yml → pgvector/pgvector:pg16: any free dev slot, one line; condition observe red→green in CI.
+- QA-1 /tmp/qa-postmerge.sh on main: doctor.test.js red = env (#146), known.
+
+**Gate rules learned today:** never npx (node 26); `bash scripts/*.sh` not sh; table is `permissions(action,category,scope)`; prose `describe("#N: …")` → `.infi/checkignore`; `server/node_modules` must not be symlink; task env files never committed. /tmp worktrees: wt-121, wt-137, wt-138p, wt-138q, wt-135, wt-142 — keep. ~173 registered worktrees, sweep later (user call).
