@@ -211,3 +211,8 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Fullwidth separators U+3000 / U+FF0D between digits not matched by credit_card → #120.
 - 14-digit migration ids still labelled credit_card; 13-digit string timestamps still thai_national_id → #100 (key-context).
 - thai_national_id must stay before credit_card in PATTERNS (13 digits match 4+4+4+1).
+
+## #116 residuals
+- mentionsInstanceCredential is a substring match on error text (harmless today: priors equal stored).
+- Compensation window (updateENV return → restore) is not atomic; ms-scale.
+- Restore-to-absent = pre-password passthrough state (known, ensure-secrets.js:22-26).
