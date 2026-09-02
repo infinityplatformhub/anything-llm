@@ -522,3 +522,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #128 TL-1 pre-read 93c4103fb (TL-1 committed directly on main checkout — reminded: main is PMO-only): #128 must merge AFTER #113 guard (self-add-to-group escalation chain); use grantPrincipalPairs not a new query; keep targetWorkspaceId scope on group pairs; RF-1..4. Relayed to Dev3.
 - #127 grant-breadth ruling requested from TL-2 after #125 verdict. Board refreshed fdc8457fd (90/128, 3033 green).
 - Ledgers normalized: /tmp/ledger-123.norm.md (7), /tmp/ledger-125.norm.md (8). Result files written for #123/#125.
+- #123 be27ac7ed MERGED (QA-1 PASS + TL-1 PASS; contract 46/46, sweeps 63/63; closed gate-123-be27ac7ed). Content verified. Post-merge running → /tmp/postmerge-123.log. Dev1 #121 delegated-admin site 3 unblocked.
