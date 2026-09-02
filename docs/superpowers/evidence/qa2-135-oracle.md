@@ -5,3 +5,6 @@ P4 rollback `User.delete({})`: leaves 3 user-principal role grants + 3 document_
 P1/P2/P3 SKIP "offboardUser not implemented" (absent from policyRepository at this SHA).
 Two probe bugs caught by controls: `member` holds only chat.send + org.member (assertions would have passed for free) → content_moderator + fixture guard reading role_permissions; setval(id-1) crashes at id 1 → setval(id,false).
 Open (TL-2): which principal each call site passes to revokeGrant; exempt principal on admin paths removes the escalation check.
+
+## Second rehearsal (03:55) — plausible-wrong stubs
+inert → 8 red · raw deleteMany + bump (looks right, no revocation rows) → 1 red: P3 per-grant half ONLY · per-grant with bogus role ids → 1 red: P3 identity ONLY (new: revoked role_id set == roles held; revoked_by_id non-empty). P3 now 7 assertions. P4 ×3 stay red until #135 (rollback path is #135's lane) — reported as out-of-scope on the slice-2 SHA.
