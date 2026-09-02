@@ -858,3 +858,9 @@ person spends an hour bisecting someone else's feature.
 
 Every `/v1` route MUST carry `validApiKey` in its middleware array. The sweep
 enforces this; do not register a route as `app.get(path, handler)` with no array.
+
+### 7.9 RED must fail for the right reason
+- A RED run where every test fails identically regardless of code (missing env, DB refused, import crash) is not evidence. Read the failure cause before counting reds.
+- A `404` assertion alone never proves a route exists or is guarded: Express answers 404 for an unmounted route. Assert the body/shape too.
+- Mint/issue endpoints are part of the threat model: a credential that any caller can mint for any subject proves nothing (#32 stream-chat oracle, QA-1).
+(Source: T-7 #31 ledger, #32 review, 2026-09-02.)
