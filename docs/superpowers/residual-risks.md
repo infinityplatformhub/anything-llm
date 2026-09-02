@@ -74,3 +74,4 @@
 - [→ #49] #32 NIT-3 embed_id scoping in mintIfEntitled has no test (drop it → cross-tenant mint DoS); NIT-4 embedHistoryRateLimit wiring on stream-chat has no test (QA-1)
 - [→ #36 follow-up] OIDC discovery cached for process lifetime (no TTL); IdP changing jwks_uri needs restart (Techlead S1 review)
 - [→ backlog] providerDocIdCallSites.test.js 5s hook timeout flakes under parallel load (C-1, #28); raise hook timeout or isolate (QA-2)
+- [→ hotfix issue above] view-as-user mutation via engine-less routes (POST /system/user, /onboarding) — LIVE on main until hotfix merges; MAJOR-2 setup_admin cannot delegate (QA-1 T-7 baseline)
