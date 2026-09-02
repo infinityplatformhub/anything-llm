@@ -105,12 +105,79 @@ const D = "[0-9０-９]";
 const NOT_D = "(?<![0-9０-９])";
 const NOT_D_AFTER = "(?![0-9０-９])";
 
+/**
+ * #120: what may sit BETWEEN the digit groups of a card number.
+ *
+ * #118 widened the digits to fullwidth and left the punctuation ASCII, so
+ * `１２３４ ５６７８ …` redacted and `1234－5678－9012－3456` did not — measured
+ * on `c44b059d3`, only U+0020, U+002D and no separator at all matched, in
+ * either digit width, and a number mixing separators missed entirely. A card
+ * typed on a CJK IME normally carries U+3000 or U+FF0D, so the miss was the
+ * ordinary case on exactly the input #118 was widening for.
+ *
+ * IN: the visible separators a person or an IME actually produces between digit
+ * groups — the spaces and the dash family.
+ *
+ * OUT, and each is a decision rather than an omission:
+ *
+ *   \n and \t — `1234\n5678\n9012\n3456` down four log lines is not one card
+ *   number. A class matching any Unicode whitespace would let an ordinary
+ *   four-column numeric log redact itself, destroying the log without
+ *   protecting anyone.
+ *
+ *   U+200B, U+FEFF, U+00AD (zero-width) — an evasion vector rather than a
+ *   typing artifact, and sixteen contiguous digits already match, so the loss
+ *   is narrow. Where invisible characters should be stripped is its own
+ *   question and belongs in its own issue, not in a separator class.
+ *
+ *   `,` and `，` — proposed as IN and REVERSED after measurement. A comma
+ *   between numbers is how lists are written, so the class caught
+ *   `ids: 1001,1002,1003,1004`, `1000,2000,3000,4000`, chunk sizes and order
+ *   ids, none of which the old pattern ever touched. That is the newline
+ *   argument again: an ordinary log redacting itself protects nobody. Both
+ *   widths go out together, so the symmetry that motivated adding the ASCII one
+ *   is kept — a card written with commas is not a form anyone types.
+ *
+ *   `.` `/` `:` `．` `：` `＝` `＿` — these join fields, versions, dates and
+ *   paths far more often than they join card groups.
+ *
+ * `phone_th` and `thai_national_id` are untouched: they have no separator
+ * today, and giving them one has its own false-positive profile.
+ */
+const SEPARATORS = [
+  "\\u0020", // space
+  "\\u002D", // hyphen-minus
+  "\\u00A0", // no-break space
+  "\\u2009", // thin space
+  "\\u202F", // narrow no-break space
+  "\\u2010", // hyphen
+  "\\u2011", // non-breaking hyphen
+  "\\u2012", // figure dash
+  "\\u2013", // en dash
+  "\\u2014", // em dash
+  "\\u2015", // horizontal bar
+  "\\u2212", // minus sign
+  "\\u3000", // ideographic space
+  "\\uFF0D", // fullwidth hyphen-minus
+];
+// Each entry is an ESCAPE SEQUENCE, not the character itself, and the class is
+// built from those escapes. Writing the literal characters would put
+// `[ -\u3000]` into the pattern — a RANGE from space to the ideographic space,
+// which matches `.`, `/`, `:` and every ASCII letter, so `1234.5678.9012.3456`
+// would redact as a card. Found while mutating this class: a mutant written with
+// literals turned the negative controls red, which is the class silently
+// becoming "any character".
+const SEP = `[${SEPARATORS.join("")}]?`;
+
 const PATTERNS = [
   { name: "thai_national_id", re: () => new RegExp(`${NOT_D}${D}{13}${NOT_D_AFTER}`, "g") },
   {
     name: "credit_card",
     re: () =>
-      new RegExp(`${NOT_D}${D}{4}[ -]?${D}{4}[ -]?${D}{4}[ -]?${D}{1,4}${NOT_D_AFTER}`, "g"),
+      new RegExp(
+        `${NOT_D}${D}{4}${SEP}${D}{4}${SEP}${D}{4}${SEP}${D}{1,4}${NOT_D_AFTER}`,
+        "g"
+      ),
   },
   { name: "email", re: () => /[\w.+-]+@[\w-]+\.[\w.]+/g },
   // The leading zero is a CLASS too, not a literal `0`: a fullwidth phone
