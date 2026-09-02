@@ -49,3 +49,57 @@ Ruling: `validRoleSelection` / `validCanModify` now ask `canAssignLegacyRole` �
 
 Note: `myCapabilities.test.js` first used its own `new PrismaClient(...)` while the endpoint under test resolves the shared `utils/prisma`. The test wrote to one database and the route read another, so every capability came back false — which is indistinguishable from a correct deny, and the "plain member holds nothing" case passed for entirely the wrong reason. Fixed by using the shared client. Worth remembering: an all-denied result is exactly what a misconfigured authorization test looks like when it is right AND when it is broken.
 Note: with the shared client, a hard-coded actor id collided with another suite's data in the full run while passing in isolation. Actor ids are now derived per process.
+
+## Migration slots moved (PMO/Techlead ruling)
+
+Ruling: `20260902021000` → `20260902070000` and `20260902022000` → `20260902071000`. The T-7 slots sat inside T-1's authz block; moving them past the PR-4b range makes replay order match merge order. Refs in the plan and this ledger updated with them — a slot number quoted in prose and not in the directory name is how a rename goes half-done.
+
+## Grant management endpoint (PMO ruling: stays in #31, not split)
+
+Ruling: `POST/DELETE/GET /admin/authorization/grants` lands in T-7 rather than a separate issue. Without it the duty split is nominal: T-1 seeded `setup_admin` and `content_moderator` with their permissions, but `grantRole` had no HTTP surface, so the only roles anybody could actually receive were the two `users.role` maps to. Three seeded roles and two reachable ones.
+
+Ruling: TWO guards on the write path, deliberately asking different questions. The route gate asks whether the actor may grant in this SCOPE — `grantScopeFromBody` resolves the body's `workspaceId` to the org or one workspace, so an admin holding `role.grant` only inside a workspace is refused at the org. The gateway then asks the T-2 question: does the actor hold every permission the role carries. Neither can see what the other sees — the route gate never learns which role, the gateway never learns the HTTP scope — so both must pass. If wrong, one of them is redundant and should be removed rather than left as decoration.
+
+Ruling: `grantScopeFromBody` takes `workspaceId` from the request body, which looks like a B-3 violation and is not. B-3 forbids deriving a resource's OWN workspace from the body; here the workspaceId names the scope the new grant is written into, and there is no stored row to read it from yet. The resolver still looks the workspace up and authorizes against the stored row, so a nonexistent workspace is a 404 and a workspace the actor holds nothing in is a refusal in that scope.
+
+Ruling: `service` and `system` principals are NOT assignable over HTTP (400). They are exactly the principals `isExemptPrincipal` skips the escalation guard for, so granting a role to one over the network is a way to route around the guard that protects every other grant.
+
+Ruling: a grant may only name a principal that exists (404). Without the check a typo writes a row that grants nothing today and silently begins granting the day an unrelated user is created with that id — the grant outlives the mistake.
+
+Ruling: a workspace-scoped role named without a `workspaceId` is a 400 saying "no org-scoped role named X", not "no such role". A caller told the role does not exist goes looking for a typo in the name; the mistake is the scope.
+
+Ruling: revoking a grant that was not there answers 200 with `deleted: 0`. The caller asked for it to be gone and it is. A 404 would report whether the grant existed, which is the enumeration answer the gate withheld.
+
+Ruling: `GET .../grants` is gated on `access.diagnose`, not `role.grant` — reading who holds what is the diagnostic question, and an auditor who may not change grants still needs to see them.
+
+Ruling: the escalation guard's refusal returns 403, not 400. The body was well formed; the actor was not permitted. A 400 would send the caller looking for a malformed request.
+
+## Two test defects caught while proving RED
+
+Ruling: the first RED run was WORTHLESS and looked convincing — 9/9 failed, but the suite failed to *run* at all (`DATABASE_URL` without a username, so `CREATE DATABASE` was denied). Every test fails identically whether or not the code under test exists. A RED proof has to fail for the reason claimed, which means reading the failure, not the count. Rule for §7.9: a RED run is evidence only once its failure message names the missing behaviour.
+
+Ruling: with a real RED run, one test still passed with the routes entirely deleted — it asserted only `status === 404`, and Express answers 404 for a route that does not exist. Now asserts the error body too. A status-only assertion against a 4xx cannot distinguish "the code refused" from "the code is not there". Rule for §7.9: every 4xx assertion checks the body, not only the status.
+
+Note: `prisma generate` had not been run in this worktree since `grant_revocations` entered the schema, so `prisma.grant_revocations` was undefined and the audit test failed for a stale-client reason that looks exactly like a missing feature. §7.0 already records that `yarn test` regenerates the client; a bare `npx jest` does not.
+
+## Evidence
+
+`Tests: 969 passed, 969 total`, `Test Suites: 90 passed, 90 total` at `2a911a7e` (`yarn test`, Node 22, PostgreSQL).
+
+## Rebase recipe recorded before the rebase (Techlead)
+
+Ruling: `policyRepository.js` conflicts with main's #39. Resolution is `inTransaction(db, async (tx) => {` from HEAD plus t7's whole body — NOT t7's side wholesale, which silently reverts #39. This is the same failure shape as #39's own `JobRuntime.js` conflict: taking one side whole leaves a green suite, because `db.$transaction` still works everywhere except the one case #39 exists for (a caller already holding a tx, where nesting throws). A conflict where either side compiles and the tests pass is the kind that gets resolved wrongly.
+
+## S-20 closed (the last DoD item without a test)
+
+Ruling: S-20 asserts `chat.read_others` on EVERY route reaching other people's chats, driven over HTTP by a legacy `role: "admin"` who holds only the `member` grant — precisely the actor the old role check waved through. Two refusals plus a positive control, because a suite of refusals alone passes just as well against a route that does not exist.
+
+Ruling: the `/v1` leg of S-20 is NOT in this branch. Grant enforcement on `/v1` is T-4b's W-8 (`4eab9839`), which is not in t7's base, so a test here would assert against code that is not present and would pass for the wrong reason. It belongs in the post-rebase run. Recorded rather than silently dropped.
+
+Note: the D-2 negative first used `content_moderator`, which the seed gives BOTH `chat.read_others` and `document.bulk_export` — it cannot demonstrate that the export route needs the second permission. Replaced with a role holding exactly one. A test for an AND needs a principal that has one half, not one that has both and passes anyway.
+
+Note: the first run of this suite was 3/3 red and meant nothing — `/system/workspace-chats` is a POST and the test sent GET, so Express answered 404 for all of it. Same §7.9 failure as the grants suite, one hour apart: the count looked like proof, the reason was not read. The verb now comes from a route table in the test rather than a convenience helper.
+
+## Evidence
+
+`Tests: 972 passed, 972 total`, `Test Suites: 91 passed, 91 total` (`yarn test`, Node 22, PostgreSQL).
