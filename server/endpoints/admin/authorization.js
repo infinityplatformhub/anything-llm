@@ -35,6 +35,10 @@ const {
 // A grant may only name a principal that exists. Without this, a typo in an id
 // writes a row that grants nothing today and silently starts granting the day
 // some unrelated user is created with that id — the grant outlives the mistake.
+// NIT-1: an object literal here means `__proto__` and `constructor` index to
+// inherited members rather than undefined, so a request naming one reaches a
+// non-function and 500s. The list is closed and short; ask it directly.
+const ASSIGNABLE_PRINCIPAL_TYPES = ["user", "group"];
 const PRINCIPAL_EXISTS = {
   user: async (id) =>
     Number.isInteger(Number(id)) &&
@@ -58,7 +62,7 @@ async function resolveGrantTarget(body) {
   const principalId = String(body?.principalId ?? "");
   const roleName = String(body?.role ?? "");
 
-  if (!PRINCIPAL_EXISTS[principalType])
+  if (!ASSIGNABLE_PRINCIPAL_TYPES.includes(principalType))
     return { error: "principalType must be 'user' or 'group'", status: 400 };
   if (!roleName) return { error: "role is required", status: 400 };
 
@@ -132,7 +136,7 @@ function adminAuthorizationEndpoints(app) {
       try {
         const principalType = String(request.query?.principalType ?? "");
         const principalId = String(request.query?.principalId ?? "");
-        if (!PRINCIPAL_EXISTS[principalType] || !principalId)
+        if (!ASSIGNABLE_PRINCIPAL_TYPES.includes(principalType) || !principalId)
           return response
             .status(400)
             .json({ error: "principalType and principalId are required" });

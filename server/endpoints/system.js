@@ -32,6 +32,9 @@ const { v4 } = require("uuid");
 const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const {
+  requireSelfSession,
+} = require("../utils/middleware/requireSelfSession");
 const { requirePermission } = require("../utils/middleware/requirePermission");
 const { resolveActor } = require("../utils/authorization/actorResolver");
 const {
@@ -125,15 +128,23 @@ function systemEndpoints(app) {
     }
   });
 
-  app.post("/onboarding", [validatedRequest], async (_, response) => {
-    try {
-      await SystemSettings.markOnboardingComplete();
-      response.sendStatus(200).end();
-    } catch (e) {
-      console.error(e.message, e);
-      response.sendStatus(500).end();
+  // #52: writes `onboarding_complete` into system_settings, so it is
+  // settings.write like every other route that touches that table. It carried
+  // session auth alone, which meant nothing asked the engine and an
+  // impersonated session could mark onboarding complete.
+  app.post(
+    "/onboarding",
+    [validatedRequest, requirePermission("settings.write", orgResource)],
+    async (_, response) => {
+      try {
+        await SystemSettings.markOnboardingComplete();
+        response.sendStatus(200).end();
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
     }
-  });
+  );
 
   app.get("/setup-complete", async (_, response) => {
     try {
@@ -683,7 +694,10 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/enable-multi-user",
-    [validatedRequest],
+    // #52: flipping the instance into multi-user mode creates the first admin.
+    // It carried session auth alone; settings.write is what every other route
+    // that changes instance configuration asks for.
+    [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
         if (response.locals.multiUserMode) {
@@ -1342,7 +1356,13 @@ function systemEndpoints(app) {
 
   // Used for when a user in multi-user updates their own profile
   // from the UI.
-  app.post("/system/user", [validatedRequest], async (request, response) => {
+  // #52: self-service — edits the CALLER'S own profile, so an impersonated
+  // session may not use it. Without this an admin viewing as a user could set
+  // that user's username and password and then log in as them for real.
+  app.post(
+    "/system/user",
+    [validatedRequest, requireSelfSession],
+    async (request, response) => {
     try {
       const sessionUser = await userFromSession(request, response);
       const { username, password, bio } = reqBody(request);
@@ -1376,7 +1396,8 @@ function systemEndpoints(app) {
         .status(500)
         .json({ success: false, error: e.message || "Internal server error" });
     }
-  });
+    }
+  );
 
   app.get(
     "/system/slash-command-presets",

@@ -63,6 +63,15 @@ async function bumpVersion(tx, changeType, scopeKey, actorId, extraScopeKeys = [
   return row.version;
 }
 
+/** Permission ids for BASELINE_GRANTABLE, resolved against the seeded table. */
+async function baselinePermissionIds(tx) {
+  const rows = await tx.permissions.findMany({
+    where: { action: { in: [...BASELINE_GRANTABLE] } },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
 async function permissionIdsForRole(tx, roleId) {
   const rows = await tx.role_permissions.findMany({
     where: { role_id: roleId, effect: "allow" },
@@ -111,6 +120,33 @@ async function heldPermissionIds(tx, actor, targetWorkspaceId) {
  * principal, whose grant comes from migrations and out ranks everything (S-9 enforces
  * the same rule for scoped API keys, which resolve to service actors).
  */
+/**
+ * #52 MAJOR-2: permissions every member of the org already holds, which the
+ * escalation guard therefore does not treat as an escalation to hand over.
+ *
+ * `setup_admin` is deliberately content-free (T-1/T-6): it configures the
+ * instance and reads nobody's chats. That made `role.grant` — which it does
+ * hold — useless, because the ONLY org role it could grant is `member`, and
+ * `member` carries `chat.send`, which `setup_admin` does not. A delegated admin
+ * who may create users but could not give them the one capability that makes an
+ * account usable is not a duty split, it is a broken role.
+ *
+ * Granting `chat.send` gives away nothing the granter has: every member holds
+ * it already, so it confers no authority over anyone. The guard stays strict
+ * for everything else — `setup_admin` still cannot mint a `content_moderator`
+ * (which carries other people's chats and documents) or a `super_admin`.
+ *
+ * Kept as a constant rather than seeded onto `setup_admin`, so the role stays
+ * content-free: this says what may be DELEGATED, not what the granter can DO.
+ *
+ * It applies to WORKSPACE-scoped roles too, and that is deliberate: `viewer`,
+ * `editor` and `owner` all carry `chat.send`, so a workspace owner delegating
+ * membership hits the same wall for the same reason. The exemption is a
+ * property of the permission — everyone already holds it — not of the scope it
+ * is being granted in.
+ */
+const BASELINE_GRANTABLE = new Set(["chat.send"]);
+
 async function grantRole({ actor, principalType, principalId, roleId, workspaceId = null, expiresAt = null, db = prisma }) {
   // A missing actor must never be a free pass: seeds and migrations pass an explicit
   // built-in principal (security review, issue #20).
@@ -123,7 +159,10 @@ async function grantRole({ actor, principalType, principalId, roleId, workspaceI
     if (!isExemptPrincipal(actor)) {
       const rolePerms = await permissionIdsForRole(tx, roleId);
       const held = await heldPermissionIds(tx, actor, workspaceId);
-      const missing = [...rolePerms].filter((p) => !held.has(p));
+      const baselineIds = await baselinePermissionIds(tx);
+      const missing = [...rolePerms].filter(
+        (p) => !held.has(p) && !baselineIds.has(p)
+      );
       if (missing.length > 0) {
         throw new AuthorizationContractError(
           "grant refused: role carries permissions the granter does not hold in this scope"

@@ -183,10 +183,17 @@ function adminEndpoints(app) {
   // so the engine's blanket mutation deny was correct, tested, and unreachable.
   // This is the write side.
   //
-  // Read-only is NOT enforced here. The engine denies every non-read action for
-  // an impersonated actor before any policy lookup (T-2), so a route that
-  // forgets to check is still safe. Enforcing it here as well would create a
-  // second answer that can disagree with the first.
+  // Read-only is NOT enforced here: the engine denies every non-read action for
+  // an impersonated actor before any policy lookup (T-2).
+  //
+  // #52 corrects what this comment used to claim. It said a route that forgets
+  // to check is "still safe" — untrue. The engine's deny only runs where a route
+  // ASKS the engine, and `POST /system/user` carried `validatedRequest` alone,
+  // so an impersonated session could set the victim's username and password and
+  // then log in as them for real. The blanket deny is a backstop for routes that
+  // ask, not a guarantee for routes that do not: every mutating route needs its
+  // own gate, and the router sweep test is what keeps that true as routes are
+  // added.
   app.post(
     "/admin/view-as-user/:id",
     [validatedRequest, requirePermission("user.manage", orgResource)],
@@ -310,7 +317,13 @@ function adminEndpoints(app) {
 
   app.get(
     "/admin/workspaces",
-    [validatedRequest, requirePermission("workspace.read", orgResource)],
+    // #52: user.manage, NOT org-wide workspace.read. This lists every workspace
+    // and its members, which is user administration. Migration 044000
+    // deliberately took org-wide workspace.read away from `member` (it made the
+    // engine treat a NULL-workspace grant as every workspace); gating an admin
+    // route on it would mean granting it back the moment any ordinary role
+    // needs workspace.read for its own scope.
+    [validatedRequest, requirePermission("user.manage", orgResource)],
     async (_request, response) => {
       try {
         const workspaces = await Workspace.whereWithUsers();
