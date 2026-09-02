@@ -22,6 +22,12 @@ jest.mock("../utils/prisma", () => ({
   workspaces: { findUnique: jest.fn() },
   api_keys: { findUnique: jest.fn().mockResolvedValue({ createdBy: 5 }) },
   workspace_users: { findMany: jest.fn().mockResolvedValue([]) },
+  // S12 (#136): the resolver reads the key creator's row to refuse a SUSPENDED
+  // one, and an unreadable users table denies. Active creator by default.
+  users: {
+    count: jest.fn().mockResolvedValue(3),
+    findUnique: jest.fn().mockResolvedValue({ suspended: 0 }),
+  },
   permissions: { findUnique: jest.fn() },
   principal_role_grants: { findMany: jest.fn() },
   role_permissions: { findMany: jest.fn() },

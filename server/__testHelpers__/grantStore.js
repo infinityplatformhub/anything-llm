@@ -22,6 +22,15 @@ function grantingPrismaMock({ createdBy = 1 } = {}) {
     workspaces: { findUnique: jest.fn() },
     api_keys: { findUnique: jest.fn().mockResolvedValue({ createdBy }) },
     workspace_users: { findMany: jest.fn().mockResolvedValue([]) },
+    // S12 (#136): `keyGrantPrincipal` reads the key creator's row to refuse a
+    // SUSPENDED one, and treats an unreadable users table as a denial. A mock
+    // without this answers 403 for every keyed request — correct fail-closed
+    // behaviour, but not what these suites are testing. Active by default; the
+    // suspended and missing cases have their own tests.
+    users: {
+      count: jest.fn().mockResolvedValue(3),
+      findUnique: jest.fn().mockResolvedValue({ suspended: 0 }),
+    },
     // the engine's read path: known action -> granted role -> allow effect
     permissions: { findUnique: jest.fn().mockResolvedValue({ id: 1 }) },
     principal_role_grants: { findMany: jest.fn().mockResolvedValue([allowRole]) },

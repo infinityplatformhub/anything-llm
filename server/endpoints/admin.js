@@ -6,6 +6,10 @@ const { emitAuditEvent } = require("../utils/events");
 const { Invite } = require("../models/invite");
 const { SystemSettings } = require("../models/systemSettings");
 const { User } = require("../models/user");
+const prisma = require("../utils/prisma");
+const {
+  removeGroupMember,
+} = require("../utils/authorization/policyRepository");
 const { DocumentVectors } = require("../models/vectors");
 const { Workspace } = require("../models/workspace");
 const { WorkspaceChats } = require("../models/workspaceChats");
@@ -183,6 +187,77 @@ function adminEndpoints(app) {
             deletedBy: currUser.username,
           },
           currUser.id
+        );
+        response.status(200).json({ success: true, error: null });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // S12 slice 1 (#136): the first production caller of `removeGroupMember`.
+  //
+  // The repository function has been correct and tested since it was written —
+  // it deletes the membership and bumps the `group_membership` policy version in
+  // ONE transaction — but every reference to it lived in its own test file, so
+  // no operator could ever take a user out of a group. Offboarding is what needs
+  // it: a suspended account that is still a group member still appears in every
+  // "who is in this group" answer.
+  //
+  // `user.manage`, not a group-specific action: no `group.*` permission is
+  // seeded, and inventing one here would add a permission row with a single call
+  // site. #136 records that as a residual rather than guessing at a taxonomy.
+  //
+  // The gate answers about the ORG, because group membership is org-scoped —
+  // `removeGroupMember` derives the workspace keys it invalidates from the
+  // membership row itself, not from anything the caller sends (B-3).
+  app.delete(
+    "/admin/group/:groupId/member/:userId",
+    [validatedRequest, requirePermission("user.manage", orgResource)],
+    async (request, response) => {
+      try {
+        // Parse FIRST, then check existence, and answer 404 before any
+        // repository call. Both halves are load-bearing and were measured
+        // separately: `999999` reached `removeGroupMember`, which bumps a policy
+        // version unconditionally and — because `workspaceScopeKeysFor` falls
+        // back to `orgId ?? 1` when it finds nothing — published that bump under
+        // `org:1`, flushing every cached decision in the instance. `"abc"`
+        // became `NaN` and threw inside the repository as a 500. An existence
+        // check alone fixes only the first; `Number.isInteger` alone fixes only
+        // the second.
+        const groupId = Number(request.params.groupId);
+        const userId = Number(request.params.userId);
+        if (!Number.isInteger(groupId) || !Number.isInteger(userId))
+          return response.sendStatus(404);
+
+        const user = await User.get({ id: userId });
+        if (!user) return response.sendStatus(404);
+        const group = await prisma.groups.findUnique({
+          where: { id: groupId },
+        });
+        if (!group) return response.sendStatus(404);
+
+        const canModify = await validCanModify(response.locals.actor, user);
+        if (!canModify.valid)
+          return response
+            .status(200)
+            .json({ success: false, error: canModify.error });
+
+        // `actor` comes from `response.locals`, which `requirePermission` set
+        // after the engine allowed the call. `removeGroupMember` refuses an
+        // escalation with it, so passing the session user instead would hand the
+        // repository a principal the gate never checked.
+        await removeGroupMember({
+          actor: response.locals.actor,
+          groupId,
+          userId,
+        });
+
+        await emitAuditEvent(
+          "group_member_removed",
+          { userName: user.username, groupId },
+          response.locals.user?.id
         );
         response.status(200).json({ success: true, error: null });
       } catch (e) {
