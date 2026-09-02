@@ -705,3 +705,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #134 SHA fe6d92e69 (lane: migration, schema, applyDirectoryPlan.js, directoryDiff.js; ledger in tree). Gate-134 agent → /tmp/gate-134.report. TL-1 verdict + rulings (F1 premise false → conflict-fixture witness?; slice 3 lock: pg_advisory_xact_lock vs lock-row+heartbeat). QA-1 probing. §7.17 lesson added.
 - #121 Dev4 verification on 6e205d79b: intersection empty, both server guards go RED on mutation. Stop withdrawn. #132 unblocked pending merge signal. Dev4 starts V8 mockup meanwhile.
 - #134 53524e57f = fe6d92e69 + ledger rulings (F1 finding, M2/M3 survivors). Gate retargeted.
+- #130 TL-2 ruling (0242fd65a): (1) stale, close with reason; (2) add capture-and-invoke test in connectionBudget.test.js (M4 + empty body + typo all die in 0.3s), keep source-grep (answers "file registered"), fix comment :60-65, residual = jest's own afterAll contract. Not A/B/C. Dev1 after #121 F-B fix.
+- #121 gate step 8: commented-code detector false positive on workspaceScopedCapabilities.test.js:237,271 (prose comments) → checkignore. Rerun on 6e205d79b in progress.
