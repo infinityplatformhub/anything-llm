@@ -252,3 +252,6 @@ Guard-below-cache equivalence depends on cache key being exactly the material; a
 
 ## #126 slice 1 (TL-1 nit)
 `WorkspaceGate` takes `canCreate` as a prop, so the action string `can("workspace.create")` lives at the Home caller and is not covered by the gate's render tests (a `workspace.write` typo passes all 7). Known limit of the extraction; slice 2 adds a caller-side fixture.
+
+## #113 (TL-1 nit)
+`aclGroupWorld:452` ternary `role.scope === "workspace" ? null : null` — both arms null; org-wide grant is what makes control A non-vacuous (`heldPermissionIds` with `targetWorkspaceId: null` matches only `workspace_id IS NULL`). Replace with plain `null` + comment.
