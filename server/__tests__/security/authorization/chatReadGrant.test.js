@@ -458,6 +458,20 @@ describe("issue 63: the grant is scoped, not a widening", () => {
     });
     expect(outsider).not.toBeNull();
 
+    // Premise guard (Techlead-1 NIT-1): the outsider must actually hold the org
+    // `member` grant. With no grant at all the 404 below would prove nothing —
+    // it would just be a user with no permissions anywhere.
+    const grants = await prisma.principal_role_grants.findMany({
+      where: { principal_type: "user", principal_id: String(outsider.id) },
+      select: { workspace_id: true, role_id: true },
+    });
+    expect(grants).toHaveLength(1);
+    expect(grants[0].workspace_id).toBeNull();
+    const memberRole = await prisma.roles.findFirstOrThrow({
+      where: { name: "member", scope: "org" },
+    });
+    expect(grants[0].role_id).toBe(memberRole.id);
+
     asUser({ id: outsider.id, role: "default", username: outsider.username });
     const response = await fetch(`${baseUrl}/workspace/${workspace.slug}/chats`);
     expect(response.status).toBe(404);
