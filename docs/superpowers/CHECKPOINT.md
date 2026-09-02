@@ -353,3 +353,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #98 recon merged (Dev3): setTimeout late mount escapes sweep; arm guard after :208 (dev branch mounts after loop); seal mutating methods only; adminEndpoints(app) actually receives apiRouter.
 - #96 dadac7b3c: QA-3 PASS (G1–G5 red, G6 unreachable via current call paths) + TL-1 PASS. Both flag one wrong comment in readableScope ("api-key expanded here, unlike engine" — code does NOT expand). Amend requested from Dev3 (comment-only) → close/merge.
 - #113 S4a TL-1 opinion: union_id as subject; checkpoint stores provider cursor/time not ours; emailVerified exemption via driver setting true, not core bypass; "Lark wins" over an already-federated account = takeover shape → USER DECISION pending.
+- Post-merge suite after #49: 2777/2777 green. Post-merge after #40 t2 + #102 running (/tmp/postmerge-102.log).
