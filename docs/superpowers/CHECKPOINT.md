@@ -412,3 +412,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #112: QA-2 interim no blocker (4 probe bugs fixed: multiUserMode, scheme substring, SPA timeout); 6 mutations pending, verdict ~5 min.
 - #108: TL-2 PASS (N6/N7a/N9/NC red; N7b hostile-GET + N8 main.jsx route assert = test gaps, non-blocking → fold into next Dev4 SHA or S11c). Waiting QA-1 only.
 - #114 ruling (TL-2): shape (b) — unauth → 6 tier-1 keys; pre-user (isConfirmedSingleUser) → all keys, endpoint fields = "" (frozen list incl. StorageDir, drift test); authed → full. RF R1/R2(+pre-user body)/R5(+count ≥92)/R8 endpoint not blanked→red/R9 user exists→window closed (real DB)/R10 onboarding renders without controlled/uncontrolled warning. → Dev1 contract.
+- #108 560e084b0 merged 8772af032, closed (infi-run:gate-108-560e084b0); content verified. 81/119. wt-108/g108 reaped. S11 = S11a+S11b done, S11c #107 queued.
+- #98 regate 12f8732b8: check-local, contract 60/60; sweep providerDocIdCallSites 2 red (#57 class) — rerun alone. Waiting TL-2 verdict.

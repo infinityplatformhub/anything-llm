@@ -191,3 +191,8 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - A future postUpdate hook on a secret key would run after a failed persist (none today).
 - newValues key removal cannot suppress audit rows today (mapping has no secret keys).
 - process.env keeps the value on failed persist by design: live until restart, error names the key.
+
+## #108 residuals (S11b)
+- Delivery log (mockup B step 3) deferred to #107.
+- #115 hydrate window: GET /mailer/settings reports hasPassword:false right after boot; admin who retypes overwrites a working credential.
+- Test gaps: hostile-GET password render; main.jsx route-guard assert (next Dev4 SHA).
