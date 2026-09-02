@@ -592,3 +592,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #120 caccf5514: gate green (203/203, sweeps 63/63) but ledger missing from commit → Dev5 pushing ledger-only SHA. TL-2 pre-read pending.
 - Post-merge #113 (+#124 pending own run): server 221 suites / 3068 passed / 0 failed (--forceExit, no hang), frontend 101/101 exit 0. Main fully green.
 - #121 e3fbcf775 (Dev1, 3 files SettingsSidebar/): gate /tmp/wt-121 running; TL-1 verdict + QA-3 probe dispatched. wt-113/124/hf reaped.
+- #121 e3fbcf775 gate RED: vitest exit 1 (26 unhandled mock errors, class repeat of #40 t4) + ledger-121 not in commit. Dev1 → new SHA. Server contract rerun on bootstrapped g121 (first run 0 total = my harness miss). TL-1/QA-3 hold. §7.17 second-occurrence logged. #130 opened (connectionBudget residuals, Dev1 after #121).
