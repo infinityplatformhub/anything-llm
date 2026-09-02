@@ -186,10 +186,15 @@ const INTENTIONAL_NON_PERMISSION_MUTATIONS = new Map([
     "self-service on caller account; requireSelfSession constrains identity",
   ]),
   ["POST /request-token", "unauthenticated login ingress"],
-  // S3 (#60): LDAP login/discovery. No principal exists before authenticate,
-  // so there is nothing for the engine to decide on. Plaintext-bind and
-  // rate-limit protections live in the LDAP driver (#60), not at this gate.
-  ["POST /sso/ldap/login", "unauthenticated LDAP login ingress"],
+  // S3 (#60): LDAP login. No principal exists before authenticate, so there is
+  // nothing for the engine to decide on. Plaintext-bind and rate-limit
+  // protections live in the LDAP driver (#60), not at this gate.
+  // GET /sso/ldap/enabled never reaches this map: non-mutating methods are
+  // filtered out before the allowlist is consulted.
+  [
+    "POST /sso/ldap/login",
+    "unauthenticated LDAP login ingress; provisions a user + default grant on first bind. Identity is bounded by the directory; rate limit + plaintext refusal are ours (ldap.js:173,198)",
+  ],
   ["POST /system/recover-account", "unauthenticated account-recovery ingress"],
   ["POST /system/reset-password", "recovery-token completion ingress"],
   ["POST /invite/:code", "invite-code acceptance ingress"],
@@ -426,8 +431,12 @@ describe("issue 52: every session-authenticated mutating route asks something", 
   });
 
   test("every mounted mutating route has identity-verified authorization", () => {
-    // Snapshot at assertion execution. Routes mounted asynchronously after this
-    // point are outside this synchronous startup contract and remain residual risk.
+    // Snapshot at assertion execution. The stability test above proves nothing
+    // mounts through setImmediate or a 0ms timer, so the residual window is
+    // narrower than "asynchronous": what escapes is a mount scheduled to land
+    // AFTER this test body runs (a longer timer, or an awaited I/O round trip).
+    // Nothing in the tree does that today; a runtime guard that refuses late
+    // apiRouter mounts is tracked separately.
     const routesAtAssertion = mountedRouteLayers(app._router?.stack);
     const ungated = [];
     for (const layer of routesAtAssertion) {
