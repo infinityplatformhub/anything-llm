@@ -97,3 +97,48 @@ than solve it, and would hide it in a way that makes the eventual Q4 test harder
 3. Stale leases are taken over, not refused — and the contract records that this is safe *because* the apply is idempotent, so the dependency is visible.
 4. Per-provider exclusion via the job type / idempotency key; global locking is rejected, and the cross-provider identity collision is named as Q4's, not slice 3's.
 5. Separately and not blocking: comment `PostgresJobScheduler.js:64`'s advisory key.
+
+---
+
+## Addendum — #138 blocker: the fetch has no timeout, so my lease rule was unusable
+
+**Skills:** `superpowers:requesting-code-review`, `security-review` checklist (two concurrent
+applies is an authorization-correctness failure).
+
+Dev3 found that my rule — *"the lease must exceed the longest plausible stall in a single driver
+call"* — cannot be applied, because that quantity is unbounded. `LarkIdentityProvider._page:148-161`
+forwards an optional `signal` that no production caller supplies, and there is no
+`AbortController` or timeout anywhere in the driver. Retry covers a dropped socket; a socket that
+stays open waits forever. The lease then expires while worker 1 is still alive, and a second
+worker starts a concurrent apply — the exact failure slice 3 exists to prevent.
+
+That is my error: I wrote a rule referring to a quantity I had not checked was bounded.
+
+**Decision: option (1) — #138 bounds the fetch itself. Not a separate S4a issue.**
+
+Splitting it would still block #138 for the same duration, but produce two contracts and two
+reviews for a change measurable in one line. More importantly, **the timeout has no meaning on its
+own** — it exists because #138's lease is computed from it. Separating them separates the number
+from the reason it exists, which is the shape that forced the cross-references in #113/#128 where
+each diff showed only half the argument.
+
+**The number: 10_000 ms per call, from the in-house precedent.**
+`OidcIdentityProvider/index.js:29` declares `DEFAULT_TIMEOUT_MS = 10_000` and `:86` applies it as
+`signal: AbortSignal.timeout(this.timeoutMs)`. Another driver in the same seam has already
+answered this question; do not invent a second number. Lark takes `timeoutMs` in config the same
+way, defaulting to 10s, and combines the caller's signal rather than discarding it:
+`AbortSignal.any([signal, AbortSignal.timeout(ms)])` when a signal is supplied.
+
+**The lease formula has a second hole in the same place.** Measured: `maxRetries = 3` (`:35`) so
+four attempts; backoff is `Math.min(2000, 100 * 2 ** attempt)` (`:210`) = 100+200+400 = 700ms.
+But the 429 path uses Lark's `Retry-After` **unclamped** (`:174`, `retryAfter * 1000`), so the
+bound is still unbounded even after a per-call timeout. **Clamp `Retry-After`** (e.g.
+`Math.min(retryAfter * 1000, 30_000)`) or the lease cannot be computed at all. With both bounds:
+4×10s + 3×30s worst case + headroom → a floor around 150s. Write the formula in the code beside
+the value, not just the number.
+
+**RF:** a server that accepts the connection and never responds must make `listPrincipals` reject
+within roughly `timeout × 4 + backoff`, not hang. Mutation: remove `AbortSignal.timeout` — the
+test then hangs to the jest timeout, which is visibly red. The fixture must be
+**accept-then-silent**, not a dead port: a dead port rejects immediately and is green under both
+versions. That is the same trap Dev3 found in their own #113 slice 2 app-secret test.
