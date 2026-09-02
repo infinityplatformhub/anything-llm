@@ -272,3 +272,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge main after #90: 2583/2584 (sole red = updateSettingsReturns, fixed by hotfix now merged; rerun in flight).
 - #40 rebase inventory (Dev2): 8 new routes vs baseline — mailer ×3, metrics, ldap enabled/login, chats/search (#61), invite/new stack+1 (#80 limiter). Ruling: ldap login/enabled → allowlist with reason (no principal pre-auth); chats/search must be workspace-gated; re-pin with measured count. First real allowlist decision the walk forced.
 - #84 QA-2 PASS 14/14; waiting Dev1 FINDING-1 commit. O5b recon landed on approof/o5-recon.
+- #84 4a02b678 (FINDING-1: DELETE credential → system.write): gate PASS (check-local, contract 9/9; sweep red = updateSettingsReturns because branch base predates hotfix merge — not #84). Waiting QA-2 (17 cases) + TL-1 delta → close/merge. Gate-equality test (QA-2 case 3) asked of Dev1.
+- O5b recon merged; rulings: CLI-only, no migration/slot in this issue; --bundle JSON on stdout only.
+- #49 contract posted (EXPECT measured-at-close). Dev2 on 40-task1-rebased (inventory: 8 new routes, ldap login/enabled → allowlist ruling).
