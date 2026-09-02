@@ -91,3 +91,6 @@
 - [→ backlog] #41 boundDocpaths catch→new Set() has no test; flipping to null = allow-all silently (QA-1 NIT-1); storedNameFor readdirSync per resolve (NIT-2)
 
 - **simpleSSOEnabled.js fallback reads raw `multi_user_mode`** when `res.locals.multiUserMode` is unset (route mounted without `validatedRequest`). No such route today; drift point only. Found by QA-2 on #58 953e108a. `[→ backlog]`
+
+- **ruling A (`validApiKey.js:111`) has no test** — QA-1 mutation M5 survived on #58; code verified correct by probe. Add test in approof/58-followup. `[→ #58 follow-up]`
+- **`websocket.js:17` `userCanToggleTools` bypasses engine in shape (b)** until reboot repairs it (QA-1 D1/D2 on #58). Deferred per ruling D. `[→ backlog]`
