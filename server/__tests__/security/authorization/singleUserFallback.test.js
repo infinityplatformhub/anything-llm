@@ -153,3 +153,29 @@ describe("QA-2 FINDING-1: single-user is confirmed by evidence, not by a setting
     expect(await resolveActor({}, res({}), { db })).toBeNull();
   });
 });
+
+describe("issue 30 follow-up: resolveActor refuses a forgotten response", () => {
+  // Techlead-1 NIT-1. `response?.locals ?? {}` made the second argument optional in effect:
+  // omit it and every branch misses, so the caller silently receives SINGLE_USER_ACTOR —
+  // the widest actor in the system. Worse than a plain crash, because it hands back a
+  // valid-looking Actor rather than an error, so nothing downstream can tell.
+  //
+  // This is the shape #30 closed three times over: an optional security argument that fails
+  // toward MORE access. The fix is that it now throws.
+
+  test("calling with one argument throws rather than resolving to single-user", async () => {
+    await expect(resolveActor({})).rejects.toThrow(/requires a response/i);
+  });
+
+  test("an EXPLICIT null response is still allowed", async () => {
+    // The distinction that makes `arguments.length` the right check rather than a null
+    // test: a caller passing null is stating it has no response, which the branches already
+    // handle. Only FORGETTING the argument is the bug, and only that is refused.
+    const db = {
+      users: { count: async () => 0, findFirst: async () => null },
+      system_settings: { findFirst: async () => null },
+      workspace_users: { findMany: async () => [] },
+    };
+    await expect(resolveActor({}, null, { db })).resolves.not.toThrow;
+  });
+});
