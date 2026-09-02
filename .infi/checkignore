@@ -24,3 +24,4 @@ server/__tests__/models/updateSettingsReturns.test.js
 docs/superpowers/mockups/
 server/models/user.js
 server/__tests__/security/authorization/workspaceScopedCapabilities.test.js
+server/__tests__/security/identity/applyDirectoryPlan.test.js
