@@ -231,3 +231,6 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Regime-1 (shared-DB data collision) trigger never reproduced (48/63/93 backends all green); fix covers regime 2 only.
 - Per-suite schema (ก) not opened; 52/55 authz suites still share the public schema.
 - Suite needs a migrated public schema, not an empty DB.
+
+## #122 (QA-1 NIT-1)
+`connectionBudget.test.js` guards the disconnect hook by source grep for `$disconnect()`; a literal kept behind `if (false)` survives 12/12 (M4). Fail-safe direction (broken guard = slow noisy gate, not wrong result). Fix: assert the effect in-process (pg_stat_activity backend count before/after hook, or spy on the real client's `$disconnect`). Also: two parallel gates while something holds 40 backends still exceed max_connections=100; two parallel gates alone are safe (peak 82/89).

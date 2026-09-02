@@ -514,3 +514,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #123 be27ac7ed regate: check-local pass, sweeps 63/63; contract rerun alone (first run lost the line). TL-1 + QA-1 queued.
 - #125 44a761a1f (Dev5, approof/memoize-key): gate started /tmp/wt-125 (g125); TL-2 + QA-2 dispatched.
 - #40 t4: Dev4 already fixed sweep (strip comments, ProbeCaller proof) + mock; committing on 2d73d5510; Dev2 merges + adds M3/M4/M6 tests only.
+- Post-merge after #122: server 3033/3033 green.
+- #123 be27ac7ed: TL-1 PASS (30dfabfad); contract 46/46 + sweeps 63/63; result file written; awaiting QA-1 → close/merge. Residual → #128 heldPermissionIds no group expansion (assigned Dev3 after #113, same file lane).
+- #125 44a761a1f: gate green (check-local, credentialStore 25/25, sweeps 63/63); result file written; awaiting TL-2 + QA-2.
+- #40 t4: Dev4 1a97438ab (sweep strip-comments + mock) → Dev2 merges f2b5d01d7→2d73d5510→1a97438ab + M3/M4/M6 → new SHA.
+- #122 QA-1 PASS + NIT-1 logged in residual-risks.
