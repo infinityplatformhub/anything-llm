@@ -49,6 +49,34 @@ async function withCounter(fn) {
   }
 }
 
+describe("the disconnect hook is actually wired (TL-2 M2/M3)", () => {
+  // The hook releases a resource and asserts nothing, so removing it — or
+  // emptying it — leaves every test in this repo green. That is precisely the
+  // failure #122 exists to prevent: a pool that silently stops being released,
+  // noticed only when several worktrees exhaust a 100-connection server.
+  //
+  // Nothing behavioural can catch it, because the symptom is the absence of a
+  // side effect in a LATER process. So the configuration is asserted directly.
+  const fs = require("fs");
+  const path = require("path");
+
+  it("jest.config.js registers the disconnect setup file", () => {
+    const config = require("../../../jest.config.js");
+    expect(config.setupFilesAfterEnv ?? []).toEqual(
+      expect.arrayContaining([expect.stringContaining("disconnectPrisma")])
+    );
+  });
+
+  it("the setup file exists and calls $disconnect in afterAll", () => {
+    // Registered-but-empty is the same failure as not registered.
+    const file = path.join(__dirname, "../../support/disconnectPrisma.js");
+    expect(fs.existsSync(file)).toBe(true);
+    const source = fs.readFileSync(file, "utf8");
+    expect(source).toMatch(/afterAll\(/);
+    expect(source).toMatch(/\$disconnect\(\)/);
+  });
+});
+
 run("the URL helper keeps the cap it is given (QA-2)", () => {
   it("preserves an explicit connection_limit through forPrismaTest", () => {
     // It used to delete it. The pool cap would then have worked everywhere
@@ -66,6 +94,17 @@ run("the URL helper keeps the cap it is given (QA-2)", () => {
   it("supplies a default cap when the caller's URL has none", () => {
     const url = forPrismaTest("postgresql://u:p@h:5432/db", { schema: "s" });
     expect(url).toContain(`connection_limit=${DEFAULT_TEST_CONNECTION_LIMIT}`);
+
+    // TL-2 M4: the line above is a TAUTOLOGY on its own — it interpolates the
+    // constant it is checking, so it passes for any value, including the
+    // uncapped default this issue exists to replace. The constant has to be
+    // bounded independently or the assertion says nothing.
+    const cap = Number(DEFAULT_TEST_CONNECTION_LIMIT);
+    expect(Number.isInteger(cap)).toBe(true);
+    expect(cap).toBeGreaterThan(0);
+    // Prisma's own default here is num_cpus*2+1 — 37 on this machine. Any cap
+    // worth setting is far below that.
+    expect(cap).toBeLessThanOrEqual(10);
   });
 
   it("does not invent a cap for the raw pg client, which has no such option", () => {

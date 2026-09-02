@@ -89,3 +89,20 @@ confirmed rather than assumed.
 |---|---|
 | restore `searchParams.delete("connection_limit")` in `forPrismaTest` | `preserves an explicit connection_limit through forPrismaTest`, `supplies a default cap when the caller's URL has none` |
 | drop the cap from the pool measurement | `holds far fewer backends under concurrency than the uncapped default` — reports **Received: 37** |
+| remove `setupFilesAfterEnv` from jest.config.js | `jest.config.js registers the disconnect setup file` |
+| empty the `afterAll` body | `the setup file exists and calls $disconnect in afterAll` |
+| set the default cap to `"37"` | `supplies a default cap when the caller's URL has none` |
+
+## TL-2 survivors, closed
+
+Ruling (M2/M3): the disconnect hook releases a resource and asserts nothing, so removing it — or
+emptying its body — leaves EVERY test in the repo green. Nothing behavioural can catch that: the
+symptom is a missing side effect in a LATER process, on a different machine, under load. So the
+configuration itself is asserted — that `jest.config.js` registers the file, and that the file
+still calls `$disconnect` in an `afterAll`. A hook that silently stops running is the exact failure
+#122 exists to prevent. — ถ้าผิด: fix หายไปเงียบ ๆ แล้วอาการกลับมาโดยไม่มีใครโยงกลับได้
+
+Ruling (M4): `toContain(\`connection_limit=${DEFAULT}\`)` interpolates the constant it is checking,
+so it passes for ANY value — including `37`, the uncapped default this issue exists to replace. The
+constant is now bounded independently (integer, > 0, ≤ 10). A test that compares a value to itself
+is not a test. — ถ้าผิด: เทสเขียวบน cap ที่ไม่ได้ cap อะไรเลย
