@@ -216,13 +216,20 @@ describe("unknown settings keys over HTTP", () => {
     });
   });
 
-  test("model writes hub_api_key despite its protectedFields membership", async () => {
-    await expect(
-      SystemSettings.updateSettings({ hub_api_key: "model-community-key" })
-    ).resolves.toEqual({ success: true, error: null });
-    await expect(
-      prisma.system_settings.findUnique({ where: { label: "hub_api_key" } })
-    ).resolves.toMatchObject({ value: "model-community-key" });
+  test("every protected and supported key remains writable", async () => {
+    const overlap = SystemSettings.protectedFields.filter((key) =>
+      SystemSettings.supportedFields.includes(key)
+    );
+    expect(overlap.length).toBeGreaterThan(0);
+
+    for (const key of overlap) {
+      await expect(
+        SystemSettings.updateSettings({ [key]: "overlap-value" })
+      ).resolves.toEqual({ success: true, error: null });
+      await expect(
+        prisma.system_settings.findUnique({ where: { label: key } })
+      ).resolves.toMatchObject({ value: "overlap-value" });
+    }
   });
 
   test("community hub writes its supported API key", async () => {
