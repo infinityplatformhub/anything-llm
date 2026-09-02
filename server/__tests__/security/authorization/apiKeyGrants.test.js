@@ -22,9 +22,13 @@ const res = (locals) => ({ locals });
 // QA-2 FINDING-1: single-user is confirmed against `users.count() === 0`, not taken from
 // the setting alone — so a fixture must say which deployment shape it is modelling.
 // Default: a populated (multi-user) deployment.
-const keyDb = (apiKey, workspaceIds = [], userCount = 3) => ({
+const keyDb = (apiKey, workspaceIds = [], userCount = 3, creator = { suspended: 0 }) => ({
   api_keys: { findUnique: async () => apiKey },
-  users: { count: async () => userCount },
+  // S12 (#136): the resolver reads the creator's row to refuse a SUSPENDED one, so
+  // a stub that omits `findUnique` is now a stub that denies — correctly, since an
+  // unreadable users table must fail closed. These fixtures model an ACTIVE creator;
+  // the suspended and missing cases have their own tests in offboardUser.test.js.
+  users: { count: async () => userCount, findUnique: async () => creator },
   workspace_users: {
     findMany: async () => workspaceIds.map((id) => ({ workspace_id: id })),
   },

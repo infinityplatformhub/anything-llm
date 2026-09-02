@@ -17,25 +17,77 @@ const prisma = require("../utils/prisma");
  */
 
 /**
- * Revoke every bearer credential belonging to a user being offboarded.
+ * `suspended`, parsed from an explicit set — never truthiness, never a default.
+ *
+ * Returns 1, 0, or `null` for anything else. `null` means REFUSE, and the caller
+ * turns it into `{success: false, error}` rather than throwing: this is a
+ * malformed request, not a server fault.
+ *
+ * It was `Number(Boolean(value))`, and every non-empty string is truthy —
+ * measured, `"0"`, `"false"`, `"no"`, `"[]"` and `"0.0"` all became 1, with only
+ * `""` becoming 0. `{"suspended": "0"}` is what a JSON client sends to
+ * UN-suspend, and combined with permanent revocation (see `revokeCredentialsFor`)
+ * that is unrecoverable: the operator's un-suspend suspends the account again AND
+ * destroys every key the user has.
+ *
+ * An unrecognised value is refused rather than assigned a side. Defaulting to 0
+ * silently ignores a suspend the operator asked for; defaulting to 1 silently
+ * destroys credentials. Both are invisible to the caller.
+ *
+ * Scope is this column only. `default: String(value)` is left alone — widening
+ * the rule to every field is a different change with its own blast radius.
+ */
+function suspendedValue(value) {
+  const token =
+    typeof value === "string" ? value.trim().toLowerCase() : value;
+  if (token === 1 || token === "1" || token === true || token === "true")
+    return 1;
+  if (token === 0 || token === "0" || token === false || token === "false")
+    return 0;
+  return null;
+}
+
+/**
+ * Revoke the user's `api_keys` rows when they are offboarded.
+ *
+ * SUSPENSION ONLY. `User.delete` does not call this and gets no sweep: nothing
+ * cleans up a deleted user's keys, because `api_keys.createdBy` has no foreign
+ * key and the row outlives its owner. What stops a deleted user's key is the
+ * READER — `keyGrantPrincipal` refuses a creator whose row is gone (TL-2
+ * security review, pinned by the F5 fixture). Orphaned rows are #135's cleanup,
+ * not an authorization gap.
+ *
+ * `api_keys` ONLY, and the other three credential tables are deliberately absent
+ * because each is already safe at the reader: `browser_extension_api_keys` and
+ * `desktop_mobile_devices` re-read `suspended` on every request and both carry a
+ * real foreign key to `users`, and `temporary_auth_tokens` checks it at
+ * `models/temporaryAuthToken.js:84`. Sweeping them would add writes that change
+ * nothing.
  *
  * `revokedAt` is what `ApiKey.validate` consults (`models/apiKeys.js:91`), so
  * setting it is what actually stops the key rather than merely recording that it
  * should have stopped.
  *
- * Already-revoked keys are left alone: `revokedAt: null` in the filter keeps the
- * ORIGINAL revocation timestamp, which is audit history. Re-stamping it would
- * rewrite when a key stopped working.
+ * REVOCATION IS PERMANENT. `revokedAt` is never cleared — not by un-suspending the
+ * user, not by anything else. A key revoked during an offboarding stays dead even
+ * if the account is restored, and the restored user mints a new one. The
+ * alternative, reviving old secrets on un-suspension, means a credential that may
+ * have been copied during the suspension silently works again.
+ *
+ * Already-revoked keys are left alone for the same reason: `revokedAt: null` in
+ * the filter keeps the ORIGINAL timestamp, which is audit history. Re-stamping it
+ * would rewrite when a key stopped working.
  *
  * Browser-extension keys need no equivalent: `validBrowserExtensionApiKey.js:27`
  * re-reads `suspended` on every request, and its key table has a real foreign key
  * to `users`.
  */
 async function revokeCredentialsFor(userId, tx) {
-  await tx.api_keys.updateMany({
+  const { count } = await tx.api_keys.updateMany({
     where: { createdBy: Number(userId), revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  return count;
 }
 
 const User = {
@@ -102,8 +154,26 @@ const User = {
   // validations for the above writable fields.
   castColumnValue: function (key, value) {
     switch (key) {
-      case "suspended":
-        return Number(Boolean(value));
+      case "suspended": {
+        // Returns `null` for an unrecognised value; `update` turns that into
+        // `{success: false, error}`. See SUSPENDED_VALUES below.
+        // An EXPLICIT SET, not truthiness and not a default.
+        //
+        // It was `Number(Boolean(value))`, and every non-empty string is truthy:
+        // measured, `"0"`, `"false"`, `"no"`, `"[]"` and `"0.0"` all became 1,
+        // with only `""` becoming 0. `{"suspended": "0"}` is what a JSON client
+        // sends to UN-suspend, and combined with permanent revocation (see
+        // `revokeCredentialsFor`) that is unrecoverable: the operator's
+        // un-suspend suspends the account again AND destroys every key the user
+        // has.
+        //
+        // An unrecognised value THROWS rather than picking a side. Defaulting to
+        // 0 silently ignores a suspend the operator asked for; defaulting to 1
+        // silently destroys credentials. Both are wrong in a way the caller
+        // cannot see, and `update` turns the throw into `{success: false, error}`
+        // — an answer.
+        return suspendedValue(value);
+      }
       case "dailyMessageLimit":
         return value === null ? null : Number(value);
       default:
@@ -214,6 +284,16 @@ const User = {
         delete updates[key];
       });
 
+      // A refused `suspended` must never reach prisma as `undefined`: prisma
+      // SKIPS an undefined field and returns success with nothing changed, which
+      // reads to the caller as a suspend that worked.
+      if (updates.hasOwnProperty("suspended") && updates.suspended === null)
+        return {
+          success: false,
+          error:
+            'suspended must be one of 1, "1", true, "true", 0, "0", false, "false"',
+        };
+
       if (Object.keys(updates).length === 0)
         return { success: false, error: "No valid updates applied." };
 
@@ -231,23 +311,39 @@ const User = {
       // user's credentials with it IN THE SAME TRANSACTION.
       //
       // Measured on `941aa79e8` before this existed: a suspended user's API key
-      // still authenticated — `validApiKey` called `next()` with no status. The
-      // session path was closed (`validatedRequest` re-reads `suspended`), so
-      // the key was the way back in.
+      // still authenticated — `validApiKey` called `next()` with no status.
+      //
+      // This sweep is NOT what enforces that. Enforcement is at the READER:
+      // `keyGrantPrincipal` refuses a suspended creator, the same way the
+      // session and job branches already did. QA-2 showed why the distinction
+      // matters — a sweep only covers the keys that exist when it runs, and
+      // three paths walked past this one. What the sweep provides is the AUDIT
+      // RECORD: `revokedAt` says when a key stopped working, which a resolver
+      // check cannot express.
       //
       // In one transaction rather than a follow-up write: a crash between the
       // two leaves an account that is suspended in the UI and still usable by
       // its key, which is the worst of the two states and the one nobody would
       // think to check.
-      const isSuspending =
-        updates.suspended === 1 && currentUser.suspended !== 1;
+      // LEVEL-triggered, not edge-triggered. It used to require a TRANSITION
+      // (`currentUser.suspended !== 1`), so re-suspending an already-suspended
+      // user swept nothing while reporting success — and a key minted between
+      // the two calls survived. The `revokedAt: null` filter already makes the
+      // sweep idempotent, so running it every time costs a no-op update.
+      //
+      // The sweep is kept even though `keyGrantPrincipal` now refuses a
+      // suspended creator: `revokedAt` is the audit record of when a key stopped
+      // working, and the resolver check leaves no such record.
+      const isSuspending = updates.suspended === 1;
 
+      let revokedKeyCount = 0;
       const user = await prisma.$transaction(async (tx) => {
         const updated = await tx.users.update({
           where: { id: parseInt(userId) },
           data: updates,
         });
-        if (isSuspending) await revokeCredentialsFor(updated.id, tx);
+        if (isSuspending)
+          revokedKeyCount = await revokeCredentialsFor(updated.id, tx);
         return updated;
       });
 
@@ -261,6 +357,10 @@ const User = {
         {
           username: user.username,
           changes: this.loggedChanges(updates, currentUser),
+          // How many credentials the offboarding actually destroyed. Zero is
+          // meaningful too — it says the sweep ran and found nothing, which is a
+          // different fact from the sweep not running.
+          ...(isSuspending ? { revokedKeyCount } : {}),
         },
         userId
       );
@@ -355,7 +455,23 @@ const User = {
 
   delete: async function (clause = {}) {
     try {
-      await prisma.users.deleteMany({ where: clause });
+      // S12 (#136, TL-2): stamp `revokedAt` before the rows lose their owner.
+      // The reader already refuses a key whose creator is gone, so this is not
+      // what closes the hole — it is the investigator's record of WHEN the key
+      // stopped working, which a resolver check cannot express and which no
+      // later query can reconstruct once the user row is gone.
+      //
+      // The key rows are NOT deleted. `browser_extension_api_keys` disappears
+      // only because its foreign key cascades; `api_keys` has none, and keeping
+      // the stamped row is the point.
+      await prisma.$transaction(async (tx) => {
+        const doomed = await tx.users.findMany({
+          where: clause,
+          select: { id: true },
+        });
+        for (const { id } of doomed) await revokeCredentialsFor(id, tx);
+        await tx.users.deleteMany({ where: clause });
+      });
       return true;
     } catch (error) {
       console.error(error.message);

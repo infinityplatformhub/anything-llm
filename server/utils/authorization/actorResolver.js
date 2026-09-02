@@ -235,6 +235,50 @@ async function jobActor({ userId = null, db = prisma } = {}) {
 }
 
 /**
+ * Is the creator of a key still allowed to act?
+ *
+ * Returns `"active"`, or a reason that denies. Never throws: every failure mode —
+ * a missing row, a suspended row, an unreadable table, or a `db` that does not
+ * expose `users.findUnique` — resolves to a denial, because the caller turns any
+ * non-active answer into "no grant principal".
+ *
+ * The last case is load-bearing. `resolveActor` accepts an injected `db`, and six
+ * test suites hand it an object carrying only the tables they care about. A
+ * version of this that assumed `findUnique` exists threw a TypeError from inside
+ * the resolver, which the api-key branch has no handler for — measured: 39
+ * failures across 7 suites. Throwing is not failing closed; it is failing loudly
+ * somewhere else.
+ *
+ * This is only ever consulted for a NON-NULL creator. The `createdBy === null`
+ * branch keeps its own rule (single-user deployments have no user rows to read),
+ * and routing it through here would deny every key a single-user instance ever
+ * issued — the outage `keyGrantPrincipal`'s comment warns about.
+ */
+// THREE distinct states, and collapsing any two is a fail-open:
+//
+//   createdBy null      -> never reaches here. `keyGrantPrincipal` sends it to the
+//                          SINGLE_USER path, which a single-user deployment depends on.
+//   createdBy dangling  -> "missing". The id points at a row that is gone: `api_keys`
+//                          has no foreign key, so a deleted owner leaves the id behind.
+//   row present         -> "active" or "suspended", by the column.
+//
+// (#135 may later sweep orphaned rows on delete; this is the reader half and holds
+// whether or not that lands.)
+async function creatorStatus(creatorId, db = prisma) {
+  try {
+    if (typeof db?.users?.findUnique !== "function") return "unreadable";
+    const creator = await db.users.findUnique({
+      where: { id: Number(creatorId) },
+      select: { suspended: true },
+    });
+    if (!creator) return "missing";
+    return creator.suspended ? "suspended" : "active";
+  } catch {
+    return "unreadable";
+  }
+}
+
+/**
  * The principal a key's grants resolve against, given its creator id.
  *
  * A null `createdBy` is not always an error. `endpoints/system.js:1073` mints keys with
@@ -246,9 +290,36 @@ async function jobActor({ userId = null, db = prisma } = {}) {
  * So a creatorless key falls back to the `single-user` service principal, which holds the
  * seeded grants — and ONLY in single-user mode. In multi-user mode a null creator is a real
  * orphan (creator deleted, or a key written outside the model), and it denies.
+ *
+ * S12 (#136, QA-2): a SUSPENDED creator denies too, and that check belongs here rather than
+ * at the point of suspension. `User.update` revokes the keys that exist when it runs — a
+ * sweep, and only as good as its coverage. Measured, three paths walked straight past it:
+ * `User._update` writes the column without running it, a key minted afterwards was never
+ * swept, and re-suspending an already-suspended user sweeps nothing while reporting success.
+ *
+ * Reading the row here makes the api-key branch symmetric with the two branches that
+ * already do it — `locals.user` at :127 and `resolveActorRef` at :201-203 — so suspension
+ * is enforced at the READER for every ingress rather than at one writer.
  */
 async function keyGrantPrincipal(creatorId, db = prisma) {
-  if (creatorId !== null) return { type: "user", id: String(creatorId) };
+  if (creatorId !== null) {
+    // Fails CLOSED, and on THREE distinct conditions that must not be collapsed:
+    //
+    //   the row is gone       -> refuse. A key whose creator was deleted is an orphan
+    //                            (QA-2 D3), and "no user found" must never read as
+    //                            "not suspended".
+    //   the row is suspended  -> refuse. The finding this closes.
+    //   the read throws       -> refuse. An unreadable users table denies, the same
+    //                            evidence rule the null-creator branch below follows.
+    //
+    // `creatorSuspended` is a separate helper so the read has ONE error path rather than
+    // a `.catch` chained onto a call that may not exist: some callers hand this module a
+    // narrow db stub, and an optional-chain here would silently answer "not suspended"
+    // for them — which is the fail-open this is meant to prevent.
+    const status = await creatorStatus(creatorId, db);
+    if (status !== "active") return null;
+    return { type: "user", id: String(creatorId) };
+  }
   // Gated by the same evidence as the anonymous branch (QA-2 FINDING-1): without it, a key
   // with no creator borrows super_admin the moment the settings read misbehaves.
   if (!(await isConfirmedSingleUser(db))) return null;

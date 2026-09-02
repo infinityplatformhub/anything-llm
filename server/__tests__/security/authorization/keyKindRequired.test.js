@@ -33,7 +33,9 @@ const {
 const res = (locals) => ({ locals });
 const keyDb = (apiKey, workspaceIds = [], userCount = 3) => ({
   api_keys: { findUnique: async () => apiKey },
-  users: { count: async () => userCount },
+  // S12 (#136): the resolver reads the key creator's row to refuse a SUSPENDED
+  // one, and an unreadable users table denies. Active creator by default.
+  users: { count: async () => userCount, findUnique: async () => ({ suspended: 0 }) },
   workspace_users: {
     findMany: async () => workspaceIds.map((id) => ({ workspace_id: id })),
   },
@@ -168,7 +170,7 @@ describe("issue 45: both real ingress paths still resolve", () => {
           throw new Error("api_keys must not be read for a browser-extension context");
         },
       },
-      users: { count: async () => 3 },
+      users: { count: async () => 3, findUnique: async () => ({ suspended: 0 }) },
       workspace_users: { findMany: async () => [] },
     };
 
