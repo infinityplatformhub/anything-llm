@@ -16,3 +16,5 @@ server/__tests__/security/identity/samlAcsUrlWarning.test.js
 server/__tests__/models/ssoProvidersPayload.test.js
 server/__tests__/security/authorization/milvusRealStoreAcl.test.js
 server/__tests__/security/authorization/weaviateRealStoreAcl.test.js
+server/__tests__/security/identity/ldapFilterEscape.test.js
+server/__tests__/security/identity/ldapProviderConfig.test.js
