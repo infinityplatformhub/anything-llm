@@ -110,3 +110,4 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Ruling C (FINDING-2): `retrievalSupport` countRows uses backticked identifier; schema without `orgId` counts as 100% unlabelled, not null.
 - Ruling D: LanceDB `table.add()` silently drops fields absent from the Arrow schema → not a 1a concern; residual → #56 (backfill must migrate schema).
 - Ruling C2: `retrievalSupport` count returns one of three explicit outcomes — real number / "provider cannot count" / "query failed: <message>"; never a silent null for a thrown error. Missing `orgId` column = 100% unlabelled, not an error. Test pair: "column absent" vs "column present but NULL" must agree per flag state.
+- Ruling (1b): `toStructured()` is deleted — no shared intermediate form exists across the 5 object-DSL dialects; each provider writes its own renderer with a render test and a real-store test.
