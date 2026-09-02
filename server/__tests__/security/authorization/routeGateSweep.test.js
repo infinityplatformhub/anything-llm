@@ -40,12 +40,23 @@ function collectImports(ast) {
   for (const node of ast.body) {
     if (node.type !== "VariableDeclaration") continue;
     for (const declaration of node.declarations) {
-      const requiredPath =
-        declaration.init?.type === "CallExpression" &&
-        declaration.init.callee?.name === "require"
-          ? declaration.init.arguments[0]?.value
-          : null;
+      const initializer = declaration.init;
+      const requireCall =
+        initializer?.type === "CallExpression" &&
+        initializer.callee?.name === "require"
+          ? initializer
+          : initializer?.type === "MemberExpression" &&
+              initializer.object?.type === "CallExpression" &&
+              initializer.object.callee?.name === "require"
+            ? initializer.object
+            : null;
+      const requiredPath = requireCall?.arguments[0]?.value;
       if (!requiredPath?.startsWith("./endpoints/")) continue;
+      if (initializer !== requireCall) {
+        throw new Error(
+          "Unsupported endpoint import binding: use top-level destructuring or a namespace require"
+        );
+      }
 
       if (declaration.id.type === "ObjectPattern") {
         for (const property of declaration.id.properties) {
@@ -225,6 +236,16 @@ describe("issue 52: every session-authenticated mutating route asks something", 
   ])("collectImports: $name — $why", ({ source, expected }) => {
     expect(collectImports(parse(source, { sourceType: "script" }))).toEqual(
       expected
+    );
+  });
+
+  test("collectImports rejects endpoint member-access bindings", () => {
+    const ast = parse(
+      'const probe = require("./endpoints/probe").mountProbeRoutes;',
+      { sourceType: "script" }
+    );
+    expect(() => collectImports(ast)).toThrow(
+      "Unsupported endpoint import binding: use top-level destructuring or a namespace require"
     );
   });
 
