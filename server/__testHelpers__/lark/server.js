@@ -25,7 +25,7 @@ const DEFAULT_PAGE_SIZE = 50; // Lark's documented maximum
  *   departments?: number,      total departments to serve
  *   pageSize?: number,
  *   failOnPage?: number|null,  1-based page that fails
- *   failMode?: "500"|"429"|"drop",
+ *   failMode?: "500"|"429"|"drop"|"hang",
  *   failTimes?: number,        how many times that page fails before succeeding
  *   tenantToken?: string,
  * }} options
@@ -45,6 +45,13 @@ async function startLarkFixture(options = {}) {
     // final page forever. The default fixture omits the trailing token, so that
     // guard had no test until this switch existed.
     alwaysToken = false,
+    // #138: hang the TOKEN endpoint rather than a page. Separate switch because the
+    // token call happens before any page is requested, so `failOnPage` cannot reach it.
+    hangToken = false,
+    // #138: what the 429 advertises. Lark can send a very large value, and honouring
+    // it verbatim parks the run for that long — the same stalled-lease outcome as a
+    // hung socket, arriving through a header instead of a socket.
+    retryAfterSeconds = 1,
   } = options;
 
   // Every request, in order. Assertions about retries and skipped pages are made
@@ -52,6 +59,9 @@ async function startLarkFixture(options = {}) {
   // distinguish "read 36 pages" from "read page 36 thirty-six times".
   const requests = [];
   let failuresServed = 0;
+  // Sockets held open by `failMode: "hang"`, destroyed on close so the server can
+  // actually shut down and jest does not hang on an open handle.
+  const hungSockets = [];
 
   const principal = (i) => ({
     // `user_id` is the subject (recon §7.2). `open_id` is served too — deliberately,
@@ -92,6 +102,14 @@ async function startLarkFixture(options = {}) {
     requests.push({ path: url.pathname, page, at: Date.now() });
 
     if (url.pathname.endsWith("/auth/v3/tenant_access_token/internal")) {
+      // #138: the token call is a THIRD unbounded fetch, on the path every
+      // enumeration goes through first. A timeout on `_page` alone would leave a
+      // hung token endpoint stalling the run before a single page is requested, so
+      // it needs its own switch to be testable at all.
+      if (hangToken) {
+        hungSockets.push(request.socket);
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
       return response.end(
         JSON.stringify({ code: 0, tenant_access_token: tenantToken, expire: 7200 })
@@ -108,10 +126,24 @@ async function startLarkFixture(options = {}) {
     if (page === failOnPage && failuresServed < failTimes) {
       failuresServed += 1;
       if (failMode === "drop") return request.socket.destroy();
+      // #138: ACCEPT the connection and never answer. Distinct from "drop" in the
+      // only way that matters here — a destroyed socket rejects the fetch promptly,
+      // so a driver with no timeout looks fine against it. A server that holds the
+      // connection open is what a hung Lark tenant actually does, and without a
+      // request timeout the driver waits forever: the run keeps its job lease alive
+      // only while the process lives, and a stalled process loses the lease to a
+      // second worker that starts a concurrent apply.
+      //
+      // The socket is kept referenced so Node does not exit under it, and closed by
+      // `close()` below rather than here.
+      if (failMode === "hang") {
+        hungSockets.push(request.socket);
+        return; // no writeHead, no end — deliberately
+      }
       if (failMode === "429") {
         response.writeHead(429, {
           "Content-Type": "application/json",
-          "Retry-After": "1",
+          "Retry-After": String(retryAfterSeconds),
         });
         return response.end(JSON.stringify({ code: 99991400, msg: "rate limited" }));
       }
@@ -158,6 +190,11 @@ async function startLarkFixture(options = {}) {
       return failuresServed;
     },
     async close() {
+      // Hung sockets first: `server.close` waits for open connections, so a held
+      // socket would make close() itself hang — the fixture reproducing the bug it
+      // tests for.
+      for (const socket of hungSockets) socket.destroy();
+      hungSockets.length = 0;
       await new Promise((resolve) => server.close(resolve));
     },
   };

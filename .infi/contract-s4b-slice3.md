@@ -46,7 +46,48 @@ opposite directions:
   stays unclaimable. So the lease must exceed the longest plausible stall in a SINGLE
   driver call, not the length of a run.
 
-### R2a. The prerequisite TL-1's rule exposes: there is no fetch timeout
+### R2a. RULED (TL-1): #138 bounds the fetch itself — no separate issue
+
+Settled terms, all in the driver half's SHA:
+
+- `timeoutMs` in the Lark provider's config, **default 10_000**, the same shape and
+  value as `OidcIdentityProvider/index.js:29` + `:86`. Not a new number — two
+  identity providers disagreeing about how long "unreachable" takes is a difference
+  nobody chose.
+- A caller's `signal` is **combined, never overwritten**:
+  `AbortSignal.any([signal, AbortSignal.timeout(ms)])`. `signal: AbortSignal.timeout(ms)`
+  is the plausible one-liner and it silently removes the caller's ability to cancel,
+  which the sync job needs on shutdown.
+- **`Retry-After` clamped** at `:174` — `Math.min(retryAfter * 1000, 30_000)`.
+  Unbounded today, so a 429 advertising a day parks the run for a day: the same
+  stalled-lease outcome as a hung socket, arriving through a header.
+- **`_tenantAccessToken` bounded too** (found while implementing, not in the ruling).
+  It runs before any page is fetched, so bounding `_page` alone leaves a hung token
+  endpoint stalling the run before it starts — correct in review, identical in
+  production.
+
+**Lease formula, written in code beside the value:**
+
+```
+4 attempts x 10s timeout + 3 x 30s worst clamped backoff + headroom  ~=  150s floor
+```
+
+Two implementation rulings made while building it, both consequences of the above
+rather than free choices:
+
+- **A fresh signal per attempt.** `AbortSignal.timeout` starts counting when it is
+  created, so one signal hoisted out of the retry loop gives all four attempts a
+  single shared deadline and the later retries no time at all — a driver that "has a
+  timeout" and still fails the hang test.
+- **A caller's abort is not retried.** Previously every fetch rejection took the
+  retryable branch; with a caller signal in play, a deliberate cancel would be
+  retried three more times and, on shutdown, keep the process doing cancelled work.
+  Timeout and cancel arrive as the *identical* error, so they are told apart by
+  `signal?.aborted` — whose signal fired — not by the error. The timeout stays
+  retryable: a tenant that stalled may answer the retry, and the bound is what makes
+  trying again safe.
+
+### Why this was a blocker at all (kept: it is the reasoning, not the ruling)
 
 "Longest plausible single-call stall" is currently **unbounded**, and that makes the
 lease number unwritable rather than merely hard to pick.

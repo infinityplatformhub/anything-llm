@@ -33,6 +33,24 @@ const MAX_PAGE_SIZE = 50;
 // Lark's documented rate limit is 50 requests/second; retries are for the 429 that
 // arrives anyway (a shared tenant quota is not ours alone to spend).
 const DEFAULT_MAX_RETRIES = 3;
+// #138: every request is bounded. Matches `OidcIdentityProvider`'s
+// DEFAULT_TIMEOUT_MS rather than introducing a second number — two identity
+// providers disagreeing about how long "unreachable" takes is a difference nobody
+// chose.
+//
+// Why a directory driver needs this and a login flow needs it less: a full sync runs
+// as a background job holding a queue lease, and the lease is renewed by a heartbeat
+// that only fires while the process makes progress. A fetch that never settles stops
+// the heartbeat, the lease expires, and a SECOND worker claims the job and starts a
+// concurrent apply against the same directory. The retry loop below does not save
+// us — it handles a DROPPED socket, and a socket that stays open and never answers
+// is not dropped.
+const DEFAULT_TIMEOUT_MS = 10_000;
+// #138: a 429 may advertise any `Retry-After`, and honouring it verbatim parks the
+// run for that long — the same stalled-lease outcome as a hung socket, arriving
+// through a header. Clamped rather than ignored: waiting IS the correct response to
+// a shared tenant quota, and this only bounds how long.
+const MAX_RETRY_AFTER_MS = 30_000;
 
 class LarkIdentityProvider {
   static providerId() {
@@ -59,7 +77,7 @@ class LarkIdentityProvider {
 
   /**
    * @param {{appId:string, appSecret:string, baseUrl?:string, pageSize?:number,
-   *          maxRetries?:number, fetchImpl?:Function}} config
+   *          maxRetries?:number, fetchImpl?:Function, timeoutMs?:number}} config
    */
   constructor(config = {}) {
     const {
@@ -69,6 +87,7 @@ class LarkIdentityProvider {
       pageSize = MAX_PAGE_SIZE,
       maxRetries = DEFAULT_MAX_RETRIES,
       fetchImpl,
+      timeoutMs,
     } = config;
 
     if (!appId || !appSecret) {
@@ -88,6 +107,7 @@ class LarkIdentityProvider {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.pageSize = pageSize;
     this.maxRetries = maxRetries;
+    this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this._fetch = fetchImpl ?? globalThis.fetch;
     this._token = null;
     this._tokenExpiresAt = 0;
@@ -107,7 +127,20 @@ class LarkIdentityProvider {
     return this.toJSON();
   }
 
-  async _tenantAccessToken() {
+  /**
+   * The signal for one request: the caller's, the timeout, or both.
+   *
+   * COMBINED, never replaced. `signal: AbortSignal.timeout(ms)` is the plausible
+   * one-liner and it silently removes the caller's ability to cancel — which the
+   * sync job needs in order to stop on shutdown. `AbortSignal.any` aborts on
+   * whichever fires first, which is what both parties mean.
+   */
+  _signalFor(callerSignal) {
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    return callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;
+  }
+
+  async _tenantAccessToken(signal) {
     if (this._token && Date.now() < this._tokenExpiresAt) return this._token;
 
     const response = await this._fetch(
@@ -116,6 +149,12 @@ class LarkIdentityProvider {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
+        // #138: bounded like every other request. This one is easy to miss and the
+        // most damaging to miss — it runs BEFORE any page is fetched, so a hung
+        // token endpoint stalls the whole enumeration before it starts, and a
+        // timeout on `_page` alone would look correct in review while failing
+        // identically in production.
+        signal: this._signalFor(signal),
       }
     ).catch((cause) => {
       throw new IdentityUnavailableError("Could not reach Lark.", { cause });
@@ -146,7 +185,7 @@ class LarkIdentityProvider {
    * @returns {Promise<{items:Array, nextToken:string|null}>}
    */
   async _page(pathname, cursor, signal) {
-    const token = await this._tenantAccessToken();
+    const token = await this._tenantAccessToken(signal);
     const url = new URL(`${this.baseUrl}${pathname}`);
     url.searchParams.set("page_size", String(this.pageSize));
     if (cursor) url.searchParams.set("page_token", cursor);
@@ -157,10 +196,25 @@ class LarkIdentityProvider {
       try {
         response = await this._fetch(url.toString(), {
           headers: { Authorization: `Bearer ${token}` },
-          signal,
+          // A FRESH signal per attempt: `AbortSignal.timeout` starts counting when
+          // it is created, so hoisting this out of the loop would give all four
+          // attempts one shared deadline and the later retries no time at all.
+          signal: this._signalFor(signal),
         });
       } catch (cause) {
+        // #138: a CALLER'S abort is not retryable. Someone asked this to stop —
+        // retrying it three more times ignores them, and on shutdown would keep the
+        // process alive doing work that was cancelled. The request timeout IS
+        // retryable, and both arrive as an abort, so they are told apart by whose
+        // signal fired rather than by the error, which is identical for both.
+        if (signal?.aborted) {
+          throw new IdentityUnavailableError("Lark enumeration was cancelled.", {
+            cause,
+          });
+        }
         // A dropped socket mid-enumeration is retryable, and is NOT an answer.
+        // So is a timed-out one: a tenant that stops answering may answer the
+        // retry, and the bound is what makes trying again safe.
         lastError = cause;
         await this._backoff(attempt);
         continue;
@@ -171,7 +225,16 @@ class LarkIdentityProvider {
         // is the point — hammering a shared tenant quota makes the next page fail too.
         const retryAfter = Number(response.headers.get("retry-after"));
         lastError = new Error("rate limited");
-        await this._backoff(attempt, Number.isFinite(retryAfter) ? retryAfter * 1000 : null);
+        // Clamped (#138). Honouring an arbitrary `Retry-After` verbatim parks the
+        // run for as long as the header says — a day, if it says a day — which
+        // stalls the job's lease exactly as a hung socket does. The wait itself is
+        // correct and kept; only its ceiling is ours.
+        await this._backoff(
+          attempt,
+          Number.isFinite(retryAfter)
+            ? Math.min(retryAfter * 1000, MAX_RETRY_AFTER_MS)
+            : null
+        );
         continue;
       }
 
