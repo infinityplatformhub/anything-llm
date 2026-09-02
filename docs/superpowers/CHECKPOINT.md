@@ -120,3 +120,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #73 TL-2 PASS 8beff79c9; gate blocked only by §7.3a title → regate on next SHA. #77 regating 59f07e80 (ledger). 60/79.
 - #77 merged df059c557 (61/79). S11 mockup B fixes in. Next: #73 title regate, #40 SHA (WeakSet guard + export list), #72, #74.
 - S11 expiry recon merged 623269b1 (expiry in Invite.get). #73 4646ef8be gating (title fixed; earlier report stale). Post-#77 main suite running.
+- #80 S11a opened (Dev3, backend half; no A/B needed). Ruling: verified-hash stored beside config, atomic. 61/80.
