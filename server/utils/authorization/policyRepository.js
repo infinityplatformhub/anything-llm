@@ -138,6 +138,12 @@ async function heldPermissionIds(tx, actor, targetWorkspaceId) {
  *
  * Kept as a constant rather than seeded onto `setup_admin`, so the role stays
  * content-free: this says what may be DELEGATED, not what the granter can DO.
+ *
+ * It applies to WORKSPACE-scoped roles too, and that is deliberate: `viewer`,
+ * `editor` and `owner` all carry `chat.send`, so a workspace owner delegating
+ * membership hits the same wall for the same reason. The exemption is a
+ * property of the permission — everyone already holds it — not of the scope it
+ * is being granted in.
  */
 const BASELINE_GRANTABLE = new Set(["chat.send"]);
 

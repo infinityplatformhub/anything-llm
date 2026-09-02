@@ -167,7 +167,7 @@ const call = (method, route, token, body) =>
     ...(method === "POST" ? { body: JSON.stringify(body ?? {}) } : {}),
   });
 
-describe("#52: an impersonated session cannot write, on any route", () => {
+describe("issue 52: an impersonated session cannot write, on any route", () => {
   test("POST /system/user is refused, and the victim's credentials are unchanged", async () => {
     const before = await prisma.users.findUnique({ where: { id: victim.id } });
 

@@ -93,7 +93,7 @@ function buildRouter() {
   return { app, registrations, skipped };
 }
 
-describe("#52: every session-authenticated mutating route asks something", () => {
+describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
 
   test("the sweep actually mounted the router (guards the guard)", () => {

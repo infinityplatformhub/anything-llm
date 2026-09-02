@@ -63,3 +63,18 @@ Ruling: `SINGLE_USER_ONLY_ROUTES` (17) each assert their handler or middleware r
 
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
 `Test Suites: 117 passed, 117 total` · `Tests: 1209 passed, 1209 total`
+
+## Post-gate round (§7.3 + Techlead nits)
+
+Ruling: three `describe` titles changed from `#52:` to `issue 52:` — the §7.3 gate splits on `#`. Same trap as #39 and #46.
+
+Ruling (Techlead nit 1): gating `POST /system/enable-multi-user` on `settings.write` does NOT lock a fresh install out of multi-user mode. Verified end to end on a database with **zero users**: the request resolves to the single-user service principal, which holds the seeded `super_admin` grant, and the route answers 200 and creates the first user. Test added rather than reasoned — the engine allowing it in isolation would not have proved the ROUTE reaches that principal.
+
+Note: the first run of that test failed with **401, not 403**, which is the wrong refusal and would have read as the lockout. Cause: `require("../../../endpoints/system")` pulls in dotenv, which repopulated `AUTH_TOKEN` and `JWT_SECRET` from a developer's `server/.env` AFTER the test had deleted them, so `validatedRequest` took the password branch instead of the single-user passthrough. Clearing them after the mount fixes it. A test whose precondition is undone by the code it is testing looks exactly like the bug it is looking for; the suite now asserts `isConfirmedSingleUser()` first so the two are distinguishable.
+
+Ruling (Techlead nit 2): `BASELINE_GRANTABLE` applying to workspace-scoped roles (`viewer`/`editor`/`owner` all carry `chat.send`) is intended, and the comment now says so. The exemption is a property of the PERMISSION — everyone already holds it — not of the scope it is granted in.
+
+## Evidence (post-gate)
+
+Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
+`Test Suites: 118 passed, 118 total` · `Tests: 1212 passed, 1212 total`
