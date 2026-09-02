@@ -122,3 +122,17 @@
 
 ## #80 S11 — settings write ไม่ atomic ข้ามสองตาราง
 `_updateSettings` = `Promise.all` upsert อิสระ ไม่มี `$transaction`; secret ไป `credential_store` คนละ path. partial write เป็นไปได้เมื่อ DB ล้มกลางทาง. #80 ลด blast radius ด้วย gate ปฏิเสธก่อนเขียนทั้งคู่ + `process.env` set หลัง persist สำเร็จ แต่ไม่แก้ atomicity. debt แยก (พบโดย Techlead-1, `techlead-80-preread.md` finding 2)
+
+## O2a (#74) — the doctor cannot be fully exercised on a developer's machine
+(written by Dev5, committed by PMO)
+
+Three of the doctor's branches need a database that is *missing* something the machine running the test already has:
+- `ext.available` failing needs a server that does not ship an extension. Driven through exported `checkExtensions` with a made-up extension name instead of `runChecks`.
+- `ext.permitted`'s probing branch only runs for an extension available but not yet installed. On a migrated DB `pg_trgm` is already there. Test asserts the property that holds on any server (whatever was probed, detail says it was rolled back).
+- `db.version` below the floor needs PostgreSQL 15. Pinned as a number (`MIN_SERVER_VERSION_NUM === 160000`) plus comparisons.
+
+Why written down: SHA `3165b913a` passed a full green gate on Dev5's machine (pgvector installed) while failing on TL-2's stock `postgres:16`. §7.1c one level out — a fresh database is not enough when the *server's* capabilities differ.
+
+What would close it: a CI job running `__tests__/scripts/doctor.test.js` against stock `postgres:16` (`.github/workflows/ci.yml:16`). Not done in #74 (scope = installer, not CI matrix).
+
+Until then: any change to `utils/doctor/index.js` touching required extensions or the version floor must be reviewed by someone whose database does *not* match the author's.
