@@ -732,3 +732,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #134 gate FINAL2 on 825139ce6 running; TL-1 one-line pending.
 - #130 MERGED (c1ae503be, plain: gate PASS + TL-2 PASS 9d8353a38). Closed via task.sh (comment read back). Lesson: `requesting-code-review` is a plugin skill — TLs must use the namespaced name.
 - #134 gate FINAL2 PASS on 825139ce6 (37/37, task check 0, result written). Ready to close/merge on TL-1 one-line confirm. Board 102/137.
+- #134 MERGED (825139ce6; gate PASS, TL-1 PASS, QA-1 PASS). Closed via task.sh (read back). Unblocks: #136 offboardUser in policyRepository (Dev5), S4b slice 3 contract (Dev3).
+- Slice 3 ruling (TL-1, 885f339df): S4b sync = core job, no second mechanism, no migration/`running` status; per-job-type lease (JobRuntime.js:41 constant is the defect), lease > one driver-call hang not run length; stale = take over, safe only because apply is idempotent (write as contract dependency); per-provider via job type; no advisory key (comment the 1_347_579 constant).
+- #135 RF-1: victim holds org role AND document_acl row; successor denied both; control holds both (TL-1 confirmed).
+- #136 QA-2 interim (26/27 primary OK): FINDING — API-key suspension enforced only by the sweep in User.update; resolveActor api-key branch never reads users.suspended; User._update(suspended:1) leaves key at 200; re-suspend is a no-op so a key minted for an already-suspended user is never swept. Extension keys are safe at the reader. → TL-2 ruling.
