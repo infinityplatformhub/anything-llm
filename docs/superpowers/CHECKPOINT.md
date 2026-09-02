@@ -666,3 +666,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #131 (+#133 pending own run): server 223 suites / 3247 passed / 0 failed, frontend 107/107 exit 0. Main fully green at bee4e60c9. Dev2 → O3 recon, Dev4 → V8 recon while #121 blocks.
 - #121 Dev1 silent since 20:33 report (3 pings: 20:30, 20:46, 20:48). Session busy. Ultimatum: reply by ~20:53 or #121 reassigned to Dev2 from Dev1's branch. Post-merge #133 running → /tmp/postmerge-133.log.
 - S4b slice 2 TL-1 pre-read (83530e44a) relayed to Dev3: pass prisma not tx (inTransaction runs inline on tx → per-run batch + version collapse), count rows not non-empty, validate driver shape before brand, resolve coreJobs via identityStore, RF-1..6; slice 3 lock = row+heartbeat.
+- Dev3 #133 test-only follow-up e865a41e5 (approof/133-guard-witnesses) gating /tmp/wt-133b (plain, merge on green). Dev5 S12 offboarding recon d8fcd2696 landed. #121 watch running (deadline ~20:53).
