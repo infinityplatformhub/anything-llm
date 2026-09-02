@@ -1,0 +1,5 @@
+# QA-1 — #138 queue-half harness staged (written by PMO from QA-1's body)
+/tmp/qa138q/ run-all.sh <server-dir> [db]; DB qa1_138. Seam shape: `afterCandidates` constructor option beside `now`; detected by CALLING it (a hook accepted but never invoked reads seamPresent:false).
+Baseline on main: RF-1 seam absent, bothReachedGate 0, attempts 1 · RF-2 worker2TookOver, heartbeat+complete LeaseLostError, attempts 2 · RF-3 leaseWindow 30001ms = fallback; expected (10000+30000)×4 = 160000 recomputed from driver constants · RF-4 seam absent.
+Assertions: RF-1 bothReachedGate===2 + jobs.attempts===1 (row-carried witness); RF-2 heartbeat suppressed explicitly, convergence = policy_versions delta N not 2N (membershipsAdded counts calls — not a witness); RF-3 lease VALUE; RF-4 same runAt, one claim call.
+Mutants: provider-independent type → RF-4 only; global advisory lock → RF-4 only; unconditional update → RF-1 only; lease never expires → RF-2 only; drop lease map → RF-3 only. Shared red sets = pair not separating. No working afterCandidates = FINDING, not NIT.
