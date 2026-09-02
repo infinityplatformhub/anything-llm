@@ -100,11 +100,28 @@ claimed to exercise. Reading did not catch either; the mutant did.
 
 ## Residual risks
 
-1. The `COMPLETE` Symbol is module-private, so a caller in another file cannot forge a
-   completed enumeration — but nothing stops slice 2 from importing
-   `completedEnumeration` and calling it on data from a failed run. The type makes the
-   mistake hard, not impossible; slice 2 owns constructing it honestly from the driver's
-   result.
+1. **The constructor is still reachable from the production path** (TL-1, and this
+   corrects how I first wrote it). `completedEnumeration` is exported from the same
+   module as `diffDirectory`, so any production caller can stamp the brand onto data
+   from a run that failed.
+
+   The Symbol proves a value passed through `completedEnumeration()`. It does not prove
+   an enumeration COMPLETED — those are different claims, and only the second one is
+   what A1 is for. While the constructor is exported next to the consumer, the type
+   discipline is ceremony rather than a guarantee.
+
+   I first recorded this as "nothing stops slice 2 from calling it on data from a failed
+   run" — which puts the fault on a future caller's discipline and is the weaker,
+   wrong framing. The defect is structural and present now, not hypothetical and
+   someone else's.
+
+   Slice 2 closes it, and both halves are REQUIRED, not optional:
+   - `enumerateDirectory(driver)` becomes the ONLY producer of a branded value — it
+     calls the driver and either returns the brand or throws.
+   - `completedEnumeration` moves to `__testHelpers__`. This is a precondition, not a
+     tidy-up: slice 1's tests must be able to build a completed enumeration without a
+     real driver, so removing the constructor with nowhere for tests to get one breaks
+     all fifteen of them.
 2. `danglingGroupRefs` is reported and otherwise inert. Slice 3 decides whether a run
    with dangling references alerts, and how loudly — recorded so it is not assumed
    handled.
