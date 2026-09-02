@@ -459,6 +459,12 @@ describe("issue 71: invite codes never reach the audit log", () => {
         ["U+061C Arabic letter mark", "\u061C"],
         ["U+2066 left-to-right isolate", "\u2066"],
         ["U+FFF9 interlinear annotation anchor", "\uFFF9"],
+        // TL-2: `Mn`, so `\p{Cf}` alone walks past all three.
+        ["U+17B4 Khmer inherent vowel AQ", "\u17B4"],
+        ["U+17B5 Khmer inherent vowel AA", "\u17B5"],
+        // TL-2: `Cf` but NOT Default_Ignorable, so that property alone misses it.
+        ["U+0600 Arabic number sign", "\u0600"],
+        ["U+13430 Egyptian hieroglyph vertical joiner", "\u{13430}"],
       ];
 
       // The secret half of each value — what must not survive. Split at the
@@ -498,10 +504,92 @@ describe("issue 71: invite codes never reach the audit log", () => {
           ]) {
             const row = await scrubbed(value);
             expect(row).not.toContain("victim");
-            expect(row).not.toContain("vic");
+            // TL-2 (1): `vic` is the fragment that survived, and it survived
+            // alongside `redactions: ["email"]`. Matched rather than
+            // contained, so a `vic` anywhere in the row fails.
+            expect(row).not.toMatch(/vic/);
             expect(row).toContain("[redacted:email]");
           }
         });
+      });
+
+      test("TL-2 (1): the leaked TAIL is gone, not merely relabelled", async () => {
+        // Measured before the fix: a 20-digit run split by a ZWSP came back as
+        // `[redacted:credit_card]<ZWSP>67890` — the WRONG class, with the tail
+        // still in the row. A test asserting `redactions` contains something,
+        // or that the row contains a marker, is green on exactly that output.
+        const row = await scrubbed("12345678901234567890".slice(0, 15) + "\u200B67890");
+        expect(row).not.toContain("67890");
+        expect(row).toContain("[redacted:long_digit_run]");
+        expect(row).not.toContain("[redacted:credit_card]");
+      });
+
+      test("TL-2 (4): several classes in ONE string are each cut in the right place", async () => {
+        // Where an offset bug would show. The patterns replace one after another
+        // on a string whose length changes as they go, so a later `optimise this`
+        // that reintroduces offset arithmetic against the ORIGINAL cuts in the
+        // wrong place — measured by TL-2: a stripped offset applied to the
+        // original slices one character short per stripped codepoint.
+        const row = await scrubbed(
+          "id 1234567\u200B890123 phone 08123\u200B45678 card 4111111111\u200B111111 code apw-inv-ABCDEFGH\u200BIJKLMNOP"
+        );
+        for (const secret of [
+          "890123",
+          "45678",
+          "111111",
+          "IJKLMNOP",
+          "1234567",
+          "08123",
+        ])
+          expect(row).not.toContain(secret);
+        for (const klass of [
+          "thai_national_id",
+          "phone_th",
+          "credit_card",
+          "credential",
+        ])
+          expect(row).toContain(`[redacted:${klass}]`);
+        // and the surrounding words survive — over-redaction is a real cost
+        for (const word of ["id", "phone", "card", "code"])
+          expect(row).toContain(word);
+      });
+
+      test("TL-2 (5): the strip reaches a string nested three arrays deep", async () => {
+        // It lives in `scrubString`, not in `redactEventData`. `scrubValue`
+        // walks every depth and `scrubChanges` has its own path, so a strip at
+        // the top level would miss everything below it.
+        const { redactEventData } = require("../../../utils/events/redaction");
+        // `embeddedFiles` rather than an invented key: an allowlisted key is
+        // required or the value is DROPPED before any scrub runs, and a test
+        // that passes because the whole branch was discarded proves nothing
+        // about the strip.
+        const { data, redactions } = redactEventData({
+          embeddedFiles: [[["note 1234567\u200B890123"]]],
+        });
+        expect(JSON.stringify(data)).toContain("[[["); // the branch survived
+        expect(JSON.stringify(data)).not.toContain("890123");
+        expect(redactions).toContain("thai_national_id");
+      });
+
+      test("TL-2 (5): the strip reaches a non-PII field inside `changes`", async () => {
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const { data } = redactEventData({
+          changes: { name: "note 1234567\u200B890123" },
+        });
+        expect(JSON.stringify(data)).not.toContain("890123");
+      });
+
+      test("TL-2 (6): CONTROL — `dropped` counts a key with an invisible character exactly as before", async () => {
+        // Key names deliberately do not go through `scrubString` (#71: echoing a
+        // name back walks PII past both guards, so only the COUNT is kept). A
+        // strip that leaked onto the key path would change behaviour nobody
+        // asked for.
+        const { redactEventData } = require("../../../utils/events/redaction");
+        const before = redactEventData({ notAnAllowedKey: 1 });
+        const after = redactEventData({ "notAnAllowed\u200BKey": 1 });
+        expect(after.dropped.length).toBe(before.dropped.length);
+        expect(after.data._droppedKeyCount).toBe(before.data._droppedKeyCount);
+        expect(JSON.stringify(after.data)).not.toContain("notAnAllowed");
       });
 
       test("the nested `changes` path #71 exists to close is covered too", async () => {
@@ -536,6 +624,27 @@ describe("issue 71: invite codes never reach the audit log", () => {
           expect(scrubValue("ordinary name", new Set(), 0)).toBe(
             "ordinary name"
           );
+        });
+
+        test("Thai and Vietnamese DIACRITICS are not stripped, even beside PII", async () => {
+          // The class is a union of two properties and deliberately not
+          // `\p{Mn}` at large. Measured: 1818 `Mn` codepoints defeat a pattern,
+          // but they include every Thai and Vietnamese mark — stripping those
+          // turns `สวัสดีครับ` into `สวสดครบ`.
+          //
+          // This is the test that separates "invisible" from "combining". It has
+          // to sit beside a real redaction, because a value with no hit is
+          // returned untouched anyway and would pass whatever the class does.
+          const { scrubValue } = require("../../../utils/events/redaction");
+          const hits = new Set();
+          const out = scrubValue(
+            "สวัสดีครับ Tiếng Việt id 1234567\u200B890123",
+            hits
+          , 0);
+          expect(out).toContain("สวัสดีครับ");
+          expect(out).toContain("Tiếng Việt");
+          expect(out).toContain("[redacted:thai_national_id]");
+          expect(out).not.toContain("890123");
         });
 
         test("nothing is flagged merely for containing an invisible character", async () => {

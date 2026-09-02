@@ -265,24 +265,42 @@ const MAX_DEPTH = 8;
 /**
  * #131: characters that are invisible in a value and defeat every pattern above.
  *
- * Measured on `da2cb0cd8`: a single one of these anywhere inside a value made it
- * invisible to EVERY pattern here — national id, phone, card, credential, email —
- * and the row then recorded `redactions: []`. Empty redactions is the sharp edge:
- * it is positive evidence of cleanliness that is false, where a mangled value
- * would at least look wrong.
+ * Measured on `da2cb0cd8`: one of these anywhere inside a value made it invisible
+ * to EVERY pattern here — national id, phone, card, credential, email,
+ * long_digit_run — and the row then recorded `redactions: []`. That is positive
+ * evidence of cleanliness that is false, where a mangled value would at least
+ * look wrong. It is not a per-pattern bug: it is a property of every pattern that
+ * matches adjacent characters.
  *
- * `\p{Cf}` carries the class; the extra list carries what the category misses.
- * Measured: 11 of the 12 leaking codepoints are `Cf`, but U+034F COMBINING
- * GRAPHEME JOINER is `Mn` and the category alone walks straight past it. A bare
- * category is not enough, and a bare list is not future-proof — so both, with a
- * test per listed codepoint.
+ * THE CLASS IS A UNION OF TWO PROPERTIES, and both halves were measured to be
+ * necessary — no hand-list, because #71 already shipped the lesson that an
+ * enumeration misses its next member (`apw-tat-` escaped a three-prefix
+ * alternation):
  *
- * NOT NFKC, for the reason this file already gives one screen up: normalisation
- * changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so scrub-then-map-offsets-back is
- * unsound. Stripping is different in kind — measured, every codepoint here is
- * length-reducing by exactly one and nothing is substituted.
+ *   `\p{Cf}` alone misses U+034F COMBINING GRAPHEME JOINER and U+17B4/U+17B5
+ *   (Khmer inherent vowels). All three are `Mn`, all three defeat every pattern.
+ *
+ *   `\p{Default_Ignorable_Code_Point}` alone misses 32 `Cf` codepoints that
+ *   defeat the patterns too — U+0600-U+0605, U+06DD, U+070F, U+0890, U+0891,
+ *   U+08E2, U+FFF9-U+FFFB, U+110BD, U+110CD and the Egyptian-hieroglyph format
+ *   controls U+13430-U+1343F.
+ *
+ * Deliberately NOT `\p{Mn}` at large: 1818 `Mn` codepoints defeat a pattern, but
+ * they include every Thai and Vietnamese diacritic. Stripping those would mangle
+ * ordinary text — measured, `สวัสดีครับ` becomes `สวสดครบ`. Default_Ignorable is
+ * exactly the property that says "this is not meant to be seen", which is the
+ * class actually at issue; verified that Thai and NFD Vietnamese pass through the
+ * union untouched.
+ *
+ * NOT NFKC, and now for two reasons. The first is the one this file already gives
+ * one screen up: normalisation changes LENGTH (`ﬁ`→`fi`, `㍿`→`株式会社`), so
+ * scrub-then-map-offsets-back is unsound. The second is that NFKC folds `１２３４`
+ * to `1234` and `－` to `-`, which would make the fullwidth digit class (#118) and
+ * the separator class (#120) dead code. Stripping is different in kind — every
+ * codepoint in this union is length-reducing by exactly one and nothing is
+ * substituted.
  */
-const INVISIBLE = /[\p{Cf}\u034F]/gu;
+const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
 
 /**
  * Replace every pattern hit in a string with its class marker.

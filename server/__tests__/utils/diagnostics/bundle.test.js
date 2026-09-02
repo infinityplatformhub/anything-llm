@@ -612,6 +612,32 @@ describe("O5b bundle — invisible characters do not smuggle PII out (#131)", ()
     );
   });
 
+  test("TL-2 (2): the shape that fools a filter — hits non-empty, PII still there", () => {
+    // Worse than `redactions: []`, and the reason this case is separate.
+    // Measured before the fix, on one string carrying an email, a credential and
+    // a card, each split by a ZWSP:
+    //
+    //   hits:   ["email"]
+    //   stored: "vic<ZWSP>[redacted:email] apw-inv-ABCDEFGHIJ<ZWSP>KLMNOP12
+    //            4111 1111 <ZWSP>1111 1111"
+    //
+    // One hit means NOT empty, so any tool filtering for "rows where nothing was
+    // redacted" skips this row entirely — while it holds a live credential and a
+    // full card number. A test asserting `hits.size > 0` is green on exactly
+    // that output, which is why every assertion below is about the VALUE.
+    const hits = new Set();
+    const out = scrubText(
+      "vic​tim@example.com apw-inv-ABCDEFGHIJ​KLMNOP12 4111 1111 ​1111 1111",
+      hits
+    );
+    expect(out).not.toMatch(/vic/);
+    expect(out).not.toContain("KLMNOP12");
+    expect(out).not.toContain("1111 1111");
+    expect(hits.has("email")).toBe(true);
+    expect(hits.has("credential")).toBe(true);
+    expect(hits.has("credit_card")).toBe(true);
+  });
+
   test("legitimate text carrying U+200B still reaches the bundle intact", () => {
     // The bundle is a diagnostic: over-redacting it costs an operator the
     // information they opened it for.
