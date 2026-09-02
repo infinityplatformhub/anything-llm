@@ -311,6 +311,48 @@ describe("#138 R3: the gate is `directory.sync`", () => {
     expect(allowed.status).toBe(202);
   }, 120_000);
 
+  test("RF-R: granting ONLY `directory.sync` to the refused caller turns 403 into 202", async () => {
+    // TL-1, and the reason the pair above is not enough. setup_admin and super_admin
+    // differ by 54 actions, so "setup_admin is refused, super_admin is allowed" is
+    // green for a gate asking ANY of those 54 — `user.manage`, `settings.write`,
+    // anything super_admin holds and setup_admin does not. It pins that one role has
+    // more permissions than the other, which was never in doubt.
+    //
+    // This varies ONE thing. Same user, same session, same route; the only change
+    // between the 403 above and the 202 below is a single `directory.sync` row on the
+    // setup_admin role. If the gate asked for any other action, that row would change
+    // nothing and this test would stay red.
+    //
+    // §7.17, third instance (#140 M4, #137, #138): a deny/allow pair between two
+    // SEEDED roles pins nothing about the action string. The discriminating fixture is
+    // the same principal with and without the one grant.
+    as(IDS.setup);
+    expect((await post(PROVIDER)).status).toBe(403);
+
+    const setupAdminRole = await prisma.roles.findFirstOrThrow({
+      where: { name: "setup_admin", scope: "org" },
+    });
+    const permission = await prisma.permissions.findUniqueOrThrow({
+      where: { action: "directory.sync" },
+    });
+    await prisma.role_permissions.create({
+      data: {
+        role_id: setupAdminRole.id,
+        permission_id: permission.id,
+        effect: "allow",
+      },
+    });
+
+    // No version bump or cache flush is needed: the engine's only memo lives for the
+    // duration of one `authorizeMany` call (engine.js — "a longer-lived cache would
+    // let a removed membership keep authorizing"), so the next request reads the row
+    // just written. Checked rather than assumed — a stale allow-set would have made
+    // this test red for a reason unrelated to the gate.
+    const nowAllowed = await post(PROVIDER);
+    expect(nowAllowed.status).toBe(202);
+    expect(nowAllowed.body.jobId).toEqual(expect.any(String));
+  }, 120_000);
+
   test("an unknown or non-syncing provider is 404, before anything is enqueued", async () => {
     as(IDS.super);
     const unknown = await post("nope");
