@@ -630,3 +630,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Lesson (PMO harness): `git diff --quiet <sha> HEAD -- <dir>` after a merge fails when main already had other changes in that dir; verify by file, not directory.
 - #132 contract posted (Dev4), recon corrected 81aeeee39 (26/10/3 counts, comments stripped). Code waits #121 merge signal. Post-merge #119 jest hung after inviteMailRoutes red (#106 class) → killing to let frontend half run.
 - Post-merge #119 (+#120 #127 aaed2b475 14a4df287 on main): server 3128 passed / 1 red inviteMailRoutes (123s, #106 class, rerunning alone); frontend 107/107 exit 0. Dev3 opening S4b slice-1 issue (recon on main ab388f424).
+- inviteMailRoutes green alone 28/28 (#106). Main fully green at eb8fbc507.
+- #131 217343aba (Dev5, zw-strip: redaction.js + auditRedaction.test + bundle.test + ledger) gating /tmp/wt-131; TL-2 pre-read+verdict + QA-2 probe dispatched. Waiting: #121 SHA (Dev1), S4b slice-1 issue (Dev3), #126 s2/#130/#132 blocked on #121.
