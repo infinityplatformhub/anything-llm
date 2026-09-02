@@ -115,3 +115,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #71 merged c81fcb75e (59/77). #73 blocked on chroma image pin (TL-2). Dev1: manager forbidden-keys → new issue after #72.
 - #78 opened (manager forbidden_keys 403, after #72 before #76). #77 reframed: limit read at request, windowMs frozen. 59/78.
 - post-merge suite on main 387a6152 (after #71): 2081 passed / 2117, 36 skipped, 0 fail (ldapRoutesHttp green).
+- #52 retro (TL-1): /v1 unswept but no ungated route; comment posted on #52. Fix via #40.
