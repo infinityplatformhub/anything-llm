@@ -4,12 +4,23 @@ const { emitAuditEvent } = require("../events");
 const prisma = require("../prisma");
 const { resolveActor } = require("../authorization/actorResolver");
 const { DatabaseAuthorizationEngine } = require("../authorization/engine");
-const {
-  isConfirmedSingleUser,
-} = require("../authorization/actorResolver");
-const API_KEY_GUARDS_KEY = Symbol.for("anything-llm.authorization.apiKeyGuards");
-const apiKeyGuards = (globalThis[API_KEY_GUARDS_KEY] ||= new WeakSet());
-const isApiKeyGuard = (middleware) => apiKeyGuards.has(middleware);
+const { isConfirmedSingleUser } = require("../authorization/actorResolver");
+const API_KEY_GUARDS_KEY = Symbol.for(
+  "anything-llm.authorization.apiKeyGuards"
+);
+// Symbol.for keeps identities consistent across jest.resetModules. This trades
+// isolation for module-instance consistency; it is test evidence, not a security
+// boundary. Freeze the binding so another module cannot replace the registry.
+if (!globalThis[API_KEY_GUARDS_KEY]) {
+  Object.defineProperty(globalThis, API_KEY_GUARDS_KEY, {
+    value: new WeakSet(),
+    writable: false,
+    configurable: false,
+  });
+}
+const apiKeyGuards = globalThis[API_KEY_GUARDS_KEY];
+const isApiKeyGuard = (middleware) =>
+  typeof middleware === "function" && apiKeyGuards.has(middleware);
 
 // T-4b (#29) W-8: PR-4a gave this middleware the SCOPE half of `/v1` authorization — does
 // the key's scope string permit the action. Nothing asked the other half: does the
@@ -66,15 +77,21 @@ async function grantAllows(action, request, response, engine, addressed) {
     const decision = await engine.authorize({
       actor: ingressActor,
       action,
-      resource: { type: "api_route", id: null, orgId: actor.orgId ?? 1, workspaceId: addressed ?? null },
+      resource: {
+        type: "api_route",
+        id: null,
+        orgId: actor.orgId ?? 1,
+        workspaceId: addressed ?? null,
+      },
     });
     return decision.allowed === true;
   } catch (error) {
-    console.error(`[authorization] grant check failed for ${action}: ${error.message}`);
+    console.error(
+      `[authorization] grant check failed for ${action}: ${error.message}`
+    );
     return false;
   }
 }
-
 
 /**
  * T-4b (#29) W-9 (G8): the workspace the request actually addresses.
@@ -113,20 +130,27 @@ function workspaceBindingMatches(context, binding, addressed) {
 }
 
 function validApiKey(action, binding = null) {
-  if (typeof action !== "string" || !action) throw new Error("validApiKey requires an explicit scope");
+  if (typeof action !== "string" || !action)
+    throw new Error("validApiKey requires an explicit scope");
   const engine = new DatabaseAuthorizationEngine();
   const middleware = async function apiKeyRequired(request, response, next) {
     // issue 58 (ruling A): inverted from the confirmed helper, so this local
     // cannot disagree with validatedRequest about which mode the instance is
     // in. Same value for handlers, one source for the answer.
     response.locals.multiUserMode = !(await isConfirmedSingleUser());
-    const bearerKey = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const bearerKey = request
+      .header("Authorization")
+      ?.match(/^Bearer\s+(.+)$/i)?.[1];
     const apiKey = bearerKey ? await ApiKey.resolve(bearerKey) : null;
-    if (!apiKey) return response.status(403).json({ error: "No valid api key found." });
+    if (!apiKey)
+      return response.status(403).json({ error: "No valid api key found." });
     const context = {
-      keyId: String(apiKey.id), keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes,
+      keyId: String(apiKey.id),
+      keyPrefix: apiKey.keyPrefix,
+      scopes: apiKey.scopes,
       workspaceId: apiKey.workspaceId ? String(apiKey.workspaceId) : null,
-      expiresAt: apiKey.expiresAt, revokedAt: apiKey.revokedAt,
+      expiresAt: apiKey.expiresAt,
+      revokedAt: apiKey.revokedAt,
       // issue 45: this id belongs to `api_keys`. Stated rather than left to be inferred —
       // the resolver now refuses a context that does not say which credential table its id
       // came from, because two tables with independent id sequences mean a wrong guess
@@ -140,7 +164,11 @@ function validApiKey(action, binding = null) {
     // Resolved once and shared: the scope half compares it to the key's binding, the grant
     // half authorizes against it (W-9).
     const addressed = await addressedWorkspaceId(request, binding);
-    const workspaceAllowed = workspaceBindingMatches(context, binding, addressed);
+    const workspaceAllowed = workspaceBindingMatches(
+      context,
+      binding,
+      addressed
+    );
     const scopePassed = scopeAllowed && workspaceAllowed;
     // The scope half runs first, and a request that already failed it never reaches the
     // engine — it must not be able to make the policy store do work.
@@ -153,14 +181,28 @@ function validApiKey(action, binding = null) {
     // original saying the key was used successfully while the caller saw a 403.
     const denyReason = allowed ? null : scopePassed ? "grant" : "scope";
     await prisma.$transaction(async (transaction) => {
-      await transaction.api_keys.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } });
-      await emitAuditEvent("auth.key_used", {
-        scopedKeyId: context.keyId, keyPrefix: context.keyPrefix, action, allowed, denyReason, orgId: 1,
-      }, null, { resource: { type: "api_key", id: context.keyId }, transaction });
+      await transaction.api_keys.update({
+        where: { id: apiKey.id },
+        data: { lastUsedAt: new Date() },
+      });
+      await emitAuditEvent(
+        "auth.key_used",
+        {
+          scopedKeyId: context.keyId,
+          keyPrefix: context.keyPrefix,
+          action,
+          allowed,
+          denyReason,
+          orgId: 1,
+        },
+        null,
+        { resource: { type: "api_key", id: context.keyId }, transaction }
+      );
     });
     // One message for both halves: which half rejected is audit detail, not something a
     // caller probing the API should be able to read off the response.
-    if (!allowed) return response.status(403).json({ error: "Insufficient scope." });
+    if (!allowed)
+      return response.status(403).json({ error: "Insufficient scope." });
     next();
   };
   middleware.scope = action;
@@ -168,4 +210,9 @@ function validApiKey(action, binding = null) {
   return middleware;
 }
 
-module.exports = { validApiKey, isApiKeyGuard, workspaceBindingMatches, addressedWorkspaceId };
+module.exports = {
+  validApiKey,
+  isApiKeyGuard,
+  workspaceBindingMatches,
+  addressedWorkspaceId,
+};

@@ -12,16 +12,28 @@ const ORG_ID = 1;
 const REGISTRY_KEY = Symbol.for(
   "anything-llm.authorization.resourceResolverRegistry"
 );
-const resolverRegistry = (globalThis[REGISTRY_KEY] ||= {
-  org: new WeakSet(),
-  workspace: new WeakSet(),
-  dynamic: new WeakSet(),
-});
+// Symbol.for keeps identities consistent across jest.resetModules. This trades
+// isolation for module-instance consistency; it is test evidence, not a security
+// boundary. Freeze the binding so another module cannot replace the registry.
+if (!globalThis[REGISTRY_KEY]) {
+  Object.defineProperty(globalThis, REGISTRY_KEY, {
+    value: {
+      org: new WeakSet(),
+      workspace: new WeakSet(),
+      dynamic: new WeakSet(),
+    },
+    writable: false,
+    configurable: false,
+  });
+}
+const resolverRegistry = globalThis[REGISTRY_KEY];
 
 const isWorkspaceResolver = (resolver) =>
-  resolverRegistry.workspace.has(resolver);
-const isOrgResolver = (resolver) => resolverRegistry.org.has(resolver);
-const isDynamicResolver = (resolver) => resolverRegistry.dynamic.has(resolver);
+  typeof resolver === "function" && resolverRegistry.workspace.has(resolver);
+const isOrgResolver = (resolver) =>
+  typeof resolver === "function" && resolverRegistry.org.has(resolver);
+const isDynamicResolver = (resolver) =>
+  typeof resolver === "function" && resolverRegistry.dynamic.has(resolver);
 
 /** The org itself — for actions with no narrower subject (user admin, settings). */
 const orgResource = async () => ({

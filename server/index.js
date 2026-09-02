@@ -2,7 +2,6 @@ process.env.NODE_ENV === "development"
   ? require("dotenv").config({ path: `.env.${process.env.NODE_ENV}` })
   : require("dotenv").config();
 
-
 require("./utils/logger")();
 require("./utils/boot/patchSdkTimeouts")();
 require("./utils/helpers/modelPricing"); // boots the model pricing cache refresh
@@ -100,48 +99,47 @@ if (!!process.env.ENABLE_HTTPS) {
 
 app.use("/api", ipAllowlist, apiRouter);
 apiRouter.use("/v1", apiIpRateLimit, apiKeyRateLimit);
-systemEndpoints(apiRouter);
-extensionEndpoints(apiRouter);
-workspaceEndpoints(apiRouter);
-workspaceThreadEndpoints(apiRouter);
-chatEndpoints(apiRouter);
-adminEndpoints(apiRouter);
-adminAuthorizationEndpoints(apiRouter);
-modelRouterEndpoints(apiRouter);
-inviteEndpoints(apiRouter);
-embedManagementEndpoints(apiRouter);
-utilEndpoints(apiRouter);
-documentEndpoints(apiRouter);
-agentWebsocket(apiRouter);
-agentSkillWhitelistEndpoints(apiRouter);
-agentFileServerEndpoints(apiRouter);
-experimentalEndpoints(apiRouter);
-developerEndpoints(app, apiRouter);
-communityHubEndpoints(apiRouter);
-agentFlowEndpoints(apiRouter);
-mcpServersEndpoints(apiRouter);
-mobileEndpoints(apiRouter);
-webPushEndpoints(apiRouter);
-telegramEndpoints(apiRouter);
-scheduledJobEndpoints(apiRouter);
-outlookAgentEndpoints(apiRouter);
-googleAgentSkillEndpoints(apiRouter);
-memoryEndpoints(apiRouter);
-auditEndpoints(apiRouter);
-// S1 (#36): SSO login/callback. Unauthenticated by design — this is the ingress
-// that produces a session, so it cannot sit behind one.
-// S2 (#43) MUST be mounted BEFORE identityEndpoints. S1 registers the wildcard
-// `/sso/:provider/login`, and Express matches in registration order — so the
-// wildcard would otherwise swallow `/sso/saml/login` and hand SAML's provider id
-// to a config builder that only knows how to produce OIDC settings. The failure
-// is a 500 on every SAML login, which is why samlRoutesHttp.test.js pins it.
-samlIdentityEndpoints(apiRouter);
-identityEndpoints(apiRouter);
-// Externally facing embedder endpoints
-embeddedEndpoints(apiRouter);
+const ENDPOINT_REGISTRATIONS = [
+  systemEndpoints,
+  extensionEndpoints,
+  workspaceEndpoints,
+  workspaceThreadEndpoints,
+  chatEndpoints,
+  adminEndpoints,
+  adminAuthorizationEndpoints,
+  modelRouterEndpoints,
+  inviteEndpoints,
+  embedManagementEndpoints,
+  utilEndpoints,
+  documentEndpoints,
+  agentWebsocket,
+  agentSkillWhitelistEndpoints,
+  agentFileServerEndpoints,
+  experimentalEndpoints,
+  { register: developerEndpoints, withApp: true },
+  communityHubEndpoints,
+  agentFlowEndpoints,
+  mcpServersEndpoints,
+  mobileEndpoints,
+  webPushEndpoints,
+  telegramEndpoints,
+  scheduledJobEndpoints,
+  outlookAgentEndpoints,
+  googleAgentSkillEndpoints,
+  memoryEndpoints,
+  auditEndpoints,
+  // SAML must precede OIDC's `/sso/:provider/login` wildcard.
+  samlIdentityEndpoints,
+  identityEndpoints,
+  // Public embed and browser-extension routes remain last.
+  embeddedEndpoints,
+  browserExtensionEndpoints,
+];
 
-// Externally facing browser extension endpoints
-browserExtensionEndpoints(apiRouter);
+for (const entry of ENDPOINT_REGISTRATIONS) {
+  const register = typeof entry === "function" ? entry : entry.register;
+  typeof entry === "function" ? register(apiRouter) : register(app, apiRouter);
+}
 
 if (process.env.NODE_ENV !== "development") {
   const { MetaGenerator } = require("./utils/boot/MetaGenerator");
@@ -212,4 +210,4 @@ app.all("*", function (_, response) {
 if (require.main === module && !process.env.ENABLE_HTTPS)
   bootHTTP(app, process.env.SERVER_PORT || 3001).catch(refuseBoot);
 
-module.exports = { app };
+module.exports = { app, ENDPOINT_REGISTRATIONS };

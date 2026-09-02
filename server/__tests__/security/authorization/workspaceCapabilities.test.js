@@ -158,15 +158,64 @@ describe("capability vocabulary by resource scope", () => {
         return null;
       },
       Object.assign(async () => null, { resolverName: "workspaceByIdParam" }),
-      require("../../../utils/middleware/resourceResolvers").orgResource,
     ];
 
     for (const resolveResource of unknownResolvers) {
-      const gate = { action: "workspace.members.manage", resolveResource };
+      const workspaceGate = {
+        action: "workspace.members.manage",
+        resolveResource,
+      };
       expect(
-        hasGateAtScope([gate], "workspace.members.manage", "workspace")
+        hasGateAtScope([workspaceGate], "workspace.members.manage", "workspace")
       ).toBe(false);
+
+      const orgGate = { action: "access.diagnose", resolveResource };
+      expect(hasGateAtScope([orgGate], "access.diagnose", "org")).toBe(false);
     }
+
+    const {
+      orgResource,
+    } = require("../../../utils/middleware/resourceResolvers");
+    const wrongScopeGate = {
+      action: "workspace.members.manage",
+      resolveResource: orgResource,
+    };
+    expect(
+      hasGateAtScope([wrongScopeGate], "workspace.members.manage", "workspace")
+    ).toBe(false);
+  });
+
+  test("resolver registry rejects wrappers, invalid input, and replacement", () => {
+    const {
+      orgResource,
+    } = require("../../../utils/middleware/resourceResolvers");
+    for (const resolver of [
+      undefined,
+      null,
+      "resolver",
+      1,
+      (...args) => orgResource(...args),
+      orgResource.bind(null),
+    ]) {
+      expect(isOrgResolver(resolver)).toBe(false);
+      expect(isWorkspaceResolver(resolver)).toBe(false);
+      expect(isDynamicResolver(resolver)).toBe(false);
+    }
+
+    const key = Symbol.for(
+      "anything-llm.authorization.resourceResolverRegistry"
+    );
+    const registry = globalThis[key];
+    expect(() =>
+      Reflect.defineProperty(globalThis, key, {
+        value: {
+          org: new WeakSet(),
+          workspace: new WeakSet(),
+          dynamic: new WeakSet(),
+        },
+      })
+    ).not.toThrow();
+    expect(globalThis[key]).toBe(registry);
   });
 
   test("resolver identity registry survives jest.resetModules", () => {

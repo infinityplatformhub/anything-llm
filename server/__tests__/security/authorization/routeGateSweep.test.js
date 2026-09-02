@@ -27,6 +27,7 @@ process.env.JWT_SECRET =
 
 const fs = require("fs");
 const path = require("path");
+const { parse } = require("hermes-eslint");
 const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
 const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
 
@@ -92,6 +93,57 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     ).toEqual([]);
   });
 
+  test("every imported endpoint registrar appears in the production list", () => {
+    const source = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
+    const ast = parse(source, { sourceType: "script" });
+    const imports = ast.body
+      .filter(
+        (node) =>
+          node.type === "VariableDeclaration" &&
+          node.declarations[0]?.id.type === "ObjectPattern" &&
+          node.declarations[0]?.init?.type === "CallExpression" &&
+          node.declarations[0].init.callee?.name === "require" &&
+          node.declarations[0].init.arguments[0]?.value.startsWith(
+            "./endpoints/"
+          )
+      )
+      .flatMap((node) =>
+        node.declarations[0].id.properties.map(
+          (property) => property.value.name
+        )
+      )
+      .filter(
+        (name) => name.endsWith("Endpoints") || name === "agentWebsocket"
+      );
+    const listed = new Set(
+      registrations.map((entry) =>
+        typeof entry === "function" ? entry.name : entry.register.name
+      )
+    );
+    expect(imports.length).toBeGreaterThanOrEqual(32);
+    expect(imports.filter((name) => !listed.has(name))).toEqual([]);
+
+    const directCalls = [];
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (
+        node.type === "CallExpression" &&
+        node.callee?.type === "Identifier" &&
+        imports.includes(node.callee.name)
+      ) {
+        directCalls.push(node.callee.name);
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === "object") visit(value);
+      }
+    };
+    visit(ast);
+    // Any `probe (apiRouter)` or multiline direct registration bypasses the
+    // production list regardless of formatting and must fail here.
+    expect(directCalls).toEqual([]);
+  });
+
   test("no mutating route carries validatedRequest alone", () => {
     const ungated = [];
     for (const layer of app._router.stack) {
@@ -141,6 +193,29 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       isApiKeyGuard: true,
     });
     expect(isApiKeyGuard(fakeGuard)).toBe(false);
+  });
+
+  test("API guard registry rejects invalid input and replacement", () => {
+    for (const value of [undefined, null, "guard", 1]) {
+      expect(isApiKeyGuard(value)).toBe(false);
+    }
+    const key = Symbol.for("anything-llm.authorization.apiKeyGuards");
+    const registry = globalThis[key];
+    expect(() =>
+      Reflect.defineProperty(globalThis, key, { value: new WeakSet() })
+    ).not.toThrow();
+    expect(globalThis[key]).toBe(registry);
+  });
+
+  test("registration list discovers spacing and ungated probe functions", () => {
+    const probe = (router) =>
+      router.post("/hidden-sweep-probe", [function validatedRequest() {}]);
+    const { app: probeApp } = buildRouter([probe]);
+    expect(
+      probeApp._router.stack.some(
+        (layer) => layer.route?.path === "/hidden-sweep-probe"
+      )
+    ).toBe(true);
   });
 
   test("the self-service routes really carry requireSelfSession", () => {

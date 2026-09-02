@@ -1,39 +1,21 @@
-const fs = require("fs");
-const path = require("path");
 const express = require("express");
 
-const SERVER_DIR = path.join(__dirname, "../..");
-
-function buildRouter() {
+function buildRouter(registrations) {
   const app = express();
-  const indexSource = fs.readFileSync(
-    path.join(SERVER_DIR, "index.js"),
-    "utf8"
-  );
-  const registrations =
-    indexSource.match(/^[a-zA-Z]+\((?:app, )?apiRouter\);$/gm) ?? [];
+  const entries =
+    registrations || require("../../index").ENDPOINT_REGISTRATIONS;
   const skipped = [];
 
-  for (const line of registrations) {
-    const fnName = line.replace(/\((?:app, )?apiRouter\);$/, "");
-    const requireMatch = indexSource.match(
-      new RegExp(
-        `\\{[^}]*\\b${fnName}\\b[^}]*\\}\\s*=\\s*require\\("([^"]+)"\\)`
-      )
-    );
-    if (!requireMatch) {
-      skipped.push(fnName);
-      continue;
-    }
+  for (const entry of entries) {
+    const register = typeof entry === "function" ? entry : entry.register;
     try {
-      const register = require(path.join(SERVER_DIR, requireMatch[1]))[fnName];
-      line.includes("(app, apiRouter);") ? register(app, app) : register(app);
+      typeof entry === "function" ? register(app) : register(app, app);
     } catch (error) {
       // agentWebsocket needs express-ws; it registers no plain HTTP routes.
-      skipped.push(`${fnName}: ${error.message}`);
+      skipped.push(`${register.name}: ${error.message}`);
     }
   }
-  return { app, registrations, skipped };
+  return { app, registrations: entries, skipped };
 }
 
 module.exports = { buildRouter };
