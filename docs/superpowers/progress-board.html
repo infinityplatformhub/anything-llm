@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">5b0b4de89</span> · 2026-09-03 01:50</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">c519506f1</span> · 2026-09-03 02:30</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -86,7 +86,7 @@ td.mono{white-space:nowrap}
   <div class="tbl"><table>
     <thead><tr><th>เรื่อง</th><th>ทางเลือก</th><th>ถ้าไม่ตอบ</th></tr></thead>
     <tbody>
-      <tr><td class="mono">#121 mockup</td><td>อนุมัติ mockup ใหม่ (ORG_CAPS 7→11, blob 6fe76aa26) · TL-1 ยืนยัน: ไม่มีเมนูใหม่ แค่คืน 13 เมนูเดิมเข้า map · จุดเดียวที่พฤติกรรมเปลี่ยน: เมนู Users ถาม user.read แทน user.manage · ผลข้างเคียงที่ตั้งใจ: manager เสีย 8 เมนู (server 403 อยู่แล้ว), setup_admin เสีย 15 เมนู (seed ผิด → #137), content_moderator เห็น workspace-chats</td><td>#121 merge ค้าง · #126 s2 #130 #132 V8 ค้างตาม</td></tr>
+      <tr><td class="mono">#121 mockup</td><td><b>ค้าง 4 issue ที่ review ผ่านแล้ว (#121 → #137 → #136 → #138)</b> · อนุมัติ mockup ใหม่ (ORG_CAPS 7→11, blob 6fe76aa26) · TL-1 ยืนยัน: ไม่มีเมนูใหม่ แค่คืน 13 เมนูเดิมเข้า map · จุดเดียวที่พฤติกรรมเปลี่ยน: เมนู Users ถาม user.read แทน user.manage · ผลข้างเคียงที่ตั้งใจ: manager เสีย 8 เมนู (server 403 อยู่แล้ว), setup_admin เสีย 15 เมนู (seed ผิด → #137), content_moderator เห็น workspace-chats</td><td>#121 merge ค้าง · #126 s2 #130 #132 V8 ค้างตาม</td></tr>
       <tr><td class="mono">V8 mockup</td><td>อนุมัติ mockup docs/superpowers/mockups/v8-mobile-viewport-authority.html (เปิดในเบราว์เซอร์แล้ว): 4 preset กว้าง×device, toggle Today/After V8, chat container + settings sidebar สองต้นไม้เทียบกัน</td><td>V8 เริ่มโค้ดไม่ได้</td></tr>
       <tr><td class="mono">O3 SIG_KEY</td><td>backup/restore: (A) SIG_KEY ส่งนอก bundle — bundle ไม่เป็น credential store แต่ recovery ต้องสองฝ่าย · (B) เก็บใน bundle เข้ารหัสด้วย passphrase (argon2id) — artifact เดียวจบ แต่ความปลอดภัยอยู่ที่ passphrase · contract .infi/recon/contract-o3.md</td><td>O3 เริ่มโค้ดไม่ได้</td></tr>
       <tr><td class="mono">#113 Q4</td><td>อีเมลเดียวกันมีทั้ง Lark และ LDAP: (a) ปฏิเสธ + รายงาน conflict ทุกรอบจนมีคนแก้ (Techlead แนะนำ) · (b) Lark ทับ link เดิมทุก full sync (เสี่ยง takeover เงียบ)</td><td>S4b slice 4 (identity matching) เริ่มไม่ได้ · slice 1–3 เดินต่อได้</td></tr>
@@ -110,7 +110,7 @@ td.mono{white-space:nowrap}
       <div class="chips"><span class="chip ok">frontend 124</span><span class="chip ok">authz 757</span><span class="chip ok">TL-1 PASS</span><span class="chip ok">QA-3 PASS</span><span class="chip no">รออนุมัติ mockup เท่านั้น</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · de7b19136 ใน review</span></div>
+      <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · f76172fec ✓ gate ✓ QA-2 · รอ TL-2</span></div>
       <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน fix SHA แล้ว: reader 3 สถานะ (null/dangling/present), sweep level-triggered, cast suspended แบบ explicit set, groupId 404 ก่อน bump, delete path stamp revokedAt · 24/24 + 14 mutants · gate + TL-2 + QA-2 กำลังตรวจ</p>
     </div>
     <div class="card">
@@ -125,7 +125,7 @@ td.mono{white-space:nowrap}
     <div class="card"><div class="top"><span class="id">#132 SystemReadRoute</span><span class="who">Dev4 · contract พร้อม รอ #121 merge</span></div><p>TL-2: ย้ายเฉพาะ mobile-connections (อีก 2 หน้าเขียนด้วย action อื่น) · เก็บ hideUserMenu · เทส assert ที่ capability ไม่ใช่ role</p></div>
     <div class="card"><div class="top"><span class="id">#130 connectionBudget</span><span class="who">Dev1 · กำลังทำ</span></div><p>TL-2 ruling: เทส capture-and-invoke จับ M4 ใน process เดียว 0.3 วิ · timeout item ปิด stale</p></div>
     <div class="card"><div class="top"><span class="id">S4b slice 2–3</span><span class="who">Dev3 · หลัง #133</span></div><p>apply + checkpoint · job + lock (session lock vs row+heartbeat = ruling) · slice 4 รอ Q4</p></div>
-    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · 9c7bcdca3 gate + TL-1 + QA-3</span></div><p>migration: grant 3 action ให้ setup_admin + แยก audit.purge (super_admin เท่านั้น) · Model Router: re-gate เมนูบน model-router.read (ไม่ให้สิทธิ์ เพราะ write = เปลี่ยนเส้นทางแชท) เป็น commit ที่สองหลัง #121 merge</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
+    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · edd8db6b7 ✓ gate ✓ TL-1 ✓ QA-3</span></div><p>migration: grant 3 action ให้ setup_admin + แยก audit.purge (super_admin เท่านั้น) · Model Router: re-gate เมนูบน model-router.read (ไม่ให้สิทธิ์ เพราะ write = เปลี่ยนเส้นทางแชท) เป็น commit ที่สองหลัง #121 merge</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
   </div>
 </section>
 
