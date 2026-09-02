@@ -51,6 +51,17 @@ model invites {
   status        String   @default("pending")
   claimedBy     Int?
   workspaceIds  String?
+  // S11a (#80): the address this invite was mailed to, or null for a copy-link
+  // invite nobody emailed — which is every invite before S11 and every one an
+  // admin creates without typing an address.
+  email         String?
+  // When it stops being redeemable, or null for never. NO @default, deliberately:
+  // a default would retire every invite already in the table the moment the
+  // migration ran. `Invite.create` applies 7 days, and only when `email` is set.
+  //
+  // Redemption checks this inside `Invite.get` — never at the routes, which
+  // already carry two byte-identical copies of the status check between them.
+  expiresAt     DateTime? @db.Timestamptz(3)
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   createdBy     Int
   lastUpdatedAt DateTime @default(now()) @db.Timestamptz(3)

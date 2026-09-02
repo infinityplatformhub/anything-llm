@@ -9,13 +9,53 @@ const Invite = {
     return `apw-inv-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
-  create: async function ({ createdByUserId = 0, workspaceIds = [] }) {
+  /** How long a MAILED invite stays redeemable. Copy-link invites keep no expiry. */
+  mailedInviteTtlMs: 7 * 24 * 60 * 60 * 1000,
+
+  /**
+   * S11a (#80): `email` is the address this invite was mailed to, and supplying
+   * one implies an expiry.
+   *
+   * The pairing is enforced HERE rather than at the routes because two routes
+   * create invites (`endpoints/admin.js`, `endpoints/api/admin/index.js`) and
+   * both come through this function — it is the only place that sees every
+   * creation. A link sent to an inbox and valid forever is a bearer credential
+   * sitting in mail history, and unlike a copy-link invite nobody can say where
+   * it ended up.
+   *
+   * Omitting `email` keeps the old behaviour exactly: no address, no expiry.
+   */
+  create: async function ({
+    createdByUserId = 0,
+    workspaceIds = [],
+    email = null,
+    expiresAt,
+  }) {
     try {
+      const normalizedEmail =
+        typeof email === "string" && email.trim() ? email.trim() : null;
+      // An explicit `expiresAt` wins (an admin choosing 24 hours); otherwise a
+      // mailed invite gets the default and a copy-link invite gets none.
+      const expiry =
+        expiresAt !== undefined
+          ? expiresAt
+          : normalizedEmail
+            ? new Date(Date.now() + this.mailedInviteTtlMs)
+            : null;
+
+      if (normalizedEmail && !expiry)
+        return {
+          invite: null,
+          error: "An emailed invite must have an expiry.",
+        };
+
       const invite = await prisma.invites.create({
         data: {
           code: this.makeCode(),
           createdBy: createdByUserId,
           workspaceIds: JSON.stringify(workspaceIds),
+          email: normalizedEmail,
+          expiresAt: expiry,
         },
       });
       return { invite, error: null };
@@ -43,11 +83,38 @@ const Invite = {
     }
   },
 
+  /**
+   * S11a (#80), TL-2 OBS-1: claim CONDITIONALLY, and let the database arbitrate.
+   *
+   * The route reads the invite, creates a user, then claims — three awaits, and
+   * between the read and the write another request can do the same. An
+   * unconditional `update` lets both win: two accounts from one invite, and the
+   * second silently overwrites the first's `claimedBy`.
+   *
+   * So the conditions that made the invite redeemable are repeated in the WHERE
+   * clause, and `count` is the answer. Re-checking expiry here too is not
+   * redundant: the read that preceded this happened at a different instant, and
+   * an invite that expires in between must not be claimable.
+   */
   markClaimed: async function (inviteId = null, user) {
     try {
-      const invite = await prisma.invites.update({
-        where: { id: Number(inviteId) },
+      const now = new Date();
+      const claim = await prisma.invites.updateMany({
+        where: {
+          id: Number(inviteId),
+          status: "pending",
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
         data: { status: "claimed", claimedBy: user.id },
+      });
+
+      // Zero means somebody else claimed it, or it expired, between the read and
+      // now. Not an error the caller can fix — but emphatically not a success.
+      if (claim.count !== 1)
+        return { success: false, error: "Invite not found or is invalid." };
+
+      const invite = await prisma.invites.findUnique({
+        where: { id: Number(inviteId) },
       });
 
       try {
@@ -76,10 +143,33 @@ const Invite = {
     }
   },
 
+  /**
+   * S11a (#80): the REDEMPTION lookup. An expired invite is returned as null —
+   * the same answer a code that never existed gets, which is what keeps this
+   * from confirming that a code was real.
+   *
+   * Expiry lives HERE, not at the routes. `GET /invite/:code` and
+   * `POST /invite/:code` already carry byte-identical copies of the status
+   * check between them; a third copy per call site is a third place to forget
+   * it, and the existing duplication is the evidence that it happens.
+   *
+   * NOT for `deactivate` or the admin listings. An admin deactivating an
+   * expired invite is tidying, and an admin list that hides expired rows cannot
+   * answer "did this invite ever get used?". Those read the table directly and
+   * should keep doing so — "can this be redeemed" and "does this row exist" are
+   * different questions.
+   */
   get: async function (clause = {}) {
     try {
       const invite = await prisma.invites.findFirst({ where: clause });
-      return invite || null;
+      if (!invite) return null;
+      // `expiresAt` null means never expires: that is every invite created
+      // before S11 and every copy-link invite since. Reading null as expired
+      // would retire all of them, and the failure would be indistinguishable
+      // from a bad code.
+      if (invite.expiresAt && invite.expiresAt.getTime() <= Date.now())
+        return null;
+      return invite;
     } catch (error) {
       console.error(error.message);
       return null;
