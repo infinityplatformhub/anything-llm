@@ -92,3 +92,5 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Slice 2: context injection choke point DocumentManager.pinnedDocs + getContextFiles (S-21); RED must prove S-10 does not catch the pinned path.
 - Slice 3: fillSourceWindow rehydration (S-22), cardinality endpoints (S-25), canonicalize 4 sites, docVectorsCanonicalize.js:19-20 comment.
 - Before each slice SHA: merge-tree against Dev2's t7 branch; report any overlap.
+- Slice 1 split (2026-09-02, Techlead pre-check): 1a = lance + pgvector + milvus (expression string) with all 9 call sites wired; remaining providers fail closed with RetrievalFilterUnsupportedError + boot warning, never a generic throw. 1b = qdrant/pinecone/chroma/weaviate/astra. vectorPredicate returns a neutral structure {orgId, workspaceIds, deniedDocIds, allowedDocIds, matchNone} with toSqlString()/toStructured(); providers never parse SQL. Rerank fallback logs a warn counter. Cache comment: saves filter build, not the version round trip.
+- regression.test.js upload→query: T-4a membership rule stands (ก); fixture makes admin a member. Write-side asymmetry → #54.
