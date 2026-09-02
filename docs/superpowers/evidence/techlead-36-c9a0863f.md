@@ -1,0 +1,3 @@
+# Techlead S1 #36 review — c9a0863f — PASS
+79/79 across 8 suites on Postgres; 0 forbidden files; schema adjacent to temporary_auth_tokens; mount index.js:124. R1 two-layer refusal; R2 default + syncLegacyRoleGrant; suspended before link return; unusablePassword random hash; atomic consume + purge; consume before exchange; limiter both routes; error mapping 409/503/401-flat; §7.4 urls.json; QA-2.3 allowlist kept.
+FINDING (non-blocking): usernameFromEmail transforms (a+b→a-b, 1user→user) so R1 collision query on raw email misses; users.username unique throws → opaque 401. Fix: compare derived username, mode insensitive → 409. → #43 scope.
