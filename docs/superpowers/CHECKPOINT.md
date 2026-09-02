@@ -502,3 +502,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #122: TL-2 re-ran M2/M3/M4 on a69c2705b — all red, no open items. Close blocked only on Dev5's poll fix for the 500ms sleep (QA-2). #125 TL-2 adds: 31-char SIG_KEY must throw; boot 97 rows measured by clock; contract names the machine.
 - #122 c2fdb8dc8 merged 196d53ee3, closed (infi-run:gate-122-c2fdb8dc8); TL-2 PASS M1–M4, QA-2 0 too-many-clients under 40 bound backends, poll fix 6/6. 90/126. wt-122/g122 reaped. Local gates now use connection_limit=5.
 - #113 ebab66da9 gate running at wt-113 (g113). #124 contract posted (waits #40 t4 merge); #126 = gate extraction follow-up (Dev4). #125 RED in progress (Dev5; oracle 28.6ms measured on main).
+- #40 t4 b6ed23711 (ready, 15/15, frontend 75/13, uiBypass 11/11): gate running at wt-40t4 (g40t4); TL-1 verdict + QA-3 probe dispatched (plain). #126 (Dev4) = renderable-gate follow-up; Dev2 not opening a duplicate.
+- #113 ebab66da9: gate running at wt-113 (g113); TL-1 + QA-1 dispatched (auth); record shape frozen on Q4.
+- Post-merge after #122 launched (/tmp/postmerge-122.log) — first main run under connection_limit=5.
+- Queue order for reviewers: #113 → #40 t4 → #123 fix SHA → #121 contract.
