@@ -82,8 +82,16 @@ app.use(
   })
 );
 
+const refuseBoot = (error) => {
+  // issue 58: the deployment-shape check rejects with an operator-facing
+  // message. Printing it and exiting non-zero is the whole point — an
+  // unhandled rejection would bury it in a stack trace.
+  console.error(`\x1b[31m[BOOT REFUSED]\x1b[0m ${error.message}`);
+  process.exit(1);
+};
+
 if (!!process.env.ENABLE_HTTPS) {
-  bootSSL(app, process.env.SERVER_PORT || 3001);
+  bootSSL(app, process.env.SERVER_PORT || 3001).catch(refuseBoot);
 } else {
   require("@mintplex-labs/express-ws").default(app); // load WebSockets in non-SSL mode.
 }
@@ -191,6 +199,6 @@ app.all("*", function (_, response) {
 // In non-https mode we need to boot at the end since the server has not yet
 // started and is `.listen`ing.
 if (require.main === module && !process.env.ENABLE_HTTPS)
-  bootHTTP(app, process.env.SERVER_PORT || 3001);
+  bootHTTP(app, process.env.SERVER_PORT || 3001).catch(refuseBoot);
 
 module.exports = { app };

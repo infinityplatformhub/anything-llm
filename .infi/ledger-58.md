@@ -23,6 +23,18 @@ Note: correcting my own recon. I first wrote that `enable-multi-user`'s two writ
 
 Ruling: the reason C is not a predicate swap is that the two branches authenticate against DIFFERENT credentials — multi-user compares a password against the `users` row, single-user compares against `process.env.AUTH_TOKEN`. Flipping the predicate on a legacy instance does not tighten a check, it routes the request to another authentication mechanism. Needs its own ruling on the migration path (boot-time repair vs refuse-to-boot); I recommend refusing to boot with a message naming the fix, because silently flipping an instance into multi-user mode is a larger surprise than a startup error.
 
+## Ruling C implemented — refuse to boot (PMO ruling)
+
+Ruling: `utils/boot/assertDeploymentShape.js` refuses to boot when `multi_user_mode = false` AND `users.count() > 0`, with a message naming both remedies (set the setting true, or delete the leftover accounts). Refusing rather than repairing: flipping the setting on the operator's behalf silently changes what the instance IS — who may log in, and how — as a side effect of an upgrade.
+
+Ruling: the check runs BEFORE `listen()`, not in the boot callbacks. Those callbacks execute after the socket is open, so a check there would be refusing while already serving requests — which is the state it exists to prevent.
+
+Ruling: `bootHTTP`/`bootSSL` became async, so `index.js` attaches `.catch(refuseBoot)` at both call sites. Without it a rejection is an unhandled promise rejection and the operator-facing message is buried in a stack trace — the message IS the deliverable of a refuse-to-boot.
+
+Ruling: an unreadable database does NOT refuse. A database outage is a different failure, and this check is not entitled to relabel it as "your deployment is misconfigured" and send the operator to edit `system_settings`. It logs and returns, letting the boot fail where it actually fails. Tested with an injected throwing client.
+
+Ruling: `isMultiUserSetup` (deploymentMode.js:20) moved to the confirmed helper in the same commit. In shape (b) it failed CLOSED — refusing an instance that is effectively multi-user, an admin lockout rather than a bypass — so it was never a hole. Fixed anyway: one half of a file on the confirmed helper and the other on the raw setting reads as a deliberate distinction to whoever edits it next.
+
 ## Ruling D
 
 Ruling: `agents/aibitat/plugins/websocket.js:17` NOT touched, per the ruling. `userCanToggleTools` returns `true` before any engine call when the setting says single-user, which is the same class, but its polarity is inverted relative to A/B and it needs tests for both. Separate commit.
@@ -55,4 +67,4 @@ Note: the mobile test also passed, by calling `MobileDevice.createTempToken` —
 ## Evidence
 
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
-`Test Suites: 122 passed, 122 total` · `Tests: 1243 passed, 1243 total`
+`Test Suites: 123 passed, 123 total` · `Tests: 1247 passed, 1247 total`
