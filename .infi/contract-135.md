@@ -13,6 +13,21 @@ symbol cited below was re-read at `a3d0f5f6b` rather than copied forward.
 finding is a measured privilege escalation: a user granted nothing is authorized
 `access.diagnose` by inheriting a deleted user's id.
 
+**Scope correction (QA-2, measured).** That escalation runs through
+**`principal_role_grants`**, not through `document_acl`. An orphaned ACL row with
+`effect: "allow"` grants a user actor nothing today: `documentFilter.js:96` reads
+`document_acl` only `where: { ..., effect: "deny" }`, and scope comes from
+`readableScope`, so an ACL-only actor gets `no_grants`. The one other reader,
+`explainAccess.js:64`, is diagnostic — it reports rows rather than acting on
+them.
+
+So the earlier claim that "a recycled id inherits document access" was
+**overstated**, and this contract says so rather than quietly dropping it.
+Orphaned ACL rows stay in scope as **defence in depth**: they are live-looking
+authority for a principal that no longer exists, and the filter's deny-only read
+is a current implementation detail, not a guarantee. What changes is how RF-1
+proves it — see below.
+
 ---
 
 ## 1. Shape — three call sites, one function, no second implementation
@@ -108,19 +123,30 @@ Assert:  a user who lands on a DELETED user's id inherits neither the role grant
          nor the document ACL row.
 Setup:   victim holds BOTH an org role AND a document_acl row (not one or the
          other); delete; setval the sequence back; create a successor;
-         ASSERT THE SUCCESSOR'S ID EQUALS THE VICTIM'S; then assert
-         engine.evaluate DENIES both the role permission and the ACL access.
-Control: a genuinely-granted user IS allowed both.
+         ASSERT THE SUCCESSOR'S ID EQUALS THE VICTIM'S.
+Then:    - role half: engine.evaluate DENIES the role permission
+         - ACL half:  the document_acl ROW IS GONE (count == 0 for that
+           principal) — asserted on the row, NOT on an engine answer
+Control: a genuinely-granted user IS allowed the role permission.
 ```
+
+**Why the ACL half asserts a row and not a decision.** Per the scope correction
+above, the engine already answers "denied" for an ACL-only actor whether or not
+the cleanup ran — the filter reads `deny` rows only. An `engine.evaluate`
+assertion on the ACL half would therefore be **green before the fix and green
+after**: a test that cannot fail, which is the §7.17 class this contract keeps
+naming. Counting the row is the only assertion that distinguishes cleaned from
+uncleaned.
 
 Three things make this test real, and each fails differently without the others:
 
 - **Asserting the id.** Without it the successor may simply not land on the
   victim's id, and the test passes whatever the cleanup does. Dev3's recon names
   this trap itself.
-- **Both a role grant and an ACL row.** `document_acl` orphans mean a recycled
-  id inherits *document access*, not only role permissions. A victim holding
-  only a role leaves the ACL half untested while reading as full coverage.
+- **Both a role grant and an ACL row.** Not because the ACL row grants access
+  today — measured above, it does not — but because cleanup that removes one and
+  silently leaves the other reads as full coverage. A victim holding only a role
+  never exercises the ACL path at all.
 - **The control.** An engine that denies everything satisfies every negative
   assertion for free — the §7.17 class, and the reason a positive control is not
   optional here.
