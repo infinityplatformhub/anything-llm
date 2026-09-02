@@ -31,11 +31,6 @@ export default {
   login: (noTry = false) => {
     return `/login${noTry ? "?nt=1" : ""}`;
   },
-  sso: {
-    login: () => {
-      return "/sso/simple";
-    },
-  },
   onboarding: {
     home: () => {
       return "/onboarding";

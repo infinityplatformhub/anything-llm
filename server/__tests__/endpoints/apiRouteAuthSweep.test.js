@@ -56,7 +56,7 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
   const routes = collectRoutes();
 
   it("registers the expected number of routes (update deliberately when adding routes)", () => {
-    expect(routes.length).toBe(63);
+    expect(routes.length).toBe(62);
   });
 
   it("every module registers at least one route and returns undefined (recorder actually saw them)", () => {
