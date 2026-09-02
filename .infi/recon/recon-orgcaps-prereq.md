@@ -88,6 +88,16 @@ An empty result is also what a broken query returns, so two non-vacuity checks:
 **10 grants exist in total across all 7 seeded roles** — matching one per action — and all 10
 belong to `super_admin:org`. The zero is a real zero.
 
+**Two different numbers are both correct, and the issue must not read them as conflicting.**
+QA-3's per-role figures (27/25/1/0) count **sidebar ENTRIES a role can see** — rendered labels,
+27 of them including `settings.privacy`. The figures above (11/4/3/0/0/0/0) count **ACTIONS a
+role holds** out of the 11 currently exposed. Entries and actions are not in one-to-one
+correspondence: several entries gate on the same action, and some gate on none. Neither number
+converts into the other, and quoting one where the other is meant makes a correct measurement
+look like a contradiction. RF-C is stated over **actions**, because that is what
+`ORG_CAPABILITIES` changes; the entry count is what a user would notice, and belongs in the
+issue's user-facing description rather than in the assertion.
+
 **So the slice is a pure catalog change on this seed.** Nothing any role can see changes;
 `can()` returns exactly what it returns today for every principal, because the only holder
 already receives `true` for all 11 currently-exposed actions. The RF can therefore assert the

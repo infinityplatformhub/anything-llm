@@ -8,3 +8,6 @@ Open (TL-2): which principal each call site passes to revokeGrant; exempt princi
 
 ## Second rehearsal (03:55) — plausible-wrong stubs
 inert → 8 red · raw deleteMany + bump (looks right, no revocation rows) → 1 red: P3 per-grant half ONLY · per-grant with bogus role ids → 1 red: P3 identity ONLY (new: revoked role_id set == roles held; revoked_by_id non-empty). P3 now 7 assertions. P4 ×3 stay red until #135 (rollback path is #135's lane) — reported as out-of-scope on the slice-2 SHA.
+
+## P6 + correct-fix signature (10:30)
+P4/P5 drive User.delete at the MODEL layer; a contract-shaped #135 (route calls offboardUser, User.delete untouched) leaves them RED BY DESIGN — P5 is a DISCRIMINATOR of where cleanup landed. New P6 drives DELETE /admin/user/:id with a real super_admin token: grants 0, acl 0, revocations 1 → GREEN under a contract-shaped stub; RED (1/1/0) on 02778b133. Correct-fix signature = P6 green + P5 red. Probe 35 assertions; baseline 27/8. Site 2 (API-key route) route case to be added; site 3 rollback has no HTTP fixture reaching the catch → P4 model-layer is the oracle, reported as such.

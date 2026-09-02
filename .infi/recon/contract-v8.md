@@ -75,26 +75,6 @@ is not arbitrary and is not a magic constant: every one of the 53 sites also car
 the halves are in different languages: the margin in a Tailwind class, the compensation in an
 inline style keyed off the user agent.
 
-**LoadingChat is the one site whose conversion CHANGES what a user sees — and it is a fix.**
-QA-1 raised this; measured across all four fixture rows, the distinction is sharper than
-"52 preserving, 1 changing":
-
-| row | the 52 today → after | LoadingChat today → after |
-|---|---|---|
-| 1200px, desktop UA (consistent) | `calc(100%-32px)` → same | `calc(100%-32px)` → same |
-| **390px, phone UA (consistent)** | `100%` → same | **`calc(100%-32px)` → `100%` — CHANGES** |
-| 500px, desktop UA (conflict) | `calc(100%-32px)` → `100%` — changes | `calc(100%-32px)` → `100%` — changes |
-| 900px, mobile UA (conflict) | `100%` → `calc(100%-32px)` — changes | `calc(100%-32px)` → same |
-
-So the 52 are behaviour-preserving **on the consistent rows** and change on the two conflicting
-rows — that change is the point of V8, not a side effect. LoadingChat is the only site that
-changes on a **consistent** row: on an ordinary phone, where nothing is in dispute, the loading
-chat is 32px short today and correct after. Its mobile branch was lost at some point and the
-inline style kept the desktop half unconditionally.
-
-**The approver must see this as a fix, not as collateral.** It is the one visible difference a
-user could notice on a device where the current behaviour is not otherwise contested.
-
 That is why the conversion is safe and also why it is fragile if left unexplained. After (ข) both
 halves are classes on the same element and change together under the same breakpoint. **One site
 carries a comment naming the relationship** (`ChatContainer/index.jsx`, the most-read of the 53),
@@ -156,34 +136,14 @@ not reasoned about.
 | # | assertion | the mutation that must turn it red |
 |---|---|---|
 | F1 | hook re-renders on viewport change | dispatch a `matchMedia` change event with no resize; a non-subscribing hook (the `usePrefersDarkMode` shape) stays stale |
-| F2 | hook subscribes and unsubscribes on the SAME MediaQueryList with the SAME handler reference | see below — the warning-based version cannot fail |
-| F3 | breakpoint is 768px | two assertions, not one: (a) `tailwind.config.js` declares no `screens` override, and (b) **`md` actually RESOLVES to 768** (TL-1). (a) alone passes if a future Tailwind major changes its own default — the absence of an override stops meaning 768 and nothing goes red. |
-| F4 | all 53 (ข) sites converted | count `isMobile ? "100%" : "calc(100% - 32px)"` == 0 AND `height: "calc(100% - 32px)"` == 0 — **and assert the scanned file count equals the expected number**, not merely that it is non-zero. **F1b (QA-1): prove the counter can fail when it counts nothing** — feed it an empty file set and require a RED, because 0 remaining out of 0 scanned is the same success signal as a real conversion, so a glob that matched nothing otherwise reports "all converted". |
+| F2 | hook cleans up | unmount, fire change, assert no setState-after-unmount warning |
+| F3 | breakpoint is 768px | drift test reads `tailwind.config.js`, asserts no `screens` override, and pins 768 — a config override silently moving `md` must go red |
+| F4 | all 53 (ข) sites converted | count `isMobile ? "100%" : "calc(100% - 32px)"` == 0 AND `height: "calc(100% - 32px)"` == 0; **and assert the scanned file count equals the expected number**, not merely that it is non-empty (TL-1). A glob that silently narrows to one file reports "zero remaining" and passes; a count pins what was actually searched |
 | F5 | residual is exactly the allowlist | compare the measured set against `v8-allowlist-24.txt` **as a set, both directions**; the failure message **prints both directions separately** — sites present-but-not-listed and listed-but-absent are different defects (a new UA dependency vs. a stale allowlist) and a single "sets differ" message sends the reader to the wrong one |
 | F6 | lint blocks new `react-device-detect` imports | add a probe import in a non-allowlisted file, confirm red; delete the probe |
 | F7 | a11y names present and constant | `getAttribute("aria-label")` non-empty on the SettingsSidebar menu button and the Sidebar toggle; `aria-expanded` flips with panel state |
 | F8 | the six surviving imports are the six named | list them from source and compare as a set — not `toContain` |
 | RF-9 | the hook follows WIDTH, not the user agent — the two conflicting rows | see below |
-
-### F2 — why "no warning" is not a test (TL-1 cfd45626a)
-
-The obvious cleanup test — unmount, fire a change, assert no setState-after-unmount warning —
-**cannot fail on React 18**: that warning was removed. It would pass against a hook with no
-cleanup at all, which is precisely the leak it claims to catch. A test that cannot go red is
-not a weak test, it is a decorative one.
-
-Assert the mechanism instead:
-
-1. capture the `MediaQueryList` the hook subscribes to;
-2. assert `addEventListener` was called on it with a handler;
-3. unmount;
-4. assert `removeEventListener` was called **on the same MediaQueryList object** with the
-   **same handler reference** — identity, not just call count. A hook that removes a freshly
-   bound function, or that queries `matchMedia` twice and cleans up the wrong list, passes a
-   count check and leaks in production.
-
-Plus a **mounted control**: while still mounted, `removeEventListener` has NOT been called.
-Without it, a hook that unsubscribes immediately on mount satisfies every assertion above.
 
 ### RF-9 — the only two fixtures that can tell the implementations apart (TL-1)
 
