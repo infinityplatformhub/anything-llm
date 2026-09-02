@@ -799,7 +799,17 @@ const SystemSettings = {
 
   markOnboardingComplete: async function () {
     try {
-      await this._updateSettings({ onboarding_complete: true });
+      // #59: `_updateSettings` returns `{success:false}` rather than throwing, so an
+      // unchecked await returned `true` from this function even when the flag was never
+      // written — onboarding would be offered again on the next boot while the caller
+      // was told it had completed.
+      const update = await this._updateSettings({ onboarding_complete: true });
+      if (!update.success) {
+        console.error(
+          `Failed to mark onboarding complete: ${update.error ?? "settings write failed"}`
+        );
+        return false;
+      }
       const { Telemetry } = require("./telemetry");
       await Telemetry.sendTelemetry("onboarding_complete");
       return true;

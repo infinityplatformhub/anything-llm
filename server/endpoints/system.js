@@ -370,12 +370,15 @@ function systemEndpoints(app) {
           }
 
           const { password } = reqBody(request);
-          // #48 NIT-3: `bcrypt.hashSync(undefined, …)` throws, so an instance with no
-          // AUTH_TOKEN answered 500 to a login attempt — an error shape that says
+          // #48 NIT-3 / #59 M10: `bcrypt.compareSync` throws when either argument is not
+          // a string, so BOTH an instance with no AUTH_TOKEN and a request that omits
+          // `password` answered 500 to a login attempt — an error shape that says
           // "something broke here", which is more than a caller should learn from a
-          // failed login. It is also not true: nothing broke, there is simply no
-          // password to match. Same 401 and same `[003]` body as a wrong password.
-          if (!process.env.AUTH_TOKEN) {
+          // failed login, and which is not even true: nothing broke, there is nothing to
+          // match. The missing-field half fires whether or not AUTH_TOKEN is set.
+          // Same 401 and same `[003]` body as a wrong password, so the three cases are
+          // indistinguishable to the caller.
+          if (!process.env.AUTH_TOKEN || typeof password !== "string") {
             await emitAuditEvent("failed_login_invalid_password", {
               ip: request.ip || "Unknown IP",
               multiUserMode: false,
@@ -796,9 +799,18 @@ function systemEndpoints(app) {
           return;
         }
 
-        await SystemSettings._updateSettings({
+        // #59: `_updateSettings` catches its own errors and RETURNS `{success:false}`.
+        // Read as a bare await, a failed write is indistinguishable from a successful
+        // one, and everything below proceeds — leaving user rows behind with
+        // `multi_user_mode` still false, which is deployment shape (b). Throwing here is
+        // what makes the rollback in the catch block run at all.
+        const modeUpdate = await SystemSettings._updateSettings({
           multi_user_mode: true,
         });
+        if (!modeUpdate.success)
+          throw new Error(
+            `Failed to enable multi-user mode: ${modeUpdate.error ?? "settings write failed"}`
+          );
         await BrowserExtensionApiKey.migrateApiKeysToMultiUser(user.id);
         await Memory.migrateToMultiUser(user.id);
         await WorkspaceChats.migrateToMultiUser(user.id);
@@ -819,10 +831,21 @@ function systemEndpoints(app) {
         await emitAuditEvent("multi_user_mode_enabled", {}, user?.id);
         response.status(200).json({ success: !!user, error });
       } catch (e) {
+        // #59: the rollback has to check too. The reason we are in this catch is
+        // usually that the settings store is failing, which is exactly when this write
+        // fails as well — an unchecked rollback reports itself as having run while the
+        // instance is left in shape (b): user rows present, multi_user_mode false.
         await User.delete({});
-        await SystemSettings._updateSettings({
+        const rollback = await SystemSettings._updateSettings({
           multi_user_mode: false,
         });
+        if (!rollback.success)
+          console.error(
+            `\x1b[31m[MULTI-USER ROLLBACK FAILED]\x1b[0m ${rollback.error ?? "settings write failed"} — ` +
+              "user accounts were removed but multi_user_mode could not be reset. The " +
+              "instance is in deployment shape (b); the boot-time repair (#58) corrects " +
+              "it on the next restart."
+          );
 
         console.error(e.message, e);
         response.sendStatus(500).end();
