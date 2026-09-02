@@ -287,7 +287,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // this line conflict. The resolution is 320 because BOTH routes mount — and the
     // count below is the MEASURED one, not 318 + 2: a pin that is arithmetic rather
     // than observation is how two correct-looking halves produce a wrong total.
-    expect(mountedRoutesAtTestLoad).toHaveLength(319);
+    expect(mountedRoutesAtTestLoad).toHaveLength(320);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );

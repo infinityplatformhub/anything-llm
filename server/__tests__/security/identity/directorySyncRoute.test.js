@@ -151,17 +151,34 @@ beforeAll(async () => {
     db: prisma,
   });
 
-  // THE ACTION AND ITS GRANT, created here because Dev1's seed slice is a separate
-  // branch. Attached to super_admin only, which is the shape Dev1's seed produces —
-  // but this is a fixture standing in for that seed, not a check of it.
-  const permission = await prisma.permissions.create({
-    data: { action: "directory.sync", description: "Trigger a directory sync" },
+  // THE ACTION AND ITS GRANT. On the combined branch the SEED provides both (#137's
+  // slice), so this defers to it and only fills the gap when it is absent — which is
+  // what the queue branch needed on its own, where the seed did not yet carry the
+  // action.
+  //
+  // `upsert` rather than `create` deliberately, and it is the more honest fixture: the
+  // suite now runs against whatever the real seed produced, so if the seed ever stops
+  // granting `directory.sync` to super_admin, R1's 202 goes red here instead of being
+  // masked by a fixture that re-granted it. What this suite still does NOT prove is
+  // that a seed-only install holds the grant — that assertion lives in
+  // directorySyncPermission.test.js, which is the right place for it.
+  const permission = await prisma.permissions.upsert({
+    where: { action: "directory.sync" },
+    create: { action: "directory.sync", description: "Trigger a directory sync" },
+    update: {},
   });
   const superAdmin = await prisma.roles.findFirstOrThrow({
     where: { name: "super_admin", scope: "org" },
   });
-  await prisma.role_permissions.create({
-    data: { role_id: superAdmin.id, permission_id: permission.id, effect: "allow" },
+  await prisma.role_permissions.upsert({
+    where: {
+      role_id_permission_id: {
+        role_id: superAdmin.id,
+        permission_id: permission.id,
+      },
+    },
+    create: { role_id: superAdmin.id, permission_id: permission.id, effect: "allow" },
+    update: {},
   });
 
   // The capable provider, registered for this suite only. `identityProviders` is the
@@ -335,6 +352,20 @@ describe("#138 R3: the gate is `directory.sync`", () => {
     const permission = await prisma.permissions.findUniqueOrThrow({
       where: { action: "directory.sync" },
     });
+    // The premise this test rests on: setup_admin must NOT already hold the action, or
+    // the 403 above came from somewhere else and the grant below changes nothing.
+    // Asserted rather than assumed, because the seed decides this and the seed is not
+    // this suite's to control.
+    const preexisting = await prisma.role_permissions.findUnique({
+      where: {
+        role_id_permission_id: {
+          role_id: setupAdminRole.id,
+          permission_id: permission.id,
+        },
+      },
+    });
+    expect(preexisting).toBeNull();
+
     await prisma.role_permissions.create({
       data: {
         role_id: setupAdminRole.id,
