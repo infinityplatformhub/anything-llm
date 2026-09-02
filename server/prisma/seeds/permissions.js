@@ -147,6 +147,13 @@ const SYSTEM_ROLES = [
     // left here is what a person may do as themselves, anywhere; access to a
     // particular workspace now comes from a workspace-scoped grant derived from
     // workspace_users.role_id.
+    //
+    // #63 adds chat.read to the three WORKSPACE roles and deliberately not
+    // here, for exactly the reason above: an org-wide chat.read would let a
+    // user read the chat history of every workspace, including ones they have
+    // never joined. Proven, not assumed — the first cut of that migration did
+    // grant it here, and chatReadGrant.test.js caught an outsider reading a
+    // workspace's history with a 200.
     permissions: ["chat.send"],
   },
   {
@@ -154,14 +161,14 @@ const SYSTEM_ROLES = [
     scope: "workspace",
     permissions: [
       "workspace.read", "workspace.write", "workspace.delete", "workspace.members.manage",
-      "chat.send", ...DOCUMENT_ACTIONS,
+      "chat.send", "chat.read", ...DOCUMENT_ACTIONS,
     ],
   },
   {
     name: "editor",
     scope: "workspace",
     permissions: [
-      "workspace.read", "workspace.write", "chat.send",
+      "workspace.read", "workspace.write", "chat.send", "chat.read",
       "document.create", "document.read", "document.search",
       "document.update", "document.delete", "document.pin", "document.watch",
     ],
@@ -169,7 +176,13 @@ const SYSTEM_ROLES = [
   {
     name: "viewer",
     scope: "workspace",
-    permissions: ["workspace.read", "document.read", "document.search", "chat.send"],
+    permissions: [
+      "workspace.read", "document.read", "document.search", "chat.send",
+      // #63: a viewer that can send a chat and not read the one it just sent is
+      // not a coherent role. chat.read is the caller's OWN history; reading
+      // other people's is chat.read_others, which stays org-scoped.
+      "chat.read",
+    ],
   },
 ];
 
