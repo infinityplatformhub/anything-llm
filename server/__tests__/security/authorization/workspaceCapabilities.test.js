@@ -60,8 +60,17 @@ function hasGateAtScope(gates, action, scope) {
 
 describe("capability vocabulary by resource scope", () => {
   test("the capability sweep mounted every HTTP router", () => {
-    expect(registrations).toHaveLength(31);
+    expect(registrations).toHaveLength(32);
     expect(mountedRoutes.length).toBeGreaterThan(100);
+    const v1Routes = mountedRoutes.filter((layer) =>
+      String(layer.route.path).startsWith("/v1/")
+    );
+    expect(v1Routes.length).toBeGreaterThanOrEqual(60);
+    expect(
+      v1Routes.some(
+        (layer) => layer.route.path === "/v1/openai/chat/completions"
+      )
+    ).toBe(true);
     expect(
       skipped.filter((entry) => !entry.startsWith("agentWebsocket"))
     ).toEqual([]);

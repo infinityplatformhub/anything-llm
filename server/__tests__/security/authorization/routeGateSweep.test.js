@@ -81,7 +81,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
-    expect(registrations).toHaveLength(31);
+    expect(registrations).toHaveLength(32);
     expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(
       100
     );
@@ -112,6 +112,26 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       if (!gated) ungated.push(signature);
     }
 
+    expect(ungated).toEqual([]);
+  });
+
+  test("every mutating developer route carries validApiKey", () => {
+    const ungated = [];
+    for (const layer of app._router.stack) {
+      if (!layer.route || !String(layer.route.path).startsWith("/v1/"))
+        continue;
+      const methods = Object.keys(layer.route.methods).filter(
+        (method) => method !== "get" && method !== "head"
+      );
+      if (methods.length === 0) continue;
+
+      const guarded = layer.route.stack.some(
+        (handler) => handler.handle?.isApiKeyGuard === true
+      );
+      if (!guarded) {
+        ungated.push(`${methods[0].toUpperCase()} ${layer.route.path}`);
+      }
+    }
     expect(ungated).toEqual([]);
   });
 
