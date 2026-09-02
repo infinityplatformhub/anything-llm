@@ -426,3 +426,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #98 db9649c24 merged 53ee95219, closed (infi-run:gate-98-db9649c24); content verified. 83/120. wt-98/g98 reaped. Dev3 → #113.
 - #116 (Dev4): RF-1..5 + RF-2b green 12/12; #108 NITs folded (pick-by-BLANK, main.jsx source assert; fake hostile test self-caught → §7.17). JWTSecret-first reorder kept; #91 order-pinning test rewritten to key-set assertion (ruled OK). SHA pending full suite → TL-1 + QA-3.
 - Post-merge after #112 + #98 running (/tmp/postmerge-98.log), idle backends cleared first.
+- #115: TL-2 found branch 115-cred-before-listen has 0 commits over main; Dev2 silent through 3 pings → 10-min ultimatum, else reassign to Dev1 (after #114 contract) and Dev2 → #40 task 4.
+- #106 RF (TL-2): fixture must bind real backends (pg_stat_activity count), and central $disconnect must not break later suites — ordering test required.
