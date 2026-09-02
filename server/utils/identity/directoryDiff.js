@@ -7,6 +7,19 @@
 // the outbox publish in one transaction (#113 RF-5). A diff that could write would be
 // the obvious place to "just do it here", and the bump would be lost.
 //
+// WHAT SLICE 2 (#134) ADDED, and why it is here rather than beside the driver.
+// `enumerateDirectory` DOES call a driver — it is the only producer of a completed
+// enumeration in production. That does not weaken R6: it takes the driver as an
+// ARGUMENT and imports none, so this module still reaches no database, no repository
+// and no concrete provider (the source test below pins all three).
+//
+// It lives in this file for a structural reason. The `COMPLETE` brand is a
+// module-private symbol, so a producer in any other file would need that symbol
+// exported — and an exported symbol is a constructor again, just with more steps.
+// Keeping the brand and its only producer together means completeness cannot be
+// asserted anywhere it is not audited. `completedEnumeration` is reachable only
+// through `__testHelpers__` for the same reason.
+//
 // THE RULE EVERYTHING BELOW SERVES. Lark has no delta API (#113), so every sync is a
 // full snapshot and ABSENCE from that snapshot is the only way to learn that someone
 // left. That makes this the one component that can revoke an entire organisation's
@@ -100,6 +113,67 @@ const DEACTIVATION_RATIO = 0.5;
 // change than a reorganisation everyone forgot to mention.
 const MEMBERSHIP_FLOOR = 25;
 const MEMBERSHIP_RATIO = 0.5;
+
+/**
+ * The ONLY producer of a completed enumeration in production (#134 R2).
+ *
+ * It lives in this module rather than beside the sync driver for a structural reason:
+ * `COMPLETE` is module-private, so a producer in any other file would need the symbol
+ * exported — and an exported symbol is a constructor again, just with more steps.
+ * Keeping both here means the brand cannot be applied anywhere it is not audited.
+ *
+ * N-2 (TL-1): the shape is ASSERTED before branding, not assumed from the driver's
+ * behaviour. S4a refuses to return a prefix (`LarkIdentityProvider._enumerate` throws
+ * on a cursor), so today a partial result is impossible — but that is a property of
+ * ONE implementation, and the brand is what every downstream guard trusts. A future
+ * driver that returns a partial result without throwing would otherwise have it
+ * branded complete, and the type discipline collapses at its source.
+ *
+ * Both calls must succeed. If `listGroups` throws after `listPrincipals` returned,
+ * this throws too and NO branded value exists — the principals look authoritative and
+ * are not, and conflating the two turns one Lark 500 into an org-wide deactivation.
+ *
+ * @param {{listPrincipals: Function, listGroups: Function}} driver
+ * @returns {Promise<Object>} a branded completed enumeration
+ */
+async function enumerateDirectory(driver, input = {}) {
+  if (!driver || typeof driver.listPrincipals !== "function" || typeof driver.listGroups !== "function") {
+    throw new DirectoryDiffError(
+      "enumerateDirectory requires a driver with listPrincipals and listGroups"
+    );
+  }
+
+  const principalPage = await driver.listPrincipals(input);
+  assertCompletePage(principalPage, "principals", "listPrincipals");
+  const groupPage = await driver.listGroups(input);
+  assertCompletePage(groupPage, "groups", "listGroups");
+
+  return completedEnumeration({
+    principals: principalPage.principals,
+    groups: groupPage.groups,
+  });
+}
+
+/**
+ * A page is only usable as part of a completed enumeration when it says, in every
+ * field, that there is nothing after it. `hasMore: true` with a full-looking array is
+ * exactly the shape that reads as a complete snapshot while being a prefix.
+ */
+function assertCompletePage(page, collection, method) {
+  if (!page || typeof page !== "object") {
+    throw new DirectoryDiffError(`${method} must return a page object`);
+  }
+  if (!Array.isArray(page[collection])) {
+    throw new DirectoryDiffError(`${method} must return an array of ${collection}`);
+  }
+  if (page.hasMore !== false || page.nextCursor != null) {
+    throw new DirectoryDiffError(
+      `${method} returned a PARTIAL enumeration (hasMore=${page.hasMore}, ` +
+        `nextCursor=${String(page.nextCursor)}). Absence from a partial snapshot is ` +
+        `not a departure, so it cannot be branded complete.`
+    );
+  }
+}
 
 /**
  * @param {{enumeration: Object, current: {users: Array, groups: Array, memberships: Array}}} input
@@ -266,7 +340,16 @@ function diffDirectory({ enumeration, current }) {
 
 module.exports = {
   diffDirectory,
-  completedEnumeration,
+  enumerateDirectory,
+  // NOT `completedEnumeration`. #134 R2: `enumerateDirectory` is the only producer of
+  // a branded value in production. The brand certifies PROVENANCE, not truth — it
+  // records that a value came from the constructor, not that an enumeration finished
+  // — so a constructor reachable from production code is a way to stamp "complete"
+  // onto data from a run that failed, and every guard below then reasons from a lie
+  // it cannot detect. The constructor still exists (`__testHelpers__`), because slice
+  // 1's tests build enumerations without a driver; what changed is that reaching it
+  // now requires naming a test helper, which is visible in review.
+  __testHelpers__: { completedEnumeration },
   failedEnumeration,
   DirectoryDiffError,
   DEACTIVATION_FLOOR,

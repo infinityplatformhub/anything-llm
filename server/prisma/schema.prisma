@@ -839,6 +839,37 @@ model groups {
   @@unique([orgId, source, externalId])
 }
 
+// S4b slice 2 (#134): what one directory sync run DID.
+//
+// Exists mainly for the run that did nothing. A REFUSED run (a scale guard fired)
+// and a no-op run both write zero rows to every other table, so without this row
+// they are the same event — and the entire point of refusing a misconfigured sync
+// is that somebody notices. `status` + `refusedReason` are what make them
+// distinguishable; both are pinned by CHECK constraints in the migration, because
+// this table is read to decide whether a sync is overdue and a typo'd status would
+// hide a refusal from every query looking for one.
+//
+// Written LAST, in its own transaction, after every write in the plan succeeded
+// (R5). A crash mid-apply then leaves a partially-applied sync that the next run
+// corrects by re-deriving from current state, rather than a rolled-back one that
+// discarded work already proven correct.
+model directory_sync_checkpoints {
+  id                 BigInt   @id @default(autoincrement())
+  orgId              Int      @default(1)
+  provider           String
+  status             String // 'completed' | 'refused' | 'failed'
+  refusedReason      String?
+  usersCreated       Int      @default(0)
+  usersDeactivated   Int      @default(0)
+  groupsCreated      Int      @default(0)
+  membershipsAdded   Int      @default(0)
+  membershipsRemoved Int      @default(0)
+  startedAt          DateTime @db.Timestamptz(3)
+  finishedAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([orgId, provider, finishedAt(sort: Desc)])
+}
+
 model group_members {
   group_id Int
   user_id  Int
