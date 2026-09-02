@@ -6,6 +6,30 @@ The brief listed three hypotheses. Two were tested and **one of them is wrong**;
 one cause but **two different regimes**, and they need different fixes. Everything below is measured
 on this machine, with the commands that produced it.
 
+> **UPDATE — the regime-1 reproduction below does NOT hold up, and the correction matters more than
+> the original claim.**
+>
+> Re-measured after PMO terminated 49 idle backends, with `pg_stat_activity` counted during the run
+> rather than client objects counted before it (TL-2 RF-1 asks for exactly this, and it is what
+> caught me):
+>
+> | total connections during run | 3 authz suites together | result |
+> |---|---|---|
+> | 48 | ×5 runs | **17/17 every run** |
+> | 63 | ×3 runs | **17/17 every run** |
+> | **93 of 100** | ×3 runs | **17/17 every run** |
+>
+> The original "40 held → 401" run was **40 held PLUS the 49 idle backends already there**, i.e.
+> ~89 total — and at a comparable 93 today the same three suites pass five times over. So the 401
+> is real (§1 quotes it from the log) but I cannot reproduce it, and "40 connections" was never the
+> variable: I reported the number my probe *opened*, not the number the server *held*.
+>
+> What survives: §1's saturation measurement (all 17 fail, `too many clients`, deterministic) and
+> §3's counts of unisolated and non-disconnecting suites. What does not: the claim that regime 1 is
+> reproducible at a stated connection count. Regime 1 is real — the varying failure sets on main
+> are not imaginary — but this recon does not establish its trigger, and the fix should not be
+> justified by a measurement I cannot repeat.
+
 ## 0. Starting measurement
 
 ```
@@ -111,6 +135,9 @@ touch regime 1.
 **Recommended order: (d), then (b), then measure whether regime 1 still bites; (a) only for the
 suites that still collide.** Rewriting 52 files should follow evidence that they need it, not
 precede it.
+
+The update at the head of this file strengthens that order rather than weakening it: with regime 1's
+trigger unreproduced, (a) is the one proposal with no measurement behind it at all.
 
 ## 5. What has NOT been measured, stated rather than assumed
 
