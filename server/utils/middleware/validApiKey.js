@@ -4,6 +4,9 @@ const { emitAuditEvent } = require("../events");
 const prisma = require("../prisma");
 const { resolveActor } = require("../authorization/actorResolver");
 const { DatabaseAuthorizationEngine } = require("../authorization/engine");
+const {
+  isConfirmedSingleUser,
+} = require("../authorization/actorResolver");
 
 // T-4b (#29) W-8: PR-4a gave this middleware the SCOPE half of `/v1` authorization — does
 // the key's scope string permit the action. Nothing asked the other half: does the
@@ -102,7 +105,10 @@ function validApiKey(action, binding = null) {
   if (typeof action !== "string" || !action) throw new Error("validApiKey requires an explicit scope");
   const engine = new DatabaseAuthorizationEngine();
   const middleware = async function apiKeyRequired(request, response, next) {
-    response.locals.multiUserMode = await SystemSettings.isMultiUserMode();
+    // issue 58 (ruling A): inverted from the confirmed helper, so this local
+    // cannot disagree with validatedRequest about which mode the instance is
+    // in. Same value for handlers, one source for the answer.
+    response.locals.multiUserMode = !(await isConfirmedSingleUser());
     const bearerKey = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
     const apiKey = bearerKey ? await ApiKey.resolve(bearerKey) : null;
     if (!apiKey) return response.status(403).json({ error: "No valid api key found." });

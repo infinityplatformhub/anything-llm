@@ -1,6 +1,9 @@
 const { MobileDevice } = require("../../../models/mobileDevice");
 const { SystemSettings } = require("../../../models/systemSettings");
 const { User } = require("../../../models/user");
+const {
+  isConfirmedSingleUser,
+} = require("../../../utils/authorization/actorResolver");
 
 /**
  * Validates the device id from the request headers by checking if the device
@@ -67,7 +70,12 @@ async function validRegistrationToken(request, response, next) {
     // If in multi-user mode, we need to validate the user id
     // associated exists, is not banned and then associate with locals so we can reuse it later.
     // If not in multi-user mode then simply having a valid token is enough.
-    const multiUserMode = await SystemSettings.isMultiUserMode();
+    // issue 58: same class as rulings A/B, on a site the brief did not list.
+    // The block below is the ONLY place this token's user is loaded and checked
+    // for existence and suspension, so reading the raw setting meant shape (b)
+    // registered a device for a suspended or deleted user. (validDeviceToken
+    // above checks suspension unconditionally — these two disagreed.)
+    const multiUserMode = !(await isConfirmedSingleUser());
     if (multiUserMode) {
       if (!tempTokenData.userId)
         return response

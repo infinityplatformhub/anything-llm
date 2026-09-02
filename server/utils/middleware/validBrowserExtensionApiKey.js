@@ -4,11 +4,21 @@ const { User } = require("../../models/user");
 const { emitAuditEvent } = require("../events");
 const { EXTENSION_SCOPES } = require("../apiKeySecurity/scopes");
 const prisma = require("../prisma");
+const {
+  isConfirmedSingleUser,
+} = require("../authorization/actorResolver");
 
 function validBrowserExtensionApiKey(action) {
   if (typeof action !== "string" || !action) throw new Error("validBrowserExtensionApiKey requires an explicit scope");
   return async function browserKeyRequired(request, response, next) {
-    const multiUserMode = await SystemSettings.isMultiUserMode();
+    // issue 58 (ruling B): INVERTED from the confirmed helper, not the raw
+    // setting. `multi_user_mode = false` with user rows present — shape (b),
+    // reachable from an interrupted enable-multi-user — made this false while
+    // `validatedRequest` treated the same instance as multi-user, and the
+    // suspension check below is inside `multiUserMode && ...`. A suspended
+    // user's extension key kept working. The local keeps its meaning ("is this
+    // multi-user") because handlers downstream read this boolean.
+    const multiUserMode = !(await isConfirmedSingleUser());
     response.locals.multiUserMode = multiUserMode;
     const secret = request.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
     const apiKey = secret ? await BrowserExtensionApiKey.validate(secret) : null;
