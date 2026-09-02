@@ -965,3 +965,6 @@ generated client โหลด dotenv จาก path absolute ที่ฝัง�
 
 ### 7.9j ด่านความปลอดภัยของ route ต้องตรวจ router ที่ประกอบแล้ว ไม่ใช่ซอร์ส
 #40: AST/regex scan ของ `index.js` ตอบว่า "ไฟล์เขียนถูก convention ไหม" — inline `apiRouter.post(...)`, registrar นอก `./endpoints/`, แก้ list หลังประกาศ ผ่านหมด (TL-1 X1–X6) · ด่านหลักต้องเดิน `app._router.stack` recursive ของ router ที่ production ประกอบจริง แล้วยืนยัน gate ด้วย identity (WeakSet registry §7.9g) ทุก mutating route · scan ซอร์สเป็น diagnostic บอกตำแหน่งเท่านั้น · list ที่ production เดินต้อง `Object.freeze`
+
+#### 7.9f evidence — #78 e52553fc7
+ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ยนเป็น `Object.create(null)` + loop `managerAllowedFields.includes(key)` — พฤติกรรมเดิมทุกประการ (manager+unknown → 200 ไม่เขียน) · PMO grep `fromEntries` = 0 แล้วนับว่าผ่าน; Dev1 trace path จับได้ · บทเรียน: เงื่อนไขรับงานต้องเป็นพฤติกรรม (เทส manager+unknown → 400) ไม่ใช่การหายไปของชื่อ symbol
