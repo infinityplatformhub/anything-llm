@@ -283,6 +283,30 @@ which is the argument for the route suite existing at all.
   RF-5, exactly as QA-1 predicted; killed once the boundary itself was asserted.
 - M5B per-call UUID idempotency key · M5C registration enqueues directly (killed by
   RF-5b alone — the runtime test cannot see it, which is why both halves exist).
+- M7B `if (held !== 1)` -> `if (true)`, the lease guard REFUSES EVERYONE. Both RF-7
+  tests red, but for two different reasons and only one of them is the point:
+    - RF-7 fails at `expect(pausedAfter).toBe(2)`, received 0 — a SETUP-REASON red.
+      The guard throws on the FIRST entity, so worker 1 never reaches the pause and the
+      interleaving the test exists to create never happens. This red says nothing about
+      whether a lease-losing worker is refused.
+    - RF-7b fails on its own assertion, and that is the discriminating one: a worker
+      that still HOLDS its lease was refused. This is the half TL-1 asked for — proof
+      that the control can fail.
+- M7C `if (held !== 1)` -> `if (false)`, the lease guard ADMITS EVERYONE. RF-7 red at
+  `expect(outcome).toBeInstanceOf(LeaseLostError)` (received a plain Object — the
+  checkpoint, because the apply ran to completion); RF-7b green, correctly, since
+  admitting a valid holder is what it asserts.
+
+  NAMING NOTE for anyone re-firing these: TL-2's verdict (8dbff801d) reports the
+  pausedAfter-0 mechanism under M7C. The mechanism is exactly right and the verdict is
+  unaffected, but it belongs to M7B — the mutant that refuses everyone is the one that
+  throws before the pause. Logs: /tmp/mut-M7B.log, /tmp/mut-M7C.log.
+
+**§7.17 (TL-2): report WHICH assertion failed, not how many.** "Both red" hid that one
+of M7B's two reds was a setup-reason red that proves nothing. A mutant that kills a
+test by preventing its fixture from ever reaching the guard is not evidence the test
+discriminates — it is the fixture-never-reached-the-guard failure wearing a kill's
+clothing.
 
 ## Residuals
 
