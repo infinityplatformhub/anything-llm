@@ -24,6 +24,9 @@ const {
   queryParams,
 } = require("../utils/http");
 const {
+  narrowManagerSystemPreferences,
+} = require("../utils/managerSystemPreferences");
+const {
   loginAccountRateLimit,
   loginIpRateLimit,
 } = require("../utils/middleware/requestControls");
@@ -1008,9 +1011,15 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const { defaultSystemPrompt } = reqBody(request);
-        const result = await SystemSettings.updateSettings({
-          default_system_prompt: defaultSystemPrompt,
-        });
+        // #78 then #72: whether this actor may write the key at all is settled
+        // before the model is asked whether the key exists.
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { default_system_prompt: defaultSystemPrompt }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
+        const result = await SystemSettings.updateSettings(narrowed.updates);
         if (["unknown_keys", "protected_keys"].includes(result.code))
           return response.status(400).json(result);
         if (!result.success)
