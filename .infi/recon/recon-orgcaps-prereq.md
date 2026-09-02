@@ -71,6 +71,37 @@ Measured across every seeded role:
 gains a capability the UI would newly reveal, and no role that answers `false` today starts
 answering `true`. The widening risk is nil **on this seed**.
 
+### Answering it directly: which of the 10 does any NON-super_admin role hold?
+
+**None.** Queried explicitly rather than inferred from the table above:
+
+```sql
+SELECT r.name||':'||r.scope, p.action
+  FROM roles r
+  JOIN role_permissions rp ON rp.role_id = r.id
+  JOIN permissions p  ON p.id = rp.permission_id
+ WHERE p.action IN (<the 10>) AND r.name <> 'super_admin';
+-- 0 rows
+```
+
+An empty result is also what a broken query returns, so two non-vacuity checks:
+**10 grants exist in total across all 7 seeded roles** — matching one per action — and all 10
+belong to `super_admin:org`. The zero is a real zero.
+
+**So the slice is a pure catalog change on this seed.** Nothing any role can see changes;
+`can()` returns exactly what it returns today for every principal, because the only holder
+already receives `true` for all 11 currently-exposed actions. The RF can therefore assert the
+strongest available form:
+
+> **RF-C: no role's visible capability set changes.** For every seeded role, the set of actions
+> `/system/my-capabilities` answers `true` for is byte-identical before and after the slice —
+> the answer map grows by 10 keys, all of them `false`, except for `super_admin` where all 10
+> are `true` and were already reachable.
+
+That is a stronger and cheaper assertion than an exception list, and it is only available
+*because* the answer is none. If a later regrant makes it non-empty, RF-C goes red and the slice
+needs the exception list instead — which is the right failure, not a nuisance.
+
 **The caveat that matters more than the result:** that is a statement about the *default seed*,
 not about a deployment. A customer who has granted `embed.write` to a custom role gets that role
 a `true` it did not previously receive — correct behaviour, and still a visible change. Exposure
