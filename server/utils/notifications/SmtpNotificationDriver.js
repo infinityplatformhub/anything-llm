@@ -73,6 +73,34 @@ class SmtpNotificationDriver {
   }
 
   /**
+   * QA-1 NIT-2: what this object looks like when something prints it.
+   *
+   * Measured before this existed: `JSON.stringify(driver)` and
+   * `util.inspect(driver)` both returned the password in full. The second is
+   * what `console.log(driver)` calls, so one debugging line — here, or inside a
+   * dependency that logs the objects it is handed — publishes the credential.
+   *
+   * Both hooks are needed and neither substitutes for the other: `toJSON` covers
+   * serialization, the inspect symbol covers logging, and node's error printing
+   * walks `cause` chains with the latter. The safe shape is an allowlist, so a
+   * field added to the constructor later is invisible here until someone
+   * deliberately adds it.
+   */
+  toJSON() {
+    return {
+      channel: SmtpNotificationDriver.channelId(),
+      host: this.host,
+      port: this.port,
+      secure: this.secure,
+      username: this.username,
+    };
+  }
+
+  [Symbol.for("nodejs.util.inspect.custom")]() {
+    return { ...this.toJSON(), password: "[redacted]" };
+  }
+
+  /**
    * Ask the relay whether this configuration works, and answer with DATA.
    *
    * A connection test that throws makes the caller catch to learn the answer.

@@ -338,3 +338,54 @@ describe("issue 80: validateConnection", () => {
     expect(JSON.stringify(result.details ?? {})).not.toContain(SMTP_PASSWORD);
   });
 });
+
+describe("issue 80 (QA-1 NIT-2): the driver cannot be serialized into a leak", () => {
+  // Measured before the fix: JSON.stringify and util.inspect both returned the
+  // password in full. `util.inspect` is what `console.log(driver)` calls, so a
+  // single debugging line anywhere — here or in a dependency that logs the
+  // objects it is handed — publishes the credential.
+  const driverWithSecret = () =>
+    new SmtpNotificationDriver({
+      host: "smtp",
+      port: 587,
+      secure: false,
+      allowInsecure: true,
+      username: "mailer",
+      password: SMTP_PASSWORD,
+      fromAddress: "no-reply@example.com",
+    });
+
+  test("JSON.stringify does not carry the password", () => {
+    const serialized = JSON.stringify(driverWithSecret());
+    expect(serialized).not.toContain(SMTP_PASSWORD);
+    expect(serialized).not.toContain(SMTP_PASSWORD_ENCODED);
+    // Still useful: an operator debugging a connection needs to see WHERE it
+    // points. Redaction that removes the diagnostic value gets reverted.
+    expect(serialized).toContain("smtp");
+  });
+
+  test("util.inspect — what console.log uses — does not carry the password", () => {
+    const util = require("util");
+    const inspected = util.inspect(driverWithSecret(), { depth: 5 });
+    expect(inspected).not.toContain(SMTP_PASSWORD);
+    expect(inspected).not.toContain(SMTP_PASSWORD_ENCODED);
+  });
+
+  test("nesting the driver in another object does not defeat it", () => {
+    // The realistic shape: a driver held on a config object that something else
+    // logs. A `toJSON` that only fired at the top level would miss this.
+    const util = require("util");
+    const wrapper = { channel: "smtp", driver: driverWithSecret() };
+    expect(JSON.stringify(wrapper)).not.toContain(SMTP_PASSWORD);
+    expect(util.inspect(wrapper, { depth: 5 })).not.toContain(SMTP_PASSWORD);
+  });
+
+  test("an error carrying the driver as `cause` does not carry the password", () => {
+    // Error causes are printed by most loggers and by node's own uncaught
+    // handler, and this driver classifies failures with `{ cause: error }` — so a
+    // cause chain reaching a driver instance is not hypothetical.
+    const util = require("util");
+    const error = new Error("failed", { cause: driverWithSecret() });
+    expect(util.inspect(error, { depth: 5 })).not.toContain(SMTP_PASSWORD);
+  });
+});

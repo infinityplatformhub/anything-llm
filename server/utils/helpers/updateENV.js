@@ -1772,13 +1772,26 @@ async function persistCredential(envKey, value) {
   // An empty value means "unset this credential", which is a delete, not a stored "".
   if (!value) {
     await CredentialStore.delete(envKey);
-    return;
+    return { error: null };
   }
   const { error } = await CredentialStore.set(envKey, value);
   if (error)
     console.error(
       `[credential-store] ${envKey} is live for this process but was not persisted; it will be lost on restart: ${error}`
     );
+  // S11a (#80), TL-1: the outcome is RETURNED as well as logged. Existing callers
+  // ignore it and keep their behaviour exactly — the value stays live for this
+  // process and the log is the warning, which is deliberate (see the note at the
+  // `process.env` assignment above).
+  //
+  // The mailer save path is the caller that must not ignore it. It writes a
+  // "these settings were verified" hash, and that hash is only true while the
+  // credential it was verified with still exists. If the write failed, the
+  // password is live now but gone after a restart — so a hash written anyway
+  // would claim verified against a credential the next boot cannot find, and
+  // every send would fail while the settings page said the configuration was
+  // confirmed working.
+  return { error: error ?? null };
 }
 
 /**

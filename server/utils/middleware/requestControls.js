@@ -139,6 +139,30 @@ const loginKey = (request) => {
   return digest(`login:${canonicalIp(request, true)}:${username}`);
 };
 
+/**
+ * S11a (#80), ruling D: bucket by the CREDENTIAL, not the source address.
+ *
+ * Sending mail costs a relay round trip and can burn a provider's sending
+ * quota, so the budget belongs to whoever is spending it. Keying on IP is wrong
+ * in both directions here: every admin behind one office NAT would share a
+ * bucket, while one key rotating through addresses would get a fresh budget per
+ * address — which is the shape an abuser has and a legitimate admin does not.
+ *
+ * A limiter runs BEFORE `requirePermission`, so `response.locals.actor` does not
+ * exist yet. The credential itself is what is available at this point, and it is
+ * the thing being metered anyway.
+ */
+const actorKey = (request) => {
+  const authorization = request.get("authorization") || "";
+  const bearer = authorization.replace(/^Bearer\s+/i, "").trim();
+  // Falls back to the address only when there is no credential at all. Those
+  // requests are about to be rejected as unauthenticated; the fallback exists so
+  // an unauthenticated flood still meets a limit rather than sharing one global
+  // bucket.
+  if (!bearer) return digest(`actor:anon:${canonicalIp(request, true)}`);
+  return digest(`actor:${bearer}`);
+};
+
 const loginIpRateLimit = limiter({
   windowEnv: "LOGIN_RATE_LIMIT_WINDOW_MS",
   limitEnv: "LOGIN_IP_RATE_LIMIT_MAX",
@@ -184,6 +208,27 @@ const chatSearchRateLimit = limiter({
   windowMs: 60_000,
   limit: 60,
   keyGenerator: ipKey,
+});
+// S11a (#80): sending an invite by mail. Low by design — this is an admin action
+// measured in a handful per sitting, and every call spends a relay round trip
+// plus a slice of the deployment's sending reputation. A number that feels
+// generous here is a number that lets one compromised key mail a customer list.
+const inviteMailRateLimit = limiter({
+  windowEnv: "INVITE_MAIL_RATE_LIMIT_WINDOW_MS",
+  limitEnv: "INVITE_MAIL_RATE_LIMIT_MAX",
+  windowMs: 60_000,
+  limit: 10,
+  keyGenerator: actorKey,
+});
+// The SMTP connection test. Also per-credential, and also cheap to abuse: it
+// opens a socket to an arbitrary host:port the caller supplies, which is a port
+// scanner if left unmetered.
+const mailerTestRateLimit = limiter({
+  windowEnv: "MAILER_TEST_RATE_LIMIT_WINDOW_MS",
+  limitEnv: "MAILER_TEST_RATE_LIMIT_MAX",
+  windowMs: 60_000,
+  limit: 6,
+  keyGenerator: actorKey,
 });
 const embedHistoryRateLimit = limiter({
   windowEnv: "EMBED_RATE_LIMIT_WINDOW_MS",
@@ -238,6 +283,7 @@ function ipAllowlist(request, response, next) {
 
 module.exports = {
   BoundedMemoryStore,
+  actorKey,
   apiIpRateLimit,
   apiKeyRateLimit,
   bearerKey,
@@ -245,8 +291,10 @@ module.exports = {
   canonicalIp,
   embedHistoryRateLimit,
   ipAllowlist,
+  inviteMailRateLimit,
   inviteRateLimit,
   loginAccountRateLimit,
   loginIpRateLimit,
+  mailerTestRateLimit,
   resetRequestControls,
 };
