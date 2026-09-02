@@ -33,7 +33,7 @@ describe("refused settings keys", () => {
     expect(Object.keys(updates)).toEqual(keyOrder);
   });
 
-  test.each(["multi_user_mode", "hub_api_key", "onboarding_complete"])(
+  test.each(["multi_user_mode", "onboarding_complete"])(
     "%s is classified as protected",
     async (key) => {
       await expect(
@@ -45,6 +45,19 @@ describe("refused settings keys", () => {
       });
     }
   );
+
+  test("hub_api_key remains writable despite also being protected", async () => {
+    const write = jest
+      .spyOn(SystemSettings, "_updateSettings")
+      .mockResolvedValue({ success: true, error: null });
+
+    await expect(
+      SystemSettings.updateSettings({ hub_api_key: "x" })
+    ).resolves.toEqual({ success: true, error: null });
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({ hub_api_key: "x" })
+    );
+  });
 
   test("caps reflected unknown keys and reports true count", async () => {
     const updates = Object.fromEntries(

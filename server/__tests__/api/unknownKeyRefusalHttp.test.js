@@ -216,6 +216,19 @@ describe("unknown settings keys over HTTP", () => {
     });
   });
 
+  test("community hub writes its supported API key", async () => {
+    const response = await update(
+      "/api/community-hub/settings",
+      () => auth(),
+      { hub_api_key: "community-key" }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "hub_api_key" } })
+    ).resolves.toMatchObject({ value: "community-key" });
+  });
+
   test("manager unknown keys stay silent and write no rows", async () => {
     const before = await snapshotSettings();
 

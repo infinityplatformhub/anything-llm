@@ -688,8 +688,10 @@ const SystemSettings = {
   // silently turn a requested write into a partial write.
   updateSettings: async function (updates = {}) {
     const keys = Object.keys(updates);
-    const protectedKeys = keys.filter((key) =>
-      this.protectedFields.includes(key)
+    const protectedKeys = keys.filter(
+      (key) =>
+        this.protectedFields.includes(key) &&
+        !this.supportedFields.includes(key)
     );
     if (protectedKeys.length) {
       return {
