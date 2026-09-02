@@ -97,3 +97,4 @@
 - **chroma has no escape clause for unlabelled rows** (no `$exists`); `RETRIEVAL_FILTER_ALLOW_UNPROVABLE` is inert there and logged as such at boot. Unbackfilled chroma deployments get empty retrieval until #56. `[→ #56]`
 - **LanceDB `table.add()` silently drops fields not in the Arrow schema** — pre-T-5 tables never gain ACL metadata through normal ingest; unlabelled population grows after T-5 ships. Backfill must migrate/rewrite the schema, not update rows. Found by Techlead on #30 05e18e79. `[→ #56]`
 - **pre-T-5 LanceDB tables have no ACL column at all** — any predicate naming `orgId` throws; slice 1a handles via schema check (ruling B). `[→ #30 1a]`
+- **`validatedRequest` passthrough when AUTH_TOKEN/JWT_SECRET unset** is reachable in production via `update-password usePassword:false` and (before the #48 denylist) via credential clear. #48 blocks the new path only. Separate issue to open by Dev1. `[→ new issue]`

@@ -880,3 +880,9 @@ enforces this; do not register a route as `app.get(path, handler)` with no array
 
 ### §7.9a summary line is not the verdict
 A Jest run whose `Tests: N passed` line is green while any suite failed to load (e.g. `jsonwebtoken` import error under Node 26) is a FAIL. Gate reads `Test Suites:` too; evidence must run under node@22. Found on #43 dab75e1a.
+
+### §7.9b XSW fixtures mirror the verifier's read path
+A forged element planted for an XSW test must sit at the exact path the verifier reads (e.g. `Conditions/AudienceRestriction/Audience`, not a bare `AudienceRestriction`). Proof: mutate the reader to document-wide `//` and every planted fixture must go red. Found on #43 01888688 (2 of 4 fixtures proved nothing until reshaped).
+
+### §7.6a probes run on a pinned SHA in QA's own detached worktree
+Probing a developer's live worktree is void: uncommitted edits change results (QA-2 on #43). QA never writes into a dev worktree (QA-1 on #48).
