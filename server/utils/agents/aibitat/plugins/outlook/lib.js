@@ -666,12 +666,13 @@ class OutlookBridge {
 
       const expiresAt = Date.now() + (data.expires_in - 60) * 1000;
       this.#decodeAndLogToken(data.access_token, "NEW token received");
-      await OutlookBridge.updateConfig({
+      const persisted = await OutlookBridge.updateConfig({
         ...config,
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
         tokenExpiry: expiresAt,
       });
+      if (!persisted.success) return persisted;
 
       this.#accessToken = data.access_token;
       this.#isInitialized = false; // Force re-initialization
@@ -739,12 +740,13 @@ class OutlookBridge {
 
       const expiresAt = Date.now() + (data.expires_in - 60) * 1000;
 
-      await OutlookBridge.updateConfig({
+      const persisted = await OutlookBridge.updateConfig({
         ...config,
         accessToken: data.access_token,
         refreshToken: data.refresh_token || config.refreshToken,
         tokenExpiry: expiresAt,
       });
+      if (!persisted.success) return persisted;
 
       this.#accessToken = data.access_token;
 

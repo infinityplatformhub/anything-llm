@@ -603,8 +603,13 @@ function adminEndpoints(app) {
           updates = filteredUpdates;
         }
 
-        const { success, error } = await SystemSettings.updateSettings(updates);
-        response.status(success ? 200 : 500).json({ success, error });
+        const result = await SystemSettings.updateSettings(updates);
+        const status = result.success
+          ? 200
+          : result.code === "unknown_keys"
+            ? 400
+            : 500;
+        response.status(status).json(result);
       } catch (e) {
         console.error(e);
         response.sendStatus(500).end();

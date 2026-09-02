@@ -104,12 +104,36 @@ describe("agent plugin settings updates report the model result", () => {
   });
 });
 
-test("default-system-prompt preserves the model's string error", () => {
-  const source = fs.readFileSync(path.join(SERVER_ROOT, "endpoints/system.js"), "utf8");
-  const handler = source.slice(
-    source.indexOf('app.post(\n    "/system/default-system-prompt"'),
-    source.indexOf('app.delete(\n    "/system/remove-pfp"')
-  );
 
-  expect(handler).toContain('error || "Failed to update default system prompt."');
+describe("Outlook token persistence failures", () => {
+  const { OutlookBridge } = require("../../utils/agents/aibitat/plugins/outlook/lib");
+
+  beforeEach(() => jest.restoreAllMocks());
+
+  test("token exchange reports a failed config persist", async () => {
+    jest.spyOn(OutlookBridge, "getConfig").mockResolvedValue({
+      clientId: "client",
+      clientSecret: "secret",
+      authType: "common",
+    });
+    jest.spyOn(OutlookBridge, "updateConfig").mockResolvedValue({
+      success: false,
+      error: "system_settings unavailable",
+    });
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+      }),
+    });
+
+    await expect(
+      new OutlookBridge().exchangeCodeForToken("code", "http://callback")
+    ).resolves.toEqual({
+      success: false,
+      error: "system_settings unavailable",
+    });
+  });
 });

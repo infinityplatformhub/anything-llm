@@ -35,8 +35,10 @@ function communityHubEndpoints(app) {
       try {
         const data = reqBody(request);
         const result = await SystemSettings.updateSettings(data);
-        if (result.error) throw new Error(result.error);
-        response.status(200).json({ success: true, error: null });
+        if (result.code === "unknown_keys")
+          return response.status(400).json(result);
+        if (!result.success) throw new Error(result.error);
+        response.status(200).json(result);
       } catch (error) {
         console.error(error);
         response.status(500).json({ success: false, error: error.message });

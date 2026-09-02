@@ -684,20 +684,22 @@ const SystemSettings = {
     }
   },
 
-  // Can take generic keys and will pre-filter invalid keys
-  // from the set before sending to the explicit update function
-  // that will then enforce validations as well.
+  // Reject the whole update when a caller sends unknown keys so typos cannot
+  // silently turn a requested write into a partial write.
   updateSettings: async function (updates = {}) {
-    const validFields = Object.keys(updates).filter((key) =>
-      this.supportedFields.includes(key)
+    const unknownKeys = Object.keys(updates).filter(
+      (key) => !this.supportedFields.includes(key)
     );
+    if (unknownKeys.length) {
+      return {
+        success: false,
+        error: `Unknown setting keys: ${unknownKeys.join(", ")}`,
+        code: "unknown_keys",
+        unknownKeys,
+      };
+    }
 
-    Object.entries(updates).forEach(([key]) => {
-      if (validFields.includes(key)) return;
-      delete updates[key];
-    });
-
-    return this._updateSettings(updates);
+    return this._updateSettings({ ...updates });
   },
 
   delete: async function (clause = {}) {

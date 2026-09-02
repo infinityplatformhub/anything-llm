@@ -1008,12 +1008,14 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const { defaultSystemPrompt } = reqBody(request);
-        const { success, error } = await SystemSettings.updateSettings({
+        const result = await SystemSettings.updateSettings({
           default_system_prompt: defaultSystemPrompt,
         });
-        if (!success)
+        if (result.code === "unknown_keys")
+          return response.status(400).json(result);
+        if (!result.success)
           throw new Error(
-            error || "Failed to update default system prompt."
+            result.error || "Failed to update default system prompt."
           );
         response.status(200).json({
           success: true,
