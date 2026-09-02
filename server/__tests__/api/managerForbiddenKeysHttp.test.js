@@ -165,6 +165,15 @@ beforeEach(async () => {
 });
 
 describe("issue 78 manager forbidden setting keys", () => {
+  it("keeps protected and supported overlap explicit", () => {
+    const overlap = SystemSettings.protectedFields.filter((key) =>
+      SystemSettings.supportedFields.includes(key)
+    );
+    // Guard against this policy assertion becoming vacuous if the overlap disappears.
+    expect(overlap.length).toBeGreaterThan(0);
+    expect(overlap).toEqual(["hub_api_key"]);
+  });
+
   it("refuses memory_enabled and leaves its row unchanged", async () => {
     await prisma.system_settings.create({
       data: { label: "memory_enabled", value: "false" },
