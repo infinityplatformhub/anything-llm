@@ -962,3 +962,6 @@ generated client โหลด dotenv จาก path absolute ที่ฝัง�
 
 ### 7.1d เทสที่ขึ้นกับสถานะ server (extension/locale/version) ต้องรัน suite บนทั้งสองสถานะ
 #74: QA-3 และ PMO gate เขียวเพราะ DB ของตัวเองบังเอิญมี extension ติดตั้งแล้ว; TL-2 บน DB สดพบ 3 เทสแดง · กฎ: เทสที่ assert สาขาซึ่งขึ้นกับสถานะ DB ต้องจัดสถานะเอง (`beforeAll` CREATE/DROP, `afterAll` คืน) และ reviewer ที่ probe สถานะพิเศษด้วยมือต้องรัน suite ทั้งบนสถานะนั้นและสถานะสด — probe ด้วยมือเห็นพฤติกรรมถูก ไม่ได้พิสูจน์ว่า suite จัดสถานะให้ตัวเอง
+
+### 7.9j ด่านความปลอดภัยของ route ต้องตรวจ router ที่ประกอบแล้ว ไม่ใช่ซอร์ส
+#40: AST/regex scan ของ `index.js` ตอบว่า "ไฟล์เขียนถูก convention ไหม" — inline `apiRouter.post(...)`, registrar นอก `./endpoints/`, แก้ list หลังประกาศ ผ่านหมด (TL-1 X1–X6) · ด่านหลักต้องเดิน `app._router.stack` recursive ของ router ที่ production ประกอบจริง แล้วยืนยัน gate ด้วย identity (WeakSet registry §7.9g) ทุก mutating route · scan ซอร์สเป็น diagnostic บอกตำแหน่งเท่านั้น · list ที่ production เดินต้อง `Object.freeze`
