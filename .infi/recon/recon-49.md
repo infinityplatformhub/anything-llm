@@ -116,16 +116,28 @@ hole is worse than a visible logout. The migration path is therefore: ship the s
 ship the widget, then turn the flag on. Recorded as a residual so the ordering is not
 rediscovered by whoever flips it.
 
-Ruling: a `@@unique([embed_id, session_id])` migration lands with this issue. Hole 2 is a
-race, and application-level check-then-act cannot close a race — only the database can
-refuse the second writer. The slot is declared on the issue.
+Ruling (WITHDRAWN, and the correction matters): there is NO unique constraint and NO
+migration. I proposed `@@unique([embed_id, session_id])` on `embed_chats` and was wrong —
+that table stores one row PER MESSAGE, not per session (`EmbedChats.new`,
+`models/embedChats.js:16-32`, creates a row for every prompt/response pair). The constraint
+would fail the migration outright on any deployment holding real data, and on an empty one
+it would silently reject the second message of every conversation. Embed chat would break.
+
+The right fix is smaller: hole 2 is a race to CLAIM AN ID, and once the server mints the id
+with `crypto.randomUUID()` no caller chooses one, so there is nothing to race for. Hole 2 is
+a consequence of the client-chosen id exactly like the other three — remove the root cause
+and it goes with them. No database change is needed.
+
+Ruling: the mint endpoint must REFUSE an id supplied in the body or query. That is the one
+way hole 2 comes back — an endpoint that accepts a caller's id is a client-chosen id wearing
+a server-minted name — so it is asserted rather than assumed.
 
 ## Tests (RED first)
 
 - **Hole 1**: request a token for a session id whose victim has requested but not yet
   received a reply → refused. RED on today's code.
-- **Hole 2**: two concurrent opens cannot produce the same id (and, if a table lands, the
-  unique constraint is asserted at the database, not only in application code).
+- **Hole 2**: two concurrent opens produce DIFFERENT ids, and the endpoint refuses an id
+  passed in the body or query — the only way a caller could reintroduce the race.
 - **Hole 3**: emptying `embed_chats` for a session does not make it mintable again.
 - **Hole 4**: two calls to the open endpoint are byte-identical in shape — same status,
   same keys — regardless of what the caller knows. Compared as raw bodies, per the S-25
