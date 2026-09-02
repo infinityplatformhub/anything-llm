@@ -421,3 +421,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - PMO daemons (inbox-wait 18560, idle-compact 15713) found dead; restarted as background tasks. Inbox empty at restart.
 - #112 43cf5da87 merged b409c73d1, closed (infi-run:gate-112-43cf5da87); content verified. 82/119. wt-112/g112 reaped. O2 = O2a+O2b done.
 - #113: Dev3 self-correction — plain UNIQUE(orgId,source,externalId) works (NULL distinct on PG17); NULLS NOT DISTINCT would fail migration on real DBs; test must run on migrated DB with existing local groups.
+- #118 amend c16a1ee27 (comment+ledger only): order clause + separator residual (U+3000/U+FF0D → #120). Waiting QA-2 → close/merge.
+- #106 recon (Dev5): two regimes — partial pressure = shared-DB data collisions (few random 401 reds), saturation = too-many-clients (all red). 52/55 authz suites share schema, 28 never $disconnect. Ruling: (ง) connection_limit=5 in test DATABASE_URL + (ข) $disconnect afterAll first (plain), measure regime 1 after; (ก) per-suite schema only if still red.
