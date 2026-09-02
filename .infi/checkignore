@@ -22,3 +22,4 @@ server/__tests__/utils/events/auditRedaction.test.js
 server/utils/apiKeySecurity/index.js
 server/__tests__/models/updateSettingsReturns.test.js
 docs/superpowers/mockups/
+server/models/user.js
