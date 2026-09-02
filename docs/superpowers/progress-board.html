@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">4a95b2d7b</span> · 2026-09-03 00:55</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">830208542</span> · 2026-09-03 01:10</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -125,7 +125,7 @@ td.mono{white-space:nowrap}
     <div class="card"><div class="top"><span class="id">#132 SystemReadRoute</span><span class="who">Dev4 · contract พร้อม รอ #121 merge</span></div><p>TL-2: ย้ายเฉพาะ mobile-connections (อีก 2 หน้าเขียนด้วย action อื่น) · เก็บ hideUserMenu · เทส assert ที่ capability ไม่ใช่ role</p></div>
     <div class="card"><div class="top"><span class="id">#130 connectionBudget</span><span class="who">Dev1 · กำลังทำ</span></div><p>TL-2 ruling: เทส capture-and-invoke จับ M4 ใน process เดียว 0.3 วิ · timeout item ปิด stale</p></div>
     <div class="card"><div class="top"><span class="id">S4b slice 2–3</span><span class="who">Dev3 · หลัง #133</span></div><p>apply + checkpoint · job + lock (session lock vs row+heartbeat = ruling) · slice 4 รอ Q4</p></div>
-    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · RED</span></div><p>TL-1: แยก audit.purge (super_admin เท่านั้น) + grant system.write/system.read/user.read ให้ setup_admin · QA-3 oracle: เมนูคืน 12 ตัว · ช่อง Model Router รอ TL-1 · merge หลัง #121</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
+    <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · GREEN</span></div><p>migration: grant 3 action ให้ setup_admin + แยก audit.purge (super_admin เท่านั้น) · Model Router: re-gate เมนูบน model-router.read (ไม่ให้สิทธิ์ เพราะ write = เปลี่ยนเส้นทางแชท) เป็น commit ที่สองหลัง #121 merge</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
   </div>
 </section>
 
