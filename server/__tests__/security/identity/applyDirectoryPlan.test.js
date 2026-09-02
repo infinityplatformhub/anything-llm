@@ -174,10 +174,25 @@ describe("#134 R1: a refused plan applies NOTHING, in either direction", () => {
 
 describe("#134 R3/R4: an accepted plan applies, per entity", () => {
   test("RF-2: two membership changes produce TWO policy_versions and TWO outbox rows", async () => {
-    // The control RF-1 needs — without it, a reconciler that never writes passes
-    // RF-1 — and the F1 witness. COUNTED, never asserted non-empty: passing a `tx`
-    // to addGroupMember collapses both changes into one bump, and "a row exists"
-    // stays green for exactly that bug.
+    // The control RF-1 needs: without it, a reconciler that never writes anything
+    // passes RF-1 and RF-5 and looks correct.
+    //
+    // What it pins: two membership changes produce exactly TWO policy_versions rows
+    // and TWO event_outbox rows, COUNTED against the number of changes, AND the two
+    // memberships exist. Both halves are needed and neither implies the other — a
+    // bump with no write passes the membership assertion's absence, and a write with
+    // no bump passes a row-existence check. "Not empty" is green for one row, so the
+    // count is the assertion, never the presence.
+    //
+    // NOT the F1 witness, and the pre-read's proposed one cannot exist. F1 predicted
+    // that passing a `tx` to addGroupMember collapses N changes into one bump.
+    // Measured on a real database through the real repository, it does not: two
+    // changes produce two rows whether a tx or `prisma` is passed, because
+    // `bumpVersion` runs once per invocation either way. Mutants M2 (per-call
+    // $transaction) and M3 (one transaction around the whole loop) both SURVIVE this
+    // suite, recorded as survivors with their reachability per §7.9 — see
+    // .infi/ledger-134.md. The pass-`prisma` rule stands on rollback scope and lock
+    // duration, which no row count can observe.
     const deptA = group("rf2-a");
     const deptB = group("rf2-b");
     const alice = principal("rf2-alice", {
