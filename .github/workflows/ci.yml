@@ -69,7 +69,10 @@ jobs:
       # MinIO and need `milvus run standalone` it has no way to receive. Compose expresses
       # both. (TL-2 ruling on #73.)
     env:
-      DATABASE_URL: postgresql://approof:approof@localhost:5432/approofworkspace_test
+      # #122: cap the Prisma pool. Its default is num_cpus*2+1, and the pool is
+      # lazy — 2 connections until load arrives — so this bounds only the
+      # suites doing heavy parallel work, at no measured time cost.
+      DATABASE_URL: postgresql://approof:approof@localhost:5432/approofworkspace_test?connection_limit=5
       API_KEY_PEPPER: ci-only-api-key-pepper-32-bytes-minimum
       # These four are what turn `describe.skip` back into `describe`. The guard test
       # realStoreSuitesRunInCi.test.js fails if any is removed from this file.
