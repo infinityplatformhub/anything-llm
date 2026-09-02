@@ -12,3 +12,4 @@ server/utils/vectorDbProviders/lance/index.js
 server/__testHelpers__/saml/assertions.js
 server/__tests__/security/identity/samlLibraryEvaluation.test.js
 server/utils/identityProviders/SamlIdentityProvider/index.js
+server/__tests__/security/identity/samlAcsUrlWarning.test.js

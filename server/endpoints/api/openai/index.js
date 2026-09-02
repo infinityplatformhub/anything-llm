@@ -8,6 +8,9 @@ const { getEmbeddingEngineSelection } = require("../../../utils/helpers");
 const { reqBody } = require("../../../utils/http");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
 const {
+  resolveActor,
+} = require("../../../utils/authorization/actorResolver");
+const {
   OpenAICompatibleChat,
 } = require("../../../utils/chats/openaiCompatible");
 const { getModelTag } = require("../../utils");
@@ -133,6 +136,11 @@ function apiOpenAICompatibleEndpoints(app) {
           messages.find((chat) => chat.role === "system")?.content ?? null;
         const history = messages.filter((chat) => chat.role !== "system") ?? [];
 
+        // T-5 (#30): resolved once and passed into both branches. The API key is a bearer
+        // credential for its creator, so this is the identity retrieval is filtered by —
+        // the key's own scopes are the other half, enforced by validApiKey.
+        const actor = await resolveActor(request, response);
+
         if (!stream) {
           const chatResult = await OpenAICompatibleChat.chatSync({
             workspace,
@@ -141,6 +149,7 @@ function apiOpenAICompatibleEndpoints(app) {
             prompt: extractTextContent(userMessage.content),
             attachments: extractAttachments(userMessage.content),
             temperature: Number(temperature),
+            actor,
           });
 
           await Telemetry.sendTelemetry("sent_chat", {
@@ -171,6 +180,7 @@ function apiOpenAICompatibleEndpoints(app) {
           attachments: extractAttachments(userMessage.content),
           temperature: Number(temperature),
           response,
+          actor,
         });
         await Telemetry.sendTelemetry("sent_chat", {
           LLMSelection: process.env.LLM_PROVIDER || "openai",

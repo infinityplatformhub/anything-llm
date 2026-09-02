@@ -5,12 +5,20 @@ const {
   MilvusClient,
 } = require("@zilliz/milvus2-sdk-node");
 const { TextSplitter } = require("../../TextSplitter");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
 const { SystemSettings } = require("../../../models/systemSettings");
 const { v4: uuidv4 } = require("uuid");
 const { storeVectorResult, cachedVectorInformation } = require("../../files");
 const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 
 class Milvus extends VectorDatabase {
   constructor() {
@@ -164,6 +172,10 @@ class Milvus extends VectorDatabase {
       let vectorDimension = null;
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
+      // T-5 (#30): stamp every vector with the fields the ACL filter reads; without them
+      // a row cannot be proven readable and is invisible once enforcement is on.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
 
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
@@ -182,7 +194,14 @@ class Milvus extends VectorDatabase {
               const newChunks = chunk.map((chunk) => {
                 const id = uuidv4();
                 documentVectors.push({ docId, vectorId: id });
-                return { id, vector: chunk.values, metadata: chunk.metadata };
+                return {
+                  id,
+                  vector: chunk.values,
+                  // T-5 (#30): cached chunks predate this stamp, so a cache hit is not a
+                  // hole in the ACL metadata. Spread last so document metadata cannot
+                  // shadow the fields the filter reads.
+                  metadata: { ...chunk.metadata, ...aclMetadata },
+                };
               });
               const insertResult = await client.insert({
                 collection_name: this.normalize(namespace),
@@ -240,7 +259,7 @@ class Milvus extends VectorDatabase {
             values: vector,
             // [DO NOT REMOVE]
             // LangChain will be unable to find your text if you embed manually and dont include the `text` key.
-            metadata: { ...metadata, text: textChunks[i] },
+            metadata: { ...metadata, text: textChunks[i], ...aclMetadata },
           };
 
           vectors.push(vectorRecord);
@@ -386,6 +405,58 @@ class Milvus extends VectorDatabase {
         ...match.metadata,
         score: match.score,
       });
+      result.scores.push(match.score);
+    });
+    return result;
+  }
+
+  /**
+   * T-5 (#30): the authorized read path. See base.js for the contract this owes.
+   *
+   * The expression is passed to `client.search` alongside the limit, so Milvus applies it
+   * during the search rather than to its output — the actor's own documents compete for
+   * the topN slots instead of losing them to rows they may not read (S-17).
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const expr = constraintFor(aclFilter).toMilvusExpr("metadata");
+    // No scope, no query.
+    if (expr === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const response = await client.search({
+      collection_name: this.normalize(namespace),
+      vectors: queryVector,
+      limit: topN,
+      expr,
+    });
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    response.results.forEach((match) => {
+      // Second layer, deliberately redundant with the expression: a row that cannot be
+      // proven allowed — including one written before the ACL backfill — is dropped here
+      // even though the query already claimed to exclude it (S-26/G4).
+      if (!isRowAllowed(match.metadata, aclFilter)) return;
+      if (match.score < similarityThreshold) return;
+      if (filterIdentifiers.includes(sourceIdentifier(match.metadata))) {
+        this.logger(
+          `${this.name}: A source was filtered from context as its parent document is pinned.`
+        );
+        return;
+      }
+
+      result.contextTexts.push(match.metadata.text);
+      result.sourceDocuments.push({ ...match.metadata, score: match.score });
       result.scores.push(match.score);
     });
     return result;

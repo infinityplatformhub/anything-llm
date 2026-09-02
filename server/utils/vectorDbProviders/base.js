@@ -136,6 +136,60 @@ class VectorDatabase {
   }
 
   /**
+   * T-5 (#30): the ONLY authorized way into a namespace's vectors.
+   *
+   * Takes a seam-02 DocumentAclFilter and pushes it into the provider query, before the
+   * topN cut. It is a separate method rather than an optional argument on
+   * performSimilaritySearch because an optional ACL argument is one forgotten call site
+   * away from an unfiltered read, and the forgetting is silent.
+   *
+   * Two rules every implementation owes:
+   *
+   *   1. PREFILTER. The predicate belongs in the query, not in a loop over its results.
+   *      Post-filtering closes the leak and silently truncates the answer — topN is spent
+   *      on rows the actor cannot read, so a legitimate document ranked below them never
+   *      appears (S-17). It also materializes forbidden chunk text into process memory,
+   *      which is the thing seam 07 exists to prevent.
+   *   2. DENY THE UNPROVABLE. A row carrying no ACL metadata cannot be shown to be
+   *      allowed, and the metadata backfill is incremental, so during rollout a namespace
+   *      holds both shapes. Unprovable means excluded (S-26/G4); the opposite default
+   *      would make the filter advisory until the backfill finished.
+   *
+   * @param {Object} params
+   * @param {string} params.namespace
+   * @param {number[]} params.queryVector
+   * @param {Object} params.aclFilter seam-02 DocumentAclFilter — required, never null
+   * @param {number} [params.similarityThreshold]
+   * @param {number} [params.topN]
+   * @param {string[]} [params.filterIdentifiers]
+   * @returns {Promise<{contextTexts: string[], sourceDocuments: any[], scores: number[]}>}
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    // Fail CLOSED and say why. The default here is reached by a deployment whose provider
+    // has no ACL pushdown yet, and the two wrong answers are both tempting: falling back
+    // to an unfiltered search would silently serve every document in the namespace, and a
+    // generic "Must be implemented by provider" would read as a code bug rather than as a
+    // deployment that must change provider or wait for that driver.
+    //
+    // This error never resolves by retrying, which is what separates it from
+    // AuthorizationUnavailableError. `assertRetrievalSupport` warns about the same
+    // condition at boot, so an operator learns before their users do.
+    const {
+      RetrievalFilterUnsupportedError,
+    } = require("../authorization/errors");
+    throw new RetrievalFilterUnsupportedError(
+      `${this.name} cannot push an authorization filter into its query yet, so retrieval is refused rather than served unfiltered. Use a supported vector provider (LanceDB, PGVector, Milvus) until this driver lands.`
+    );
+  }
+
+  /**
    * Perform a similarity search and return raw results
    * @param {Object} params - Search parameters
    * @param {any} params.client - Vector database client

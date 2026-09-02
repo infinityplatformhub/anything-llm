@@ -7,6 +7,18 @@ const { v4: uuidv4 } = require("uuid");
 const { sourceIdentifier } = require("../../chats");
 const { NativeEmbeddingReranker } = require("../../EmbeddingRerankers/native");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+  ACL_FIELDS: ACL_COLUMNS,
+} = require("../../authorization/vectorPredicate");
+const {
+  allowUnprovableRows,
+} = require("../../authorization/retrievalEnforcement");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 const path = require("path");
 
 /**
@@ -224,6 +236,199 @@ class LanceDb extends VectorDatabase {
   }
 
   /**
+   * T-5 (#30): the authorized read path. See base.js for the contract this owes.
+   *
+   * The predicate is attached with `where()` BEFORE `limit()`. lancedb prefilters by
+   * default in 0.15 — `postfilter()` is the opt-in — so this genuinely narrows the
+   * candidate set rather than trimming the winners. Getting that order wrong would not
+   * leak, which is what makes it dangerous: it would silently drop the actor's own
+   * lower-ranked documents and look like a retrieval-quality problem (S-17).
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+    rerank = false,
+    query = null,
+  }) {
+    // Before any client work: an invalid filter is a caller bug, and connecting first
+    // would let a miswired route make the database work on its behalf.
+    assertFilter(aclFilter);
+    // LanceDB takes an SQL-ish expression string; the neutral constraint decides the
+    // MEANING and this only renders it.
+    const predicate = constraintFor(aclFilter).toSqlString();
+
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    // No scope, no query. Skipping the round trip entirely is cheaper than issuing an
+    // unsatisfiable predicate and cannot be defeated by a dialect quirk.
+    if (predicate === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const collection = await client.openTable(namespace);
+
+    // A table written before T-5 has no ACL COLUMNS in its Arrow schema — not null
+    // values, no columns. DataFusion resolves identifiers against the schema, so even
+    // `` `orgId` IS NULL `` throws `No field named orgId` there. The escape clause would
+    // fail on precisely the tables it exists to serve (Techlead FINDING-1).
+    //
+    // So the case is detected and branched explicitly rather than by relaxing the
+    // predicate. A looser predicate would have to hold for post-T-5 tables too, which is
+    // where the real enforcement happens; this keeps that path strict and handles the
+    // legacy table as its own decision.
+    const labelled = await this.hasAclColumns(collection);
+    if (!labelled) {
+      if (!allowUnprovableRows()) {
+        // Not silent: an empty result with no explanation reads as "no matching
+        // documents", and the operator would look at their embeddings rather than at the
+        // one variable that governs this.
+        this.logger(
+          `namespace "${namespace}" predates the ACL metadata (no orgId/workspaceId/docId columns). Its vectors cannot be proven readable and are EXCLUDED. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to serve them meanwhile.`
+        );
+        return empty;
+      }
+      // Flag set: serve the table unfiltered at the query, then let isRowAllowed rule on
+      // each row. Every row here is unlabelled by construction, so the second layer
+      // applies the same all-or-nothing rule it applies everywhere else — this is not a
+      // bypass, it is the one input shape the flag exists for.
+      return this.#collect(
+        await collection
+          .vectorSearch(queryVector)
+          .distanceType("cosine")
+          .limit(
+            rerank
+              ? Math.max(
+                  10,
+                  Math.min(50, Math.ceil((await this.namespaceCount(namespace)) * 0.1))
+                )
+              : topN
+          )
+          .toArray(),
+        { aclFilter, similarityThreshold, topN, filterIdentifiers, rerank, query, namespace }
+      );
+    }
+
+    // Reranking widens the candidate set before ranking it, so the ACL predicate must be
+    // attached to THAT query too — otherwise the wider net is the unfiltered one, which
+    // would make rerank mode a way around the seam rather than a retrieval-quality knob.
+    const searchLimit = rerank
+      ? Math.max(10, Math.min(50, Math.ceil((await this.namespaceCount(namespace)) * 0.1)))
+      : topN;
+    const response = await collection
+      .vectorSearch(queryVector)
+      .distanceType("cosine")
+      .where(predicate)
+      .limit(searchLimit)
+      .toArray();
+
+    return this.#collect(response, {
+      aclFilter,
+      similarityThreshold,
+      topN,
+      filterIdentifiers,
+      rerank,
+      query,
+      namespace,
+    });
+  }
+
+  /**
+   * Does this table carry the ACL columns at all?
+   *
+   * A table written before T-5 has none — not null values, no COLUMNS. DataFusion resolves
+   * identifiers against the Arrow schema, so any predicate naming `orgId` throws there,
+   * `IS NULL` included. That is why this is a schema question rather than a data one.
+   *
+   * Errs toward "labelled" only when the schema cannot be read at all, because the strict
+   * path is the safe one: a wrong `true` produces a failed query, a wrong `false` on a
+   * flagged deployment would serve a labelled table unfiltered.
+   *
+   * @param {import('@lancedb/lancedb').Table} table
+   */
+  async hasAclColumns(table) {
+    try {
+      const schema = await table.schema();
+      const names = new Set((schema?.fields ?? []).map((field) => field.name));
+      return ACL_COLUMNS.every((column) => names.has(column));
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Rank, re-check and shape the rows a search returned.
+   *
+   * Shared by both branches of queryAuthorized so the legacy-table path cannot drift into
+   * a second, laxer copy of the row check — the pushdown differs between those branches,
+   * but what happens to a returned row must not.
+   */
+  async #collect(
+    response,
+    {
+      aclFilter,
+      similarityThreshold,
+      topN,
+      filterIdentifiers,
+      rerank,
+      query,
+      namespace,
+    }
+  ) {
+    // Reranking runs over rows that already survived the ACL check, never before it: a
+    // reranker scoring forbidden chunks would both read them and let them displace
+    // permitted ones from the final topN.
+    const allowed = response.filter(({ vector: _, ...rest }) =>
+      isRowAllowed(rest, aclFilter)
+    );
+    const ranked =
+      rerank && query
+        ? await new NativeEmbeddingReranker()
+            .rerank(query, allowed, { topK: topN })
+            .catch((e) => {
+              // Degrading to distance order is SAFE — `allowed` has already passed the
+              // ACL check, so the fallback can only be worse-ranked, never
+              // over-permissive. But it is silent from the user's side: they get
+              // plausible results and no sign that reranking stopped working, so a
+              // persistently broken reranker would look like a gradual quality decline
+              // rather than a fault. Warn per occurrence so it is greppable.
+              // Accepted in the DoD as a degradation, not a failure.
+              console.warn(
+                `\x1b[33m[VectorDB::LanceDb]\x1b[0m rerank failed for namespace "${namespace}", falling back to distance order (results remain ACL-filtered): ${e.message}`
+              );
+              return allowed.slice(0, topN);
+            })
+        : allowed;
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    ranked.forEach((item) => {
+      const { vector: _, ...rest } = item;
+      // Second layer, deliberately redundant with the predicate: a row that cannot be
+      // proven allowed — including one written before the ACL backfill — is dropped here
+      // even though the query already claimed to exclude it (S-26/G4).
+      if (!isRowAllowed(rest, aclFilter)) return;
+      if (this.distanceToSimilarity(item._distance) < similarityThreshold) return;
+      if (filterIdentifiers.includes(sourceIdentifier(rest))) {
+        this.logger(
+          "A source was filtered from context as it's parent document is pinned."
+        );
+        return;
+      }
+
+      const score =
+        item?.rerank_score ?? this.distanceToSimilarity(item._distance);
+      result.contextTexts.push(rest.text);
+      result.sourceDocuments.push({ ...rest, score });
+      result.scores.push(score);
+    });
+
+    return result;
+  }
+
+  /**
    *
    * @param {LanceClient} client
    * @param {string} namespace
@@ -320,6 +525,12 @@ class LanceDb extends VectorDatabase {
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // T-5 (#30): stamp every vector with the fields the ACL filter reads. Without them
+      // a row cannot be proven readable, so once RETRIEVAL_FILTER_ENFORCE is on it is
+      // invisible to every search — written successfully and unreadable forever.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -334,7 +545,14 @@ class LanceDb extends VectorDatabase {
               const id = uuidv4();
               const { id: _id, ...metadata } = chunk.metadata;
               documentVectors.push({ docId, vectorId: id });
-              submissions.push({ id: id, vector: chunk.values, ...metadata });
+              // Cached chunks were embedded earlier and carry no ACL fields; they are
+              // stamped on the way in, so a cache hit is not a hole in the metadata.
+              submissions.push({
+                id: id,
+                vector: chunk.values,
+                ...metadata,
+                ...aclMetadata,
+              });
             });
           }
 
@@ -387,6 +605,10 @@ class LanceDb extends VectorDatabase {
             ...vectorRecord.metadata,
             id: vectorRecord.id,
             vector: vectorRecord.values,
+            // T-5 (#30): last, so document metadata can never shadow the ACL fields the
+            // filter reads — a document whose own metadata happened to carry `orgId`
+            // would otherwise decide its own tenancy.
+            ...aclMetadata,
           });
           documentVectors.push({ docId, vectorId: vectorRecord.id });
         }

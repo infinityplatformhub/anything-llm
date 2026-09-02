@@ -1,9 +1,17 @@
 const pgsql = require("pg");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
 const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { TextSplitter } = require("../../TextSplitter");
 const { v4: uuidv4 } = require("uuid");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 
 /*
  Embedding Table Schema (table name defined by user)
@@ -418,6 +426,68 @@ class PGVector extends VectorDatabase {
     return result;
   }
 
+  /**
+   * T-5 (#30): the authorized read path. See base.js for the contract this owes.
+   *
+   * The predicate goes into the WHERE clause of the same statement as the ORDER BY and
+   * LIMIT, so PostgreSQL filters before it ranks — the actor's own documents compete for
+   * the topN slots instead of losing them to rows they may not read (S-17).
+   *
+   * Bound parameters, never interpolation: this predicate reaches a live connection, and
+   * document ids originate as user-supplied file data.
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    // $1 is the embedding and $2 the namespace, so ACL placeholders start at $3.
+    const constraint = constraintFor(aclFilter).toJsonbSql("metadata", 3);
+    // No scope, no query — cheaper than an unsatisfiable predicate and impossible to get
+    // subtly wrong.
+    if (constraint === null) return empty;
+
+    let connection = null;
+    try {
+      connection = await this.connect();
+      if (!(await this.namespaceExists(connection, namespace))) return empty;
+
+      const embedding = `[${queryVector.map(Number).join(",")}]`;
+      const response = await connection.query(
+        `SELECT embedding ${this.operator.cosine} $1 AS _distance, metadata FROM "${PGVector.tableName()}" WHERE namespace = $2 AND ${constraint.sql} ORDER BY _distance ASC LIMIT $${3 + constraint.params.length}`,
+        [embedding, namespace, ...constraint.params, topN]
+      );
+
+      const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+      response.rows.forEach((item) => {
+        // Second layer, deliberately redundant with the predicate: a row that cannot be
+        // proven allowed — including one written before the ACL backfill — is dropped
+        // here even though the query already claimed to exclude it (S-26/G4).
+        if (!isRowAllowed(item.metadata, aclFilter)) return;
+        if (this.distanceToSimilarity(item._distance) < similarityThreshold) return;
+        if (filterIdentifiers.includes(sourceIdentifier(item.metadata))) {
+          this.logger(
+            "A source was filtered from context as it's parent document is pinned."
+          );
+          return;
+        }
+
+        const score = this.distanceToSimilarity(item._distance);
+        result.contextTexts.push(item.metadata.text);
+        result.sourceDocuments.push({ ...item.metadata, score });
+        result.scores.push(score);
+      });
+      return result;
+    } finally {
+      if (connection) await connection.end();
+    }
+  }
+
   normalizeVector(vector) {
     const magnitude = Math.sqrt(
       vector.reduce((sum, val) => sum + val * val, 0)
@@ -558,6 +628,10 @@ class PGVector extends VectorDatabase {
 
     try {
       const { pageContent, docId, ...metadata } = documentData;
+      // T-5 (#30): stamp every vector with the fields the ACL filter reads; without them
+      // a row cannot be proven readable and is invisible once enforcement is on.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
       if (!pageContent || pageContent.length == 0) return false;
       connection = await this.connect();
 
@@ -575,7 +649,12 @@ class PGVector extends VectorDatabase {
             const id = uuidv4();
             const { id: _id, ...metadata } = chunk.metadata;
             documentVectors.push({ docId, vectorId: id });
-            submissions.push({ id: id, vector: chunk.values, metadata });
+            submissions.push({
+              id: id,
+              vector: chunk.values,
+              // Cached chunks predate this stamp, so a cache hit is not a metadata hole.
+              metadata: { ...metadata, ...aclMetadata },
+            });
           }
 
           await this.updateOrCreateCollection({
@@ -631,7 +710,8 @@ class PGVector extends VectorDatabase {
           submissions.push({
             id: vectorRecord.id,
             vector: vectorRecord.values,
-            metadata: vectorRecord.metadata,
+            // T-5 (#30): ACL fields spread last so document metadata cannot shadow them.
+            metadata: { ...vectorRecord.metadata, ...aclMetadata },
           });
           documentVectors.push({ docId, vectorId: vectorRecord.id });
         }
