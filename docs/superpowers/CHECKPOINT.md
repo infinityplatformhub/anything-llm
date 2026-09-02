@@ -561,3 +561,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #124 4646ed17b gate GREEN: delta = WorkspaceModelPicker/index.jsx only; check-local pass; frontend 96/96 exit 0; capabilities PASS. Result file written (run-id gate-124-4646ed17b). Awaiting TL-1 pre-read + QA-3 light probe → close/merge.
 - #126 slice 1 2286a997e (Dev2, Home only, lane clean): gate /tmp/wt-126 running; TL-1 pre-read + QA-3 queued after #124. Slice 2 (SettingsSidebar PrivacyLinkGate) waits for #121.
 - #126 slice 1 2286a997e gate GREEN: check-local pass, frontend 93/93 exit 0, capabilities PASS, Home 6/6; ledger 4 rulings; result file written (run-id gate-126-s1-2286a997e). Awaiting TL-1 + QA-3 (after #124).
+- #124 ledger-only SHA ab11d35a8 accepted (delta = .infi/ledger-124.md only, 3 rulings). Close target = ab11d35a8, run-id gate-124-ab11d35a8. Residual LLMSelector aria-label logged.

@@ -240,3 +240,6 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 
 ## #125 (TL-2 + QA-2)
 Guard-below-cache equivalence depends on cache key being exactly the material; adding KEY_VERSION or multi-entry makes guard-before-cache load-bearing with no test. Timing oracle closes only after the first derivation; relies on #115 hydrating before `listen()`, no test holds that coupling.
+
+## #124 (Dev4)
+`LLMSelector/action.jsx:100` hardcoded English `aria-label` left as-is (component is dead code per #40 t4; fix when it is rendered again).
