@@ -58,12 +58,12 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">2875a25d0</span> · 2026-09-03 06:05</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">fcc173c09</span> · 2026-09-03 07:20</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
 <section class="overall">
-  <div class="big">103<small>/ 141 issues ปิด</small></div>
+  <div class="big">104<small>/ 141 issues ปิด</small></div>
   <div>
     <div class="bar" aria-label="99 closed, 3 in review, 3 in dev, 5 queued of 133">
       <span style="width:74.4%;background:var(--done)"></span>
@@ -72,7 +72,7 @@ td.mono{white-space:nowrap}
       <span style="width:3.8%;background:var(--queue)"></span>
     </div>
     <div class="legend">
-      <span><i style="background:var(--done)"></i>ปิดแล้ว 103</span>
+      <span><i style="background:var(--done)"></i>ปิดแล้ว 104</span>
       <span><i style="background:var(--gate)"></i>รอ review 4</span>
       <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
       <span><i style="background:var(--queue)"></i>คิว 5</span>
@@ -110,7 +110,7 @@ td.mono{white-space:nowrap}
       <div class="chips"><span class="chip ok">frontend 124</span><span class="chip ok">authz 757</span><span class="chip ok">TL-1 PASS</span><span class="chip ok">QA-3 PASS</span><span class="chip no">รออนุมัติ mockup เท่านั้น</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#136 S12</span><span class="who">Dev5 · slice 1 MERGED · slice 2 6a379f735 ใน review</span></div>
+      <div class="top"><span class="id">#136 S12</span><span class="who">Dev5 · slice 2 02778b133 ✓TL-1 ✓QA-2 รอ gate+TL-2 · #135 RED</span></div>
       <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน fix SHA แล้ว: reader 3 สถานะ (null/dangling/present), sweep level-triggered, cast suspended แบบ explicit set, groupId 404 ก่อน bump, delete path stamp revokedAt · 24/24 + 14 mutants · gate + TL-2 + QA-2 กำลังตรวจ</p>
     </div>
     <div class="card">
@@ -137,6 +137,7 @@ td.mono{white-space:nowrap}
   <div class="tbl"><table>
     <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุ</th></tr></thead>
     <tbody>
+      <tr><td class="mono">#139</td><td>yarn test ปฏิเสธ node ≠ 22 ทุกเส้นทาง (pretest + vitest setupFiles) · .nvmrc ตรง engines ทั้ง 4 แพ็กเกจ</td><td>QA-2 จับว่า npx vitest หลุด pretest · drift check ที่ไม่เคยถูกเขียนลงไฟล์ผ่านด้วย EXIT=0</td></tr>
       <tr><td class="mono">#136 slice 1</td><td>S12 offboarding: API-key suspension บังคับที่ reader (null / dangling / present), sweep level-triggered, cast "0"/"false" ถูก, delete path stamp revokedAt</td><td>QA-2 + TL-2 พบ 5 finding บน SHA แรก ทุกตัวปิดใน SHA เดียว · 14 mutants + 5 fix-mutants</td></tr>
       <tr><td class="mono">#138 driver</td><td>S4b slice 3 ครึ่งแรก: ทุก Lark request มี timeout 10s, Retry-After clamp 30s, token call bound, caller signal ไม่ถูกทับ</td><td>3 หลุมที่คอมเมนต์อ้างกลไกที่ไม่ได้วัด (heartbeat) แก้ก่อน merge · lease สูตรจากค่าคงที่ ไม่ใช่ตัวเลข</td></tr>
       <tr><td class="mono">#134</td><td>S4b slice 2: apply directory plan ผ่าน repository ต่อ entity + checkpoint พร้อม CHECK</td><td>TL-1 กลับ ruling lock: sync เป็น core job ไม่สร้างกลไกที่สอง · #135 ต้องผ่าน offboardUser ไม่เขียน cleanup ซ้ำ</td></tr>
