@@ -147,7 +147,126 @@ Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack 
 verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
 re-run is a no-op rather than a full-table rewrite. No `DO` block.
 
-### Mutation proof (driver round)
+#
+## ACS route (Q-1) — and a mount-order defect the HTTP test caught
+
+Ruling: `/sso/saml/login` and `/sso/saml/acs` live in `endpoints/identity/saml.js`, with
+`inviteRateLimit` on BOTH from the first commit (Q-1) — the ACS route is unauthenticated
+and every call costs an XML parse plus signature verification before it can be refused,
+which is a free CPU sink; if this is wrong an operator raises a limit.
+
+Ruling: the ACS route closes ruling 3's second half — the driver verifies AND claims
+before `linkPrincipal` is called, so a forged or replayed assertion never reaches the
+code that creates or modifies a user.
+
+Ruling: `samlIdentityEndpoints` is mounted BEFORE `identityEndpoints` in `index.js`.
+S1 registers the wildcard `/sso/:provider/login` and Express matches in registration
+order, so mounted the other way the wildcard swallows `/sso/saml/login` and hands SAML's
+provider id to a config builder that only produces OIDC settings — a 500 on every SAML
+login. Found by the HTTP test on its first run, not by reading; a unit test of the
+handler would have passed while the route was unreachable. Restoring the original order
+fails 8 of 9 route tests.
+
+#
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (ACS round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| mount `identityEndpoints` first again | the route tests | 8 of 9 failed |
+| drop `inviteRateLimit` from the ACS route | the Q-1 rate-limit test | killed exactly that one |
+
+The rate-limit test sets `INVITE_RATE_LIMIT_MAX=5` for the suite. The limit VALUE is
+configuration; what the test pins is that a limiter is mounted at all, which is the part
+a refactor can silently drop.
+
+
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (driver round)
 
 | mutant | expected kill | result |
 |---|---|---|
@@ -159,6 +278,125 @@ written, two of them planted a BARE `AudienceRestriction` / `SubjectConfirmation
 which the driver's read path cannot reach even document-wide — so they passed against
 the unsafe mutant and proved nothing. They now plant a full `Conditions` / `Subject`,
 matching the path shape actually read, and all four die under the mutant.
+
+
+## ACS route (Q-1) — and a mount-order defect the HTTP test caught
+
+Ruling: `/sso/saml/login` and `/sso/saml/acs` live in `endpoints/identity/saml.js`, with
+`inviteRateLimit` on BOTH from the first commit (Q-1) — the ACS route is unauthenticated
+and every call costs an XML parse plus signature verification before it can be refused,
+which is a free CPU sink; if this is wrong an operator raises a limit.
+
+Ruling: the ACS route closes ruling 3's second half — the driver verifies AND claims
+before `linkPrincipal` is called, so a forged or replayed assertion never reaches the
+code that creates or modifies a user.
+
+Ruling: `samlIdentityEndpoints` is mounted BEFORE `identityEndpoints` in `index.js`.
+S1 registers the wildcard `/sso/:provider/login` and Express matches in registration
+order, so mounted the other way the wildcard swallows `/sso/saml/login` and hands SAML's
+provider id to a config builder that only produces OIDC settings — a 500 on every SAML
+login. Found by the HTTP test on its first run, not by reading; a unit test of the
+handler would have passed while the route was unreachable. Restoring the original order
+fails 8 of 9 route tests.
+
+#
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (ACS round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| mount `identityEndpoints` first again | the route tests | 8 of 9 failed |
+| drop `inviteRateLimit` from the ACS route | the Q-1 rate-limit test | killed exactly that one |
+
+The rate-limit test sets `INVITE_RATE_LIMIT_MAX=5` for the suite. The limit VALUE is
+configuration; what the test pins is that a limiter is mounted at all, which is the part
+a refactor can silently drop.
+
+
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
 
 ## Mutation proof (FINDING-1 round)
 
@@ -207,7 +445,126 @@ Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack 
 verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
 re-run is a no-op rather than a full-table rewrite. No `DO` block.
 
-### Mutation proof (driver round)
+#
+## ACS route (Q-1) — and a mount-order defect the HTTP test caught
+
+Ruling: `/sso/saml/login` and `/sso/saml/acs` live in `endpoints/identity/saml.js`, with
+`inviteRateLimit` on BOTH from the first commit (Q-1) — the ACS route is unauthenticated
+and every call costs an XML parse plus signature verification before it can be refused,
+which is a free CPU sink; if this is wrong an operator raises a limit.
+
+Ruling: the ACS route closes ruling 3's second half — the driver verifies AND claims
+before `linkPrincipal` is called, so a forged or replayed assertion never reaches the
+code that creates or modifies a user.
+
+Ruling: `samlIdentityEndpoints` is mounted BEFORE `identityEndpoints` in `index.js`.
+S1 registers the wildcard `/sso/:provider/login` and Express matches in registration
+order, so mounted the other way the wildcard swallows `/sso/saml/login` and hands SAML's
+provider id to a config builder that only produces OIDC settings — a 500 on every SAML
+login. Found by the HTTP test on its first run, not by reading; a unit test of the
+handler would have passed while the route was unreachable. Restoring the original order
+fails 8 of 9 route tests.
+
+#
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (ACS round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| mount `identityEndpoints` first again | the route tests | 8 of 9 failed |
+| drop `inviteRateLimit` from the ACS route | the Q-1 rate-limit test | killed exactly that one |
+
+The rate-limit test sets `INVITE_RATE_LIMIT_MAX=5` for the suite. The limit VALUE is
+configuration; what the test pins is that a limiter is mounted at all, which is the part
+a refactor can silently drop.
+
+
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (driver round)
 
 | mutant | expected kill | result |
 |---|---|---|
@@ -220,6 +577,125 @@ which the driver's read path cannot reach even document-wide — so they passed 
 the unsafe mutant and proved nothing. They now plant a full `Conditions` / `Subject`,
 matching the path shape actually read, and all four die under the mutant.
 
+
+## ACS route (Q-1) — and a mount-order defect the HTTP test caught
+
+Ruling: `/sso/saml/login` and `/sso/saml/acs` live in `endpoints/identity/saml.js`, with
+`inviteRateLimit` on BOTH from the first commit (Q-1) — the ACS route is unauthenticated
+and every call costs an XML parse plus signature verification before it can be refused,
+which is a free CPU sink; if this is wrong an operator raises a limit.
+
+Ruling: the ACS route closes ruling 3's second half — the driver verifies AND claims
+before `linkPrincipal` is called, so a forged or replayed assertion never reaches the
+code that creates or modifies a user.
+
+Ruling: `samlIdentityEndpoints` is mounted BEFORE `identityEndpoints` in `index.js`.
+S1 registers the wildcard `/sso/:provider/login` and Express matches in registration
+order, so mounted the other way the wildcard swallows `/sso/saml/login` and hands SAML's
+provider id to a config builder that only produces OIDC settings — a 500 on every SAML
+login. Found by the HTTP test on its first run, not by reading; a unit test of the
+handler would have passed while the route was unreachable. Restoring the original order
+fails 8 of 9 route tests.
+
+#
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+## Mutation proof (ACS round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| mount `identityEndpoints` first again | the route tests | 8 of 9 failed |
+| drop `inviteRateLimit` from the ACS route | the Q-1 rate-limit test | killed exactly that one |
+
+The rate-limit test sets `INVITE_RATE_LIMIT_MAX=5` for the suite. The limit VALUE is
+configuration; what the test pins is that a limiter is mounted at all, which is the part
+a refactor can silently drop.
+
+
+## Techlead round 3 — Recipient, Issuer, Status
+
+Ruling: `SubjectConfirmationData/@Recipient` is checked against our ACS URL before the
+claim, read through `readFromAssertion` from INSIDE the signature. `Response/@Destination`
+sits outside the signature — usable for a fast refusal, never for a decision. Recipient
+is a THIRD axis: an assertion can name us as audience and be perfectly in date yet have
+been aimed at another endpoint (intercepted in transit to another SP, or an IdP induced
+to deliver elsewhere); if this is wrong a misconfigured IdP is refused until its
+Recipient matches, which is the correct answer anyway.
+
+Ruling: `Assertion/Issuer` is checked against `idpEntityId` before the claim — "some
+trusted key signed this" is not enough, because a trust list holds several certificates
+during a rotation and a deployment may configure more than one provider, so without it
+any IdP whose certificate we hold could mint assertions in another's name.
+
+Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+and never to the response — it usually means the IdP refused (disabled account, declined
+MFA, unknown user), which an operator needs and an attacker would read as an account
+oracle.
+
+Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
+bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
+of three distinct holes.
+
+Ruling: the ACS URL comes from `SSO_ACS_URL` (or `SSO_CALLBACK_BASE_URL`), NOT from the
+request's `Host` header. Since that value is what the signed Recipient is compared
+against, deriving it from a caller-controlled header would make the check agree with the
+attacker rather than with the IdP's configuration. The Host fallback remains only for a
+deployment that has configured neither, where the check degrades to "matches whatever
+host this request claimed" — no worse than absent, and no better.
+
+This was found by the full-tree run, not by reading: adding the Recipient check turned 4
+route tests red, because the HTTP suite reached the ACS through supertest's own host.
+The tests were right and the route was wrong.
+
+### Mutation proof (round 3)
+
+| mutant | expected kill | result |
+|---|---|---|
+| remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
+| remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
 ## Mutation proof
 
 | mutant | expected kill | result |
@@ -230,10 +706,13 @@ matching the path shape actually read, and all four die under the mutant.
 
 ## Evidence
 
-`__tests__/security/identity` + `__tests__/utils/retention` — Tests: 155 passed, 155 total (15 suites), against real
+`__tests__/security` (whole tree) — Tests: 361 passed, 361 total, 37 suites, against real
 Postgres via `prisma migrate deploy` (§7.1a, never `db push`).
 
-Note for anyone re-running these: jest must run under node@22. Under the default node 26
+Two environment traps, both of which produce failures that look like broken code:
+`API_KEY_PEPPER` must be at least 32 BYTES — a shorter one fails 8 authorization suites
+at import with a message about the pepper, not about the test. And jest must run under
+node@22. Under the default node 26
 `jsonwebtoken` throws at import and three suites fail to LOAD — which jest reports as
 suite-level failures while the test count still reads green, so "58 passed" appeared
 next to three broken suites.

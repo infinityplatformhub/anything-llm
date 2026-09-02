@@ -52,6 +52,7 @@ const {
 const { memoryEndpoints } = require("./endpoints/memory");
 const { auditEndpoints } = require("./endpoints/audit");
 const { identityEndpoints } = require("./endpoints/identity");
+const { samlIdentityEndpoints } = require("./endpoints/identity/saml");
 const { httpLogger } = require("./middleware/httpLogger");
 const {
   apiIpRateLimit,
@@ -121,6 +122,12 @@ memoryEndpoints(apiRouter);
 auditEndpoints(apiRouter);
 // S1 (#36): SSO login/callback. Unauthenticated by design — this is the ingress
 // that produces a session, so it cannot sit behind one.
+// S2 (#43) MUST be mounted BEFORE identityEndpoints. S1 registers the wildcard
+// `/sso/:provider/login`, and Express matches in registration order — so the
+// wildcard would otherwise swallow `/sso/saml/login` and hand SAML's provider id
+// to a config builder that only knows how to produce OIDC settings. The failure
+// is a 500 on every SAML login, which is why samlRoutesHttp.test.js pins it.
+samlIdentityEndpoints(apiRouter);
 identityEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);

@@ -245,6 +245,26 @@ describe("conditions", () => {
     );
   });
 
+  test("an assertion aimed at ANOTHER service's ACS is refused", async () => {
+    // Everything else about this verifies. Only the delivery address is wrong —
+    // so without a Recipient check, an assertion intercepted on its way to a
+    // different SP is a working login here. Recipient is inside the signature,
+    // which is what makes it trustworthy; the Response's own @Destination is not.
+    await expect(complete(signed("wrongRecipient").xml)).rejects.toThrow(
+      IdentityAuthenticationError
+    );
+  });
+
+  test("an assertion from a DIFFERENT issuer is refused, even signed by a trusted cert", async () => {
+    // The two-provider case. A trust list holds several certificates during a
+    // rotation, and a deployment may configure more than one provider — so "some
+    // trusted key signed this" would let any IdP whose certificate we hold mint
+    // assertions in another's name.
+    await expect(complete(signed("wrongIssuer").xml)).rejects.toThrow(
+      IdentityAuthenticationError
+    );
+  });
+
   test("an assertion answering a request we never sent is refused", async () => {
     await expect(complete(signed("wrongInResponseTo").xml)).rejects.toThrow(
       IdentityAuthenticationError
@@ -296,6 +316,20 @@ describe("PMO ruling: the assertion ID is claimed LAST", () => {
     // The victim's genuine login, arriving afterwards. It must still work.
     const principal = await complete(xml);
     expect(principal.email).toBe("person@example.com");
+  });
+
+  test("a WRONG-RECIPIENT assertion records nothing", async () => {
+    // Same reasoning as the expired case: genuinely signed, so it reaches the
+    // conditions checks — and must be refused there, before the claim.
+    const before = await countRows();
+    await complete(signed("wrongRecipient").xml).catch(() => null);
+    expect(await countRows()).toBe(before);
+  });
+
+  test("a WRONG-ISSUER assertion records nothing", async () => {
+    const before = await countRows();
+    await complete(signed("wrongIssuer").xml).catch(() => null);
+    expect(await countRows()).toBe(before);
   });
 
   test("a SUCCESSFUL login does record the ID", async () => {

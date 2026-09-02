@@ -153,9 +153,11 @@ class SamlIdentityProvider {
     const assertion = this._verifiedAssertion(xml, doc);
 
     // (2)–(3) Everything from here reads `assertion`, never `doc`.
+    this._checkIssuer(assertion);
     this._checkConditions(assertion);
     this._checkAudience(assertion);
     this._checkInResponseTo(assertion, expectedInResponseTo);
+    this._checkRecipient(assertion);
 
     // (4) Last. See rule 2 at the top of this file.
     await AssertionReplay.claim({
@@ -187,7 +189,18 @@ class SamlIdentityProvider {
     if (signedIds.length !== 1) throw new IdentityAuthenticationError(REFUSED);
 
     const assertions = select("//saml:Assertion", doc);
-    if (assertions.length !== 1) throw new IdentityAuthenticationError(REFUSED);
+    if (assertions.length !== 1) {
+      // NIT-1: a Response with no assertion usually means the IdP REFUSED —
+      // account disabled, MFA declined, unknown user — and it says so in Status.
+      // That goes to the log, where an operator can act on it, and never to the
+      // response, where it would tell an attacker which accounts exist.
+      const status = String(
+        select("string(//samlp:StatusCode/@Value)", doc) ?? ""
+      ).trim();
+      if (status)
+        console.error(`[identity:saml] provider returned status: ${status}`);
+      throw new IdentityAuthenticationError(REFUSED);
+    }
 
     // The heart of it: the element we are about to read must be the element the
     // signature covers.
@@ -228,7 +241,15 @@ class SamlIdentityProvider {
     throw new IdentityAuthenticationError(REFUSED);
   }
 
-  /** NotBefore/NotOnOrAfter, read from the verified assertion. */
+  /**
+   * NotBefore/NotOnOrAfter, read from the verified assertion.
+   *
+   * This and `_checkAudience` carry weight for each other; neither is redundant.
+   * Conditions bound WHEN an assertion is usable, audience bounds WHERE. Drop
+   * the time check and a captured assertion for this service works forever; drop
+   * the audience check and a current assertion for a different service works
+   * here. A reviewer removing "the duplicate" opens one of those two holes.
+   */
   _checkConditions(assertion) {
     const notBefore = readStringFromAssertion(
       assertion,
@@ -259,6 +280,11 @@ class SamlIdentityProvider {
    *
    * Without this, an assertion minted for another service behind the same IdP is
    * a valid login here: the signature is genuine, it was simply never for us.
+   *
+   * Paired with `_checkConditions` (see there): audience bounds WHERE, conditions
+   * bound WHEN, and neither substitutes for the other. `_checkRecipient` is a
+   * third axis again — where the IdP was told to DELIVER it, which naming us as
+   * the audience does not pin down.
    */
   _checkAudience(assertion) {
     const audiences = readFromAssertion(
@@ -277,6 +303,39 @@ class SamlIdentityProvider {
     );
     if (String(inResponseTo) !== String(expected))
       throw new IdentityAuthenticationError(REFUSED);
+  }
+
+  /**
+   * The assertion must come from the provider we think we are talking to.
+   *
+   * "Some trusted key signed this" is not enough. A trust list holds several
+   * certificates during a rotation, and a deployment may configure more than one
+   * provider — so without this, any IdP whose certificate we hold could mint
+   * assertions in another's name.
+   */
+  _checkIssuer(assertion) {
+    const issuer = readStringFromAssertion(assertion, "string(./saml:Issuer/text())");
+    if (issuer !== this.idpEntityId) throw new IdentityAuthenticationError(REFUSED);
+  }
+
+  /**
+   * The IdP must have been told to deliver this HERE.
+   *
+   * A third axis beyond audience and conditions: an assertion can name us as its
+   * audience, be perfectly in date, and still have been aimed at a different
+   * endpoint — intercepted in transit to another SP, or one the IdP was induced
+   * to send elsewhere.
+   *
+   * Read from INSIDE the signed assertion, which is what makes it worth
+   * trusting. The Response's own `@Destination` sits outside the signature: fine
+   * for a fast refusal, never something a decision may rest on.
+   */
+  _checkRecipient(assertion) {
+    const recipient = readStringFromAssertion(
+      assertion,
+      "string(./saml:Subject/saml:SubjectConfirmation/saml:SubjectConfirmationData/@Recipient)"
+    );
+    if (recipient !== this.acsUrl) throw new IdentityAuthenticationError(REFUSED);
   }
 
   /** Read the principal — again, only from the verified assertion. */

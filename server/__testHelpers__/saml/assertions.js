@@ -45,13 +45,14 @@ function assertionXml({
   notOnOrAfter = iso(5 * 60_000),
   audience = SP_ENTITY_ID,
   issuer = IDP_ENTITY_ID,
+  recipient = ACS_URL,
 } = {}) {
   return `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${assertionId}" IssueInstant="${iso()}" Version="2.0">
   <saml:Issuer>${issuer}</saml:Issuer>
   <saml:Subject>
     <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${nameId}</saml:NameID>
     <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
-      <saml:SubjectConfirmationData InResponseTo="${inResponseTo}" NotOnOrAfter="${notOnOrAfter}" Recipient="${ACS_URL}"/>
+      <saml:SubjectConfirmationData InResponseTo="${inResponseTo}" NotOnOrAfter="${notOnOrAfter}" Recipient="${recipient}"/>
     </saml:SubjectConfirmation>
   </saml:Subject>
   <saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}">
@@ -349,6 +350,42 @@ const fixtures = {
       }),
       attackerPublicKeyPem: attacker.publicKeyPem,
     };
+  },
+
+  /**
+   * DoD 9 — Techlead: a perfectly valid assertion aimed at ANOTHER service's ACS.
+   *
+   * Everything verifies — signature, issuer, audience, conditions, InResponseTo.
+   * The only thing wrong is where the IdP was told to deliver it. Without a
+   * Recipient check, an assertion intercepted in transit to another SP (or one
+   * the IdP was tricked into aiming elsewhere) is a working login here.
+   *
+   * Recipient lives INSIDE the signed assertion, so it cannot be edited. The
+   * Response's own @Destination sits outside the signature and is worth a fast
+   * refusal but must never be what a decision rests on.
+   */
+  wrongRecipient(options = {}) {
+    return fixtures.valid({
+      ...options,
+      recipient: `${config.hostileOrigin}/api/sso/saml/acs`,
+    });
+  },
+
+  /**
+   * DoD 10 — Techlead: a DIFFERENT IdP, signing with a certificate that is in
+   * our trust list.
+   *
+   * This is the two-provider case. Trust lists hold several certificates during a
+   * rotation, and a deployment may configure more than one provider; if the
+   * driver only asks "did any trusted key sign this", then any IdP whose
+   * certificate we hold can mint assertions for any other. The Issuer must match
+   * the provider we think we are talking to.
+   */
+  wrongIssuer(options = {}) {
+    return fixtures.valid({
+      ...options,
+      issuer: `${config.hostileOrigin}/saml`,
+    });
   },
 
   /** DoD 4 — NotOnOrAfter already passed. */
