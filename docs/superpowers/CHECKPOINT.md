@@ -960,3 +960,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #142 fix f96a95024 (Dev5): afterAll 30_000 on assignableRolesHttp + offboardUser + new hookTimeouts.test.js guard + ledger. PMO gate run under node22 (see result); TL-2 plain pre-read + QA-2 quick check dispatched. Monitor re-armed. Dev4 → audit issue body draft; TL-1 → #138 verdict checklist pre-write.
 - #142 f96a95024: Dev5 report 44/44 ×3 suites; untimed mutant load-dependent → structural guard hookTimeouts.test.js (brace-matched, names offenders, control; skips itself — ledgered); 2 offenders fixed tree-wide. PMO gate red = symlinked node_modules (my fault); gate-142 agent relaunched with real install.
 - #135 TL-2 site-2 ruling: (a) offboard-first in ONE tx; 403 names role.revoke; atomic fixture; intended narrowing stated. Relayed to Dev2.
+
+- #142 MERGED 4c08b150b (plain): hookTimeouts structural guard; TL-2 PASS b94e31f27; QA-2 shapes 88/2/0/9; follow-ups: hook-scanner-shapes, 403-seam. Prose-describe false positive → .infi/checkignore.
