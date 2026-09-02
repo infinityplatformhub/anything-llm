@@ -284,3 +284,10 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 8fdb067dc: gate PASS (check-local; contract 82/82 exact; authz+sweeps 664 pass 0 fail; result bound). Waiting QA-3 (SPA re-probe) + TL-2 (inventory diff 316/8 new) → close task 1 / merge → NIT-2 follow-up → task 2.
 - #84 c22939503 (final: bounded gate-equality scan; delete-line mutation now red 2, move-both stays green on relation test): gating (gate-84d); QA-3 point-2 + TL-1 one-line delta requested → close/merge.
 - #84 c22939503: gate PASS (check-local; contract 10/10; related 107/107; result bound). Close on QA-3 + TL-1 delta.
+
+## 2026-09-02 16:52 — #84 merged (06c94cd80)
+- #84 c22939503 → merge --no-ff, pushed origin approof/main, issue closed (infi-run:gate-84-c22939503 read back).
+- Verdicts: gate 10/10 + 107/107; QA-2 PASS f309f1247 (found unbounded scan) → fix c22939503; QA-3 PASS M1–M5; TL-1 NIT-1 closed (5-variant table).
+- Residual (QA-3): `nextRoute === -1` fallback still scans to EOF; `keeps a stored OpenAI key…` test credits filter but validator rejects — comment-only, not reopened.
+- 72/92 closed. Post-merge suite running (/tmp/postmerge-84.log). wt-84 + g84 reaped.
+- Dev1 → #91. Dev5 #94: found \b digit-pattern leak in utils/events/redaction.js (thai_national_id/phone_th/credit_card) → ruled separate hotfix issue.
