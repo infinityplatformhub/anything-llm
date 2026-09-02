@@ -117,8 +117,17 @@ describe("issue 32 BLOCKER-1: stream-chat must not mint a token for someone else
     expect(response.headers[SESSION_TOKEN_HEADER]).toBeUndefined();
   });
 
-  test("a genuinely NEW session still gets its token — the widget must keep working", async () => {
-    // Positive control. Without this the fix could pass by minting nothing, ever.
+  test("a session with no rows yet gets NOTHING — issue 49 removed the free mint", async () => {
+    // This test used to assert the opposite, and the inversion is the whole of #49. Under
+    // #32 an absent embed_chats row meant "new", and new meant a free token. But the row is
+    // written only after the LLM replies, so during that window an attacker naming the
+    // victim's id was equally "new" (hole 1) — and an embed delete cascades the rows, so
+    // emptying them made every id in it mintable again (hole 3).
+    //
+    // Sessions are opened at POST /embed/:embedId/session now, where the server picks the id
+    // and being new is true by construction rather than inferred from storage. The positive
+    // control this test used to provide lives there (embedServerMintedSession.test.js), so
+    // the fix still cannot pass by minting nothing, ever.
     prisma.embed_chats.findFirst.mockResolvedValue(null); // no rows yet
 
     const response = await request(appWithEmbed())
@@ -126,8 +135,7 @@ describe("issue 32 BLOCKER-1: stream-chat must not mint a token for someone else
       .set("Origin", ORIGIN)
       .send({ sessionId: FRESH_SESSION, message: "hello" });
 
-    expect(response.headers[SESSION_TOKEN_HEADER]).toEqual(expect.any(String));
-    expect(response.headers[SESSION_TOKEN_HEADER].length).toBeGreaterThan(0);
+    expect(response.headers[SESSION_TOKEN_HEADER]).toBeUndefined();
   });
 
   test("an existing session WITH a valid token gets a fresh one — rotation still works", async () => {
@@ -253,7 +261,16 @@ describe("issue 32 QA-1 (4): the signature is keyed, not merely a hash", () => {
 describe("issue 32 QA-1 (5): Access-Control-Expose-Headers appends", () => {
   test("an existing expose list is preserved, not overwritten", async () => {
     // Overwriting would silently break any other header a deployment already exposes.
-    prisma.embed_chats.findFirst.mockResolvedValue(null);
+    //
+    // Driven by a ROTATION now rather than by a new session: issue 49 removed the free mint,
+    // so the only way stream-chat still sets this header is a caller presenting a valid
+    // token for the session it names. The header logic under test is unchanged; what reaches
+    // it changed.
+    prisma.embed_chats.findFirst.mockResolvedValue({ id: 55 });
+    const held = mintSessionToken({
+      embedUuid: EMBED_UUID,
+      sessionId: FRESH_SESSION,
+    });
     const app = express();
     app.use(express.json());
     app.use((_request, response, next) => {
@@ -265,6 +282,7 @@ describe("issue 32 QA-1 (5): Access-Control-Expose-Headers appends", () => {
     const response = await request(app)
       .post(`/embed/${EMBED_UUID}/stream-chat`)
       .set("Origin", ORIGIN)
+      .set(SESSION_TOKEN_HEADER, held)
       .send({ sessionId: FRESH_SESSION, message: "hello" });
 
     const exposed = response.headers["access-control-expose-headers"];
