@@ -192,7 +192,7 @@ function getVectorDbClass(getExactly = null) {
  * @param {{provider: string | null, model: string | null} | null} params - Initialize params for LLMs provider
  * @returns {BaseLLMProvider}
  */
-function getLLMProvider({ provider = null, model = null } = {}) {
+function resolveLLMProviderInstance({ provider = null, model = null } = {}) {
   const LLMSelection = provider ?? process.env.LLM_PROVIDER ?? "openai";
   const embedder = getEmbeddingEngineSelection();
 
@@ -325,10 +325,59 @@ function getLLMProvider({ provider = null, model = null } = {}) {
 }
 
 /**
+ * O5a-wire (#102): counters are attached HERE, at the one factory every chat
+ * path goes through, rather than at each call site.
+ *
+ * There are ELEVEN completion call sites across five files
+ * (apiChatHandler, embed, openaiCompatible, stream, telegramBot) and no base
+ * class among the 39 providers — the recon assumed "the chat path" was one
+ * place and it is not. Wiring eleven sites means a twelfth, added later, is
+ * counted nowhere and the metric silently under-reports, which is worse than
+ * not having it: a dashboard reading low looks like low traffic.
+ *
+ * Wrapping the completion METHODS, not the factory call, keeps the count
+ * honest: a counter incremented when a connector is CONSTRUCTED would count
+ * intentions — connectors are built on paths that then fail validation, and on
+ * paths that never complete anything at all.
+ *
+ * The wrapper is a thin proxy over the two methods every provider implements,
+ * both of which resolve when the provider has actually answered.
+ */
+function instrumentLLMProvider(connector, providerSelection) {
+  const { safeObserve, providerLabel } = require("../metrics");
+  const label = providerLabel(providerSelection);
+
+  for (const method of ["getChatCompletion", "streamGetChatCompletion"]) {
+    if (typeof connector[method] !== "function") continue;
+    const original = connector[method].bind(connector);
+    connector[method] = async (...args) => {
+      const result = await original(...args);
+      // AFTER it resolves: a rejected completion is not a served one, and the
+      // throw propagates untouched so nothing about error handling changes.
+      safeObserve("chats_total", { provider: label });
+      return result;
+    };
+  }
+  return connector;
+}
+
+/**
+ * @see resolveLLMProviderInstance — this wraps it so every chat path is counted
+ * at one place. The signature and return value are unchanged.
+ */
+function getLLMProvider({ provider = null, model = null } = {}) {
+  const selection = provider ?? process.env.LLM_PROVIDER ?? "openai";
+  return instrumentLLMProvider(
+    resolveLLMProviderInstance({ provider, model }),
+    selection
+  );
+}
+
+/**
  * Returns the EmbedderProvider by itself to whatever is currently in the system settings.
  * @returns {BaseEmbedderProvider}
  */
-function getEmbeddingEngineSelection() {
+function resolveEmbeddingEngineInstance() {
   const { NativeEmbedder } = require("../EmbeddingEngines/native");
   const engineSelection = process.env.EMBEDDING_ENGINE;
   switch (engineSelection) {
@@ -380,6 +429,46 @@ function getEmbeddingEngineSelection() {
     default:
       return new NativeEmbedder();
   }
+}
+
+/**
+ * The embedding half of the same argument. `embedChunks` is called from eight
+ * vector-database providers and implemented by fourteen engine classes, so
+ * neither side is one place either.
+ *
+ * `EMBEDDING_ENGINE` is its OWN environment variable, not `LLM_PROVIDER`: an
+ * install commonly runs a hosted LLM against the bundled native embedder, and
+ * labelling embeddings with the chat provider would report a provider that
+ * computed none of them. Both go through the same `providerLabel` table —
+ * the engine list is a subset of the provider list, so one table serves.
+ *
+ * The default arm returns the native embedder for an unset or unrecognised
+ * value, so the label follows the same rule: what actually ran, not what was
+ * configured.
+ */
+function getEmbeddingEngineSelection() {
+  const { safeObserve, providerLabel } = require("../metrics");
+  const engine = resolveEmbeddingEngineInstance();
+  const declared = String(process.env.EMBEDDING_ENGINE ?? "").trim().toLowerCase();
+  // An unrecognised value falls through to NativeEmbedder above, so the honest
+  // label is `native` — reporting the unrecognised name would say a provider
+  // computed embeddings it never saw.
+  const label =
+    engine?.constructor?.name === "NativeEmbedder"
+      ? "native"
+      : providerLabel(declared);
+
+  if (typeof engine?.embedChunks === "function") {
+    const original = engine.embedChunks.bind(engine);
+    engine.embedChunks = async (...args) => {
+      const result = await original(...args);
+      // One per BATCH, after it resolves. Per chunk would count a single
+      // document as thousands of embeddings and make the counter unreadable.
+      safeObserve("embeddings_total", { provider: label });
+      return result;
+    };
+  }
+  return engine;
 }
 
 /**

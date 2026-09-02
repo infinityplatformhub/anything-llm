@@ -25,11 +25,7 @@ client.collectDefaultMetrics({ register: registry });
  * against words for things users can rename — a label assembled at call time is
  * one refactor away from carrying a workspace name.
  */
-const ALLOWED_LABEL_NAMES = Object.freeze([
-  "provider",
-  "outcome",
-  "kind",
-]);
+const ALLOWED_LABEL_NAMES = Object.freeze(["provider", "outcome"]);
 
 /**
  * And the values each may take. An allowed NAME with a free-text VALUE is the
@@ -37,6 +33,13 @@ const ALLOWED_LABEL_NAMES = Object.freeze([
  *
  * `provider` is a class of integration, never an endpoint or a model name: an
  * operator's self-hosted URL is as identifying as a workspace title.
+ *
+ * O5a-wire (#102) removed the `kind` label along with the `operations_total`
+ * counter that was its only user. Its values duplicated what the four specific
+ * counters report, and two counters for one event means two dashboards that
+ * disagree with nothing to say which is right. A label with no metric using it
+ * is an invitation to find a use for it, which is how a vocabulary widens
+ * without anyone deciding to widen it.
  */
 const ALLOWED_LABEL_VALUES = Object.freeze({
   provider: Object.freeze([
@@ -49,7 +52,6 @@ const ALLOWED_LABEL_VALUES = Object.freeze({
     "other",
   ]),
   outcome: Object.freeze(["success", "failure"]),
-  kind: Object.freeze(["chat", "embedding", "document", "login"]),
 });
 
 const COUNTERS = {
@@ -77,13 +79,41 @@ const COUNTERS = {
     labelNames: ["outcome"],
     registers: [registry],
   }),
-  operations_total: new client.Counter({
-    name: "operations_total",
-    help: "Instance operations, by kind and outcome.",
-    labelNames: ["kind", "outcome"],
-    registers: [registry],
-  }),
 };
+
+/**
+ * The resolver accepts 41 provider strings; `provider` allows 7. So a call site
+ * cannot pass `process.env.LLM_PROVIDER` through — on most real installs that
+ * throws.
+ *
+ * One table, and anything not in it becomes `"other"`. NEVER a passthrough: an
+ * unlisted value reaching a label is the exact thing the vocabulary exists to
+ * prevent, and passthrough would make the guard fire on the values nobody
+ * anticipated, which are the ones worth guarding against.
+ *
+ * Widening the vocabulary to 41 values instead would defeat its purpose.
+ * Cardinality is why the list is short, and a dashboard does not need to
+ * distinguish `ppio` from `novita` — an operator debugging one knows which they
+ * configured. The `provider` label answers "which class of integration", and
+ * the specific product is in the environment, where it is already reported.
+ *
+ * Never throws: it is called on the way INTO `observe`, and a mapping that
+ * threw would turn an unmapped provider into the failure the mapping exists to
+ * avoid.
+ */
+const PROVIDER_LABELS = Object.freeze({
+  openai: "openai",
+  azure: "azure",
+  anthropic: "anthropic",
+  ollama: "ollama",
+  localai: "localai",
+  native: "native",
+});
+
+function providerLabel(raw) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  return PROVIDER_LABELS[key] ?? "other";
+}
 
 /**
  * Increment a counter, refusing anything not declared above.
@@ -115,6 +145,49 @@ function observe(name, labels = {}) {
   counter.inc(labels);
 }
 
+/**
+ * Every call site increments through THIS, not through `observe` directly.
+ *
+ * Two failures to avoid at once. `observe` throws by design, and a throw inside
+ * a chat handler would turn a metrics bug into a user-visible 500 — the
+ * observability breaking the thing it observes. But swallowing it silently
+ * returns to a counter that reports zero forever with nobody noticing, which is
+ * the condition wiring these counters exists to end.
+ *
+ * So: log and continue. In tests `observe` still throws and is still a hard
+ * failure; in production the mistake lands in the log.
+ *
+ * WHAT THE LOG SAYS: the metric and the label NAME. Never the rejected VALUE. A
+ * rejected value is by definition one that was not supposed to be published,
+ * and writing it into a log to explain why it was not published is the same
+ * leak one file over.
+ *
+ * ONCE per (metric, label) per process. An install whose provider does not map
+ * would otherwise log on every chat.
+ */
+const warnedObservations = new Set();
+
+function safeObserve(name, labels = {}) {
+  try {
+    observe(name, labels);
+  } catch (error) {
+    // The label NAME, taken from our own keys — not from the error text, which
+    // quotes the value that was rejected.
+    const labelNames = Object.keys(labels).sort().join(",");
+    const key = `${name}:${labelNames}`;
+    if (warnedObservations.has(key)) return;
+    warnedObservations.add(key);
+    console.warn(
+      `[metrics] refused to record "${name}" with label(s) [${labelNames}]; the value is not in the declared vocabulary and is not logged here`
+    );
+  }
+}
+
+/** Test seam: the once-per-process memory would otherwise leak across tests. */
+function __resetObservationWarnings() {
+  warnedObservations.clear();
+}
+
 /** The exposition body and its content type. */
 async function render() {
   return {
@@ -139,6 +212,10 @@ const APP_METRIC_NAMES = Object.freeze(
 
 module.exports = {
   registry,
+  providerLabel,
+  PROVIDER_LABELS,
+  safeObserve,
+  __resetObservationWarnings,
   APP_METRIC_NAMES,
   observe,
   render,

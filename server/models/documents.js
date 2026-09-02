@@ -5,6 +5,7 @@ const prisma = require("../utils/prisma");
 const { Telemetry } = require("./telemetry");
 const { safeJsonParse } = require("../utils/http");
 const { getModelTag } = require("../endpoints/utils");
+const { safeObserve } = require("../utils/metrics");
 
 const Document = {
   writable: ["pinned", "watched", "lastUpdatedAt"],
@@ -146,6 +147,11 @@ const Document = {
           metadata?.title || newDoc.filename
         );
         failedToEmbed.push(metadata?.title || newDoc.filename);
+        // O5a-wire (#102): PER DOCUMENT, beside the push that records it, not
+        // once per call. A batch of three with one failure is two successes and
+        // one failure; counting per call would report a single outcome for a
+        // batch that had both.
+        safeObserve("documents_total", { outcome: "failure" });
         errors.add(error);
         emitProgress(workspace.slug, {
           type: "doc_failed",
@@ -158,12 +164,21 @@ const Document = {
       try {
         await prisma.workspace_documents.create({ data: newDoc });
         embedded.push(path);
+        safeObserve("documents_total", { outcome: "success" });
         emitProgress(workspace.slug, {
           type: "doc_complete",
           ...docProgress,
         });
       } catch (error) {
         console.error(error.message);
+        // QA-2 (#102): this branch enters NEITHER array — the vector write
+        // succeeded but the row did not, so the document is neither `embedded`
+        // nor `failedToEmbed`. Wiring the counter from the two arrays would
+        // have reported two outcomes for a batch of three and the missing one
+        // would look like a batch that was smaller, not one that partly failed.
+        // Counted here for the same reason it is counted beside each push:
+        // per document, at the point the outcome is known.
+        safeObserve("documents_total", { outcome: "failure" });
         emitProgress(workspace.slug, {
           type: "doc_failed",
           ...docProgress,
