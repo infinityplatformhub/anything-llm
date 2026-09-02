@@ -950,3 +950,9 @@ PMO post-merge suite ต้องเก็บบรรทัด `✕` และ�
 เกณฑ์รับงาน: (1) mutation ทุกตัวที่ Dev/QA/Techlead นึกออกแดง (2) surface ที่ยังเปิดอยู่ถูกบันทึกใน `residual-risks.md` โดยระบุว่าอะไรยังไม่กัน (3) ห้ามเขียนว่า "ปิดครบ" — เขียนว่า "ปิดที่รู้จัก N ตัว ณ SHA X"
 
 เทส sweep/spoof ต้องเรียก predicate/registry ตัวจริง ห้าม parametrize classifier ให้ inject ได้ (`classifiers.isOrgResolver || isOrgResolver` = พิสูจน์ตัวปลอม ไม่ใช่ตัวจริง)
+
+### 7.9i ตัวตรวจแบบ static: รูปที่ไม่รู้จัก = ล้มเหลว ไม่ใช่เพิกเฉย
+
+collector/sweep ที่อ่าน source (AST/regex) ห้ามมี default "ไม่ตรงรูป = ข้าม" — #40 bypass #9–#12 (alias, suffix, declarator index, member access) เป็นคลาสเดียวกัน: collector รู้จัก import รูปหนึ่ง ของนอกรูปหลุด แก้ทีละรูปไม่จบ
+
+กฎ: ประกาศรูปที่รับเป็น convention (คอมเมนต์ในไฟล์ที่ถูกบังคับ) แล้ว assert ว่าทุก require ในขอบเขต (เช่น `./endpoints/*` ใน `server/index.js`) ตรงรูปนั้น รูปอื่นแดงพร้อมบรรทัด + รูปที่รับ · fixture ทั้งสองทิศ ("รับ" / "ปฏิเสธ+เหตุผล") ครอบ bypass ที่เคยเจอ · ต้นทุน = convention บังคับในไฟล์เดียว ถูกกว่าไล่ตามรูป
