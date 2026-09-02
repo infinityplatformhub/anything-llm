@@ -126,3 +126,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #73 merged 0657de64e (62/80). Slice 3: partial retracted → 500 over cap; batch namespaceCount → backlog issue.
 - #81 opened (batch namespaceCount, Dev4 after #30). 62/81.
 - post-merge suite on main c82cb8b4 (after #73, real-store env): 2127/2127, 0 skip, reporter active.
+- #74 3165b913a gating (/tmp/wt-74; QA-3+TL-2 asked). #72 b4e1de7d gating (/tmp/wt-72; QA-1/QA-2/TL-1 asked). #40 91fbf57 probed by QA-2: bypass 7+8 closed, defineProperty pending in Dev2 tree. Post-#73 suite 2127/2127.
