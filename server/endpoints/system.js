@@ -375,6 +375,24 @@ function systemEndpoints(app) {
     "/request-token",
     [loginIpRateLimit, loginAccountRateLimit],
     async (request, response) => {
+      // O5a-wire (#102): counted ONCE, on the way out, from the status code —
+      // not at each branch. This handler has TEN outcome branches across the
+      // multi-user and single-user paths (three that issue a token, seven that
+      // refuse), and a branch added later would be counted nowhere if each site
+      // had to remember. The status code is the thing every branch already sets
+      // and cannot forget.
+      //
+      // The label is a CONSTANT either way. Nothing from the request — not the
+      // username, not the IP, not which branch refused — reaches a label:
+      // `outcome` allows exactly "success" and "failure", so a call site
+      // attempting otherwise throws (utils/metrics).
+      const { safeObserve } = require("../utils/metrics");
+      response.on("finish", () =>
+        safeObserve("auth_attempts_total", {
+          outcome: response.statusCode === 200 ? "success" : "failure",
+        })
+      );
+
       try {
         const bcrypt = require("bcryptjs");
 
