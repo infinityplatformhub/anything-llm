@@ -504,6 +504,9 @@ trip it: `#` for issue references, `//` for any URL in a title (`http://…`).
 Everything else about the title is unconstrained; only these two tokens matter,
 and only on a line ending in `{`.
 
+### 7.3a Test titles never start with `#`
+- The commented-out-code gate reads `#` on a line ending in `{` as a comment. Write `issue 52:` not `#52:` in describe/it titles. Hit on #39, #46, #52, #32-era; check before `task.sh check`.
+
 ### 7.4 Do not write `postgresql://` as a literal in test setup
 
 The same gate as §7.3, different token. A line containing `//` that ends in `{`
