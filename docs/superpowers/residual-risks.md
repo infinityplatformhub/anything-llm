@@ -276,3 +276,6 @@ Call-site guard strips only `//` comments; a `/* */` block containing the condit
 
 ## #119 (TL-2 N6 NIT)
 `sealRoutes(undefined)` skip-guard is reachable but untested; add `expect(() => sealRoutes(undefined)).not.toThrow()`. N4 (`internalRouter !== target`) unreachable on express 4.22.1.
+
+## #133 (TL-1, for slice 2 contract)
+A refused plan still carries its additive lists (create/addMembership). Slice 2 apply must rule explicitly: TL-1 recommends **apply nothing** from a refused plan (a snapshot suspected wrong on the destructive side is not trusted on the additive side). Must be a Ruling in the slice-2 contract, not implied by plan shape.
