@@ -269,3 +269,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 
 ## 2026-09-02 — #80 hotfix c6b56093 merged
 - gate PASS (137/137 incl. sweeps), TL-1 PASS (no NIT), QA-3 PASS. Clears main's sole red (updateSettingsReturns). Includes 5 follow-ups. Split-state residual (no cross-table transaction) stands.
+- Post-merge main after #90: 2583/2584 (sole red = updateSettingsReturns, fixed by hotfix now merged; rerun in flight).
+- #40 rebase inventory (Dev2): 8 new routes vs baseline — mailer ×3, metrics, ldap enabled/login, chats/search (#61), invite/new stack+1 (#80 limiter). Ruling: ldap login/enabled → allowlist with reason (no principal pre-auth); chats/search must be workspace-gated; re-pin with measured count. First real allowlist decision the walk forced.
+- #84 QA-2 PASS 14/14; waiting Dev1 FINDING-1 commit. O5b recon landed on approof/o5-recon.
