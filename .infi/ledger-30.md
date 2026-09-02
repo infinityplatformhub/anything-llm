@@ -161,4 +161,4 @@ and the working commands are in the test file's header.
 
 Residual: Chroma has no escape clause until #56 backfills.
 
-SHA: 99440ee1 (branch approof/t5-slice-1b, base b512557e)
+SHA: 21b8f724 (branch approof/t5-slice-1b, base b512557e)
