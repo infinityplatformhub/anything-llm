@@ -271,7 +271,12 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // otherwise — is held by __tests__/endpoints/preflightHttp.test.js,
     // including that the transition closes inside one process and that an
     // unreadable users table fails closed.
-    expect(mountedRoutesAtTestLoad).toHaveLength(318);
+    // 318 -> 319 with S12 slice 1 (#136): DELETE
+    // /admin/group/:groupId/member/:userId, the first production caller of
+    // `removeGroupMember`. It is a MUTATION, so unlike #112's read it must also
+    // appear in the gated set below — carrying `user.manage` on the org, since
+    // no `group.*` permission is seeded.
+    expect(mountedRoutesAtTestLoad).toHaveLength(319);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );

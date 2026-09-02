@@ -18,6 +18,17 @@ function queryParams(request) {
 
 /**
  * Creates a JWT with the given info and expiry
+ *
+ * RESIDUAL (S12 #136): these tokens CANNOT BE REVOKED. There is no session
+ * table, no denylist and no `jti`, so a token stays valid for its full 30-day
+ * default no matter what happens to the account it names.
+ *
+ * Suspension works today only because `validatedRequest` re-reads the user row
+ * on every request and refuses a suspended one — the check is at the reader, not
+ * on the token. Any future path that trusts a signed token WITHOUT that lookup
+ * reopens a 30-day window, and nothing in the schema could close it after the
+ * fact. Revocation is S13.
+ *
  * @param {object} info - The info to include in the JWT
  * @param {string} expiry - The expiry time for the JWT (default: 30 days)
  * @returns {string} The JWT

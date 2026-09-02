@@ -16,6 +16,28 @@ const prisma = require("../utils/prisma");
  * @property {number|null} dailyMessageLimit
  */
 
+/**
+ * Revoke every bearer credential belonging to a user being offboarded.
+ *
+ * `revokedAt` is what `ApiKey.validate` consults (`models/apiKeys.js:91`), so
+ * setting it is what actually stops the key rather than merely recording that it
+ * should have stopped.
+ *
+ * Already-revoked keys are left alone: `revokedAt: null` in the filter keeps the
+ * ORIGINAL revocation timestamp, which is audit history. Re-stamping it would
+ * rewrite when a key stopped working.
+ *
+ * Browser-extension keys need no equivalent: `validBrowserExtensionApiKey.js:27`
+ * re-reads `suspended` on every request, and its key table has a real foreign key
+ * to `users`.
+ */
+async function revokeCredentialsFor(userId, tx) {
+  await tx.api_keys.updateMany({
+    where: { createdBy: Number(userId), revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
 const User = {
   usernameRegex: new RegExp(/^[a-z][a-z0-9._@-]*$/),
   writable: [
@@ -205,9 +227,28 @@ const User = {
         updates.password = bcrypt.hashSync(updates.password, 10);
       }
 
-      const user = await prisma.users.update({
-        where: { id: parseInt(userId) },
-        data: updates,
+      // S12 (#136): suspension is offboarding, and offboarding must take the
+      // user's credentials with it IN THE SAME TRANSACTION.
+      //
+      // Measured on `941aa79e8` before this existed: a suspended user's API key
+      // still authenticated — `validApiKey` called `next()` with no status. The
+      // session path was closed (`validatedRequest` re-reads `suspended`), so
+      // the key was the way back in.
+      //
+      // In one transaction rather than a follow-up write: a crash between the
+      // two leaves an account that is suspended in the UI and still usable by
+      // its key, which is the worst of the two states and the one nobody would
+      // think to check.
+      const isSuspending =
+        updates.suspended === 1 && currentUser.suspended !== 1;
+
+      const user = await prisma.$transaction(async (tx) => {
+        const updated = await tx.users.update({
+          where: { id: parseInt(userId) },
+          data: updates,
+        });
+        if (isSuspending) await revokeCredentialsFor(updated.id, tx);
+        return updated;
       });
 
       // A role change must move the grant with it — a demoted admin who keeps

@@ -192,6 +192,63 @@ function adminEndpoints(app) {
     }
   );
 
+  // S12 slice 1 (#136): the first production caller of `removeGroupMember`.
+  //
+  // The repository function has been correct and tested since it was written —
+  // it deletes the membership and bumps the `group_membership` policy version in
+  // ONE transaction — but every reference to it lived in its own test file, so
+  // no operator could ever take a user out of a group. Offboarding is what needs
+  // it: a suspended account that is still a group member still appears in every
+  // "who is in this group" answer.
+  //
+  // `user.manage`, not a group-specific action: no `group.*` permission is
+  // seeded, and inventing one here would add a permission row with a single call
+  // site. #136 records that as a residual rather than guessing at a taxonomy.
+  //
+  // The gate answers about the ORG, because group membership is org-scoped —
+  // `removeGroupMember` derives the workspace keys it invalidates from the
+  // membership row itself, not from anything the caller sends (B-3).
+  app.delete(
+    "/admin/group/:groupId/member/:userId",
+    [validatedRequest, requirePermission("user.manage", orgResource)],
+    async (request, response) => {
+      try {
+        const { groupId, userId } = request.params;
+        const user = await User.get({ id: Number(userId) });
+        if (!user) return response.sendStatus(404);
+
+        const canModify = await validCanModify(response.locals.actor, user);
+        if (!canModify.valid)
+          return response
+            .status(200)
+            .json({ success: false, error: canModify.error });
+
+        const {
+          removeGroupMember,
+        } = require("../utils/authorization/policyRepository");
+        // `actor` comes from `response.locals`, which `requirePermission` set
+        // after the engine allowed the call. `removeGroupMember` refuses an
+        // escalation with it, so passing the session user instead would hand the
+        // repository a principal the gate never checked.
+        await removeGroupMember({
+          actor: response.locals.actor,
+          groupId: Number(groupId),
+          userId: Number(userId),
+        });
+
+        await emitAuditEvent(
+          "group_member_removed",
+          { userName: user.username, groupId: Number(groupId) },
+          response.locals.user?.id
+        );
+        response.status(200).json({ success: true, error: null });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
   // T-7 (#31, D-3): view-as-user. Issues a session that reads AS the target user
   // while remaining, provably, the admin's session.
   //
