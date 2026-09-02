@@ -118,3 +118,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #52 retro (TL-1): /v1 unswept but no ungated route; comment posted on #52. Fix via #40.
 - #77 a004eee3: gate PASS 36/36 (/tmp/wt-77 kept). Waits ledger-77 + QA-3 + TL-1 → close/merge (incl. S11 mockup B fixes). #73 8beff79c9 gating (/tmp/wt-73), TL-2 verdict asked. #40 e875cd1 withdrawn (bypass 7) TL-1 accepted regex+guard; next SHA delta only. #72 pending hub_api_key regression fix. #74 Tasks 1-3 done, M11/OBS-1/2 pending SHA.
 - #73 TL-2 PASS 8beff79c9; gate blocked only by §7.3a title → regate on next SHA. #77 regating 59f07e80 (ledger). 60/79.
+- #77 merged df059c557 (61/79). S11 mockup B fixes in. Next: #73 title regate, #40 SHA (WeakSet guard + export list), #72, #74.
