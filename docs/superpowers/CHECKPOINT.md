@@ -601,3 +601,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #121 QA-3 on e3fbcf775: exit 1 deterministic (parent exit 0); M1-M5 dead; M6/M7 survive → sent to Dev1 for same SHA. Evidence committed.
 - #119 0e2317834 (Dev5 sealRoutes-mode fix) pushed: regating /tmp/wt-119. #127 2ba5ca93a gate green (98/98, drift 4/4, sweeps); result written; TL-2 verdict + QA-3 probe pending.
 - Post-merge #124 + #126 s1: server 221 suites / 3068 passed / 0 failed (--forceExit), frontend 101/101 exit 0, capabilities PASS. Main fully green at 6211dfb9c+.
+- #119 0e2317834 gate GREEN: check-local pass, routeMountGuard+routeGateSweep 77/77 (from 71), sweeps 63/63, ledger 11 rulings; result written (run-id gate-119-0e2317834). TL-2 + QA-2 re-verdict dispatched.
