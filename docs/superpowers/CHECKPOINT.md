@@ -105,3 +105,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - O2 (Dev5): mockups A/B at `24951395`, QA-3 recommends B. **User must choose A/B** → task.sh start.
 - S11 (Dev3): recon + 3 mockups at `031be4f5` (worktree s3-ldap). Dev3 recommends B. **User must choose A/B.** Invite-code leak into event_logs confirmed (inviteCode in ALLOWED_KEYS) → Dev3 opens bug issue first; QA-3 re-verifies.
 - #70 (Dev1 SDD): implementer running.
+14:24 main c79c5d2b: post-merge suite 1897 passed / 1933 (36 skipped)
