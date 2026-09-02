@@ -21,6 +21,7 @@ const {
 const {
   IdentityConflictError,
   IdentityUnavailableError,
+  IdentityAuthenticationError,
 } = require("../../utils/identityProviders/errors");
 const { IdentityLoginState } = require("../../models/identityLoginState");
 const { linkPrincipal } = require("../../utils/identity/linkPrincipal");
@@ -112,12 +113,48 @@ function warnIfRecipientCheckDegraded() {
   );
 }
 
+// Everything a SAML login needs before it can work. Missing any of these, the
+// driver throws at construction and every login is a 500.
+const REQUIRED_ENV = [
+  "SSO_SAML_ENTITY_ID",
+  "SSO_SAML_IDP_ENTITY_ID",
+  "SSO_SAML_SSO_URL",
+  "SSO_SAML_CERTIFICATE",
+];
+
+/**
+ * Name what is missing, at boot, one variable at a time.
+ *
+ * A configuration error found on the first login surfaces as a 500 to whoever
+ * happened to try it, with the reason in a log line nobody is watching. Named
+ * here instead, while the person who wrote the configuration is still looking.
+ *
+ * `SSO_SAML_CERTIFICATES` (plural) satisfies the certificate requirement too;
+ * checking only the singular would report a correctly configured deployment as
+ * broken, which is the fastest way to make a warning ignorable.
+ */
+function warnIfMisconfigured() {
+  if (!samlEnabled()) return;
+  const missing = REQUIRED_ENV.filter((key) => {
+    if (key === "SSO_SAML_CERTIFICATE")
+      return !process.env.SSO_SAML_CERTIFICATE && !process.env.SSO_SAML_CERTIFICATES;
+    return !process.env[key];
+  });
+  if (missing.length === 0) return;
+  console.error(
+    `[identity:saml] SAML is enabled but not configured: ${missing.join(", ")} ` +
+      `${missing.length === 1 ? "is" : "are"} unset. Every SAML login will fail ` +
+      `until this is fixed.`
+  );
+}
+
 function samlIdentityEndpoints(app) {
   if (!app) return;
 
   // At mount, so it appears on every boot rather than on the first login —
   // by which time whoever configured this has moved on.
   warnIfRecipientCheckDegraded();
+  warnIfMisconfigured();
 
   // Rate limited: unauthenticated, and every call writes a row. Without this it
   // is a free way to fill identity_login_state.
@@ -168,6 +205,12 @@ function samlIdentityEndpoints(app) {
       // the login state is what proves this answers a flow we started, and
       // consuming it first means a replayed POST is refused before any parsing.
       const consumed = await IdentityLoginState.consume(String(relayState));
+      // The state must belong to a login STARTED here. Login states are one
+      // table shared by every provider, so a state issued by the OIDC flow would
+      // otherwise be spendable at this endpoint — letting an attacker who can
+      // start one flow satisfy the "answers a login we began" check of another.
+      if (consumed.provider !== PROVIDER)
+        throw new IdentityAuthenticationError("This login could not be verified.");
 
       const config = await providerConfig(request);
       if (!config)

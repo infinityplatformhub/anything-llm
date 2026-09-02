@@ -12,6 +12,7 @@ const {
 const {
   IdentityConflictError,
   IdentityUnavailableError,
+  IdentityAuthenticationError,
 } = require("../utils/identityProviders/errors");
 const { IdentityLoginState } = require("../models/identityLoginState");
 const { linkPrincipal } = require("../utils/identity/linkPrincipal");
@@ -112,6 +113,12 @@ function identityEndpoints(app) {
       // Single-use: consuming BEFORE the exchange means a replayed callback is
       // refused even if the code would still have been accepted.
       const consumed = await IdentityLoginState.consume(String(state));
+      // The state must belong to a login started for THIS provider. One table
+      // holds every provider's login states, so without this a state issued by
+      // another flow is spendable here — and `:provider` comes from the URL, so
+      // the caller picks which driver gets handed it.
+      if (consumed.provider !== provider)
+        throw new IdentityAuthenticationError("This login could not be verified.");
 
       const config = await providerConfig(provider);
       if (!config)

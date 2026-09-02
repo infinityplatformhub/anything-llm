@@ -113,6 +113,22 @@ function assertionFor(requestId, kind = "valid", options = {}) {
 }
 
 describe("GET /api/sso/saml/login", () => {
+  test("mount order: the SAML route wins over S1's wildcard", async () => {
+    // S1 registers `/sso/:provider/login` and Express matches in REGISTRATION
+    // order, so `samlIdentityEndpoints` must be mounted before
+    // `identityEndpoints` in index.js.
+    //
+    // If this test fails with 500, read it as "the wildcard swallowed the
+    // route", NOT as "SAML is broken": the wildcard hands "saml" to a config
+    // builder that only produces OIDC settings, and the SAML driver then throws
+    // on a missing entityId. Nothing about the SAML code has to change to fix
+    // it — the mount order does.
+    const response = await request(app).get("/api/sso/saml/login");
+    expect(response.status).toBe(302);
+    // And it went to the SAML SSO URL, not to an OIDC authorize endpoint.
+    expect(response.headers.location).toContain(process.env.SSO_SAML_SSO_URL);
+  });
+
   test("redirects to the IdP and records the login state", async () => {
     const response = await request(app).get("/api/sso/saml/login");
     expect(response.status).toBe(302);
@@ -204,6 +220,32 @@ describe("POST /api/sso/saml/acs", () => {
       .send({ SAMLResponse: encode(xml), RelayState: requestId });
     expect(second.status).toBe(401);
     expect(second.body.token).toBeUndefined();
+  });
+
+  test("a login state issued by ANOTHER provider cannot be spent here", async () => {
+    // identity_login_state is one table shared by every provider. Without a
+    // provider check the state row an OIDC login wrote is a perfectly good
+    // RelayState here — so an attacker who can start any flow satisfies this
+    // endpoint's "answers a login we began" requirement using someone else's.
+    const foreign = await prisma.identity_login_state.create({
+      data: {
+        state: `foreign-${crypto.randomBytes(8).toString("hex")}`,
+        nonce: crypto.randomBytes(8).toString("hex"),
+        provider: "oidc",
+        redirectUri: fixtures.ACS_URL,
+        codeVerifier: crypto.randomBytes(8).toString("hex"),
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
+    const { xml } = assertionFor(foreign.state);
+
+    const response = await request(app)
+      .post("/api/sso/saml/acs")
+      .type("form")
+      .send({ SAMLResponse: encode(xml), RelayState: foreign.state });
+
+    expect(response.status).toBe(401);
+    expect(response.body.token).toBeUndefined();
   });
 
   test("an ACS post with no SAMLResponse is a flat refusal, not a crash", async () => {

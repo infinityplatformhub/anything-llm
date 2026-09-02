@@ -252,7 +252,9 @@ describe("rate limiting (Q-4)", () => {
       }
     }
     expect(sawLimit).toBe(true);
-  });
+    // Same reasoning as the callback test below: 40 sequential requests do not
+    // reliably fit jest's 5s default when the whole tree is running.
+  }, 30_000);
 
   test("the CALLBACK route is limited too — a wrong state still costs a DB read", async () => {
     // Techlead: an unauthenticated callback with a junk state is refused, but
@@ -269,5 +271,10 @@ describe("rate limiting (Q-4)", () => {
       }
     }
     expect(sawLimit).toBe(true);
-  });
+    // Up to 40 sequential requests, each doing a database read. That fits inside
+    // jest's 5s default when this suite runs alone and does not when the whole
+    // security tree runs, which made it fail intermittently on load rather than
+    // on behaviour. The limit being reached is the assertion; how long 40
+    // round trips take on a busy machine is not.
+  }, 30_000);
 });

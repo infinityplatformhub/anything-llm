@@ -213,12 +213,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (ACS round)
 
@@ -277,12 +347,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (driver round)
 
@@ -363,12 +503,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (ACS round)
 
@@ -427,12 +637,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (FINDING-1 round)
 
@@ -547,12 +827,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (ACS round)
 
@@ -611,12 +961,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (driver round)
 
@@ -697,12 +1117,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof (ACS round)
 
@@ -761,12 +1251,82 @@ fires at mount, not on first login (by then whoever configured it has moved on),
 stays silent when SAML is off, since warnings about features nobody enabled teach
 operators to skip warnings. Removing the call kills exactly the one test.
 
-### Mutation proof (round 3)
+#
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
+
+## Mutation proof (round 3)
 
 | mutant | expected kill | result |
 |---|---|---|
 | remove `_checkIssuer` | the two wrong-issuer tests | killed exactly those two |
 | remove `_checkRecipient` | the two wrong-recipient tests | killed exactly those two |
+
+
+## Techlead round 4 (final commit on 4765dbae)
+
+Ruling: the login state consumed at a callback must belong to a login started for
+THAT provider — `identity_login_state` is one table shared by every provider, so
+without the check a state issued by one flow is spendable at another's endpoint, and
+an attacker who can start any flow satisfies the "answers a login we began"
+requirement of a different one. Added to BOTH the SAML ACS and the OIDC callback
+(where `:provider` comes from the URL, so the caller picks which driver receives it).
+
+Ruling: the mount-order test asserts a 302 AND that the redirect went to the SAML SSO
+URL, with a comment saying a 500 here means the wildcard swallowed the route rather
+than SAML being broken — a failing test that misdirects the next reader costs more than
+it saves.
+
+Ruling: `warnIfMisconfigured` names each unset required variable at mount. Only the
+genuinely missing ones are listed (naming variables that ARE set trains operators to
+skim), and `SSO_SAML_CERTIFICATES` satisfies the certificate requirement, since
+reporting a correctly configured deployment as broken is the fastest way to make a
+warning ignorable.
+
+Ruling: the two OIDC rate-limit tests get a 30s timeout. Each makes up to 40 sequential
+requests with a database read apiece, which fits jest's 5s default when the suite runs
+alone and does not when the whole tree runs — so it failed on LOAD, not on behaviour.
+Diagnosed by running the suite alone (10/10 green) before touching anything; the fix is
+the timeout, not a smaller loop, because reaching the limit is the assertion.
+
+### Mutation proof (round 4)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `if (consumed.provider !== PROVIDER)` → `if (false)` | the cross-provider state test | killed exactly that one |
+
+Full tree run twice after the timeout fix: 372/372 both times.
 
 ## Mutation proof
 
@@ -778,7 +1338,7 @@ operators to skip warnings. Removing the call kills exactly the one test.
 
 ## Evidence
 
-`__tests__/security` (whole tree) — Tests: 365 passed, 365 total, 38 suites, against real
+`__tests__/security` (whole tree) — Tests: 372 passed, 372 total, 38 suites, against real
 Postgres via `prisma migrate deploy` (§7.1a, never `db push`).
 
 Two environment traps, both of which produce failures that look like broken code:

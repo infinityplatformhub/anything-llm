@@ -20,6 +20,11 @@ const ENV_KEYS = [
   "SSO_SAML_ENABLED",
   "SSO_ACS_URL",
   "SSO_CALLBACK_BASE_URL",
+  "SSO_SAML_ENTITY_ID",
+  "SSO_SAML_IDP_ENTITY_ID",
+  "SSO_SAML_SSO_URL",
+  "SSO_SAML_CERTIFICATE",
+  "SSO_SAML_CERTIFICATES",
 ];
 
 let saved;
@@ -74,5 +79,61 @@ describe("the Host-header fallback is never silent", () => {
     // irrelevant warning learns to ignore the relevant ones too.
     samlIdentityEndpoints(fakeApp());
     expect(errors.join("\n")).not.toMatch(/recipient/i);
+  });
+});
+
+describe("missing configuration is named at boot, not on the first login", () => {
+  test("each unset variable is named", () => {
+    // A configuration error found on the first login is a 500 for whoever
+    // happened to try it, explained in a log line nobody is watching.
+    process.env.SSO_SAML_ENABLED = "true";
+    samlIdentityEndpoints(fakeApp());
+
+    const warning = errors.join("\n");
+    for (const key of [
+      "SSO_SAML_ENTITY_ID",
+      "SSO_SAML_IDP_ENTITY_ID",
+      "SSO_SAML_SSO_URL",
+      "SSO_SAML_CERTIFICATE",
+    ])
+      expect(warning).toContain(key);
+  });
+
+  test("only the ACTUALLY missing ones are named", () => {
+    process.env.SSO_SAML_ENABLED = "true";
+    process.env.SSO_SAML_ENTITY_ID = "https://app.example.com/saml/metadata";
+    process.env.SSO_SAML_IDP_ENTITY_ID = "https://idp.example.com/saml";
+    samlIdentityEndpoints(fakeApp());
+
+    const warning = errors.join("\n");
+    // Listing variables that ARE set trains operators to skim the message, and
+    // then the one that matters goes unread.
+    expect(warning).not.toContain("SSO_SAML_ENTITY_ID,");
+    expect(warning).toContain("SSO_SAML_SSO_URL");
+  });
+
+  test("the plural SSO_SAML_CERTIFICATES satisfies the certificate requirement", () => {
+    // Reporting a correctly configured deployment as broken is the fastest way
+    // to make a warning ignorable.
+    process.env.SSO_SAML_ENABLED = "true";
+    process.env.SSO_SAML_CERTIFICATES = "MIIBcert1|||MIIBcert2";
+    samlIdentityEndpoints(fakeApp());
+    expect(errors.join("\n")).not.toContain("SSO_SAML_CERTIFICATE ");
+  });
+
+  test("a fully configured provider is silent", () => {
+    process.env.SSO_SAML_ENABLED = "true";
+    process.env.SSO_ACS_URL = "https://app.example.com/api/sso/saml/acs";
+    process.env.SSO_SAML_ENTITY_ID = "https://app.example.com/saml/metadata";
+    process.env.SSO_SAML_IDP_ENTITY_ID = "https://idp.example.com/saml";
+    process.env.SSO_SAML_SSO_URL = "https://idp.example.com/saml/sso";
+    process.env.SSO_SAML_CERTIFICATE = "MIIBcert1";
+    samlIdentityEndpoints(fakeApp());
+    expect(errors).toHaveLength(0);
+  });
+
+  test("SAML disabled says nothing about configuration", () => {
+    samlIdentityEndpoints(fakeApp());
+    expect(errors.join("\n")).not.toContain("SSO_SAML_ENTITY_ID");
   });
 });
