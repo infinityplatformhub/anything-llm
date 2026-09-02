@@ -75,6 +75,26 @@ is not arbitrary and is not a magic constant: every one of the 53 sites also car
 the halves are in different languages: the margin in a Tailwind class, the compensation in an
 inline style keyed off the user agent.
 
+**LoadingChat is the one site whose conversion CHANGES what a user sees — and it is a fix.**
+QA-1 raised this; measured across all four fixture rows, the distinction is sharper than
+"52 preserving, 1 changing":
+
+| row | the 52 today → after | LoadingChat today → after |
+|---|---|---|
+| 1200px, desktop UA (consistent) | `calc(100%-32px)` → same | `calc(100%-32px)` → same |
+| **390px, phone UA (consistent)** | `100%` → same | **`calc(100%-32px)` → `100%` — CHANGES** |
+| 500px, desktop UA (conflict) | `calc(100%-32px)` → `100%` — changes | `calc(100%-32px)` → `100%` — changes |
+| 900px, mobile UA (conflict) | `100%` → `calc(100%-32px)` — changes | `calc(100%-32px)` → same |
+
+So the 52 are behaviour-preserving **on the consistent rows** and change on the two conflicting
+rows — that change is the point of V8, not a side effect. LoadingChat is the only site that
+changes on a **consistent** row: on an ordinary phone, where nothing is in dispute, the loading
+chat is 32px short today and correct after. Its mobile branch was lost at some point and the
+inline style kept the desktop half unconditionally.
+
+**The approver must see this as a fix, not as collateral.** It is the one visible difference a
+user could notice on a device where the current behaviour is not otherwise contested.
+
 That is why the conversion is safe and also why it is fragile if left unexplained. After (ข) both
 halves are classes on the same element and change together under the same breakpoint. **One site
 carries a comment naming the relationship** (`ChatContainer/index.jsx`, the most-read of the 53),

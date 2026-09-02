@@ -122,6 +122,13 @@
         <div class="font-medium">(ข) 53 lines / 41 files</div>
         <div class="text-slate-600 mt-1">the copied height idiom becomes
           <code>h-full md:h-[calc(100%-32px)]</code>. Inline style and JS dependency go together.</div>
+        <div class="mt-2 rounded bg-emerald-50 border border-emerald-200 text-emerald-900 p-2">
+          <b>One of the 53 is a fix, not a conversion.</b> <code>LoadingChat</code> lost its
+          mobile branch at some point and applies the desktop height unconditionally, so the
+          loading chat is <b>32px short on an ordinary phone</b> — a plain case, not one of the
+          disputed rows above. The other 52 change only where the two authorities already
+          disagree. Approving this slice approves that one visible fix.
+        </div>
       </div>
       <div class="rounded-lg bg-slate-50 p-3">
         <div class="font-medium">(ค) 24 lines / 15 files</div>
