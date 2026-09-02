@@ -46,6 +46,11 @@ vi.mock("@/models/system", () => ({
     },
     keys: async () => ({}),
     getSystemSettings: async () => ({}),
+    // `ToolsMenu` mounts its slash-commands tab, which calls this on mount. A mock missing it
+    // does not fail a test — the call is inside an unawaited effect, so it surfaces as an
+    // UNHANDLED REJECTION and vitest exits 1 while reporting every test as passed. Green
+    // output, non-zero exit: the CI job fails and the report says nothing is wrong.
+    getSlashCommandPresets: async () => [],
   },
 }));
 

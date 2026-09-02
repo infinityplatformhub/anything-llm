@@ -29,6 +29,32 @@ const nonManagerCallers = {
     "workspace agent configuration is admin-only",
 };
 
+/**
+ * Whether a file CALLS `Admin.updateSystemPreferences`, as opposed to merely mentioning it.
+ *
+ * The scan used to be `source.includes("updateSystemPreferences(")`, which cannot tell code
+ * from prose. #40 task 4 added two files that explain in a COMMENT which server gate applies to
+ * that call — "`Admin.updateSystemPreferences({memory_enabled})`, which the server gates with
+ * requirePermission('settings.write')" — and the sweep reported both as unclassified callers.
+ *
+ * Allowlisting them would have been the wrong fix twice over: it would record a false claim
+ * (they are not callers), and it would leave the next accurate comment failing the same way,
+ * which teaches people to delete the comment rather than write it. A comment naming the API it
+ * is about is exactly what a reader needs.
+ *
+ * Line comments are stripped before matching. Block comments and strings are NOT handled: this
+ * is a heuristic over source text, not a parser, and every real call site in this repo is a
+ * plain statement. A false POSITIVE fails loudly here, which is the safe direction — a caller
+ * wrongly listed gets noticed; one wrongly skipped does not.
+ */
+function callsUpdateSystemPreferences(source) {
+  return source
+    .split("\n")
+    .map((line) => line.replace(/\/\/.*$/, ""))
+    .join("\n")
+    .includes("updateSystemPreferences(");
+}
+
 function writtenFields(source) {
   return [
     ...source.matchAll(/Admin\.updateSystemPreferences\(\{([\s\S]*?)\}\)/g),
@@ -106,7 +132,7 @@ describe("issue 78 manager allowed fields drift", () => {
         else if (/\.(js|jsx)$/.test(entry.name)) {
           const source = fs.readFileSync(absolute, "utf8");
           if (
-            source.includes("updateSystemPreferences(") &&
+            callsUpdateSystemPreferences(source) &&
             !absolute.endsWith("models/admin.js")
           )
             callers.push(path.relative(frontendDir, absolute));
