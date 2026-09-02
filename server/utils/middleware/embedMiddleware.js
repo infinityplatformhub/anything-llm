@@ -203,62 +203,6 @@ async function canRespond(request, response, next) {
 }
 
 /**
- * issue 49: gate for the session-open route (POST /embed/:embedId/session).
- *
- * Deliberately NOT canRespond and NOT embedHistoryAccess, though it looks like both:
- *
- *   - canRespond reads `sessionId` and `message` out of the body and 404s when the session
- *     id is not a UUID. At session open there is no session id yet — that is the whole
- *     point of the route — so canRespond would refuse every legitimate call.
- *   - embedHistoryAccess verifies a token for a session in the URL, and queries
- *     embed_chats to prove the session belongs to this embed. Neither exists yet either,
- *     and the query would put an embed_chats read back on the one path that must not have
- *     one (hole 3: entitlement that consults rows returns when the rows change).
- *
- * What it keeps is what actually applies before a session exists: the embed must be enabled,
- * and the caller must be on an allowed origin. An embed that restricts its origins must
- * restrict who can open a session on it, or the restriction is decorative.
- *
- * Answers with the same shapes those two use for the same conditions, so a caller cannot
- * tell which gate refused it.
- *
- * Must run after validEmbedConfig.
- */
-async function embedSessionOpen(request, response, next) {
-  try {
-    const embed = response.locals.embedConfig;
-    if (!embed) {
-      response.status(404).json({ error: "Embed not found." });
-      return;
-    }
-
-    if (!embed.enabled) {
-      response.status(503).json({
-        error:
-          "This chat has been disabled by the administrator - try again later.",
-      });
-      return;
-    }
-
-    const host = request.headers?.origin ?? "";
-    const allowedHosts = EmbedConfig.parseAllowedHosts(embed);
-    // EMBED_REQUIRE_ALLOWLIST: an embed with no allowlist is denied, not allowed — the same
-    // rule canRespond and embedHistoryAccess apply (F-12a).
-    if (
-      (allowedHosts === null && "EMBED_REQUIRE_ALLOWLIST" in process.env) ||
-      (allowedHosts !== null && !allowedHosts.includes(host))
-    ) {
-      response.status(401).json({ error: "Invalid request." });
-      return;
-    }
-
-    next();
-  } catch {
-    response.status(500).json({ error: "Invalid request." });
-  }
-}
-
-/**
  * PR-0d (issue #12, G12): access gate for the history read/invalidate routes
  * (GET/DELETE /embed/:embedId/:sessionId). These previously ran with only
  * validEmbedConfig — no enabled check, no origin allowlist, no sessionId format
@@ -366,5 +310,4 @@ module.exports = {
   validEmbedConfigId,
   canRespond,
   embedHistoryAccess,
-  embedSessionOpen,
 };

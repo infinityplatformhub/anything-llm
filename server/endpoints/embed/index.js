@@ -8,14 +8,12 @@ const {
   canRespond,
   setConnectionMeta,
   embedHistoryAccess,
-  embedSessionOpen,
 } = require("../../utils/middleware/embedMiddleware");
 const {
   embedHistoryRateLimit,
 } = require("../../utils/middleware/requestControls");
 const {
   mintIfEntitled,
-  openSession,
   SESSION_TOKEN_HEADER,
 } = require("../../utils/middleware/embedSessionToken");
 const {
@@ -31,36 +29,6 @@ function embeddedEndpoints(app) {
   // unauthenticated caller can probe this route, and mintIfEntitled now answers a question
   // about whether a session exists (by whether a token comes back). An IP limiter bounds
   // that probing at the same rate the history routes already use.
-  // issue 49: where a session begins. The server picks the id here and signs it in the same
-  // response, which is what closes the four holes #32 left — see openSession for why no
-  // tightening of the old mint rule could.
-  //
-  // The caller sends nothing. Any sessionId in the body or query is ignored rather than
-  // rejected: rejecting it would answer "was that a real id" to whoever asked, and ignoring
-  // it cannot, because the reply is the same either way. That sameness is hole 4, and it is
-  // why this returns one shape unconditionally — no branch on what the caller knows.
-  //
-  // Behind the same gates the history routes use, minus the chat-only checks: rate limited
-  // because an unauthenticated caller can reach it, and origin-checked because an embed that
-  // restricts its origins must restrict this too. NOT behind canRespond — that reads a
-  // sessionId and a message out of the body, neither of which exists yet at session open.
-  app.post(
-    "/embed/:embedId/session",
-    [embedHistoryRateLimit, validEmbedConfig, setConnectionMeta, embedSessionOpen],
-    async (_, response) => {
-      try {
-        const { sessionId, token } = openSession({
-          embed: response.locals.embedConfig,
-        });
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.status(200).json({ sessionId, token });
-      } catch (e) {
-        console.error(e.message, e);
-        response.sendStatus(500).end();
-      }
-    }
-  );
-
   app.post(
     "/embed/:embedId/stream-chat",
     [embedHistoryRateLimit, validEmbedConfig, setConnectionMeta, canRespond],
@@ -77,14 +45,17 @@ function embeddedEndpoints(app) {
           username = null,
         } = reqBody(request);
 
-        // issue 49: this route no longer opens sessions — POST /embed/:embedId/session does,
-        // and the id it returns is the server's own. What is left here is ROTATION: a caller
-        // presenting a valid token for this session gets a fresh one, so a conversation
-        // running past the 24h TTL is not logged out mid-thread.
+        // issue 32: this is where a session first reaches the server, so it is where its
+        // token is minted. The widget stores it and presents it on the history routes,
+        // which is what turns a known session id into a proven one.
         //
-        // A caller without that proof gets no token and the chat still proceeds, rather than
-        // a 4xx — refusing would answer "does this session exist" just as usefully as a
-        // token would (#32 QA-1 BLOCKER-1, and hole 4 in the same shape).
+        // QA-1 BLOCKER-1: minting is NOT unconditional. Issuing a token for whatever
+        // sessionId the body named made the gate a formality — an attacker who learned a
+        // victim's UUID could POST here, collect a valid token, and read their history with
+        // it. mintIfEntitled issues one only for a genuinely new session, or to a caller
+        // who already holds a valid token for this one (rotation); otherwise null, and the
+        // chat still proceeds without a token rather than 4xx-ing, which would answer
+        // "does this session exist" just as usefully.
         //
         // Sent as a header rather than only a cookie: an embed on a third-party origin
         // cannot rely on cookies surviving SameSite, and the widget already keeps its

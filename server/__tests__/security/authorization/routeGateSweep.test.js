@@ -212,15 +212,6 @@ const INTENTIONAL_NON_PERMISSION_MUTATIONS = new Map([
     "DELETE /embed/:embedId/:sessionId",
     "embed session access middleware owns authorization",
   ],
-  // issue 49: session-open ingress. Unauthenticated by nature — a site visitor has no
-  // identity yet, and the token this route mints is what gives them one, so there is no
-  // principal for the engine to decide about. It is not ungoverned: embedSessionOpen
-  // enforces the embed's enabled flag and origin allowlist, and embedHistoryRateLimit
-  // bounds it per caller IP. It writes nothing.
-  [
-    "POST /embed/:embedId/session",
-    "unauthenticated session-open ingress; embedSessionOpen enforces enabled + origin allowlist, embedHistoryRateLimit bounds it, and it persists nothing",
-  ],
   [
     "DELETE /browser-extension/disconnect",
     "browser extension key middleware authenticates request",
@@ -257,14 +248,9 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThanOrEqual(31);
-    // 317 counts each route layer once. A 363-line dump expands app.all("*")
+    // 316 counts each route layer once. A 363-line dump expands app.all("*")
     // into 35 method handlers; both measure the same mounted router tree.
-    //
-    // 316 -> 317 with issue 49: POST /embed/:embedId/session. The number is pinned rather
-    // than computed precisely so that adding a route is a deliberate edit here — this line
-    // is the one that made me declare the new route's exemption instead of letting an
-    // unauthenticated mutating route mount unnoticed.
-    expect(mountedRoutesAtTestLoad).toHaveLength(317);
+    expect(mountedRoutesAtTestLoad).toHaveLength(316);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );
