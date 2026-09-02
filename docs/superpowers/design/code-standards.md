@@ -934,3 +934,6 @@ worktree ที่มี agent อื่น (implementer) ทำงานอย�
 
 ### §7.16 push after merge
 PMO ต้อง publish approof/main ทันทีหลังทุก merge — main ค้าง local 51 commit ทำให้ Dev4 rebase บน base ที่ไม่มี slice 2 (2026-09-02)
+
+### §7.14a post-merge suite log
+PMO post-merge suite ต้องเก็บบรรทัด `✕` และบล็อก `●` (grep -E "^(FAIL|Tests:|Test Suites:)|✕|●") ไม่ grep ทิ้ง — ครั้งแรกเสียชื่อเทสที่แดงไป (ldapRoutesHttp)
