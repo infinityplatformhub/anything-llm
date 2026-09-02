@@ -8,10 +8,22 @@
  *
  * Four keys, not the five in INSTANCE_AUTH_KEYS. `AUTH_TOKEN` is deliberately
  * absent: it is the operator's single-user password, set from the onboarding
- * UserSetup step and documented as such in docker/.env.example. Writing a random
- * value there makes validatedRequest leave its no-auth branch and makes
- * /system/request-token compare the operator's password against bytes nobody has
- * ever seen — a permanent lockout with no reset path.
+ * UserSetup step and documented as such in docker/.env.example:405.
+ * `clearStoredCredential` says the same thing from the other side
+ * (updateENV.js:1886) — AUTH_TOKEN is instance authentication, redirected to
+ * /system/update-password rather than treated as a provider credential.
+ *
+ * Writing a random value there makes /system/request-token compare the
+ * operator's password against bytes nobody has ever seen (system.js:400-405):
+ * a permanent lockout whose only reset is hand-editing the file this script
+ * wrote.
+ *
+ * Generating JWT_SECRET is safe on its own account. validatedRequest's
+ * passthrough branch is a disjunction — `!AUTH_TOKEN || !JWT_SECRET`
+ * (validatedRequest.js:29-36) — so setting one of the two does not close it.
+ * With AUTH_TOKEN still absent, a fresh install stays open until the operator
+ * chooses a password, which is exactly the behaviour the onboarding flow
+ * expects.
  */
 const crypto = require("crypto");
 const fs = require("fs");
@@ -61,17 +73,31 @@ function main() {
     ? `${existing}\n${generated}\n`
     : `${existing}${generated}\n`;
 
-  // writeEnvFileAtomic REFUSES by returning false (symlinked path, or a file
-  // owned by another uid) rather than throwing. Ignoring the return value is
-  // the failure this branch exists for: the boot would continue with secrets
-  // that live only in this process, so every API key minted in that run stops
-  // verifying at the next restart.
-  if (writeEnvFileAtomic(envPath, body) !== true) {
+  // writeEnvFileAtomic fails in TWO shapes, and only one of them is a return
+  // value. Its own guards (symlinked path, file owned by another uid) log and
+  // return FALSE. But a directory that will not accept the temp file or the
+  // rename throws straight out of fs (updateENV.js:2101,2110) — which on a
+  // read-only mount is the likelier of the two. Handling only the return value
+  // would let that case escape as a stack trace, which tells the operator
+  // where our code is rather than what to do about their volume.
+  //
+  // Either way the boot must stop. Continuing would leave secrets that exist
+  // only in this process, so every API key minted in that run stops verifying
+  // at the next restart.
+  let written = false;
+  try {
+    written = writeEnvFileAtomic(envPath, body) === true;
+  } catch (error) {
+    console.error(`[ensure-secrets] Could not write ${envPath}: ${error.message}`);
+    written = false;
+  }
+
+  if (!written) {
     console.error(
-      `[ensure-secrets] Could not write ${envPath}. The instance secrets were NOT persisted, so the boot is stopping here rather than running with secrets that vanish on restart.`
+      `[ensure-secrets] The instance secrets were NOT persisted, so the boot is stopping here rather than running with secrets that vanish on restart.`
     );
     console.error(
-      `[ensure-secrets] The refusal reason is printed above. The usual cause is ownership: the container runs as uid ${typeof process.getuid === "function" ? process.getuid() : "unknown"} and the mounted file belongs to someone else. Fix with 'chown' on the host file, or set UID/GID in docker/.env.`
+      `[ensure-secrets] The usual cause is ownership: this process runs as uid ${typeof process.getuid === "function" ? process.getuid() : "unknown"} and the mounted file or its directory belongs to someone else. Fix it with 'chown' on the host, or start compose as: UID=$(id -u) GID=$(id -g) docker compose up`
     );
     return 1;
   }

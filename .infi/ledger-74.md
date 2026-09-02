@@ -69,6 +69,24 @@ Ruling: `POSTGRES_INITDB_ARGS: "--locale=en_US.UTF-8"` is added to compose and l
 Ruling: `HOW_TO_USE_DOCKER.md` documents the doctor with `--no-deps`. (QA-3 ruling 4.)
 ถ้าผิด: `depends_on: postgres condition: service_healthy` makes the command wait on the bundled database's healthcheck, so an operator diagnosing an unreachable external database watches a healthcheck for a database they are not using.
 
+Ruling: (TL-2 M11) `ensure-secrets` prints key NAMES, never values, and three tests hold it there — the generated values, any 64-hex run at all, and an operator's existing value quoted back.
+ถ้าผิด: container logs are shipped, aggregated and retained by people who are not the operator, so a printed pepper is printed forever. The code already behaved this way; without the tests that was a coincidence rather than a constraint.
+
+Ruling: (TL-2 OBS-1) the new assignments are APPENDED. `writeEnvFileAtomic` takes the whole file body, so a generator that parses into pairs and re-serialises silently rewrites the operator's `.env`. Tested with a file carrying comments, indentation, blank lines, trailing spaces, a `#` inside a quoted value, and no trailing newline.
+ถ้าผิด: comments and ordering vanish and any value whose quoting the parser does not reproduce is corrupted — on a file the operator may have hand-written.
+
+Ruling: (TL-2 OBS-2) the write is wrapped in try/catch as well as checked for `false`. `writeEnvFileAtomic` fails in two shapes: its own guards log and return false, but a directory that rejects the temp-file open or the rename throws straight out of `fs` (`updateENV.js:2101,2110`) — the likelier of the two on a read-only mount.
+ถ้าผิด: the read-only-volume case escapes as a stack trace, which tells the operator where our code is rather than what to do about their volume. Verified: removing the try/catch turns the assertion red with `at Object.<anonymous>` in the output.
+
+Ruling: (TL-2 OBS-4) the `doctor` arm skips the STORAGE_DIR banner deliberately — the doctor's own `storage.writable` check names the real path and a remedy.
+ถ้าผิด: 14 lines of banner about a container that is not going to serve anything, ahead of the answer the operator ran the command for.
+
+Ruling: (TL-2 OBS-5) text assertions on the shell file for `exec`, for `&&` between the three stages, and for the preflight sitting inside the backgrounded block after `cd`. Weak guards, kept because the behavioural tests cannot see a `;` that silently becomes an unconditional migrate.
+ถ้าผิด: `&&` degraded to `;` runs the migration whatever the doctor said, which is the exact failure the ordering exists to prevent.
+
+Ruling: (TL-2 note) generating `JWT_SECRET` alone does not close the no-auth passthrough. That branch is a disjunction, `!AUTH_TOKEN || !JWT_SECRET` (`validatedRequest.js:29-36`), so with AUTH_TOKEN still absent a fresh install stays open until the operator picks a password — which is what the onboarding flow expects. Recorded in the script's header comment beside `clearStoredCredential`'s own statement that AUTH_TOKEN is instance authentication (`updateENV.js:1886`).
+ถ้าผิด: a future reader "fixes" the asymmetry by generating AUTH_TOKEN too, and reintroduces the lockout.
+
 ## Residual
 
 - **QA-3 ruling 1, the half that is not testable here.** `POST /system/update-password` with `usePassword:false` blanks `AUTH_TOKEN` and `JWT_SECRET` in memory only (`endpoints/system.js:705-707`) — no `updateENV` call, nothing written. Three tests cover what O2a controls: a restart finds no `AUTH_TOKEN`, `JWT_SECRET` is not rotated, and ensure-secrets never writes `AUTH_TOKEN` back. The in-memory/on-disk divergence itself is pre-existing behaviour outside this issue's diff; flagged for O2b, where the React step meets it.

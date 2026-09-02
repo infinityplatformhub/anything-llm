@@ -82,6 +82,33 @@ describe("the dispatch exists at all", () => {
     expect(source).toMatch(/\$\{1:-/);
   });
 
+  it("uses exec for the doctor arm", () => {
+    // Weak on its own — the behavioural test above proves the exit code
+    // survives — but it names the ONE word whose removal is invisible in a
+    // reading of the file and fatal to the gate.
+    const source = fs.readFileSync(ENTRYPOINT, "utf8");
+    expect(source).toMatch(/exec node .*doctor\.js/);
+  });
+
+  it("chains ensure-secrets, doctor and migrate with && rather than ;", () => {
+    // A `;` between them would run the migration whatever the doctor said,
+    // which is the entire failure this ordering exists to prevent.
+    const source = fs.readFileSync(ENTRYPOINT, "utf8");
+    expect(source).toMatch(/ensure-secrets\.js" &&/);
+    expect(source).toMatch(/doctor\.js" &&/);
+  });
+
+  it("runs the preflight inside the backgrounded server block, after the cd", () => {
+    // Both scripts resolve paths relative to the server directory; hoisting
+    // them out of the `{ ... } &` block would run them before `cd` and outside
+    // the chain whose failure stops the boot.
+    const source = fs.readFileSync(ENTRYPOINT, "utf8");
+    const cdAt = source.indexOf('cd "$APP_ROOT/server/"');
+    const secretsAt = source.indexOf("ensure-secrets.js");
+    expect(cdAt).toBeGreaterThan(-1);
+    expect(secretsAt).toBeGreaterThan(cdAt);
+  });
+
   it("dispatches before the STORAGE_DIR warning (ruling 5)", () => {
     // The warning block is 14 lines of banner. Running it first means
     // `... run --rm anything-llm doctor` prints a storage warning about a
@@ -99,6 +126,17 @@ describe("the dispatch exists at all", () => {
 });
 
 describe("doctor", () => {
+  it("skips the STORAGE_DIR banner, which the doctor reports better itself", () => {
+    // Deliberate (TL-2 OBS-4): the doctor has a storage.writable check that
+    // names the actual path and a remedy. Leading with 14 lines of banner
+    // about a container that is not going to serve anything buries the answer
+    // the operator asked for.
+    const result = runEntrypoint(["doctor"], { STORAGE_DIR: "" });
+    expect(`${result.stdout}${result.stderr}`).not.toContain(
+      "STORAGE_DIR environment variable is not set"
+    );
+  });
+
   it("runs the doctor script and nothing else", () => {
     const result = runEntrypoint(["doctor"]);
     expect(result.status).toBe(0);
