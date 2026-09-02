@@ -940,3 +940,5 @@ PMO post-merge suite ต้องเก็บบรรทัด `✕` และ�
 
 ### §7.9g trust by registry, not by property
 การตรวจใดที่อ่าน property/ชื่อจากฟังก์ชันเพื่อตัดสินความน่าเชื่อถือ (`resolverName`, `fn.name`, `isApiKeyGuard`) ปลอมได้โดยคนที่เขียนฟังก์ชันนั้นเสมอ — ใช้สมาชิกภาพใน registry (WeakSet บน globalThis symbol) ที่ endpoint file ใส่เองไม่ได้ · เจอ pattern นี้ = finding ทันที ไม่ต้อง mutation ก่อน (#40 bypass 4/5/7)
+
+§7.9f หลักฐาน: #40 task 1 เจอ bypass 8 ตัว — ทั้ง 8 เจอด้วย mutation, 0 ด้วยการอ่าน, 4 ตัวหลังเจอหลัง implementer รายงาน "แก้แล้ว" · shape/count guard (regex, registrations===N, skipped ว่าง) จับ "ของที่รู้จักหาย" ไม่จับ "ของที่ไม่รู้จักโผล่" — ต้องใช้ list ที่ production วนจริง (§7.9g)
