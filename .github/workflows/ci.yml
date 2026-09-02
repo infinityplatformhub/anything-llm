@@ -37,8 +37,14 @@ jobs:
       # curl or wget, so a container-level health check would either fail permanently or
       # (worse) be written as something that always succeeds. The runner HAS curl, so the
       # readiness wait is a real step below where its output is visible.
+      # 1.0.0+, NOT 0.5.x: server/package.json pins `chromadb ^2.0.1`, whose client speaks
+      # the v2 API. A 0.5.x server answers /api/v1/heartbeat with 200 and returns 404 for
+      # everything under /api/v2 — so the readiness wait below would go green and all 8
+      # tests would then fail on ChromaNotFoundError. Measured: 0.5.5 gives v1:200 v2:404,
+      # 1.0.0 gives v1:410 v2:200. Bumping the client without bumping this image is the
+      # drift to watch for.
       chroma:
-        image: chromadb/chroma:0.5.5
+        image: chromadb/chroma:1.0.0
         ports:
           - 8000:8000
       qdrant:
@@ -121,7 +127,10 @@ jobs:
                  "SKIP and CI would pass without running them (#73)"
             return 1
           }
-          wait_for chroma   http://localhost:8000/api/v1/heartbeat
+          # v2, matching the chromadb ^2.0.1 client. Probing v1 would answer 200 on a
+          # 0.5.x server that the client cannot talk to — a readiness check that passes
+          # while the thing it checks is unusable is worse than none.
+          wait_for chroma   http://localhost:8000/api/v2/heartbeat
           wait_for qdrant   http://localhost:6333/readyz
           wait_for weaviate http://localhost:8080/v1/.well-known/ready
           # Milvus has no plain HTTP readiness endpoint on 19530 (it speaks gRPC), so this
@@ -139,5 +148,9 @@ jobs:
 
       - run: yarn prisma migrate deploy --schema prisma/schema.prisma
         working-directory: server
+      # Do NOT add a path or -t pattern to this command. The #73 reporter deliberately
+      # stands down on a filtered run (a subset cannot prove a suite's absence), so a
+      # pattern here would silently disable the guard while CI still looked green — the
+      # very failure this issue closed. Run everything, or change the reporter first.
       - run: yarn test
         working-directory: server

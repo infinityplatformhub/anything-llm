@@ -109,25 +109,50 @@ describe("#73: real-store suites are not silently skipped in CI", () => {
     expect(JSON.stringify(jestConfig.reporters)).toContain("realStoreReporter");
   });
 
-  test("any CI-exempt suite is declared in the workflow and in residual-risks", () => {
-    // An exemption that lives only in this file is invisible to anyone reading CI. If
-    // Milvus (which needs etcd and MinIO) proves impractical in Actions, the honest
-    // outcome is three engines in CI plus a written statement — never four silent skips.
-    const exempt = Object.keys(CI_EXEMPT);
-    if (exempt.length === 0) {
-      expect(fs.existsSync(WORKFLOW)).toBe(true);
-      return;
-    }
+  // An exemption that lives only in a source file is invisible to anyone reading CI. If
+  // Milvus (which needs etcd and MinIO) ever proves impractical in Actions, the honest
+  // outcome is three engines in CI plus a written statement — never four silent skips.
+  //
+  // TL-2 NOTE, accepted: `CI_EXEMPT` is empty today, so a test that loops over it and
+  // early-returns asserts NOTHING — it passes identically whether the rule works or not,
+  // and would keep passing the day someone adds the first exemption. The rule is therefore
+  // extracted and driven with fixtures, so the branch that matters is actually executed.
+  //
+  // Same defect class as QA-1's M7 on slice 2: an assertion made against data that cannot
+  // exercise it is an assertion that the fixture is empty.
+  const undeclaredExemptions = (exempt, workflowText, residualsText) =>
+    Object.keys(exempt).filter((file) => {
+      const engine = file.replace(/RealStore.*$/, "").toLowerCase();
+      return (
+        !workflowText.toLowerCase().includes(engine) ||
+        !residualsText.toLowerCase().includes(engine)
+      );
+    });
+
+  test("an exemption missing from the workflow or residual-risks is caught", () => {
+    const fake = { milvusRealStoreAcl: "needs etcd+MinIO" };
+    // Declared in neither.
+    expect(undeclaredExemptions(fake, "name: CI", "# residuals")).toEqual([
+      "milvusRealStoreAcl",
+    ]);
+    // Declared in the workflow only — still not enough; an operator reading the risk
+    // register would never learn the engine is unguarded.
+    expect(
+      undeclaredExemptions(fake, "milvus: image: x", "# residuals")
+    ).toEqual(["milvusRealStoreAcl"]);
+    // Declared in both.
+    expect(
+      undeclaredExemptions(fake, "milvus: image: x", "- milvus is dev-run")
+    ).toEqual([]);
+  });
+
+  test("today's exemptions (if any) are declared in the workflow and residual-risks", () => {
     const workflow = fs.readFileSync(WORKFLOW, "utf-8");
     const residuals = fs.readFileSync(
       path.resolve(__dirname, "../../../../docs/superpowers/residual-risks.md"),
       "utf-8"
     );
-    for (const file of exempt) {
-      const engine = file.replace(/RealStore.*$/, "").toLowerCase();
-      expect(workflow.toLowerCase()).toContain(engine);
-      expect(residuals.toLowerCase()).toContain(engine);
-    }
+    expect(undeclaredExemptions(CI_EXEMPT, workflow, residuals)).toEqual([]);
   });
 
   test("the workflow sets every variable the listed suites need", () => {
