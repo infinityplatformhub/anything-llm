@@ -1,4 +1,6 @@
-const { SystemSettings } = require("../../models/systemSettings");
+const {
+  isConfirmedSingleUser,
+} = require("../authorization/actorResolver");
 
 /**
  * Checks if simple SSO login is disabled by checking if the
@@ -29,8 +31,13 @@ function simpleSSOLoginDisabled() {
  */
 async function simpleSSOLoginDisabledMiddleware(_, response, next) {
   if (!("multiUserMode" in response.locals)) {
-    const multiUserMode = await SystemSettings.isMultiUserMode();
-    response.locals.multiUserMode = multiUserMode;
+    // #58 rulings A/B, handed to #50 by #58's ledger: the raw setting and
+    // `validatedRequest` disagree in shape (b) (multi_user_mode false WITH user
+    // rows). Reading the raw setting here made this guard fail OPEN — it skipped
+    // the NO_LOGIN block on an instance the session layer treats as multi-user,
+    // leaving credential login available where the operator forbade it.
+    // Inverted from the confirmed helper, so the local keeps its meaning.
+    response.locals.multiUserMode = !(await isConfirmedSingleUser());
   }
 
   if (response.locals.multiUserMode && simpleSSOLoginDisabled()) {

@@ -88,6 +88,28 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
     ).toEqual([]);
   });
 
+  it("the refusing middleware runs FIRST on every /v1 route", () => {
+    // #50 §2: inherited from ssoIssuanceHotfix.test.js, which asserted this for
+    // one route while the ssoIssuanceLock existed. That file is deleted with its
+    // route, but the property is not about the lock — it is that an
+    // unauthenticated request never reaches anything that touches the database.
+    // Carrying a guard SOMEWHERE in the array (asserted above) is not the same
+    // claim: a guard in position 2 runs after whatever sits in position 1.
+    //
+    // validApiKey is a factory returning a NAMED function expression
+    // (validApiKey.js), so identity comparison against the export cannot work.
+    // The name can, and it was given deliberately.
+    const notFirst = routes.filter(
+      (route) => route.middlewares[0]?.name !== "apiKeyRequired"
+    );
+    expect(
+      notFirst.map(
+        (r) =>
+          `${r.method.toUpperCase()} ${r.path} (${r.module}) -> ${r.middlewares[0]?.name ?? "none"}`
+      )
+    ).toEqual([]);
+  });
+
   it("env-dump specifically is guarded", () => {
     const envDump = routes.find((r) => r.path === "/v1/system/env-dump");
     expect(envDump).toBeDefined();

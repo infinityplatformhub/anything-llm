@@ -31,6 +31,13 @@ export default {
   login: (noTry = false) => {
     return `/login${noTry ? "?nt=1" : ""}`;
   },
+  sso: {
+    // #50: /sso/simple is deleted. This now starts a real IdP login, and takes
+    // the provider because there is no single "the" provider any more.
+    login: (provider) => {
+      return `/api/sso/${provider}/login`;
+    },
+  },
   onboarding: {
     home: () => {
       return "/onboarding";

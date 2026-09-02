@@ -18,24 +18,33 @@ export default function Login() {
 
   if (loading || ssoLoading) return <FullScreenLoader />;
 
-  // #50: SIMPLE_SSO_NO_LOGIN still disables credential login — the server
-  // enforces it (endpoints/invite.js, endpoints/admin.js, /request-token) and
-  // that protection is deliberately kept. What is gone is the passthrough page
-  // it used to redirect to, so there is no longer anywhere to send the user
-  // except the operator's own URL.
+  // #50: SIMPLE_SSO_NO_LOGIN still disables credential login and the server
+  // still enforces it. What changed is the destination: /sso/simple is deleted,
+  // so a forced user goes to a real IdP login instead.
   if (ssoConfig.enabled && ssoConfig.noLogin) {
+    // An explicit redirect URL is the operator's own choice and wins.
     if (!!ssoConfig.noLoginRedirect && !query.has("token"))
       return window.location.replace(ssoConfig.noLoginRedirect);
-    // No redirect configured: say so plainly. Navigating to a deleted route
-    // rendered a blank "No token provided." screen with no way forward.
+
+    // Otherwise start a login with the first enabled provider. Not a <Navigate>:
+    // this is a server route that redirects to the IdP, not a client one.
+    const [provider] = ssoConfig.providers ?? [];
+    if (provider) {
+      window.location.replace(paths.sso.login(provider));
+      return <FullScreenLoader />;
+    }
+
+    // Credential login disabled with no provider configured and no redirect set
+    // is a locked-out instance. Say so, rather than navigating somewhere that
+    // renders a blank screen.
     return (
       <div className="w-screen h-screen overflow-hidden bg-theme-bg-primary flex items-center justify-center flex-col gap-4">
         <p className="text-theme-text-primary font-mono text-lg">
           Login via credentials has been disabled by the administrator.
         </p>
         <p className="text-theme-text-secondary font-mono text-sm">
-          Sign in through your identity provider, or contact the system
-          administrator.
+          No identity provider is enabled, so there is no way to sign in. The
+          system administrator must enable one or unset SIMPLE_SSO_NO_LOGIN.
         </p>
       </div>
     );

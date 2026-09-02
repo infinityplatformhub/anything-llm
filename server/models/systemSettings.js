@@ -625,6 +625,12 @@ const SystemSettings = {
       SimpleSSOEnabled: "SIMPLE_SSO_ENABLED" in process.env || false,
       SimpleSSONoLogin: "SIMPLE_SSO_NO_LOGIN" in process.env || false,
       SimpleSSONoLoginRedirect: this.simpleSSO.noLoginRedirect(),
+      // #50: SIMPLE_SSO_NO_LOGIN forces users through SSO, and the passthrough
+      // page it used to redirect to is deleted. The login screen needs to know
+      // where to send them instead, so the enabled providers travel with the
+      // flag that strands them. Ids only — never issuer URLs or client ids,
+      // which this payload is unauthenticated.
+      SSOProviders: this.ssoEnabledProviders(),
 
       // --------------------------------------------------------
       // Agent Skill Settings
@@ -1123,6 +1129,21 @@ const SystemSettings = {
       console.error(error.message);
       return { connectionKey: null };
     }
+  },
+
+  /**
+   * #50: which identity providers are configured and switched on. Derived from
+   * the registry so a provider added in S2/S3 appears without another edit here.
+   * @returns {string[]} provider ids, e.g. ["oidc"]
+   */
+  ssoEnabledProviders: function () {
+    const {
+      identityProviders,
+    } = require("../utils/identityProviders");
+    const on = ["1", "true", "yes", "on"];
+    return Object.keys(identityProviders).filter((id) =>
+      on.includes(String(process.env[`SSO_${id.toUpperCase()}_ENABLED`] ?? "").toLowerCase())
+    );
   },
 
   simpleSSO: {

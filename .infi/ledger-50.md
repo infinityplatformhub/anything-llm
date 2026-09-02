@@ -56,3 +56,67 @@ Ruling: `identity.js:138` ใส่ comment ว่าเป็น consumer เ�
 
 ## GREEN
 `Tests: 1340 passed, 1340 total` / `Test Suites: 132 passed, 132 total` fresh DB
+
+## Ruling รอบ 2 (Techlead pre-check → PMO) — commit ที่สอง
+
+Ruling: (1) เก็บ frontend redirect ไม่ทิ้ง — ที่ผมทำใน abf6cae7 (แทนด้วยข้อความ) ผิด
+operator ที่ตั้ง NO_LOGIN โดยไม่มี redirect URL จะล็อกเอาต์ตัวเอง. เปลี่ยนเป้า
+`paths.sso.login()` → `/api/sso/:provider/login` ของ provider แรกที่ enabled
+ต้องเพิ่ม `SSOProviders` ใน `SystemSettings.currentSettings()` เพราะ frontend
+ไม่เคยมีทางรู้ว่า provider ไหน enabled (ไม่มี endpoint ไหน expose มาก่อน)
+ส่ง id อย่างเดียว ไม่ส่ง issuer/client id เพราะ payload นี้ unauthenticated
+ถ้าผิด: หน้า login พาไป provider ที่ปิดอยู่ → 404 แทนที่จะเป็นข้อความบอกสาเหตุ
+
+Ruling: fallback เมื่อไม่มี provider เลย = ข้อความ (ไม่ใช่ redirect ไปไหน) เพราะ
+NO_LOGIN + ไม่มี IdP + ไม่มี redirect URL = instance ที่เข้าไม่ได้จริง ๆ ต้องบอกตรง ๆ
+ว่าต้อง enable provider หรือ unset NO_LOGIN ถ้าผิด: หน้าขาวแบบเดิม
+
+Ruling: (2) `simpleSSOEnabled.js:66` แก้ใน #50 (ยกเลิก issue แยกตาม ruling (a) เดิม)
+→ `!(await isConfirmedSingleUser())` ตาม #58 rulings A/B. ไฟล์ไม่ต้อง require
+SystemSettings อีกต่อไป ถ้าผิด: shape (b) ยัง fail-OPEN — ข้าม NO_LOGIN block
+บน instance ที่ session layer ถือว่า multi-user = credential login เปิดอยู่ทั้งที่
+operator สั่งปิด
+
+Ruling: (3) `sso.issue` ลบผ่าน migration slot ใหม่ 090000 ไม่แก้ 020000/045000
+(applied migration = immutable, `_prisma_migrations` เก็บ checksum)
+ลำดับใน migration: `role_permissions` ก่อน `permissions` เพราะไม่มี ON DELETE CASCADE
+(020000:33-39) ลบสลับลำดับ = orphan rows ถ้าผิด: FK ค้าง ชี้ไป id ที่ไม่มีแล้ว
+
+Ruling: key ที่เหลือ scope ว่างหลัง strip → ปล่อยเป็น `[]` **ไม่ revoke** (PMO ruling)
++ migration RAISE NOTICE บอก count และ keyPrefix ทุกตัวที่กลายเป็น `[]`
+ถ้าผิด: revoke = ตัดสินใจแทน operator และย้อนไม่ได้ ส่วน `[]` เห็นได้และแก้ได้
+
+Ruling: (4) property "middleware ที่ปฏิเสธต้องมาก่อน" ย้ายจาก `ssoIssuanceHotfix.test.js`
+ไปเป็น sweep ใน `apiRouteAuthSweep.test.js` — assert `mw[0].name === "apiKeyRequired"`
+ทุก /v1 route (62 route) เทียบชื่อเพราะ validApiKey เป็น factory คืน named function
+expression identity comparison ใช้ไม่ได้ ถ้าผิด: guard อยู่ position 2 = มีอะไรรันก่อนมัน
+
+Ruling: (5) single-use ของ TemporaryAuthToken ผ่าน HTTP ย้ายไป
+`identityRoutesHttp.test.js` (OIDC callback) เพราะ `ssoIssuanceLockHttp.test.js`
+ที่ถูกลบเป็นที่เดียวในทั้ง tree ที่พิสูจน์ property นี้ผ่าน HTTP และ OIDC พึ่ง property
+เดียวกัน ถ้าผิด: property หายไปเงียบ ๆ พร้อม feature ที่บังเอิญเป็นคนถือเทสไว้
+
+Ruling: `t1-authz-migration.test.js:173` แก้ assertion ไม่ใช่แก้ migration —
+suite นี้ replay step-7a ของ 020000 **หลัง** `migrate deploy` เพื่อจำลอง legacy state
+ซึ่ง re-INSERT vocabulary รวม `sso.issue` ที่ 090000 เพิ่งลบ. บน boot จริง migration
+รันตามลำดับและแถวนั้นหายจริง (พิสูจน์ใน ssoIssueRetirement.test.js ที่รัน migrate deploy
+ล้วน) จึงเป็น artifact ของการ rewind ไม่ใช่ drift ระหว่าง seed กับ schema
+assertion ใหม่ยังตรวจว่า replayed row เป็นความต่างเพียงอย่างเดียว
+ถ้าผิด: ถ้าไปแก้ migration แทน จะทำลาย property ที่ 020000 ต้องมี
+
+Ruling: `SIMPLE_SSO_NO_LOGIN_REDIRECT` **ไม่ลบ** ทั้งที่ ruling บอกว่าลบได้ตัวเดียว —
+วัดแล้วยังถูกอ่านอยู่ 4 จุด (`systemSettings.js:1160,1163`, `useSimpleSSO.js:25`,
+`Login/index.jsx:26-27`) และเป็นทางที่ ruling (1) สั่งให้เก็บไว้ (redirect URL ของ
+operator ชนะ provider default) ลบ = ทำลาย ruling (1) เอง เปลี่ยนเป็นแก้ comment
+ใน .env.example ทั้งสองไฟล์ให้ตรงความหมายใหม่แทน ถ้าผิด: operator ที่ตั้ง URL ไว้
+จะถูกพาไป provider แทน URL ตัวเอง
+
+## RED รอบ 2
+- predicate: revert `simpleSSOEnabled.js:66` กลับเป็น raw → 1 failed / 3 passed
+  ตัวที่แดงคือ "NO_LOGIN enforced in shape (b)" ส่วน control 3 ตัวเขียว (fixture
+  เป็น shape (b) จริง, ไม่ตั้ง flag ต้องผ่าน, ตั้งแค่ ENABLED ต้องผ่าน) — control
+  ชุดนี้จำเป็นเพราะ guard ที่เขียนผิดเป็น "block เสมอ" จะผ่านเทสหลักแต่พังทุก login
+
+## GREEN รอบ 2
+`Tests: 1351 passed, 1351 total` / `Test Suites: 133 passed, 133 total` fresh DB
+migration 090000 + full migrate deploy

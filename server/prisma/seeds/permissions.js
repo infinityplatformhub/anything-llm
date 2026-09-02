@@ -70,7 +70,6 @@ const API_ACTIONS = [
   "user.write",
   "system.read",
   "system.write",
-  "sso.issue",
   "invite.read",
   "invite.create",
   "invite.delete",
@@ -108,7 +107,6 @@ const ALL_ACTIONS = [
     "workspace.read",
     "workspace.write",
     "workspace.delete",
-    "sso.issue",
   ]),
 ].sort();
 
@@ -118,7 +116,7 @@ const SYSTEM_ROLES = [
     name: "setup_admin",
     scope: "org",
     permissions: [
-      "settings.write", "user.manage", "key.manage", "sso.issue",
+      "settings.write", "user.manage", "key.manage",
       "workspace.read", "access.diagnose", "role.grant", "role.revoke",
     ],
   },
