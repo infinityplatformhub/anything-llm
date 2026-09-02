@@ -12,6 +12,11 @@
 //
 // This is a bearer credential, not an identity: it proves "whoever opened this session is
 // making this request", which is exactly the property the raw UUID lacked.
+//
+// Minting is unconditional; ENFORCEMENT is behind EMBED_REQUIRE_SESSION_TOKEN, default off
+// (PMO ruling on #32). The widget that stores the token and sends it back lives in the
+// `embed/` submodule and ships separately, so the server must be able to run ahead of it
+// without locking visitors out of their own history. See embedMiddleware.js.
 
 const crypto = require("crypto");
 

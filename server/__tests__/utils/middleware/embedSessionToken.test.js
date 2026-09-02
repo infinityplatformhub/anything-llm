@@ -15,6 +15,12 @@
 // Ordering matters and is asserted: verification runs before the DB read, so an unsigned
 // request costs no query, and a forged token cannot be used to probe which sessions exist.
 //
+// Enforcement sits behind EMBED_REQUIRE_SESSION_TOKEN, default OFF (PMO ruling). The widget
+// that stores and returns the token lives in the `embed/` submodule — a separate repository
+// — so a server that enforced by default would 401 every widget that had not upgraded yet.
+// Both states are covered below: ON is the guarantee, OFF is the promise that shipping this
+// server half alone changes nothing for existing deployments.
+//
 // RED on 169e2689: there is no token, so every request bearing a valid-format id passes.
 
 process.env.STORAGE_DIR = process.env.STORAGE_DIR || require("os").tmpdir();
@@ -84,7 +90,16 @@ beforeEach(() => {
   prisma.embed_chats.findFirst.mockResolvedValue({ id: 10 });
 });
 
-describe("#32: an embed session id must be proven, not merely known", () => {
+afterEach(() => {
+  delete process.env.EMBED_REQUIRE_SESSION_TOKEN;
+});
+
+describe("issue 32: an embed session id must be proven, not merely known", () => {
+  // The flag is what this whole describe is about, so it is set for every case in it.
+  beforeEach(() => {
+    process.env.EMBED_REQUIRE_SESSION_TOKEN = "true";
+  });
+
   test("a valid-format session id with NO token is refused", async () => {
     // The whole point: knowing the UUID is no longer enough.
     const next = jest.fn();
@@ -245,7 +260,7 @@ describe("#32: an embed session id must be proven, not merely known", () => {
   });
 });
 
-describe("#32: token minting", () => {
+describe("issue 32: token minting", () => {
   test("two sessions of the same embed get different tokens", async () => {
     const a = mintSessionToken({ embedUuid: EMBED_UUID, sessionId: SESSION });
     const b = mintSessionToken({ embedUuid: EMBED_UUID, sessionId: OTHER_SESSION });
@@ -255,5 +270,71 @@ describe("#32: token minting", () => {
   test("the token does not contain the raw signing key", async () => {
     const token = mintSessionToken({ embedUuid: EMBED_UUID, sessionId: SESSION });
     expect(token).not.toContain(process.env.SIG_KEY);
+  });
+});
+
+describe("issue 32: with EMBED_REQUIRE_SESSION_TOKEN unset, the route behaves exactly as before", () => {
+  // The reason the flag exists. A deployment that upgrades the server before the widget
+  // must keep working: tokens are minted, nobody presents them yet, and history still
+  // loads. If any of these fail, shipping the server half alone breaks live embeds.
+  beforeEach(() => {
+    delete process.env.EMBED_REQUIRE_SESSION_TOKEN;
+  });
+
+  test("a request with no token is allowed through", async () => {
+    const next = jest.fn();
+    const response = makeResponse(embed());
+
+    await embedHistoryAccess(makeRequest(), response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBeNull();
+  });
+
+  test("a garbage token is ignored rather than fatal", async () => {
+    // An old widget could send anything, or nothing; with the flag off none of it is read.
+    const next = jest.fn();
+    const response = makeResponse(embed());
+
+    await embedHistoryAccess(makeRequest({ token: "not-a-token" }), response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test("the W-10 ownership check still runs — the flag does not disable it", async () => {
+    // The flag governs only the new token gate. The cross-tenant boundary #29 closed is
+    // not part of the bargain and must hold in both states.
+    prisma.embed_chats.findFirst.mockResolvedValue(null);
+    const next = jest.fn();
+    const response = makeResponse(embed());
+
+    await embedHistoryAccess(makeRequest(), response, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("the origin allowlist still runs too", async () => {
+    const next = jest.fn();
+    const response = makeResponse(
+      embed({ allowlist_domains: JSON.stringify(["https://other.example"]) })
+    );
+
+    await embedHistoryAccess(makeRequest(), response, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("a valid token is accepted with the flag off as well", async () => {
+    // The rollout order: widget ships first and starts sending tokens, server enforces
+    // later. A token arriving early must not be treated as an error.
+    const next = jest.fn();
+    const response = makeResponse(embed());
+    const token = mintSessionToken({ embedUuid: EMBED_UUID, sessionId: SESSION });
+
+    await embedHistoryAccess(makeRequest({ token }), response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });
