@@ -46,6 +46,26 @@ DISJOINT — the digit lookarounds stop `credit_card` matching inside a run of 1
 what the disjointness actually depends on. An unfalsifiable claim in a comment is worse than no
 comment: the next reader defends a property nothing holds. — ถ้าผิด: คอมเมนต์ที่อธิบายเหตุผลที่ไม่มีอยู่จริง
 
+## TL-1 pre-read, applied (comments and ledger only, no behaviour change)
+
+Ruling: my "ORDER IS NOT LOAD-BEARING" comment was too broad and TL-1 was right to catch it.
+Measured: `credit_card` DOES match `1234567890123` — 4+4+4+1 with the separators absent. So
+`thai_national_id` running first is the only reason a national id is labelled as one rather than as
+a card, and THAT ordering is load-bearing. The comment now says which pattern's position does not
+matter (`long_digit_run`'s) and which does. — ถ้าผิด: คนที่มาสลับลำดับทีหลังอ่านคอมเมนต์ผมแล้วเชื่อว่า
+ลำดับไม่สำคัญ แล้วเลขบัตรประชาชนทุกใบถูก label เป็นเลขบัตรเครดิต
+
+Residual declared, measured with exact codepoints: the DIGITS are handled, the SEPARATORS are not.
+`credit_card`'s `[ -]?` is ASCII-only —
+
+    １２３４ ５６７８ ９０１２ ３４５６   (ASCII space)  → redacted
+    １２３４　５６７８　９０１２　３４５６   (U+3000)       → NOT redacted
+    1234－5678－9012－3456              (U+FF0D)       → NOT redacted
+
+Ruling (PMO): NOT closed in #118. Widening the separator class is a different change from widening
+the digit class and needs its own fixture — one where the separator is the only variable. Own issue.
+— ถ้าผิด: fix สองอย่างในเทสชุดเดียว แล้วไม่รู้ว่าอันไหนทำให้ผ่าน
+
 ## Evidence
 
 `auditRedaction.test.js` **169 passed** (148 before + 21).

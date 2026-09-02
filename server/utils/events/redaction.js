@@ -87,6 +87,20 @@ const ALLOWED_KEYS = new Set([
 // Other Unicode digit families (Arabic-Indic, Devanagari) remain unmatched.
 // Adding them is a one-line change here when someone needs it; guessing at
 // which ones matter today would be inventing scope.
+//
+// RESIDUAL, measured and deliberately left: the DIGITS are handled, the
+// SEPARATORS are not. `credit_card`'s `[ -]?` is ASCII-only, so a card written
+// with fullwidth punctuation is not redacted even though every digit in it now
+// matches:
+//
+//   １２３４ ５６７８ ９０１２ ３４５６   (ASCII space)      → redacted
+//   １２３４　５６７８　９０１２　３４５６   (U+3000)          → NOT redacted
+//   1234－5678－9012－3456              (U+FF0D)          → NOT redacted
+//
+// Closing it means widening the separator class, which is a different change
+// from widening the digit class and deserves its own fixture — a number where
+// the separator is the only variable. Raised as its own issue rather than
+// folded in here.
 const D = "[0-9０-９]";
 const NOT_D = "(?<![0-9０-９])";
 const NOT_D_AFTER = "(?![0-9０-９])";
@@ -148,17 +162,22 @@ const PATTERNS = [
   // Deliberately makes NO semantic claim. The marker says a long run of digits
   // was here, not what it was, because not knowing is the whole situation.
   //
-  // Placed last for readability, but the ORDER IS NOT LOAD-BEARING and this
-  // comment should not pretend otherwise: measured, this pattern and the
-  // classified ones are DISJOINT. The digit lookarounds mean `credit_card`
-  // cannot match inside a run of 17+ (there is a digit after its last group)
-  // and this cannot match a run of 16 or fewer. Moving it to the front changes
-  // no outcome — verified by mutation, which is how the first version of this
-  // comment was found to be wrong.
+  // Placed last for readability. THIS pattern's position is not load-bearing:
+  // measured, it and the classified ones are disjoint, because the digit
+  // lookarounds mean `credit_card` cannot match inside a run of 17+ (a digit
+  // follows its last group) and this cannot match 16 or fewer. Moving it to
+  // the front changes no outcome — verified by mutation, which is how an
+  // earlier version of this comment was found to be wrong.
   //
-  // What the disjointness DEPENDS ON is those lookarounds. Relax them and this
-  // pattern starts eating the tail of every card number, which is why the tests
-  // pin the specific labels rather than only the fact of redaction.
+  // ORDER ELSEWHERE IN THIS LIST IS LOAD-BEARING, and the qualifier matters:
+  // `credit_card` DOES match a 13-digit run (`1234567890123` satisfies
+  // 4+4+4+1 with the separators absent — measured). `thai_national_id` runs
+  // first and claims it, which is the only reason a national id is labelled as
+  // one rather than as a card. Swapping those two mislabels every Thai id.
+  //
+  // What this pattern's disjointness DEPENDS ON is those lookarounds. Relax
+  // them and it starts eating the tail of every card number, which is why the
+  // tests pin the specific labels rather than only the fact of redaction.
   {
     name: "long_digit_run",
     re: () => new RegExp(`${NOT_D}${D}{17,}${NOT_D_AFTER}`, "g"),
