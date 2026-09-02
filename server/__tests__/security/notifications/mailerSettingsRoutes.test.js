@@ -303,3 +303,131 @@ describe("issue 80: the routes never echo the credential", () => {
     expect(read.body.settings).toHaveProperty("hasPassword");
   });
 });
+
+describe("issue 80 hotfix: a failed settings write never answers 200", () => {
+  // The #65 sweep caught this: `updateSettings` REPORTS failure rather than
+  // throwing, so discarding its return silently drops the write while the route
+  // reports success. Both call sites in this file did exactly that.
+  //
+  // The consequence differs per site and both are bad. On /mailer/test the hash
+  // is the record that a configuration was proven to work, so losing it makes an
+  // operator believe a test they watched succeed was remembered. On
+  // /mailer/settings the settings themselves are lost while the page says saved.
+  const { SystemSettings } = require("../../../models/systemSettings");
+
+  afterEach(() => jest.restoreAllMocks());
+
+  test("save reports failure when the settings write is refused", async () => {
+    fixture = await startSmtpFixture();
+    const settings = settingsFor(fixture);
+    await testMailer(adminAuth, {
+      ...settings,
+      password: SMTP_PASSWORD,
+      to: "operator@example.com",
+    });
+
+    jest
+      .spyOn(SystemSettings, "updateSettings")
+      .mockResolvedValue({ success: false, error: "write refused" });
+
+    const saved = await saveMailer(adminAuth, {
+      ...settings,
+      password: SMTP_PASSWORD,
+    });
+
+    expect(saved.status).toBe(500);
+    expect(saved.body.saved).toBe(false);
+
+    // TL-1 (4): the settings row is UNCHANGED. A refusal that answered 500 while
+    // having written half the fields would be worse than the silent success this
+    // replaces — the operator would retry against a configuration that is now
+    // neither the old one nor the new one.
+    const rows = await prisma.system_settings.findMany({
+      where: { label: { startsWith: "smtp_" } },
+    });
+    for (const row of rows)
+      expect(row.value).not.toBe("a-value-that-was-never-saved");
+  });
+
+  test("TL-1: a key-shaped refusal is still OUR 500, not the caller's 400", async () => {
+    // Every label this route writes comes from SETTING_KEYS, which is exactly
+    // what `supportedFields` contains — so `unknown_keys` is unreachable by
+    // construction. If it somehow arrives, it is a bug on our side, and a 400
+    // would tell the caller to fix a request that was never wrong.
+    fixture = await startSmtpFixture();
+    const settings = settingsFor(fixture);
+    await testMailer(adminAuth, {
+      ...settings,
+      password: SMTP_PASSWORD,
+      to: "operator@example.com",
+    });
+
+    jest.spyOn(SystemSettings, "updateSettings").mockResolvedValue({
+      success: false,
+      error: "Unknown setting keys: nonsense",
+      code: "unknown_keys",
+    });
+
+    const saved = await saveMailer(adminAuth, {
+      ...settings,
+      password: SMTP_PASSWORD,
+    });
+
+    expect(saved.status).toBe(500);
+  });
+
+  test("test reports failure when the verified hash cannot be recorded", async () => {
+    // The message really went out, so the response must not claim outright
+    // failure either — but it must not report success, because the proof the
+    // save gate will look for was never written.
+    fixture = await startSmtpFixture();
+    const settings = settingsFor(fixture);
+
+    jest
+      .spyOn(SystemSettings, "_updateSettings")
+      .mockResolvedValue({ success: false, error: "write refused" });
+
+    const tested = await testMailer(adminAuth, {
+      ...settings,
+      password: SMTP_PASSWORD,
+      to: "operator@example.com",
+    });
+
+    expect(tested.status).toBe(500);
+    expect(tested.body.ok).toBe(false);
+    // The mail DID go, and the message says so — an operator who watched it
+    // arrive must not be told it failed.
+    expect(tested.body.error).toMatch(/sent/i);
+  });
+});
+
+describe("issue 80 follow-up: /mailer/test is rate limited on the real route", () => {
+  // Same defect QA-2 found on the invite limiter, in the second place I made it:
+  // `mailerTestRateLimit` was mounted and nothing proved it. Unmounting it left
+  // 93/93 green — mounted and tested are separate claims, and only the first had
+  // been checked.
+  //
+  // It matters here because this route opens a socket to a host and port the
+  // CALLER supplies. Unmetered, that is a port scanner wearing an admin session.
+  test("the seventh test message in a window is refused", async () => {
+    fixture = await startSmtpFixture();
+    const settings = settingsFor(fixture);
+
+    const statuses = [];
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const response = await testMailer(adminAuth, {
+        ...settings,
+        password: SMTP_PASSWORD,
+        to: "operator@example.com",
+      });
+      statuses.push(response.status);
+    }
+
+    // The built-in ceiling is 6 — asserted against the shipped default rather
+    // than one the test sets, so this proves what a deployment actually gets.
+    expect(statuses.slice(0, 6).every((status) => status === 200)).toBe(true);
+    expect(statuses[6]).toBe(429);
+    // And a refusal costs no connection: the relay saw six, not eight.
+    expect(fixture.messages).toHaveLength(6);
+  }, 120_000);
+});

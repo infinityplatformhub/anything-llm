@@ -37,7 +37,22 @@ const SystemSettings = {
   /** A default system prompt that is used when no other system prompt is set or available to the function caller. */
   saneDefaultSystemPrompt:
     "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is {datetime}. Return only your response to the question given the above information following the users instructions as needed.",
-  protectedFields: ["multi_user_mode", "hub_api_key", "onboarding_complete"],
+  protectedFields: [
+    "multi_user_mode",
+    "hub_api_key",
+    "onboarding_complete",
+    // S11a (#80), TL-1: the mailer's verified-hash is the save gate's own proof.
+    // Left in `supportedFields` it was writable by anyone holding `system.write`
+    // — and because the HMAC is keyed on SIG_KEY, a hash copied from a staging
+    // instance sharing that key would verify here. The gate could be handed its
+    // own answer.
+    //
+    // The mailer route writes it through `_updateSettings`, which bypasses the
+    // key filter (as five other call sites already do). So the guarantee is "no
+    // request body can set this label", not "only one function writes it" —
+    // worth stating, because the second is what it looks like.
+    "smtp_verified_hash",
+  ],
   publicFields: [
     "footer_data",
     "support_email",
@@ -72,9 +87,6 @@ const SystemSettings = {
     // KEY_MAPPING, because this table is read on every page load and sits in
     // every backup.
     //
-    // `smtp_verified_hash` is the proof that these exact settings once sent a
-    // message. It is a digest, not a secret, and it belongs beside the settings
-    // it describes so the two are written together.
     "smtp_host",
     "smtp_port",
     "smtp_secure",
@@ -83,7 +95,6 @@ const SystemSettings = {
     "smtp_username",
     "smtp_from_address",
     "smtp_from_name",
-    "smtp_verified_hash",
 
     "logo_filename",
     "telemetry_id",

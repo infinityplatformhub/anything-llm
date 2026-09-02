@@ -107,9 +107,13 @@ async function sendInvite({ invite, address, appUrl }) {
   const link = `${base}/accept-invite/${invite.code}`;
 
   return driver.send({
-    // Seam 6: the idempotency key is the event and the recipient together, so a
-    // retry cannot double-send and two recipients of one event still both get a
-    // message.
+    // Seam 6: the idempotency key is the event and the recipient TOGETHER.
+    //
+    // Today an invite has exactly one recipient, so the address adds nothing —
+    // which is the reason to include it now rather than later. The day an event
+    // fans out to several people, a key derived from the invite alone would
+    // deduplicate everyone after the first into silence, and the failure would be
+    // invisible: no error, no bounce, just people who were never written to.
     notificationId: `invite:${invite.id}:${address}`,
     templateId: "invite",
     recipient: { type: "address", id: address },

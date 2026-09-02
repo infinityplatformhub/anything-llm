@@ -8,6 +8,12 @@
 // Behind `system.write` rather than `settings.write` (ruling A). These carry a
 // relay credential and open an outbound connection to a host the caller names —
 // closer to changing how the instance runs than to editing a preference.
+//
+// TL-1 follow-up (2): the gate binds a CONFIGURATION, not an ACTOR. One admin
+// may test and another may save, and that is intended — the question the gate
+// answers is "were these exact settings proven to work", which is a fact about
+// the settings and not about who established it. Binding it to a session would
+// also make it useless across a page reload, and tempting to work around.
 
 const {
   SmtpNotificationDriver,
@@ -92,6 +98,15 @@ function mailerEndpoints(app) {
             .status(400)
             .json({ ok: false, error: "A test address is required." });
 
+        // TL-1 follow-up (3): the body is FIXED, deliberately. The caller
+        // supplies a destination and nothing else — no subject, no text. This
+        // endpoint authenticates with the deployment's own relay credentials and
+        // sends from its own domain, so a caller-controlled body would make it a
+        // free mailer wearing this instance's reputation.
+        //
+        // `notificationId` carries a timestamp rather than a stable key because
+        // repeat tests are the POINT here: an operator retrying after fixing a
+        // setting must actually send again, not receive a deduplicated no-op.
         const driver = driverFor(settings, password);
         await driver.send({
           notificationId: `mailer-test:${Date.now()}`,
@@ -107,12 +122,34 @@ function mailerEndpoints(app) {
         // sent something. Any later edit to a connection field — or a rotated
         // password — stops matching, so the proof expires by construction rather
         // than by anyone remembering to clear a flag.
-        await SystemSettings.updateSettings({
+        // #65 sweep: `updateSettings` REPORTS failure rather than throwing, so
+        // discarding its return silently drops the write. That matters more here
+        // than for most settings — the hash is the record that this
+        // configuration was proven to work, and a save that quietly failed to
+        // write it leaves the operator believing a test they watched succeed was
+        // remembered.
+        const recorded = await SystemSettings._updateSettings({
           [mailerSettings.VERIFIED_HASH_KEY]: mailerSettings.configHash(
             settings,
             password
           ),
         });
+        // ALWAYS 500, never 400. `unknown_keys` and `protected_keys` are
+        // unreachable here by construction — every label written comes from
+        // SETTING_KEYS, which is exactly what `supportedFields` contains — so any
+        // failure is OUR write failing, and a 4xx would blame the caller for a
+        // bug no change to their request could fix (#78's dead-branch note).
+        //
+        // The message says what actually happened: the mail WAS sent, so an
+        // operator who watched it arrive is not told it failed, but the proof the
+        // save gate looks for is missing. Silence here strands them in a 409 loop
+        // — save refusing for want of a hash a successful test never wrote.
+        if (recorded?.error)
+          return response.status(500).json({
+            ok: false,
+            error:
+              "The test message was sent, but this configuration could not be recorded as verified. Send another test before saving.",
+          });
 
         response.status(200).json({ ok: true, error: null });
       } catch (e) {
@@ -120,12 +157,10 @@ function mailerEndpoints(app) {
         // failing command, and for an auth failure that command carries the
         // credential.
         console.error("[mailer] test failed:", e.name);
-        response
-          .status(400)
-          .json({
-            ok: false,
-            error: "The mail server could not be reached with these settings.",
-          });
+        response.status(400).json({
+          ok: false,
+          error: "The mail server could not be reached with these settings.",
+        });
       }
     }
   );
@@ -168,7 +203,23 @@ function mailerEndpoints(app) {
           });
         process.env[mailerSettings.PASSWORD_ENV_KEY] = password;
 
-        await SystemSettings.updateSettings(settings);
+        const written = await SystemSettings.updateSettings(settings);
+        // Same reasoning: 500, because every label here is in `supportedFields`.
+        //
+        // And the message names the SPLIT STATE, because there is one. The
+        // credential was persisted and is live in this process, while the
+        // settings it belongs to were not saved — so the stored hash no longer
+        // matches, and after a restart the mailer would fail every send with
+        // nothing on screen explaining why. No rollback: nothing spans
+        // `credential_store` and `system_settings` transactionally, which is a
+        // recorded residual risk rather than something to paper over here.
+        if (written?.error)
+          return response.status(500).json({
+            saved: false,
+            error:
+              "The password was stored but the settings could not be saved, so email delivery is not configured. Try saving again.",
+          });
+
         response.status(200).json({ saved: true, error: null });
       } catch (e) {
         console.error("[mailer] save failed:", e.message);
