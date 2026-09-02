@@ -549,3 +549,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113: Dev3 had the deny-only fix done before retraction → ruling (ข): accept new SHA (denyCount + document.share bar, RF-9 5 tests, D1/D2). #129 closes with it. QA-1 fires 4 cases + allow-only on new SHA. TL-1 re-reads 3 lines + document.share ruling.
 - #126 ruling: option 1 — Dev2 does Home half now; SettingsSidebar PrivacyLinkGate half after #121 merges (no two devs in one file).
 - #119 c44b059d3 gate: check-local pass, sweeps 63/63; contract line lost → rerunning alone.
+- #119 c44b059d3 gate GREEN: check-local pass, contract routeMountGuard+routeGateSweep 71/71, sweeps 63/63. Result/env/ledger (8 rulings) prepped in /tmp/wt-119. Awaiting TL-2 verdict + QA-2 probe.
+- Post-merge #40 t4 server: 3023 passed, 2 failed in metrics.test.js + inviteMailRoutes.test.js (+ known assignableRolesSession helper suite). Rerunning the two alone; inviteMailRoutes is a known #106 flake class. Frontend half still running.
