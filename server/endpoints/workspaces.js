@@ -8,7 +8,19 @@ const { moveProcessedDocsToFolder } = require("../utils/files");
 const { Workspace } = require("../models/workspace");
 const { Document } = require("../models/documents");
 const { DocumentVectors } = require("../models/vectors");
-const { WorkspaceChats } = require("../models/workspaceChats");
+const {
+  WorkspaceChats,
+  MIN_SEARCH_LENGTH,
+  MAX_SEARCH_LENGTH,
+} = require("../models/workspaceChats");
+const {
+  chatSearchRateLimit,
+} = require("../utils/middleware/requestControls");
+
+// V9 (#61): one page of search hits. Bounded here rather than taken from the
+// caller — an unbounded page is the whole history, which is the thing search
+// exists to avoid returning.
+const SEARCH_PAGE_SIZE = 50;
 const { getVectorDbClass, stripThinkingFromText } = require("../utils/helpers");
 const { handleFileUpload } = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
@@ -441,6 +453,108 @@ function workspaceEndpoints(app) {
           ? await WorkspaceChats.forWorkspaceByUser(workspace.id, user.id)
           : await WorkspaceChats.forWorkspace(workspace.id);
         response.status(200).json({ history: convertToChatHistory(history) });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // V9 (#61): search a user's OWN chat history inside one workspace.
+  //
+  // The gate is byte-identical to the two history reads above — same action, same
+  // resolver — so concealment, key binding and the impersonation rule come from
+  // the engine rather than from anything decided here. What this route adds is
+  // input validation; the row-level `user_id` predicate is the model's, and it is
+  // not optional there.
+  app.get(
+    "/workspace/:slug/chats/search",
+    [
+      validatedRequest,
+      chatSearchRateLimit,
+      requirePermission("chat.read", workspaceBySlug),
+    ],
+    async (request, response) => {
+      try {
+        const workspace = await Workspace.get({ slug: request.params.slug });
+        if (!workspace) {
+          response.sendStatus(400).end();
+          return;
+        }
+
+        const query = String(request.query?.q ?? "").trim();
+        if (
+          query.length < MIN_SEARCH_LENGTH ||
+          query.length > MAX_SEARCH_LENGTH
+        ) {
+          response.status(400).json({
+            error: `Search query must be between ${MIN_SEARCH_LENGTH} and ${MAX_SEARCH_LENGTH} characters.`,
+          });
+          return;
+        }
+
+        // A cursor that is not a positive integer is a malformed request, not a
+        // request for page one — silently starting over would hand the caller a
+        // duplicate page and look like the cursor worked.
+        const rawCursor = request.query?.cursor;
+        let beforeId = null;
+        if (rawCursor !== undefined && rawCursor !== "") {
+          beforeId = Number(rawCursor);
+          if (!Number.isInteger(beforeId) || beforeId <= 0) {
+            response.status(400).json({ error: "Invalid cursor." });
+            return;
+          }
+        }
+
+        // The searching user, never a user named in the request. `chat.read_others`
+        // does not widen this: V9 is the caller's own history (V10 owns cross-user
+        // search and the leak tests that go with it).
+        const user = await userFromSession(request, response);
+        if (!user?.id) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const chats = await WorkspaceChats.searchForUser({
+          workspaceId: workspace.id,
+          userId: user.id,
+          query,
+          limit: SEARCH_PAGE_SIZE,
+          beforeId,
+        });
+
+        // thread_id carries no relation by design (schema comment: adding one
+        // forces a whole-table migration), so slugs come from one extra lookup
+        // over the distinct ids on this page rather than from a join.
+        const threadIds = [
+          ...new Set(chats.map((chat) => chat.thread_id).filter(Boolean)),
+        ];
+        const threads = threadIds.length
+          ? await WorkspaceThread.where({ id: { in: threadIds } })
+          : [];
+        const slugByThreadId = new Map(
+          threads.map((thread) => [thread.id, thread.slug])
+        );
+
+        const results = chats.map((chat) => ({
+          chatId: chat.id,
+          prompt: chat.prompt,
+          response: chat.response_text,
+          threadSlug: chat.thread_id
+            ? (slugByThreadId.get(chat.thread_id) ?? null)
+            : null,
+          sentAt: Math.floor(new Date(chat.createdAt).getTime() / 1000),
+        }));
+
+        response.status(200).json({
+          results,
+          // Only a full page can have more behind it; a short page ends the walk
+          // without costing the caller a request that returns nothing.
+          nextCursor:
+            results.length === SEARCH_PAGE_SIZE
+              ? results[results.length - 1].chatId
+              : null,
+        });
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();

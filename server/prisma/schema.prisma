@@ -205,7 +205,10 @@ model workspace_chats {
   lastUpdatedAt   DateTime @default(now()) @db.Timestamptz(3)
   feedbackScore   Boolean?
   memoryProcessed Boolean? @map("memory_processed")
+  response_text   String? // V9: response.text as plain text, for trigram search. Raw `response` is a JSON blob whose sources/attachments must not be searchable.
   users           users?   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([user_id, workspaceId, id(sort: Desc)])
 }
 
 model workspace_agent_invocations {

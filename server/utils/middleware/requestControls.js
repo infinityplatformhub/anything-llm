@@ -159,6 +159,17 @@ const inviteRateLimit = limiter({
   limit: 30,
   keyGenerator: ipKey,
 });
+// V9 (#61): chat search is the one chat route whose cost is not bounded by the
+// caller's own history size — a short needle makes the planner walk a large
+// candidate set. The history reads it sits beside return a bounded page and
+// need no limiter of their own.
+const chatSearchRateLimit = limiter({
+  windowEnv: "CHAT_SEARCH_RATE_LIMIT_WINDOW_MS",
+  limitEnv: "CHAT_SEARCH_RATE_LIMIT_MAX",
+  windowMs: 60_000,
+  limit: 60,
+  keyGenerator: ipKey,
+});
 const embedHistoryRateLimit = limiter({
   windowEnv: "EMBED_RATE_LIMIT_WINDOW_MS",
   limitEnv: "EMBED_RATE_LIMIT_MAX",
@@ -215,6 +226,7 @@ module.exports = {
   apiIpRateLimit,
   apiKeyRateLimit,
   bearerKey,
+  chatSearchRateLimit,
   canonicalIp,
   embedHistoryRateLimit,
   ipAllowlist,
