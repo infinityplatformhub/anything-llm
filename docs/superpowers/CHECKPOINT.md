@@ -361,3 +361,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #112 plain half 259540acb: first gate run reported `0 total` = worktree not bootstrapped (§7.9l harness, not code); re-bootstrapped, contract + sweeps rerunning.
 - #112 auth half: TL-1 RF-1..5 forwarded to Dev5 (rule = User.count()===0 OR system.write per request; not isConfirmedSingleUser, not isOnboardingComplete).
 - USER DECISION PENDING: #113 Q4 — "Lark wins" over an account already federated to LDAP = re-point identity_links (takeover shape). TL-1: allow only for never-linked local accounts, via sync job not login path, own audit event, revoke sessions. Need เอา/ไม่เอา + which case.
+- #112 plain half 259540acb gate PASS (103/103 + sweeps 63/63, ledger 11) — wt-112/g112 kept; close when auth half lands in same branch. Ruling corrected: gate = isConfirmedSingleUser (fail closed), not User.count() (fails open) — TL-1 F1 reversed by source; lesson → §7.17.
+- #104: QA-3 pre-review confirms RF-1..3 broken on main; rulings: newValues drops failed key; update-password no rollback (residual + separate issue).

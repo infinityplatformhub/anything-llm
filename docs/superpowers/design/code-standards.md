@@ -998,3 +998,4 @@ Every reviewer rejection names a class; PMO repeats it in the next dispatch to a
 - **Reuse ruling without reading** (#96): "reuse X" when X answers a different question. Techlead confirms structure before dispatch.
 - **Harness silence** (§7.9l, #40 `0 total`, TL-2 wrong path 76/76): a suite that never ran reports green. Always confirm the suite count moved.
 - **Merge verified by title, not content** (#49 cb0e3b75e: merge commit landed docs+tests, zero source, because a prior revert of the same ancestor won). After every merge: `git show HEAD:<file> | grep -c <new symbol>` on one production file, and run the issue's contract on main before closing.
+- **Fail-direction ruling from name, not catch branch** (#112: "use User.count() not isConfirmedSingleUser" — count() returns 0 on DB error = open; isConfirmedSingleUser returns false = closed). Before ruling on which helper gates a route, read its catch branch.
