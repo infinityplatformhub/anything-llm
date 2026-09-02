@@ -52,7 +52,11 @@ function renderNewWorkspaceButton({ capabilities, user }) {
   );
 }
 
-const newWorkspaceControl = () => screen.queryByText(/new workspace/i);
+// i18n is not initialised in the test environment, so `t("new-workspace.title")`
+// renders the key itself. Query for the key: matching on English copy would
+// make this test fail whenever the wording changes, which is not what it is
+// about.
+const newWorkspaceControl = () => screen.queryByText("new-workspace.title");
 
 beforeEach(() => {
   resetCapabilities();
