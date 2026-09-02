@@ -37,48 +37,56 @@ const EXPECTED_SKIPPED_REGISTRARS = new Set(["agentWebsocket"]);
 
 function collectImports(ast) {
   const imports = [];
-  for (const node of ast.body) {
-    if (node.type !== "VariableDeclaration") continue;
-    for (const declaration of node.declarations) {
-      const initializer = declaration.init;
-      const requireCall =
-        initializer?.type === "CallExpression" &&
-        initializer.callee?.name === "require"
-          ? initializer
-          : initializer?.type === "MemberExpression" &&
-              initializer.object?.type === "CallExpression" &&
-              initializer.object.callee?.name === "require"
-            ? initializer.object
-            : null;
-      const requiredPath = requireCall?.arguments[0]?.value;
-      if (!requiredPath?.startsWith("./endpoints/")) continue;
-      if (initializer !== requireCall) {
+  const visit = (node, parent, grandparent) => {
+    if (!node || typeof node !== "object") return;
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === "require"
+    ) {
+      const argument = node.arguments[0];
+      if (argument?.type !== "Literal") {
         throw new Error(
-          "Unsupported endpoint import binding: use top-level destructuring or a namespace require"
+          `Unsupported dynamic require at line ${node.loc?.start.line ?? "unknown"}: endpoint modules use top-level unaliased destructuring`
         );
       }
-
-      if (declaration.id.type === "ObjectPattern") {
-        for (const property of declaration.id.properties) {
+      if (argument.value.startsWith("./endpoints/")) {
+        const declaration = parent;
+        const topLevel =
+          declaration?.type === "VariableDeclarator" &&
+          declaration.init === node &&
+          grandparent?.type === "VariableDeclaration" &&
+          ast.body.includes(grandparent);
+        const properties =
+          declaration?.id?.type === "ObjectPattern"
+            ? declaration.id.properties
+            : null;
+        const unaliased = properties?.every(
+          (property) =>
+            property.key.type === "Identifier" &&
+            property.value.type === "Identifier" &&
+            property.key.name === property.value.name
+        );
+        if (!topLevel || !unaliased) {
+          throw new Error(
+            `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example")`
+          );
+        }
+        for (const property of properties) {
           imports.push({
             exported: property.key.name,
             local: property.value.name,
-            namespace: false,
           });
         }
-      } else if (declaration.id.type === "Identifier") {
-        imports.push({
-          exported: "*",
-          local: declaration.id.name,
-          namespace: true,
-        });
-      } else {
-        throw new Error(
-          `Unsupported endpoint import binding: ${declaration.id.type}`
-        );
       }
     }
-  }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value))
+        value.forEach((child) => visit(child, node, parent));
+      else if (value && typeof value === "object") visit(value, node, parent);
+    }
+  };
+  visit(ast, null, null);
   return imports;
 }
 
@@ -188,87 +196,82 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
   test.each([
     {
-      name: "normal destructuring",
+      name: "normal top-level destructuring",
       source: 'const { normalEndpoints } = require("./endpoints/normal");',
-      expected: [
-        {
-          exported: "normalEndpoints",
-          local: "normalEndpoints",
-          namespace: false,
-        },
-      ],
-      why: "every endpoint property is registration-shaped",
+      expected: [{ exported: "normalEndpoints", local: "normalEndpoints" }],
+      reason: null,
     },
     {
-      name: "aliased destructuring",
-      source:
-        'const { hiddenEndpoints: probe } = require("./endpoints/hidden");',
-      expected: [
-        { exported: "hiddenEndpoints", local: "probe", namespace: false },
-      ],
-      why: "export identifies the property while local binding identifies calls",
-    },
-    {
-      name: "second declarator and suffix-free name",
-      source:
-        'const harmless = 1, { mountProbeRoutes } = require("./endpoints/probe");',
-      expected: [
-        {
-          exported: "mountProbeRoutes",
-          local: "mountProbeRoutes",
-          namespace: false,
-        },
-      ],
-      why: "declarator position and spelling grant no exemption",
-    },
-    {
-      name: "namespace import",
-      source: 'const ep = require("./endpoints/probe");',
-      expected: [{ exported: "*", local: "ep", namespace: true }],
-      why: "member calls through endpoint namespaces must remain visible",
-    },
-    {
-      name: "non-endpoint import",
+      name: "non-endpoint path",
       source: 'const { helper } = require("./utils/helper");',
       expected: [],
-      why: "only endpoint-module imports belong to registration completeness",
+      reason: null,
     },
-  ])("collectImports: $name — $why", ({ source, expected }) => {
-    expect(collectImports(parse(source, { sourceType: "script" }))).toEqual(
-      expected
-    );
-  });
-
-  test("collectImports rejects endpoint member-access bindings", () => {
-    const ast = parse(
-      'const probe = require("./endpoints/probe").mountProbeRoutes;',
-      { sourceType: "script" }
-    );
-    expect(() => collectImports(ast)).toThrow(
-      "Unsupported endpoint import binding: use top-level destructuring or a namespace require"
-    );
-  });
-
-  test("collectImports rejects unsupported endpoint ArrayPattern bindings", () => {
-    const ast = parse('const [probe] = require("./endpoints/probe");', {
-      sourceType: "script",
-    });
-    expect(() => collectImports(ast)).toThrow(
-      "Unsupported endpoint import binding: ArrayPattern"
-    );
+    {
+      name: "alias",
+      source:
+        'const { hiddenEndpoints: probe } = require("./endpoints/hidden");',
+      reason: "top-level unaliased destructuring",
+    },
+    {
+      name: "second declarator",
+      source:
+        'const harmless = 1, { probeEndpoints } = require("./endpoints/probe");',
+      expected: [{ exported: "probeEndpoints", local: "probeEndpoints" }],
+      reason: null,
+    },
+    {
+      name: "member access",
+      source: 'const probe = require("./endpoints/probe").mountProbeRoutes;',
+      reason: "top-level unaliased destructuring",
+    },
+    {
+      name: "namespace/default binding",
+      source: 'const ep = require("./endpoints/probe");',
+      reason: "top-level unaliased destructuring",
+    },
+    {
+      name: "array binding",
+      source: 'const [probe] = require("./endpoints/probe");',
+      reason: "top-level unaliased destructuring",
+    },
+    {
+      name: "nested block",
+      source:
+        'if (true) { const { probeEndpoints } = require("./endpoints/probe"); }',
+      reason: "top-level unaliased destructuring",
+    },
+    {
+      name: "computed require",
+      source: 'const { probeEndpoints } = require("./endpoints/" + name);',
+      reason: "Unsupported dynamic require",
+    },
+    {
+      name: "indirect require",
+      source:
+        'const path = "./endpoints/probe"; const { probeEndpoints } = require(path);',
+      reason: "Unsupported dynamic require",
+    },
+  ])("collectImports: $name", ({ source, expected, reason }) => {
+    const collect = () =>
+      collectImports(
+        parse(source, {
+          sourceType: "script",
+          enableExperimentalComponentSyntax: true,
+        })
+      );
+    if (reason) expect(collect).toThrow(reason);
+    else expect(collect()).toEqual(expected);
   });
 
   test("direct endpoint calls are formatting and binding independent", () => {
     const ast = parse(
-      `const { hiddenEndpoints: probe } = require("./endpoints/hidden");
-       const ep = require("./endpoints/probe");
-       probe (apiRouter);
-       ep.mountProbeRoutes(apiRouter);`,
+      `const { hiddenEndpoints } = require("./endpoints/hidden");
+       hiddenEndpoints (apiRouter);`,
       { sourceType: "script" }
     );
     expect(directRegistrarCalls(ast, collectImports(ast))).toEqual([
-      "probe",
-      "ep",
+      "hiddenEndpoints",
     ]);
   });
 
