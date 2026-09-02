@@ -240,7 +240,7 @@ describe("issue 63: GET /v1/workspace/:slug/chats", () => {
   //
   // The test is kept rather than deleted: #63's question was whether the GRANT half is
   // consulted on this route at all, and it still is. Only the grant it requires moved.
-  it("a key whose creator is only a workspace member is refused (#64)", async () => {
+  it("a key whose creator is only a workspace member is refused (issue 64)", async () => {
     const response = await withMemberKey(
       request(app).get(`/api/v1/workspace/${workspace.slug}/chats`)
     );
@@ -269,7 +269,7 @@ describe("issue 63: GET /v1/workspace/:slug/chats", () => {
 
 describe("issue 63: GET /v1/workspace/:slug/thread/:threadSlug/chats", () => {
   // Same reason as the workspace listing above: #64 made this route `chat.read_others`.
-  it("a key whose creator is only a workspace member is refused (#64)", async () => {
+  it("a key whose creator is only a workspace member is refused (issue 64)", async () => {
     const response = await withMemberKey(
       request(app).get(
         `/api/v1/workspace/${workspace.slug}/thread/${thread.slug}/chats`

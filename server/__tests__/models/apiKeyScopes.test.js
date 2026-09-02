@@ -75,7 +75,7 @@ describe("the scope presets the mint sites use", () => {
     expect(KNOWN_SCOPES).not.toContain("*");
   });
 
-  test("a retired scope says what replaced it, not that it is unknown (#64)", async () => {
+  test("a retired scope says what replaced it, not that it is unknown (issue 64)", async () => {
     // `Unknown scope(s): chat.read` is true and useless — it reads as a typo, so the
     // caller's next move is to check their spelling rather than to grant the right
     // thing. A name that WAS valid should say so.
@@ -89,7 +89,7 @@ describe("the scope presets the mint sites use", () => {
     expect(error).not.toMatch(/Unknown scope/);
   });
 
-  test("no all-users chat route has drifted back to chat.read (#64)", () => {
+  test("no all-users chat route has drifted back to chat.read (issue 64)", () => {
     // #64 NIT-2. The three routes that return EVERY user's chats declare
     // `chat.read_others`; `chat.read` would let a key read other people's chats with a
     // grant that does not say so, which is how it was before #64.
