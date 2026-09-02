@@ -95,7 +95,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #15 e77d0b78 (QA-1 witness 12/12 ×3, evidence/qa1-e2e-witness.md)
 - #28B merged; #44 merged; #47 merged (cdb03d1d)
 - pairwise merge-tree across all six: 0 conflicts
-- #32 ruling (ข): EMBED_REQUIRE_SESSION_TOKEN default off; widget → anythingllm-embed submodule PR [→ needs issue]
+- #32 ruling (ข): EMBED_REQUIRE_SESSION_TOKEN default off; widget → anythingllm-embed submodule PR [→ #49]
 - T-7 rulings: grants endpoint stays in #31; migrations → 070000/071000; frontend/src/models/system.js reserved for t7
 - ledger-46 reconstructed by PMO from commit bodies (QA-2 confirmed content)
 - RULE: main checkout is PMO-only; trial merges in detached /tmp worktrees (63beadd3 stray merge reset 2026-09-02)
