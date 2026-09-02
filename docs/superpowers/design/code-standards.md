@@ -922,3 +922,6 @@ Full `yarn test` (1,600+ tests, 5–10 min) runs **once**, by the PMO gate on th
 
 ### §7.6c every worktree starts with scripts/wt-bootstrap.sh
 One command: node 22 check, no symlinked node_modules, fresh DB + migrate deploy + seed + prisma generate. Replaces the four env failures seen on 2026-09-02 (node 26, missing deps after a merge, stale DB without a migration, unseeded baseline).
+
+### §7.9f mutation-first hand-off
+Dev/Techlead ส่ง SHA ให้ PMO gate ได้ก็ต่อเมื่อรัน mutation ที่ปิด finding นั้นเองแล้วเห็นแดง — รายงาน "แก้แล้ว" ของ implementer ไม่ใช่หลักฐาน (#40 bypass คลาสเดียวกันรอด 4 รอบ ทุกรอบเจอด้วย mutation ไม่เคยเจอด้วยการอ่าน)
