@@ -20,6 +20,10 @@ const RESOLVERS_FILE = path.join(
   __dirname,
   "../../../utils/middleware/resourceResolvers.js"
 );
+const MOCKUP_FILE = path.join(
+  __dirname,
+  "../../../../docs/superpowers/mockups/frontend-authz-capabilities.html"
+);
 
 function javascriptFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -154,5 +158,17 @@ describe("capability vocabulary by resource scope", () => {
         )
       ).toBe(true);
     }
+  });
+
+  test("workspace capabilities match the approved mockup", () => {
+    const mockup = fs.readFileSync(MOCKUP_FILE, "utf8");
+    const match = /const\s+WS_CAPS\s*=\s*(\[[^;]*\]);/.exec(mockup);
+    if (!match) throw new Error(`Could not parse WS_CAPS from ${MOCKUP_FILE}`);
+    const approved = JSON.parse(match[1]);
+
+    // Capability order has no meaning to authorizeMany or UI lookups. Sorting
+    // both full arrays ignores order while still exposing omissions, additions,
+    // and duplicates.
+    expect([...WORKSPACE_CAPABILITIES].sort()).toEqual([...approved].sort());
   });
 });
