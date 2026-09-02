@@ -84,3 +84,10 @@ Frontend caches per session and asks `can("user.manage")` instead of `role === "
 ## §PMO rulings (updated)
 - Part (A) capabilities endpoint = T-7 #31 (`GET /system/my-capabilities`). #40 = part (B) UI can() only, lane D, after #31.
 - Bug to test first: default user with workspace editor grants has sidebar hidden (Sidebar/index.jsx:193).
+
+### PMO rulings — #40 (2026-09-02, after Dev2 re-measure on f704874a)
+- (1) Capabilities endpoint accepts `?workspaceId=` and answers the workspace-scoped set via `authorizeMany` + `workspaceById`; lists derive from `ACTION_SCOPES`, never hard-coded; `org.member` excluded per #53. Scope of #40 = endpoint extension + Tier 1/2 org sites + Sidebar:193 bug (RED first) + PrivateRoute:118. Remaining workspace sites (ManageWorkspace, FileUploadWarning, ParsedFilesMenu, AgentConfig) → new issue #40b. Frontend cache keyed per workspaceId, invalidated by returned `policyVersion`.
+- (2) Site count 26/21 recorded in ledger.
+- (3) One-page persona-switch mockup (5 personas × org / workspace-A member / workspace-B outsider) committed under docs/superpowers/mockups/, SHA in contract, PMO confirms before implementation.
+- (4) PrivateRoute:118 included.
+- Flow: `task.sh start --type change` → SDD with Sonnet implementer + Sonnet reviewer (model stated) → `task.sh check` → SHA.
