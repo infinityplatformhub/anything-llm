@@ -25,8 +25,11 @@ function getTabs(t, user, canConfigureWorkspace) {
   // The decision is made by the CALLER and passed in. `getTabs` is a plain function invoked
   // from `useMemo`, so a hook called here would violate the Rules of Hooks and break at
   // runtime — which it did, in my first attempt; mutation testing surfaced it, not review.
-  const canSeeAgentSkills =
-    !user?.hasOwnProperty("role") || canConfigureWorkspace;
+  // TL-1 F2: `!user ||`, matching every other site. The old
+  // `!user?.hasOwnProperty("role")` also short-circuits for a user object that
+  // simply lacks a `role` key — a shape that is not single-user mode and should
+  // still be asked about the capability.
+  const canSeeAgentSkills = !user || canConfigureWorkspace;
   if (canSeeAgentSkills) {
     tabs.push({
       key: "agent-skills",

@@ -117,6 +117,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.clearAllMocks());
 
+// Source assertions below must read CODE, not prose. TL-1 measured the
+// difference: drop `visible` from the gate but leave a comment mentioning the
+// pattern, and a whole-file match still passes — the mutant survives while the
+// test reports it dead. Same failure as the drift sweep in this very SHA, and
+// as task 1's central lesson: scanning text is not scanning what runs.
+function codeOf(source) {
+  return source
+    .split("\n")
+    .map((line) => line.replace(/\/\/.*$/, ""))
+    .join("\n");
+}
+
 describe("#40 task 4: WorkspaceModelPicker gates on workspace.write, not role", () => {
   test("a role-default user holding workspace.write SEES it", async () => {
     // The bug #40 exists to close: `role !== "admin"` hides the control from someone the
@@ -196,7 +208,7 @@ describe("#40 task 4: WorkspaceModelPicker gates on workspace.write, not role", 
       "utf8"
     );
 
-    expect(source).toMatch(/visible && can\("workspace\.write"\)/);
+    expect(codeOf(source)).toMatch(/visible && can\("workspace\.write"\)/);
   });
 
   test("single-user mode (no user object) still sees it", async () => {
@@ -315,7 +327,7 @@ describe("#40 task 4: ToolsMenu gates the agent-skills tab on workspace.write", 
       ),
       "utf8"
     );
-    expect(source).toMatch(/visible && can\("workspace\.write"\)/);
+    expect(codeOf(source)).toMatch(/visible && can\("workspace\.write"\)/);
   });
 
   test("an INVISIBLE workspace hides the tab even with an allowing map (M3)", async () => {
