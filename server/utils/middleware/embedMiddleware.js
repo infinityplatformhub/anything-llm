@@ -4,6 +4,19 @@ const { EmbedChats } = require("../../models/embedChats");
 const { EmbedConfig } = require("../../models/embedConfig");
 const { reqBody } = require("../http");
 const prisma = require("../prisma");
+const {
+  verifySessionToken,
+  tokenFromRequest,
+} = require("./embedSessionToken");
+
+/**
+ * issue 32: is session-token proof required on the history routes?
+ *
+ * Presence-based, matching EMBED_REQUIRE_ALLOWLIST directly below it rather than inventing
+ * a second truthiness convention in the same file. Read per-request, not captured at module
+ * load, so a test can flip it without re-requiring the module.
+ */
+const requireSessionToken = () => "EMBED_REQUIRE_SESSION_TOKEN" in process.env;
 
 // Finds or Aborts request for a /:embedId/ url. This should always
 // be the first middleware and the :embedID should be in the URL.
@@ -230,6 +243,37 @@ async function embedHistoryAccess(request, response, next) {
     ) {
       response.status(401).json({ error: "Invalid request." });
       return;
+    }
+
+    // issue 32: the session id must be PROVEN, not merely known. W-10 below closes the
+    // cross-tenant half of G12 (embed A cannot name embed B's session); this closes the
+    // other half, where anyone who learns a visitor's UUID reads their conversation.
+    //
+    // Before the ownership query on purpose, for two reasons: an unsigned caller must not
+    // be able to make the database work, and that query must never become an oracle for
+    // which session ids exist.
+    //
+    // Behind EMBED_REQUIRE_SESSION_TOKEN, default OFF (PMO ruling on #32). The widget that
+    // stores the minted token and presents it back lives in the `embed/` submodule — a
+    // separate repository shipping on its own cadence — so enforcing here by default would
+    // 401 every existing widget the moment a server upgraded ahead of it. The server mints
+    // unconditionally (see endpoints/embed/index.js), so a deployment can roll the widget
+    // out first, confirm tokens are flowing, and only then set this flag. Turn it on once
+    // the widget half has landed; until then this route is exactly as it was after W-10.
+    if (requireSessionToken()) {
+      const verdict = verifySessionToken({
+        token: tokenFromRequest(request),
+        embedUuid: String(embed.uuid),
+        sessionId,
+      });
+      if (!verdict.valid) {
+        // A token for a different session or embed is a real credential pointed at the
+        // wrong thing (403); no token, a malformed one, or an expired one is simply
+        // unproven (401). Neither answer says whether the session exists.
+        const status = verdict.reason === "mismatch" ? 403 : 401;
+        response.status(status).json({ error: "Invalid session credentials." });
+        return;
+      }
     }
 
     // T-4b (#29) W-10 / S-24 (G12): the session must belong to THIS embed. The gates above

@@ -29,6 +29,7 @@ const {
 } = require("../../../utils/middleware/embedMiddleware");
 
 const SESSION = "123e4567-e89b-42d3-a456-426614174000";
+const EMBED_UUID = "emb-ownership";
 
 const makeResponse = (embed) => ({
   locals: { embedConfig: embed },
@@ -37,13 +38,30 @@ const makeResponse = (embed) => ({
   sendStatus: jest.fn().mockReturnThis(),
   end: jest.fn(),
 });
-const makeRequest = (overrides = {}) => ({
+// issue 32 added a token gate ahead of the ownership check these tests exercise. They
+// assert what happens AT that check, so each request now carries a token minted for the
+// embed under test — the token itself has its own suite (embedSessionToken.test.js).
+const {
+  mintSessionToken,
+  SESSION_TOKEN_HEADER,
+} = require("../../../utils/middleware/embedSessionToken");
+
+// Takes the embed it is addressed to, so the token matches whichever embed the test
+// mounts — a token is bound to its embed, so a shared default would only ever work for one.
+const makeRequest = (forEmbed, overrides = {}) => ({
   params: { sessionId: SESSION },
-  headers: { origin: "https://allowed.example" },
+  headers: {
+    origin: "https://allowed.example",
+    [SESSION_TOKEN_HEADER]: mintSessionToken({
+      embedUuid: String(forEmbed.uuid),
+      sessionId: SESSION,
+    }),
+  },
   ...overrides,
 });
 const embed = (id) => ({
   id,
+  uuid: `${EMBED_UUID}-${id}`,
   enabled: true,
   allowlist_domains: JSON.stringify(["https://allowed.example"]),
 });
@@ -58,7 +76,7 @@ describe("T-4b W-10: an embed session is bound to the embed that issued it", () 
     const response = makeResponse(embed(2));
     const next = jest.fn();
 
-    await embedHistoryAccess(makeRequest(), response, next);
+    await embedHistoryAccess(makeRequest(embed(2)), response, next);
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(404);
@@ -72,7 +90,7 @@ describe("T-4b W-10: an embed session is bound to the embed that issued it", () 
     const response = makeResponse(embed(1));
     const next = jest.fn();
 
-    await embedHistoryAccess(makeRequest(), response, next);
+    await embedHistoryAccess(makeRequest(embed(1)), response, next);
 
     expect(next).toHaveBeenCalledTimes(1);
   });
@@ -84,7 +102,7 @@ describe("T-4b W-10: an embed session is bound to the embed that issued it", () 
     const response = makeResponse(embed(1));
     const next = jest.fn();
 
-    await embedHistoryAccess(makeRequest(), response, next);
+    await embedHistoryAccess(makeRequest(embed(1)), response, next);
 
     expect(response.status).toHaveBeenCalledWith(404);
     expect(response.json).toHaveBeenCalledWith(
@@ -97,7 +115,7 @@ describe("T-4b W-10: an embed session is bound to the embed that issued it", () 
     const response = makeResponse(embed(1));
     const next = jest.fn();
 
-    await embedHistoryAccess(makeRequest(), response, next);
+    await embedHistoryAccess(makeRequest(embed(1)), response, next);
 
     expect(next).not.toHaveBeenCalled();
   });
@@ -109,7 +127,7 @@ describe("T-4b W-10: an embed session is bound to the embed that issued it", () 
     });
     const next = jest.fn();
 
-    await embedHistoryAccess(makeRequest(), response, next);
+    await embedHistoryAccess(makeRequest(embed(1)), response, next);
 
     expect(next).not.toHaveBeenCalled();
     expect(prisma.embed_chats.findFirst).not.toHaveBeenCalled();
