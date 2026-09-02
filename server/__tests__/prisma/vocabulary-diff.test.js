@@ -69,8 +69,12 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
       "audit.read",
       // #53: membership, carrying no authority
       "org.member",
+      // #138: firing a directory run deactivates every user absent from the
+      // provider snapshot, so it is its own action rather than a use of
+      // user.manage, and super_admin holds it alone.
+      "directory.sync",
     ];
     expect(approved.filter((a) => !ALL_ACTIONS.includes(a))).toEqual([]);
-    expect(ALL_ACTIONS.length).toBe(62);
+    expect(ALL_ACTIONS.length).toBe(63);
   });
 });

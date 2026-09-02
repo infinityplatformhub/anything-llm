@@ -99,6 +99,25 @@ const API_ACTIONS = [
 // the instance, which is the same reason T-2 flagged chat export.
 const AUDIT_ACTIONS = ["audit.read"];
 
+// #138 (S4b slice 3). Triggering a directory sync is not a user-management action
+// and deliberately does not live in ENGINE_ACTIONS beside `user.manage`.
+//
+// The reason is what the sync DOES rather than what it is called: a run invokes
+// `applyDirectoryPlan`, which creates users, creates groups, rewrites group
+// membership and DEACTIVATES every user absent from the snapshot. Lark has no
+// delta API, so absence from a snapshot is the only departure signal
+// (applyDirectoryPlan.js:8-12) — a misconfigured directory app produces a
+// snapshot that is confidently wrong about the whole organisation, and applying
+// it is a bulk suspend of everyone.
+//
+// So it is its own action, held by super_admin alone. In particular NOT
+// setup_admin: that role exists to finish an installation, and #137 widened it
+// into system.write/system.read/user.read for exactly that. Handing it
+// directory.sync would let the role that configures the provider also fire the
+// run that suspends the organisation — the two duties this split exists to keep
+// apart (TL-1 38287c1cf).
+const DIRECTORY_ACTIONS = ["directory.sync"];
+
 // #53: "is the caller a real, unsuspended principal of this org" — and nothing
 // more. It carries NO authority: every route that asks it still filters by
 // membership in the handler. It exists because seven routes were asking
@@ -118,6 +137,7 @@ const ALL_ACTIONS = [
     ...ENGINE_ACTIONS,
     ...API_ACTIONS,
     ...AUDIT_ACTIONS,
+    ...DIRECTORY_ACTIONS,
     ...ORG_MEMBERSHIP_ACTIONS,
     "workspace.read",
     "workspace.write",
@@ -224,6 +244,7 @@ const ACTION_SCOPES = Object.freeze({ "org.member": "org" });
 module.exports = {
   DOCUMENT_ACTIONS,
   AUDIT_ACTIONS,
+  DIRECTORY_ACTIONS,
   ALL_ACTIONS,
   ACTION_SCOPES,
   SYSTEM_ROLES,
