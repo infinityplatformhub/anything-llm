@@ -142,3 +142,11 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 35c91ab0: contract 36/36; URL gate hit = user.js:366 old comment (Dev3 fixes in step 5) + mockup CDN (checkignore mockups/). Ruling B revised: keep updateENV:1655 order; persistCredential returns {error}; verified-hash written last only if persist succeeded. Scope: A/B/D in #80, C → #85, E → #78.
 - #40: bypass #10 (mountProbeRoutes) open; rulings: default-deny collector keyed by require ./endpoints/* + apiRouter call, collectImports(ast) fixture-driven, helper register(app, apiRouter), no injectable classifier in spoof/sweep tests, CONTROL + bucket exclusivity. #86 opened: /v1 rate limit has zero test coverage (Dev2 after #40).
 - Cleanup replies complete (all 10). Open question: s1-oidc-postgres owner (Dev3 asked).
+
+## 2026-09-02 — #74 c0c6472b0 gate PASS; #78 rebase hold; #80 37712d41
+- #74 c0c6472b0: gate PASS (tests arrange own extension state, SIG_SALT env); TL-2 (3 DB states) + QA-3 (fresh+installed) verdicts requested → close/merge. Residual to add at merge: getVectorDbClass raw-string switch (app silently falls back to LanceDB on `PGVECTOR`).
+- #78 3a10defc: gate PASS but branch forked before #72 (3-file overlap, community-hub reverts 400→500). Ruling: rebase on main; narrowing 403 first then #72 400 mapping; 4 boundary tests (manager+unknown→400, manager+multi_user_mode→400 protected, manager+hub_api_key→403, forbidden+unknown→403). Gate env lesson: CONTRACT_CMD needs `export PATH=node@22` or jest prints no `Tests:` line.
+- #84 ruling: fix at system.js:672 route only; enable-multi-user out of scope; secrets derived from KEY_MAPPING (91, not 95 — grep counted comments).
+- #80 37712d41: TL-1 F1/F2/F3 + NITs done (flags split, notificationId idempotency success-only bounded+TTL, retryAfterMs deleted); gating partial. Route lane next.
+- #40 152cad912 still adds accepted shapes; ruling: full-tree require walk with default:fail, mutation table must name who ran each.
+- #86 opened (/v1 rate limit zero coverage). §7.1d, §7.9i, §7.6c note added.
