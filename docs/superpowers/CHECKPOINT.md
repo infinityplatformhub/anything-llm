@@ -805,3 +805,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - checkignore +3 test files (describe "#NNN" detector FP).
 - #137 TL-1 REJECT on fcf4236d4 (88a6aabfb): F-1 audit.purge not in seed ALL_ACTIONS → t1-authz-migration.test.js:186 red on merge; fix AUDIT_ACTIONS += "audit.purge" (seeds/permissions.js:100). F-2 add RF-F2 set-equality (migrate-only permissions minus RETIRED == ALL_ACTIONS, both directions) using block E's DB; mutant = today's seed. Rename accepted for the prefix-collision reason only (deploy of earlier-named migration measured fine). Re-verdict = two hunks.
 - #138 driver: mutants A/B/C killed by named tests; D re-running (first run killed at 120s → SURVIVOR-UNKNOWN, harness working); E/F queued. Ledger committing next.
+- #138 driver → ab26979ab (cd2c6cabe + ledger-138, 7 rulings). Gate step 8 / TL-1 / QA-1 retargeted. Mutants D–F results pending from Dev3 (message, not commit).
