@@ -110,9 +110,59 @@ this is additive or replaces `User.delete`.
 
 Risk tier: this is `auth` on every axis — permissions, schema, session revocation.
 
-## What I did NOT verify
+## The three residuals, now measured (PMO follow-up)
 
-- whether any Lark/LDAP/OIDC/SAML provider path re-links a suspended user on next login
-  (`linkPrincipal.js:77` throws for an existing link, but I did not drive a real login)
-- whether `workspace_users` rows for a deleted user cascade
-- the mobile device path end to end
+All three came back CLEAN. Recording them as verified rather than assumed, because "probably fine"
+is what a later reader inherits otherwise.
+
+**Provider re-link of a suspended user — REFUSED.** Drove `linkPrincipal` against a real
+`identity_links` row for a suspended user:
+
+    existing link, suspended user      ->  REFUSED "This account is suspended."
+    NEW subject, same email, suspended ->  REFUSED "This email is already linked…"
+
+The second is refused by the R1 anti-takeover rule rather than by the suspension check, which is
+worth knowing: the two refusals have different causes, so removing either one leaves a path open.
+`linkPrincipal.js:77` is shared by all four drivers (Lark, LDAP, OIDC, SAML) — they reach the same
+core, so this is one check rather than four.
+
+**`workspace_users` cascades.** `schema.prisma:251` is a real FK with `onDelete: Cascade`; measured
+1 row before the delete, 0 after. `identity_links` likewise (`schema.prisma:409`), 0 after.
+
+So the orphaning in Finding 2 is specific to `principal_role_grants`, and specific to the fact that
+its `principal_id` is a String rather than a relation. Every table that models the user with a real
+FK behaves correctly. That narrows the fix and is an argument for the schema shape being the defect
+rather than `User.delete` being incomplete.
+
+**Mobile device path — closed, in both states.**
+
+    suspended user's device  ->  400 "User is suspended."   next() NOT called
+    after the user is deleted ->  device row is GONE (cascade, schema.prisma:546)
+    unclaimed device (userId null) -> next() called, locals.user unset
+
+The third line is the one worth flagging: an unclaimed device passes the middleware with no user
+attached. That is by design — `endpoints/mobile/middleware/index.js:30` guards the user branch — but
+it means every route behind this middleware must handle `locals.user` being absent. Not an
+offboarding defect; noted because S12 must not assume this middleware yields a user.
+
+**One more, measured while there: suspension does not remove grants.**
+
+    grants before suspend: 1    after suspend: 1
+
+Consistent with Finding 1 — suspension changes one column and nothing else. Correct today (the
+resolver re-reads `suspended`), and it means a suspended user's grants are still live rows that any
+`principal_role_grants` query counts. Anything that answers "who holds this role" from the grants
+table alone includes suspended users.
+
+## Probe corrections
+
+Two of these probes were wrong before they were right, and both would have produced a false result:
+
+- the first identity-link probe silently failed to create the link (`user_id` vs `userId`), so
+  `linkPrincipal` took the NEW-user branch and reported `ALLOWED created=true` — the opposite of the
+  truth. It now throws if the setup write fails instead of logging and continuing.
+- the first mobile probe passed a request object with no `header()`, so the middleware 500'd on its
+  own first line and never reached the suspension check.
+
+Both were caught by the result looking wrong rather than by the probe reporting an error, which is
+the argument for asserting on setup rather than on the outcome alone.
