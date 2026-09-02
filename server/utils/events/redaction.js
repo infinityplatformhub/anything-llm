@@ -116,11 +116,7 @@ const NOT_D_AFTER = "(?![0-9０-９])";
  * ordinary case on exactly the input #118 was widening for.
  *
  * IN: the visible separators a person or an IME actually produces between digit
- * groups — the spaces, the dash family, and both commas.
- *
- * `,` is here alongside `，` deliberately. A class where the fullwidth comma
- * matches and the ASCII one does not is the same half-widened asymmetry that
- * created this bug; widening one width and not the other is how #118 shipped.
+ * groups — the spaces and the dash family.
  *
  * OUT, and each is a decision rather than an omission:
  *
@@ -134,6 +130,14 @@ const NOT_D_AFTER = "(?![0-9０-９])";
  *   is narrow. Where invisible characters should be stripped is its own
  *   question and belongs in its own issue, not in a separator class.
  *
+ *   `,` and `，` — proposed as IN and REVERSED after measurement. A comma
+ *   between numbers is how lists are written, so the class caught
+ *   `ids: 1001,1002,1003,1004`, `1000,2000,3000,4000`, chunk sizes and order
+ *   ids, none of which the old pattern ever touched. That is the newline
+ *   argument again: an ordinary log redacting itself protects nobody. Both
+ *   widths go out together, so the symmetry that motivated adding the ASCII one
+ *   is kept — a card written with commas is not a form anyone types.
+ *
  *   `.` `/` `:` `．` `：` `＝` `＿` — these join fields, versions, dates and
  *   paths far more often than they join card groups.
  *
@@ -142,7 +146,6 @@ const NOT_D_AFTER = "(?![0-9０-９])";
  */
 const SEPARATORS = [
   "\\u0020", // space
-  "\\u002C", // comma
   "\\u002D", // hyphen-minus
   "\\u00A0", // no-break space
   "\\u2009", // thin space
@@ -155,7 +158,6 @@ const SEPARATORS = [
   "\\u2015", // horizontal bar
   "\\u2212", // minus sign
   "\\u3000", // ideographic space
-  "\\uFF0C", // fullwidth comma
   "\\uFF0D", // fullwidth hyphen-minus
 ];
 // Each entry is an ESCAPE SEQUENCE, not the character itself, and the class is

@@ -316,7 +316,6 @@ describe("issue 71: invite codes never reach the audit log", () => {
         test.each([
           ["U+0020 space", " "],
           ["U+002D hyphen-minus", "-"],
-          ["U+002C comma", ","],
           ["U+00A0 no-break space", "\u00A0"],
           ["U+2009 thin space", "\u2009"],
           ["U+202F narrow no-break space", "\u202F"],
@@ -328,7 +327,6 @@ describe("issue 71: invite codes never reach the audit log", () => {
           ["U+2014 em dash", "\u2014"],
           ["U+2015 horizontal bar", "\u2015"],
           ["U+2212 minus sign", "\u2212"],
-          ["U+FF0C fullwidth comma", "\uFF0C"],
           ["U+FF0D fullwidth hyphen-minus", "\uFF0D"],
         ])("%s, with ASCII digits", async (_label, separator) => {
           const row = await scrubbed(joined(CARD, separator));
@@ -338,7 +336,6 @@ describe("issue 71: invite codes never reach the audit log", () => {
         test.each([
           ["U+3000 ideographic space", "\u3000"],
           ["U+FF0D fullwidth hyphen-minus", "\uFF0D"],
-          ["U+FF0C fullwidth comma", "\uFF0C"],
         ])("%s, with FULLWIDTH digits — the realistic IME case", async (_l, sep) => {
           const row = await scrubbed(joined(FULLWIDTH, sep));
           expect(row).toContain("[redacted:credit_card]");
@@ -352,12 +349,22 @@ describe("issue 71: invite codes never reach the audit log", () => {
           expect(row).toContain("[redacted:credit_card]");
         });
 
-        test("ASCII comma matches, symmetrically with the fullwidth one", async () => {
-          // Stated as its own test because a class where `\uFF0C` matches and
-          // `,` does not is the same half-widened asymmetry that created this
-          // bug — #118 widened digits and left punctuation behind.
-          const row = await scrubbed(joined(CARD, ","));
-          expect(row).toContain("[redacted:credit_card]");
+        test("BOTH commas are OUT — proposed as IN, reversed on measurement", async () => {
+          // They were in the contract and are not in the class. A comma between
+          // numbers is how a LIST is written: measured, adding it caught
+          // `ids: 1001,1002,1003,1004`, `1000,2000,3000,4000`, chunk sizes and
+          // order ids — none of which the pattern touched before. Same argument
+          // as newline. Both widths go out together, so the symmetry that
+          // motivated adding the ASCII one is preserved.
+          for (const list of [
+            "ids: 1001,1002,1003,1004",
+            "1000,2000,3000,4000",
+            "chunk 4096,8192,1024,2048",
+            "価格 1200\uFF0C3400\uFF0C5600\uFF0C7800",
+          ]) {
+            const row = await scrubbed(list);
+            expect(row).not.toContain("[redacted:credit_card]");
+          }
         });
       });
 
@@ -369,6 +376,8 @@ describe("issue 71: invite codes never reach the audit log", () => {
           ["U+FF1D fullwidth equals", "\uFF1D"],
           ["U+FF3F fullwidth low line", "\uFF3F"],
           ["U+FF0E fullwidth full stop", "\uFF0E"],
+          ["U+002C comma", ","],
+          ["U+FF0C fullwidth comma", "\uFF0C"],
           ["ASCII full stop", "."],
           ["solidus", "/"],
         ])("%s does not join four digit groups into a card", async (_l, sep) => {
@@ -394,10 +403,11 @@ describe("issue 71: invite codes never reach the audit log", () => {
 
         test("ordinary text carrying an IN separator is untouched", async () => {
           // The over-redaction control PMO asked for. This class has NO Luhn
-          // check (see "no checksum validation, deliberately" below), so its
-          // false-positive profile is unchanged by #120 in kind — only the
-          // separators that reach it are wider. What must not happen is a
-          // sentence redacting because it contains a dash.
+          // check (see "no checksum validation, deliberately" below), so EVERY
+          // separator admitted here widens what it can falsely catch. That is
+          // why both commas were reversed out after measurement rather than
+          // kept on the symmetry argument. What must not happen is a sentence
+          // redacting because it contains a dash.
           const row = await scrubbed("release 1.16.1\u2013stable, built 2026");
           expect(row).not.toContain("[redacted:credit_card]");
         });
