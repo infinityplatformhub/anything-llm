@@ -7,6 +7,11 @@
  * what its probe had opened rather than what the server was holding, reported
  * "40 connections", and was actually running against ~89. The claim it produced
  * did not survive re-measurement.
+ *
+ * WHAT THIS SUITE NEEDS: a PostgreSQL at DATABASE_URL whose `public` schema has
+ * been migrated — it counts real backends and opens real clients, so there is
+ * nothing to stub. Without a PostgreSQL URL every block below is SKIPPED rather
+ * than failed, the same rule doctor.test.js follows.
  */
 const { Client } = require("pg");
 const {
@@ -203,8 +208,23 @@ run("the singleton survives being disconnected (RF-2)", () => {
       expect(during).toBeGreaterThan(before);
 
       await client.$disconnect();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      expect(await backendCount(counter)).toBeLessThanOrEqual(before);
+      // POLL, not a longer sleep. `$disconnect` returns when the client has
+      // asked its backends to close; Postgres reaps them on its own schedule,
+      // so a fixed wait races that schedule rather than waiting for it. QA-2
+      // measured 4/6 runs passing at 500 ms and 6/6 at 1000 and 2000 —
+      // evidence that the number was tuning a race, and that any number would
+      // be tuning it.
+      //
+      // The deadline is generous because it is a failure bound, not an
+      // expectation: a healthy release takes well under a second, and 10 s only
+      // decides how long a genuinely stuck one takes to report.
+      const deadline = Date.now() + 10000;
+      let after = await backendCount(counter);
+      while (after > before && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        after = await backendCount(counter);
+      }
+      expect(after).toBeLessThanOrEqual(before);
     });
   });
 

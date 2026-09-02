@@ -92,6 +92,16 @@ confirmed rather than assumed.
 | remove `setupFilesAfterEnv` from jest.config.js | `jest.config.js registers the disconnect setup file` |
 | empty the `afterAll` body | `the setup file exists and calls $disconnect in afterAll` |
 | set the default cap to `"37"` | `supplies a default cap when the caller's URL has none` |
+| skip the `$disconnect` before the release poll | `releases its backends when disconnected` |
+
+Ruling (QA-2): the 500 ms sleep after `$disconnect` was TUNING A RACE, not waiting for a condition.
+`$disconnect` returns once the client has asked its backends to close; Postgres reaps them on its
+own schedule. QA-2 measured 4/6 runs passing at 500 ms and 6/6 at 1000 and 2000 — which says any
+fixed number is tuning, and a larger one only tunes more slowly. Replaced with a poll on
+`backendCount` against a 10 s deadline: the deadline is a failure bound, not an expectation. 6/6
+runs pass, and the mutation that skips the disconnect still takes it red, so waiting for the
+condition did not weaken it into always passing. — ถ้าผิด: เทสที่แดงสองในหกครั้งโดยไม่มีอะไรพัง
+แล้วคนแก้ด้วยการเพิ่มตัวเลข
 
 ## TL-2 survivors, closed
 
