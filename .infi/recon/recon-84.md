@@ -73,3 +73,11 @@ per-key แม่นกว่าและรักษาความสามา
 
 - `assertDeploymentShape.js` และ path ตอน boot — ไม่มี actor
 - `/v1/system/update-env` — เข้มอยู่แล้ว
+
+## ruling ของ PMO (2026-09-02)
+
+Ruling: **(ข) ยกทั้ง route เป็น `system.write`** — บั๊กคือ session surface หลวมกว่า `/v1` (`scopes.js:77`) สำหรับปฏิบัติการเดียวกัน (ข) ปิดตรงนั้นพอดี และไม่มีหน้า manager พึ่งพา route นี้เลย (ตรวจครบ 10 หน้า ทุกหน้า `AdminRoute`)
+
+ถ้าผิดจะเสีย: `setup_admin` หมดความสามารถตั้ง 122 คีย์ non-secret — ซึ่งวันนี้ไม่มี UI ให้ทำอยู่แล้ว **ยอมรับผลนี้โดยตั้งใจ** บันทึกลง residual ว่าถ้าอนาคตต้องการให้ manager ตั้ง provider ได้ ให้เปิด issue per-key ตอนนั้น ไม่ใช่ปล่อยรูไว้เผื่อ
+
+Ruling: เทสต้องมี manager → 403 **ทั้ง secret และ non-secret** (สุ่มอย่างละ 1 ตัว derive จาก `KEY_MAPPING`) · admin → 200 พร้อม control · assert ความสัมพันธ์กับ `scopes.js` ว่า `/v1` ยังเป็น `system.write`
