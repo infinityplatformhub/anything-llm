@@ -39,12 +39,19 @@ const DEFAULT_MAX_RETRIES = 3;
 // chose.
 //
 // Why a directory driver needs this and a login flow needs it less: a full sync runs
-// as a background job holding a queue lease, and the lease is renewed by a heartbeat
-// that only fires while the process makes progress. A fetch that never settles stops
-// the heartbeat, the lease expires, and a SECOND worker claims the job and starts a
-// concurrent apply against the same directory. The retry loop below does not save
-// us — it handles a DROPPED socket, and a socket that stays open and never answers
-// is not dropped.
+// as a background job, and an unbounded request makes it run forever — the job never
+// completes, its worker slot is held indefinitely, and the sync silently stops
+// happening while every dashboard says a run is in progress. The retry loop below
+// does not save us: it handles a DROPPED socket, and a socket that stays open and
+// never answers is not dropped.
+//
+// WHAT THIS DOES NOT DO, because an earlier version of this comment claimed it and
+// TL-1 measured it false: a hung fetch does NOT stop the job heartbeat. `setInterval`
+// keeps firing while a promise is awaited (9 beats observed during a hung request),
+// so the lease keeps renewing and no second worker takes over. Lease takeover covers
+// a process that is KILLED, WEDGED, or starving its event loop — not one politely
+// waiting on a socket. The bound exists for the stall itself, not for a concurrency
+// consequence it does not have.
 const DEFAULT_TIMEOUT_MS = 10_000;
 // #138: a 429 may advertise any `Retry-After`, and honouring it verbatim parks the
 // run for that long — the same stalled-lease outcome as a hung socket, arriving

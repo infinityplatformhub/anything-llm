@@ -350,11 +350,15 @@ describe("S4a (#113) RF-6/RF-7: a snapshot is complete, or it is an error", () =
  * and `_tenantAccessToken` had no signal at all. The retry loop covers a DROPPED
  * socket; a socket that stays open and never answers is not a dropped socket.
  *
- * Why that is a concurrency bug rather than a hygiene one: the job heartbeat renews
- * the lease only while the process makes progress. A run stalled forever in fetch
- * stops renewing, the lease expires, and a second worker claims the job and starts a
- * CONCURRENT APPLY against the same directory — the exact failure slice 3 exists to
- * prevent.
+ * Why it matters: an unbounded request makes the sync job run forever. The job never
+ * completes, its worker slot is held indefinitely, and the directory silently stops
+ * syncing while every dashboard reports a run in progress.
+ *
+ * NOT because it triggers a lease takeover. An earlier version of this comment said a
+ * hung fetch stops the heartbeat and lets a second worker start a concurrent apply;
+ * TL-1 measured that false — `setInterval` keeps firing while a promise is awaited (9
+ * beats during a hung request), so the lease keeps renewing. Takeover covers a killed,
+ * wedged or event-loop-starved process, not one politely waiting on a socket.
  *
  * The fixture ACCEPTS the connection and never answers. A dead port is not a
  * substitute: it rejects instantly, so a driver with no timeout is green against it.

@@ -60,16 +60,47 @@ unbounded: `_page` forwarded an optional `signal` that no production caller supp
 and `_tenantAccessToken` had none at all. The retry loop covers a DROPPED socket; a
 socket that stays open and never answers is not a dropped socket.
 
-It is a concurrency bug, not hygiene: the job heartbeat renews the lease only while
-the process makes progress. A run stalled forever in `fetch` stops renewing, the lease
-expires, and a second worker claims the job and starts a CONCURRENT APPLY against the
-same directory — the failure slice 3 exists to prevent.
+An unbounded request makes the sync job run forever: it never completes, its worker
+slot is held indefinitely, and the directory silently stops syncing while every
+dashboard reports a run in progress.
 
-**Lease formula, to be written beside the value in the queue half:**
+### CORRECTION (TL-1, measured): a hung fetch does NOT stop the heartbeat
+
+`Ruling: the reason recorded for the timeout is that an unbounded request stalls the
+job indefinitely and burns a worker slot — NOT that it triggers a lease takeover,
+which TL-1 measured false: setInterval keeps firing while a promise is awaited (9
+beats observed during a hung request), so the lease keeps renewing and no second
+worker takes over; takeover covers a KILLED, WEDGED or event-loop-starved process, not
+one politely waiting on a socket — cost if wrong: the fix stays correct either way,
+but a comment asserting a mechanism nobody measured is how the next person builds on
+it; this is the second time in two issues (see #134's F1) that a plausible mechanism
+survived into a comment unmeasured.`
+
+Corrected in three places rather than one, because the claim had propagated: the
+driver's `DEFAULT_TIMEOUT_MS` block, the test file's `R2a` docblock, and here.
+
+**Consequence for the queue half (RF-2):** a fixture that models "worker died" by
+hanging its fetch would prove nothing — the lease would keep renewing. RF-2 must
+suppress the heartbeat EXPLICITLY to model a wedged process.
+
+### CORRECTION (TL-1): the lease formula was short one backoff
+
+`_backoff` runs on the last failing attempt too, before the throw, so a doomed page
+sleeps `maxRetries + 1` times rather than `maxRetries`.
+
+**Lease floor, written in the queue half as an EXPRESSION derived from the constants,
+never a literal — a literal stops being true the moment either constant moves:**
 
 ```
-4 attempts x 10s timeout + 3 x 30s worst clamped backoff + headroom  ~=  150s floor
+(maxRetries + 1) x (timeoutMs + MAX_RETRY_AFTER_MS)  =  4 x 40s  =  160s
 ```
+
+`Ruling: take TL-1's optional change — skip the final _backoff before the throw —
+rather than only widening the formula: sleeping 30s before giving up serves nobody,
+the witness is obvious (elapsed on a doomed page drops by one backoff), and leaving a
+known off-by-one in the formula's inputs is how the formula quietly stops being true —
+cost if wrong: one fewer spacing interval against a rate-limited tenant on a request
+we are abandoning anyway.`
 
 QA-1's correction, adopted: on a silent socket the run stalls inside attempt 0 and the
 retry loop never iterates, so the observed floor is ~`timeoutMs + backoff`, NOT
