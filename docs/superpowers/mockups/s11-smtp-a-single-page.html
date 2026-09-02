@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>S11 mockup A — SMTP settings, single page</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-5xl mx-auto p-6 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-semibold">S11 mockup A — SMTP settings on one page</h1>
+    <p class="text-sm text-slate-600 mt-1">
+      Throwaway mockup for step 1.5. Config, connection test and the send log live on a
+      single scrolling page, the way <span class="font-mono text-xs">GeneralSettings/Security</span>
+      does. Everything below is clickable: try saving with a blank host, testing the
+      connection, and switching the encryption mode to <span class="font-mono text-xs">none</span>.
+    </p>
+  </header>
+
+  <!-- ─── config ─────────────────────────────────────────────────────── -->
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold">Email delivery</h2>
+      <p class="text-sm text-slate-600 mt-0.5">
+        Used for invitations. Nothing else sends mail yet.
+      </p>
+    </div>
+
+    <div class="p-5 space-y-5">
+      <label class="flex items-center gap-3">
+        <input id="enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+        <span class="text-sm font-medium">Enable email delivery</span>
+      </label>
+
+      <div id="fields" class="space-y-5 opacity-40 pointer-events-none">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">SMTP host</label>
+            <input id="host" type="text" placeholder="smtp.example.com"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+            <p id="host-err" class="text-xs text-red-600 mt-1 hidden">A host is required.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Port</label>
+            <input id="port" type="text" value="587"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Username</label>
+            <input id="user" type="text" placeholder="apikey"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Password</label>
+            <input id="pass" type="password" placeholder="••••••••••••"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+            <p class="text-xs text-slate-500 mt-1">
+              Stored encrypted (AES-256-GCM). It is never shown again after saving,
+              and never returned by the API.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Encryption</label>
+          <select id="tls"
+            class="w-full md:w-64 h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none">
+            <option value="starttls">STARTTLS (recommended)</option>
+            <option value="tls">Implicit TLS</option>
+            <option value="none">None — plaintext</option>
+          </select>
+          <div id="tls-warn"
+            class="hidden mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <b>Plaintext.</b> The SMTP password and every message, including invite
+            links, cross the network unencrypted. Refused unless
+            <span class="font-mono text-xs">SMTP_ALLOW_INSECURE</span> is set on the
+            server, and logged loudly at every boot.
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">From address</label>
+            <input id="from" type="text" placeholder="no-reply@example.com"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">From name</label>
+            <input id="fromname" type="text" placeholder="ApproofWorkspace"
+              class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-5 py-4 border-t border-slate-200 flex items-center gap-3">
+      <button id="save"
+        class="h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        Save
+      </button>
+      <button id="test"
+        class="h-9 px-4 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50">
+        Send test email
+      </button>
+      <span id="status" class="text-sm"></span>
+    </div>
+  </section>
+
+  <!-- ─── log ────────────────────────────────────────────────────────── -->
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold">Recent deliveries</h2>
+      <p class="text-sm text-slate-600 mt-0.5">
+        Status only. Subjects, bodies and invite links are never recorded here —
+        an invite link in a log is a working credential.
+      </p>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-left text-slate-500 border-b border-slate-200">
+        <tr>
+          <th class="px-5 py-2 font-medium">When</th>
+          <th class="px-5 py-2 font-medium">Recipient</th>
+          <th class="px-5 py-2 font-medium">Template</th>
+          <th class="px-5 py-2 font-medium">Status</th>
+        </tr>
+      </thead>
+      <tbody id="log" class="divide-y divide-slate-100"></tbody>
+    </table>
+    <div class="px-5 py-3 border-t border-slate-200 text-xs text-slate-500">
+      <b>queued</b> means the server accepted the message. SMTP cannot confirm it
+      reached a mailbox, so no row ever says “delivered”.
+    </div>
+  </section>
+
+</div>
+
+<script>
+const rows = [
+  { t: "2 minutes ago",  to: "priya@example.com",  tpl: "invite",  s: "queued" },
+  { t: "18 minutes ago", to: "sam@example.com",    tpl: "invite",  s: "queued" },
+  { t: "1 hour ago",     to: "test@example.com",   tpl: "test",    s: "queued" },
+  { t: "3 hours ago",    to: "dev@bad-host.test",  tpl: "invite",  s: "retrying" },
+  { t: "yesterday",      to: "old@example.com",    tpl: "invite",  s: "failed" },
+];
+const chip = {
+  queued:   "bg-sky-100 text-sky-800",
+  retrying: "bg-amber-100 text-amber-900",
+  failed:   "bg-red-100 text-red-800",
+};
+document.getElementById("log").innerHTML = rows.map(r => `
+  <tr>
+    <td class="px-5 py-2.5 text-slate-500">${r.t}</td>
+    <td class="px-5 py-2.5 font-mono text-xs">${r.to}</td>
+    <td class="px-5 py-2.5">${r.tpl}</td>
+    <td class="px-5 py-2.5">
+      <span class="px-2 py-0.5 rounded-full text-xs font-medium ${chip[r.s]}">${r.s}</span>
+    </td>
+  </tr>`).join("");
+
+const $ = id => document.getElementById(id);
+
+$("enabled").addEventListener("change", e => {
+  $("fields").className = e.target.checked
+    ? "space-y-5"
+    : "space-y-5 opacity-40 pointer-events-none";
+});
+
+$("tls").addEventListener("change", e => {
+  $("tls-warn").classList.toggle("hidden", e.target.value !== "none");
+});
+
+$("save").addEventListener("click", () => {
+  const blank = $("enabled").checked && !$("host").value.trim();
+  $("host-err").classList.toggle("hidden", !blank);
+  $("status").innerHTML = blank
+    ? '<span class="text-red-600">Not saved — fix the errors above.</span>'
+    : '<span class="text-green-700">Saved.</span>';
+});
+
+$("test").addEventListener("click", () => {
+  if (!$("enabled").checked) {
+    $("status").innerHTML = '<span class="text-slate-500">Enable email delivery first.</span>';
+    return;
+  }
+  $("status").innerHTML = '<span class="text-slate-500">Connecting…</span>';
+  setTimeout(() => {
+    $("status").innerHTML = $("host").value.trim()
+      ? '<span class="text-green-700">Accepted by the server. Check the inbox — SMTP cannot confirm delivery.</span>'
+      : '<span class="text-red-600">Connection failed: no host configured.</span>';
+  }, 700);
+});
+</script>
+</body>
+</html>
