@@ -161,3 +161,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #74 c0c6472b0: gate PASS, QA-3 PASS (92/92 fresh+installed), TL-2 PASS (0 failed on stock16/fresh16/virgin; M1–M12 caught 10, M3/M10 explained → residual). Residual: getVectorDbClass raw switch. O2b waits user A/B.
 - #78: Dev1 confirmed F2/F3, retracted objection; impl78 on union classification + 3 routes + no filter + drift assert. Next SHA → gate + QA-2 6 cases + TL-1.
 - #80 37712d41 partial gate 70/70; route lane in progress.
+- Post-merge main after #74: 2219/2222 full run; 3 red = C-1 docIdVariants (providerDocIdCallSites) → pass 20/20 with fresh STORAGE_DIR. Cause: shared main storage dir holds stale LanceDB state. §7.14a: post-merge suite must use fresh STORAGE_DIR. Other 3 red suites pass isolated (load).
+- #40 dccaba8: first gate run invalid (wt-bootstrap.sh absent on branch fork d69a9382c, 31 failed = no DB); manual bootstrap + regate running. Dev2 posted `updated` on #40 (13 bypasses, all found by running). #52 retro comment added.
+- #78: impl78 reported a nonexistent SHA (3rd false report); ruling: one final dispatch with raw git output, else Dev1 writes (Opus) with a fresh Sonnet reviewer. 4th route enable-multi-user → system.write at ingress.
