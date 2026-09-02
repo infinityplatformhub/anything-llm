@@ -13,12 +13,19 @@
 // This is a bearer credential, not an identity: it proves "whoever opened this session is
 // making this request", which is exactly the property the raw UUID lacked.
 //
-// Minting is unconditional; ENFORCEMENT is behind EMBED_REQUIRE_SESSION_TOKEN, default off
-// (PMO ruling on #32). The widget that stores the token and sends it back lives in the
-// `embed/` submodule and ships separately, so the server must be able to run ahead of it
-// without locking visitors out of their own history. See embedMiddleware.js.
+// Minting is CONDITIONAL — see mintIfEntitled. An earlier revision minted for whatever
+// session id a request named, which made the gate a formality: an attacker holding a
+// victim's UUID could mint their way past it (QA-1 BLOCKER-1).
+//
+// ENFORCEMENT on the history routes is separately behind EMBED_REQUIRE_SESSION_TOKEN,
+// default off (PMO ruling on #32). The widget that stores the token and sends it back
+// lives in the `embed/` submodule and ships separately, so the server must be able to run
+// ahead of it without locking visitors out of their own history. See embedMiddleware.js.
+// That flag governs only the demand; the minting rule below applies in both states, so a
+// deployment mid-rollout is not handing out tokens that become valid when the flag flips.
 
 const crypto = require("crypto");
+const prisma = require("../prisma");
 
 /** Header for embeds that cannot rely on cookies (third-party context, SameSite). */
 const SESSION_TOKEN_HEADER = "x-allm-session-token";
@@ -103,6 +110,50 @@ function verifySessionToken({ token, embedUuid, sessionId, now = Date.now() }) {
 }
 
 /**
+ * Decide whether this request may be issued a token for `sessionId`, and mint it if so.
+ *
+ * QA-1 BLOCKER-1: minting used to be unconditional, which made the whole scheme a
+ * formality. stream-chat minted for whatever sessionId the body named, so an attacker who
+ * had learned a victim's UUID — the exact threat this issue exists to close — could ask for
+ * a token against it and then read the history with it. The token proved possession of a
+ * UUID, which is what the bare UUID already proved.
+ *
+ * Two ways to be entitled, and only two:
+ *
+ *   1. The session is NEW — no embed_chats row for this embed and session. Nobody's
+ *      conversation is behind it yet, so there is nothing to steal. This is how a genuine
+ *      first message gets its token.
+ *   2. The caller already holds a valid token for it — rotation. Every message after the
+ *      first names a session that now has rows, so without this an ongoing conversation
+ *      would stop being able to refresh.
+ *
+ * Naming an existing session with no proof gets null: no token, and the chat itself still
+ * proceeds, because refusing to answer would turn this into a "does this session exist"
+ * oracle of a different shape.
+ *
+ * Scoped to (embed_id, session_id) rather than session_id alone: a session id that belongs
+ * to a different embed is not "existing" here, and must not block minting for this one.
+ *
+ * @returns {Promise<string|null>} the token, or null when the caller has not earned one
+ */
+async function mintIfEntitled({ embed, sessionId, request, db = prisma }) {
+  const embedUuid = String(embed.uuid);
+
+  const existing = await db.embed_chats.findFirst({
+    where: { embed_id: embed.id, session_id: String(sessionId) },
+    select: { id: true },
+  });
+  if (!existing) return mintSessionToken({ embedUuid, sessionId: String(sessionId) });
+
+  const verdict = verifySessionToken({
+    token: tokenFromRequest(request),
+    embedUuid,
+    sessionId: String(sessionId),
+  });
+  return verdict.valid ? mintSessionToken({ embedUuid, sessionId: String(sessionId) }) : null;
+}
+
+/**
  * Read the token off a request: header first, then cookie.
  *
  * PMO ruling: no cookie-parser dependency. The Cookie header is a well-defined
@@ -129,6 +180,7 @@ function tokenFromRequest(request) {
 
 module.exports = {
   mintSessionToken,
+  mintIfEntitled,
   verifySessionToken,
   tokenFromRequest,
   SESSION_TOKEN_HEADER,
