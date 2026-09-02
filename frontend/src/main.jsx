@@ -399,12 +399,18 @@ const router = createBrowserRouter([
         },
       },
       {
+        // #127: AdminRoute, not ManagerRoute. Both routes this page calls are gated
+        // `requirePermission("system.read", orgResource)` (endpoints/mobile/index.js:21,86),
+        // and only `super_admin:org` holds `system.read` — legacy `manager` maps to `member`
+        // (legacyRoleGrants.js:23), which does not. Under ManagerRoute a manager saw the page
+        // and got 403 from both of its calls: a page that renders and cannot work.
+        // TL-2 ruling: fix the guard, do NOT widen system.read.
         path: "/settings/mobile-connections",
         lazy: async () => {
           const { default: MobileConnections } = await import(
             "@/pages/GeneralSettings/MobileConnections"
           );
-          return { element: <ManagerRoute Component={MobileConnections} /> };
+          return { element: <AdminRoute Component={MobileConnections} /> };
         },
       },
       {
