@@ -968,3 +968,6 @@ generated client โหลด dotenv จาก path absolute ที่ฝัง�
 
 #### 7.9f evidence — #78 e52553fc7
 ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ยนเป็น `Object.create(null)` + loop `managerAllowedFields.includes(key)` — พฤติกรรมเดิมทุกประการ (manager+unknown → 200 ไม่เขียน) · PMO grep `fromEntries` = 0 แล้วนับว่าผ่าน; Dev1 trace path จับได้ · บทเรียน: เงื่อนไขรับงานต้องเป็นพฤติกรรม (เทส manager+unknown → 400) ไม่ใช่การหายไปของชื่อ symbol
+
+### 7.6e mutation backup ต้องเก็บ path เต็ม ไม่ใช่ basename
+#87: backup 4 ไฟล์ลง /tmp ด้วย basename — `utils/helpers/index.js` กับ `utils/doctor/index.js` ชนกัน restore เขียน doctor ทับ helpers source edit หายทั้งหมด (โผล่เป็น 27 แดง โชคดีที่ไม่เงียบ) · ใช้ `git stash` / `git diff > patch` / path เต็ม (`tr / _`) เท่านั้น · restore ที่ "ดูเหมือนสำเร็จ" คือ failure mode
