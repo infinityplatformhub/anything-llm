@@ -387,3 +387,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #104 bd77c0411: gate PASS at wt-104 (g104) — check-local, contract persistCredentialFailureHttp 9/9, sweeps 63/63. Waiting QA-3 + TL-1 (auth).
 - #108 5992b34b9 (S11b): gate running at wt-108 (g108); QA-1 + TL-2 dispatched. #99/#100/#101 rulings: no checksum, [0-9０-９] class, long_digit_run last, one issue (Dev5).
 - #114 QA-3 baseline on main: unauth 200, 135 fields (env-dependent — tests must derive, not hardcode), 7 planted internal hosts leak; tier-1 types: SimpleSSONoLoginRedirect null, SSOProviders [] (not boolean).
+- #112 43cf5da87: TL-1 PASS (RF-1..5 each red at a named test; OBS: synthetic check id in level test is load-bearing; #114 link belongs in residual). Waiting QA-2 A–G only.
+- #108 5992b34b9: gate PASS at wt-108 (g108) — check-local, frontend 24/24, server guard 6/6, sweeps 63/63; ledger-108 missing → Dev4 committing. Waiting QA-1 DOM probe + TL-2 N6–N10.
+- #98 71acf4173 gate running at wt-98 (g98); TL-2 verdict (plain) → merge.
