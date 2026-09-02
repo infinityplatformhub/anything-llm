@@ -436,3 +436,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #115 4f7d4aeb9: gate PASS at wt-115 (g115) — check-local, credentialsBeforeListen 8 + credentialPersistence 10 = 18/18, sweeps 63/63, ledger normalized /tmp/ledger-115.norm.md. Waiting TL-2 R1–R6 + QA-1 (auth).
 - #113 S4a slice 1 c2b3e2723 (RF-3 seed-before-migrate, 5/5, 3 mutants) — TL-1 early read; Dev3 → RF-1/2 → RF-4 → RF-5; gate on combined SHA. Q4 still user's.
 - Post-merge after #118 queued (/tmp/postmerge-118.log).
+- #116 5d1cabfa4: gate PASS at wt-116 (g116) — check-local, updatePasswordRollback 12/12, sweeps 63/63, frontend 27/27 (carries #108 NITs), ledger normalized. Waiting TL-1 + QA-3 (auth).
+- #117 QA-2 baseline: scryptSync 26ms, 97 derivations 2518ms; 4 call sites (2 in SSO login path). Plan A–F + 5 mutations; fail-open risk if cache ignores material (SIG_KEY removed mid-run must still throw) → forwarded to Dev2.
