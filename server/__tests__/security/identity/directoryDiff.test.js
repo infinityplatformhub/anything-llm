@@ -241,6 +241,63 @@ describe("#133 R4: the scale guard needs a floor as well as a ratio", () => {
     ]);
   });
 
+  test("OVER the deactivation floor but UNDER its ratio is allowed — the ratio arm", async () => {
+    // The deactivation ratio had no witness of its own: every fixture clearing
+    // DEACTIVATION_FLOOR also cleared DEACTIVATION_RATIO, so the floor alone explained
+    // every result and replacing the ratio with `&& true` survived.
+    //
+    // 11 of 100 leave: past the floor (10) and far under the ratio (50%). Only the
+    // ratio can allow this, which is the band where the two arms disagree — the same
+    // discipline the membership ratio test already follows.
+    const users = Array.from({ length: 100 }, (_, i) => linkedUser(`u-${i}`));
+    const present = users.slice(11).map((u) => principal(u.subject));
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({ principals: present, groups: [] }),
+      current: state({ users }),
+    });
+
+    expect(plan.refused).toBe(false);
+    expect(plan.deactivate).toHaveLength(11);
+  });
+
+  test("when the MEMBERSHIP guard refuses, the deactivation list is cleared too", async () => {
+    // `refused` clears BOTH destructive lists whichever guard fired, and that had no
+    // witness either: every membership-refusal fixture had an empty deactivation list
+    // to begin with, so `refusedDeactivations ? [] : deactivate` would have passed
+    // them all while still shipping deactivations on a membership-refused run.
+    //
+    // Here 12 people genuinely leave (under the deactivation ratio, so that guard
+    // stays silent) while the remaining 88 lose their department — which trips the
+    // membership guard. A run this wrong about memberships is not to be trusted about
+    // departures either, so both lists must come back empty.
+    const users = Array.from({ length: 100 }, (_, i) => linkedUser(`u-${i}`));
+    const memberships = users.map((u) => ({
+      subject: u.subject,
+      groupExternalId: "d-1",
+    }));
+    // 12 absent entirely; the other 88 present but with no departments.
+    const principals = users
+      .slice(12)
+      .map((u) => principal(u.subject, { groupExternalIds: [] }));
+
+    const plan = diffDirectory({
+      enumeration: completedEnumeration({ principals, groups: [group("d-1")] }),
+      current: state({
+        users,
+        groups: [{ externalId: "d-1", name: "dept-d-1", id: 10 }],
+        memberships,
+      }),
+    });
+
+    expect(plan.refused).toBe(true);
+    expect(plan.refusedReason).toMatch(/membership/i);
+    expect(plan.removeMembership).toEqual([]);
+    // The assertion this test exists for: cleared by the MEMBERSHIP guard, not by its
+    // own.
+    expect(plan.deactivate).toEqual([]);
+  });
+
   test("a large org losing a NORMAL number is allowed", async () => {
     // The control that keeps T6 from being satisfied by "refuse whenever anyone
     // leaves". Two departures out of a hundred is ordinary.
