@@ -40,7 +40,7 @@ vi.mock("@/hooks/useUser", () => ({
 }));
 
 import { NewWorkspaceButton } from "@/components/Sidebar";
-import { resetCapabilities } from "@/hooks/useCapabilities";
+import useCapabilities, { resetCapabilities } from "@/hooks/useCapabilities";
 
 function renderNewWorkspaceButton({ capabilities, user }) {
   mockCapabilities.current = { capabilities, workspace: null, error: null };
@@ -57,6 +57,20 @@ function renderNewWorkspaceButton({ capabilities, user }) {
 // make this test fail whenever the wording changes, which is not what it is
 // about.
 const newWorkspaceControl = () => screen.queryByText("new-workspace.title");
+
+// Renders a probe whose text flips once the hook settles, so a test can wait
+// for "the map arrived" instead of for something already true on the first tick
+// (TL-1: waiting on the fixture asserts against the LOADING state, and passes
+// even for a can() that always answers true).
+function CapabilityProbe() {
+  const { loading } = useCapabilities();
+  return <span>{loading ? "caps-loading" : "caps-ready"}</span>;
+}
+
+async function waitForCapabilitiesToLoad() {
+  render(<CapabilityProbe />);
+  await screen.findByText("caps-ready");
+}
 
 beforeEach(() => {
   resetCapabilities();
@@ -82,9 +96,7 @@ describe("#40 task 4: NewWorkspaceButton gates on workspace.create", () => {
       capabilities: { "workspace.create": false },
       user: { id: 1, role: "manager" },
     });
-    await waitFor(() =>
-      expect(mockCapabilities.current.capabilities).toBeDefined()
-    );
+    await waitForCapabilitiesToLoad();
     expect(newWorkspaceControl()).toBeNull();
   });
 
@@ -113,9 +125,7 @@ describe("#40 task 4: NewWorkspaceButton gates on workspace.create", () => {
       capabilities: { "settings.write": true, "workspace.create": false },
       user: { id: 1, role: "admin" },
     });
-    await waitFor(() =>
-      expect(mockCapabilities.current.capabilities).toBeDefined()
-    );
+    await waitForCapabilitiesToLoad();
     expect(newWorkspaceControl()).toBeNull();
   });
 });

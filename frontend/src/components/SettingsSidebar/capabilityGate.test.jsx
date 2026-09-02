@@ -48,6 +48,20 @@ function renderGate({ capabilities, user }) {
   return render(<PrivacyLinkGate />);
 }
 
+// Renders a probe whose text flips once the hook settles, so a test can wait
+// for "the map arrived" instead of for something already true on the first tick
+// (TL-1: waiting on the fixture asserts against the LOADING state, and passes
+// even for a can() that always answers true).
+function CapabilityProbe() {
+  const { loading } = useCapabilities();
+  return <span>{loading ? "caps-loading" : "caps-ready"}</span>;
+}
+
+async function waitForCapabilitiesToLoad() {
+  render(<CapabilityProbe />);
+  await screen.findByText("caps-ready");
+}
+
 beforeEach(() => resetCapabilities());
 afterEach(() => vi.clearAllMocks());
 
@@ -78,7 +92,7 @@ describe("#40 task 4: the privacy link follows AdminRoute's capability", () => {
       capabilities: HOLDS_CREATE_ONLY,
       user: { id: 1, role: "admin" },
     });
-    await waitFor(() => expect(mockCapabilities.current).toBeDefined());
+    await waitForCapabilitiesToLoad();
     expect(link()).not.toBeVisible();
   });
 

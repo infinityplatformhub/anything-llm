@@ -39,7 +39,7 @@ vi.mock("@/models/workspace", () => ({
 }));
 
 import { ShortWidthNewWorkspaceButton } from "@/components/Sidebar/SearchBox";
-import { resetCapabilities } from "@/hooks/useCapabilities";
+import useCapabilities, { resetCapabilities } from "@/hooks/useCapabilities";
 
 function renderControl({ capabilities, user }) {
   mockCapabilities.current = { capabilities, workspace: null, error: null };
@@ -68,6 +68,18 @@ const HOLDS_CREATE_ONLY = {
   "workspace.create": true,
 };
 
+// Renders a probe whose text changes when the hook settles, so a test can wait
+// for "the map arrived" rather than for something that was already true.
+function CapabilityProbe() {
+  const { loading } = useCapabilities();
+  return <span>{loading ? "caps-loading" : "caps-ready"}</span>;
+}
+
+async function waitForCapabilitiesToLoad() {
+  render(<CapabilityProbe />);
+  await screen.findByText("caps-ready");
+}
+
 beforeEach(() => {
   resetCapabilities();
   mockCapabilities.deferred = false;
@@ -88,11 +100,17 @@ describe("#40 task 4: the collapsed-sidebar create control", () => {
   test("hidden from an admin-roled user holding only settings.write", async () => {
     // Both halves matter: the role says admin (the old check would show it) and
     // the caller holds a capability (so this is not an empty-map pass).
+    //
+    // The wait must observe the map ARRIVING, not merely that the fixture
+    // exists — the fixture is defined on the first tick, so waiting on it
+    // asserts against the loading state and would pass even for a can() that
+    // always answers true (TL-1). Rendering a probe that flips only once the
+    // map has resolved is what makes the wait mean something.
     renderControl({
       capabilities: HOLDS_SETTINGS_ONLY,
       user: { id: 1, role: "admin" },
     });
-    await waitFor(() => expect(mockCapabilities.current).toBeDefined());
+    await waitForCapabilitiesToLoad();
     expect(control()).toBeNull();
   });
 
