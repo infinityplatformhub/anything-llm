@@ -809,3 +809,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #138 driver ab26979ab: task.sh check PASS (26/26), result written. Waiting TL-1 + QA-1 verdicts; Dev3 mutants D–F pending.
 - #137 QA-3 PASS on fcf4236d4 (qa3-137-fcf4236d4.md): 15/15 mutants killed incl. G-f bump, A-d shared-path, A-c seeded-not-granted, G-j upgrade path (130000 → applies 140000), G-g idempotent (125/63 rows; policy_versions +1 correct). Visible set 12→24. MERGE ORDER: #121 before #137. TL-1 F-1/F-2 fix from Dev1 still needed → then QA-3 re-run is trivial (seed vocab).
 - #136 Dev5 full suite on f76172fec: 3309 passed / 0 failed (226 suites). Gate-136b contract 57/57 so far.
+- #137 → 7349520ca (AUDIT_ACTIONS += audit.purge; RF-F2 set-equality test; ledger rewording). Gate rerun on fresh g137c (contract + t1-authz-migration + task check), TL-1 two-hunk re-read, QA-3 G-h/G-i/RF-F2 rerun dispatched.
