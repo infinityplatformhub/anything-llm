@@ -16,7 +16,9 @@ export default function useTextSize() {
   };
 
   useEffect(() => {
-    const storedTextSize = window.localStorage.getItem("approofworkspace_text_size");
+    const storedTextSize = window.localStorage.getItem(
+      "approofworkspace_text_size"
+    );
     if (storedTextSize) {
       setTextSize(storedTextSize);
       setTextSizeClass(getTextSizeClass(storedTextSize));

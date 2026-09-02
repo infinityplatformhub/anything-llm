@@ -35,7 +35,8 @@ const TRANSLATIONS = {
     },
     survey: {
       title: "Welcome to ApproofWorkspace",
-      description: "Help us make ApproofWorkspace built for your needs. Optional.",
+      description:
+        "Help us make ApproofWorkspace built for your needs. Optional.",
       email: "What's your email?",
       useCase: "What will you use ApproofWorkspace for?",
       useCaseWork: "For work",
@@ -1665,7 +1666,8 @@ const TRANSLATIONS = {
           'Memories should be a single, concise statement. e.g. "User prefers Python over JavaScript"',
         edit_description: "Update the content of this memory.",
         label: "Memory",
-        placeholder: "e.g. User's name is Joe, User works on ApproofWorkspace, etc.",
+        placeholder:
+          "e.g. User's name is Joe, User works on ApproofWorkspace, etc.",
         create: "Create",
         save: "Save",
         cancel: "Cancel",

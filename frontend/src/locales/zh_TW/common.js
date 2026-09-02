@@ -870,7 +870,8 @@ const TRANSLATIONS = {
   },
   privacy: {
     title: "隱私與資料處理",
-    description: "這裡設定已連線的第三方提供者與 ApproofWorkspace 會如何處理資料。",
+    description:
+      "這裡設定已連線的第三方提供者與 ApproofWorkspace 會如何處理資料。",
     anonymous: "已啟用匿名遙測",
   },
   connectors: {
@@ -1197,7 +1198,8 @@ const TRANSLATIONS = {
           "回憶應該簡潔明瞭，用單一的陳述來表達。例如：「使用者更偏好 Python 語言，而非 JavaScript 語言」。",
         edit_description: "更新此記憶的內容。",
         label: "記憶",
-        placeholder: "例如：使用者姓名為 Joe，使用者正在使用 ApproofWorkspace 等。",
+        placeholder:
+          "例如：使用者姓名為 Joe，使用者正在使用 ApproofWorkspace 等。",
         create: "創造",
         save: "儲存",
         cancel: "取消",
@@ -1285,7 +1287,8 @@ const TRANSLATIONS = {
       },
       "display-language": {
         title: "顯示語言",
-        description: "選擇 ApproofWorkspace 介面的顯示語言；若已有翻譯就會套用。",
+        description:
+          "選擇 ApproofWorkspace 介面的顯示語言；若已有翻譯就會套用。",
       },
       logo: {
         title: "品牌標誌",

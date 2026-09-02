@@ -315,7 +315,9 @@ export default function MultiUserAuth() {
               </h3>
             </div>
             <p className="text-zinc-400 light:text-zinc-600 text-sm text-center">
-              {t("login.sign-in", { appName: customAppName || "ApproofWorkspace" })}
+              {t("login.sign-in", {
+                appName: customAppName || "ApproofWorkspace",
+              })}
             </p>
           </div>
         </div>

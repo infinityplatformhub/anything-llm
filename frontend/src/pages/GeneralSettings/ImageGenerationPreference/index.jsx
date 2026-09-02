@@ -230,7 +230,9 @@ export default function ImageGenerationPreference() {
                   >
                     <div className="flex gap-x-4 items-center">
                       <img
-                        src={selectedProviderObject?.logo || ApproofWorkspaceIcon}
+                        src={
+                          selectedProviderObject?.logo || ApproofWorkspaceIcon
+                        }
                         alt={`${selectedProviderObject?.name} logo`}
                         className="w-10 h-10 rounded-md"
                       />

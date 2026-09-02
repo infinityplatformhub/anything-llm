@@ -819,7 +819,8 @@ const TRANSLATIONS = {
     },
     chat: {
       title: "Chat",
-      description: "Passen Sie Ihre Chat-Einstellungen für ApproofWorkspace an.",
+      description:
+        "Passen Sie Ihre Chat-Einstellungen für ApproofWorkspace an.",
       auto_submit: {
         title: "Spracheingaben automatisch senden",
         description:

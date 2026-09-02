@@ -53,13 +53,13 @@ vi.mock("@/components/Footer", () => ({
   default: () => <div>footer</div>,
 }));
 vi.mock("@/models/workspace", () => ({
-  default: { all: async () => [], searchWorkspaces: async () => ({ results: [] }) },
+  default: {
+    all: async () => [],
+    searchWorkspaces: async () => ({ results: [] }),
+  },
 }));
 
-import {
-  NewWorkspaceButton,
-  SidebarMobileHeader,
-} from "@/components/Sidebar";
+import { NewWorkspaceButton, SidebarMobileHeader } from "@/components/Sidebar";
 import useCapabilities, { resetCapabilities } from "@/hooks/useCapabilities";
 
 function renderNewWorkspaceButton({ capabilities, user }) {

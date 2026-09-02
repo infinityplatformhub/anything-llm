@@ -163,7 +163,8 @@ export function SidebarMobileHeader() {
                   style={{ objectFit: "contain" }}
                 />
               </div>
-              {(!user || (!settingsLoading && canSettings("settings.write"))) && (
+              {(!user ||
+                (!settingsLoading && canSettings("settings.write"))) && (
                 <div className="flex gap-x-2 items-center text-slate-500 shink-0">
                   <SettingsButton />
                 </div>

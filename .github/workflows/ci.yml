@@ -1,8 +1,19 @@
 name: CI
 
 on:
+  # #149: WIDENED from `branches: ["approof/main"]`.
+  #
+  # The restriction meant backend CI ran only for PRs targeting approof/main, so a PR
+  # into any other branch — a stacked branch, a long-lived feature line — got no test
+  # run at all and merged on a green page that had tested nothing. That was survivable
+  # while `run-tests.yaml` existed as a second (broken) net; with that file deleted in
+  # this commit, this workflow is the only backend test run, and it has to cover every
+  # pull request.
+  #
+  # Widened rather than pattern-matched: any pattern encodes today's branch naming, and
+  # the branch this fork forgets to list is exactly the one that needed the run. Noise
+  # is bounded by the `concurrency` group below, which cancels superseded runs.
   pull_request:
-    branches: ["approof/main"]
 
 concurrency:
   group: ci-${{ github.ref }}

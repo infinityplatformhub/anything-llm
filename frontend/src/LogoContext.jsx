@@ -28,7 +28,9 @@ export function LogoProvider({ children }) {
         setLoginLogo(isCustomLogo ? logoURL : DefaultLoginLogo);
         setIsCustomLogo(isCustomLogo);
       } else {
-        isLightMode() ? setLogo(ApproofWorkspaceDark) : setLogo(ApproofWorkspace);
+        isLightMode()
+          ? setLogo(ApproofWorkspaceDark)
+          : setLogo(ApproofWorkspace);
         setLoginLogo(DefaultLoginLogo);
         setIsCustomLogo(false);
       }

@@ -793,7 +793,8 @@ const TRANSLATIONS = {
     },
     branding: {
       title: "Varumärke och vitmärkning",
-      description: "Vitmärka din ApproofWorkspace-instans med anpassad profilering.",
+      description:
+        "Vitmärka din ApproofWorkspace-instans med anpassad profilering.",
     },
     chat: {
       title: "Chatt",

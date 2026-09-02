@@ -7,6 +7,16 @@ import unusedImports from "eslint-plugin-unused-imports";
 
 export default defineConfig([
   { ignores: ["__tests__/**", "**/syncStaticLists.mjs"] },
+  // #149: `__tests__` is ignored outright, but `__testHelpers__` is LINTED — the
+  // helpers are shared production-shaped modules that several suites import, so a
+  // dead variable or a bad import there breaks callers, whereas a suite is
+  // self-contained. What they need is the jest globals: CI measured 60
+  // `'jest' is not defined` errors under `no-undef` because they were linted as
+  // application source. (TL-1 ruling d410f46ee.)
+  {
+    files: ["__testHelpers__/**/*.{js,mjs,cjs}"],
+    languageOptions: { globals: { ...globals.jest } },
+  },
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: { js, prettier: pluginPrettier, "unused-imports": unusedImports },

@@ -825,7 +825,8 @@ const TRANSLATIONS = {
     },
     chat: {
       title: "Xat",
-      description: "Estableix les teves preferències de xat per a ApproofWorkspace.",
+      description:
+        "Estableix les teves preferències de xat per a ApproofWorkspace.",
       auto_submit: {
         title: "Envia automàticament l'entrada de veu",
         description:
