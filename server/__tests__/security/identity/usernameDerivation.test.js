@@ -14,6 +14,7 @@ const crypto = require("crypto");
 const {
   deriveUsername,
   usernameCandidates,
+  normalizeForCompare,
 } = require("../../../utils/identity/deriveUsername");
 
 describe("deriveUsername — distinct emails stay distinct", () => {
@@ -66,6 +67,29 @@ describe("deriveUsername — distinct emails stay distinct", () => {
       expect(derived.length).toBeGreaterThanOrEqual(2);
       expect(derived.length).toBeLessThanOrEqual(64);
     }
+  });
+
+  test("PMO ruling: case and Unicode form are normalized before comparing", () => {
+    // Both sides of a handle comparison must go through the SAME normalization,
+    // or `User+X@` and `user+x@` are two handles for one mailbox and the
+    // collision rule silently stops firing.
+    expect(deriveUsername("User+X@CORP.COM")).toBe(deriveUsername("user+x@corp.com"));
+
+    // Unicode gives the same text two encodings. Lowercasing alone does not
+    // reconcile them: composed `\u00e9` sanitizes to one `-`, decomposed
+    // `e`+accent to `e-`, so an IdP that emits NFD would derive a different
+    // username than the account the person already owns.
+    const composed = "caf\u00e9@corp.com";
+    const decomposed = "cafe\u0301@corp.com";
+    expect(composed).not.toBe(decomposed);
+    expect(deriveUsername(composed)).toBe(deriveUsername(decomposed));
+  });
+
+  test("normalizeForCompare is the one normalization both sides use", () => {
+    // Exported so callers cannot invent a second, subtly different version —
+    // which is exactly how the two sides drift apart.
+    expect(normalizeForCompare("User+X@CORP.COM")).toBe("user+x@corp.com");
+    expect(normalizeForCompare("cafe\u0301")).toBe(normalizeForCompare("caf\u00e9"));
   });
 
   test("derivation is deterministic — the same email gives the same username", () => {

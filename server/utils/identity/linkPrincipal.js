@@ -9,7 +9,11 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prismaDefault = require("../prisma");
 const { syncLegacyRoleGrant } = require("../authorization/legacyRoleGrants");
-const { deriveUsername, usernameCandidates } = require("./deriveUsername");
+const {
+  deriveUsername,
+  usernameCandidates,
+  normalizeForCompare,
+} = require("./deriveUsername");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
@@ -57,7 +61,9 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
       "The identity provider did not verify this email address."
     );
 
-  const normalizedEmail = String(email).toLowerCase();
+  // The same normalization the handle comparison uses, so the two sides cannot
+  // drift apart: `User+X@` and `user+x@` are one mailbox, in both checks.
+  const normalizedEmail = normalizeForCompare(email);
 
   const existingLink = await db.identity_links.findUnique({
     where: { provider_subject: { provider, subject } },
@@ -81,52 +87,23 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
   }
 
   // R1 (PMO ruling): a new external identity whose email matches an existing
-  // local account is REFUSED, never auto-linked. Auto-linking is the classic
+  // account is REFUSED, never auto-linked. Auto-linking is the classic
   // takeover — anyone who can register that address at the IdP inherits the
   // account. Deliberate linking happens from settings, while already logged in.
-  // Checked against BOTH the raw address and the username it would derive to.
-  // A local account is stored under its username, which for an SSO-created
-  // account is the derived form — so comparing only the raw address misses the
-  // collision and lets it fall through to a P2002 the caller sees as a bare
-  // 401. Techlead: this must reach the user as R1's 409, which is the answer
-  // that tells them what to do.
-  // Checked against BOTH the raw address and the username it would derive to.
-  // A local account created by an admin is stored under whatever username they
-  // chose, which may be the derived form — comparing only the raw address
-  // misses that and lets it fall through to a P2002 the caller sees as a bare
-  // 401, against the FIRST person's account.
   //
-  // But the derived-username match is only a takeover when the account it hits
-  // is a LOCAL one. Two different mailboxes can sanitize to the same handle
-  // (`user+x@` and `user!x@` both derive `user-x@`), and refusing those with
-  // "an account with this email already exists" would be false — no account
-  // with their email exists, and they are not trying to take anything over.
-  // Those fall through to the suffix retry below and get their own account.
-  const derivedUsername = deriveUsername(normalizedEmail);
-  const collision = await db.users.findFirst({
-    where: {
-      OR: [
-        { username: { equals: normalizedEmail, mode: "insensitive" } },
-        { username: { equals: derivedUsername, mode: "insensitive" } },
-      ],
-    },
-    include: { identity_links: true },
-  });
-  // An account already linked to some OTHER external identity is not a local
-  // account this person could sign into — it is someone else's SSO account that
-  // happens to share a derived handle.
-  const isLocalAccount = collision && collision.identity_links.length === 0;
-  const isSameAddress =
-    collision &&
-    collision.username?.toLowerCase() === normalizedEmail.toLowerCase();
-  if (collision && (isLocalAccount || isSameAddress))
-    throw new IdentityConflictError(
-      "An account with this email already exists. Sign in with your existing " +
-        "credentials and link this identity provider from your settings."
-    );
+  // The checks below run in a FIXED order, and the order is itself the ruling:
+  //
+  //   1. email match  — the address itself is already known here
+  //   2. handle match — the address is new, but derives onto someone's handle
+  //
+  // The other way round, the handle rule would SHADOW the email rule: an
+  // account linked to a DIFFERENT provider under the same address would look
+  // like "someone else who happens to share a handle" and fall through to the
+  // suffix retry, quietly creating a second account for one mailbox. Email
+  // match wins first, and it does not care whether the account it hits is a
+  // local one or already federated elsewhere.
 
-  // Same address arriving under a DIFFERENT external subject: also a takeover
-  // shape, and it must not quietly create a second account holding one identity.
+  // (1a) The address is already federated, under this provider or another.
   const emailAlreadyLinked = await db.identity_links.findFirst({
     where: { email: normalizedEmail },
   });
@@ -134,6 +111,44 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
     throw new IdentityConflictError(
       "This email is already linked to another identity. Sign in with the " +
         "original provider and manage links from your settings."
+    );
+
+  // (1b) A local account stored under the raw address.
+  const byEmail = await db.users.findFirst({
+    where: { username: { equals: normalizedEmail, mode: "insensitive" } },
+  });
+  if (byEmail)
+    throw new IdentityConflictError(
+      "An account with this email already exists. Sign in with your existing " +
+        "credentials and link this identity provider from your settings."
+    );
+
+  // (2) The address is new here, but the handle it derives to is taken.
+  //
+  // An account is stored under its username, which for an SSO-created account
+  // is the derived form — so comparing only the raw address misses this and
+  // lets it fall through to a P2002 the caller sees as a bare 401, against the
+  // FIRST person's account, which did nothing wrong.
+  //
+  // PMO ruling: a derived-handle match is a takeover only when the account it
+  // hits is LOCAL. Two different mailboxes can sanitize to one handle (`user+x@`
+  // and `user!x@` both give `user-x@`), and telling those people "an account
+  // with this email already exists" would be false — no account with their
+  // email exists and they are taking nothing over. Those fall through to the
+  // suffix retry below and get their own account.
+  //
+  // Both sides go through the same normalization deriveUsername uses (NFC then
+  // lowercase); comparing on anything else means `User+X@` and `user+x@` are
+  // two handles for one mailbox and the rule silently stops firing.
+  const derivedUsername = deriveUsername(normalizedEmail);
+  const handleCollision = await db.users.findFirst({
+    where: { username: { equals: derivedUsername, mode: "insensitive" } },
+    include: { identity_links: true },
+  });
+  if (handleCollision && handleCollision.identity_links.length === 0)
+    throw new IdentityConflictError(
+      "An account with this email already exists. Sign in with your existing " +
+        "credentials and link this identity provider from your settings."
     );
 
   // QA-1 NIT-1: two different mailboxes can legitimately derive the same

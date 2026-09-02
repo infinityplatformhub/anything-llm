@@ -30,9 +30,20 @@ const LEADING_PREFIX = "u";
  * person's plausible address.
  */
 function sanitize(text) {
-  return String(text)
-    .toLowerCase()
-    .replace(/[^a-z0-9._@-]/g, "-");
+  return normalizeForCompare(text).replace(/[^a-z0-9._@-]/g, "-");
+}
+
+/**
+ * The normalization both sides of a handle comparison must go through.
+ *
+ * NFC before lowercasing, because Unicode gives the same text two encodings:
+ * `é` is one code point in NFC and `e` + a combining accent in NFD. Sanitizing
+ * without normalizing first turns them into `-` and `e-` — two handles for one
+ * name — so the same person arriving from an IdP that emits NFD would derive a
+ * different username than the one they already own.
+ */
+function normalizeForCompare(text) {
+  return String(text).normalize("NFC").toLowerCase();
 }
 
 /**
@@ -88,4 +99,10 @@ function* usernameCandidates(email, attempts = 5) {
   }
 }
 
-module.exports = { deriveUsername, usernameCandidates, MAX_LENGTH, MIN_LENGTH };
+module.exports = {
+  deriveUsername,
+  usernameCandidates,
+  normalizeForCompare,
+  MAX_LENGTH,
+  MIN_LENGTH,
+};

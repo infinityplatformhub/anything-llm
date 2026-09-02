@@ -250,6 +250,48 @@ describe("R1 — email collision with an existing local account", () => {
     expect(second.user.username).toMatch(/-sso-[0-9a-f]+$/);
   });
 
+  test("PMO ruling 1: the handle comparison normalizes BOTH sides", async () => {
+    // `User+X@` and `user+x@` are one mailbox. If either side of the comparison
+    // skips a step of the normalization the other side applies, they stop
+    // matching and the collision rule quietly does nothing — which is exactly
+    // the failure the rule exists to prevent, only now it looks like it works.
+    const suffix = crypto.randomBytes(4).toString("hex");
+    const stored = deriveUsername(`user+${suffix}@${RESERVED_APEX}`);
+    await prisma.users.create({
+      data: { username: stored, password: "local-hash", role: "default" },
+    });
+
+    // Arrives with different case in both the local part and the domain.
+    const incoming = `User+${suffix.toUpperCase()}@${RESERVED_APEX.toUpperCase()}`;
+    const error = await linkPrincipal(principal({ email: incoming }), {
+      db: prisma,
+    }).catch((e) => e);
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    expect(error.message).toMatch(/settings/i);
+  });
+
+  test("PMO ruling 2: an email already linked to ANOTHER provider stays under R1", async () => {
+    // The handle rule must not shadow the email rule. This address is already
+    // federated somewhere else, so the account carries identity_links — which
+    // is precisely the marker the handle rule uses to say "different person,
+    // give them their own account". Checking the handle FIRST would send one
+    // mailbox down the suffix retry and create a second account for it.
+    const email = `crossidp-${crypto.randomBytes(4).toString("hex")}@${RESERVED_APEX}`;
+    await linkPrincipal(principal({ provider: "oidc", email }), { db: prisma });
+    const usersBefore = await prisma.users.count();
+
+    // Same address, a different provider and subject.
+    const error = await linkPrincipal(
+      principal({ provider: "saml", email }),
+      { db: prisma }
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    // R1's email-match refusal, not the handle rule's, and not a second account.
+    expect(error.message).toMatch(/already linked to another identity/i);
+    expect(await prisma.users.count()).toBe(usersBefore);
+  });
+
   test("the refusal writes nothing — no user, no link", async () => {
     const email = `taken-${crypto.randomBytes(4).toString("hex")}@example.com`;
     await prisma.users.create({
