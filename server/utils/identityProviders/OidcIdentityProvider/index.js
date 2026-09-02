@@ -102,6 +102,11 @@ class OidcIdentityProvider {
   }
 
   async discover() {
+    // ponytail: cached for the lifetime of this instance, with no TTL. Endpoint
+    // URLs effectively never move, and a driver instance is per-request today,
+    // so the window is short. Upgrade to a TTL (as _jwks has) if drivers ever
+    // become long-lived singletons — otherwise a moved endpoint would be
+    // pinned for the life of the process. Accepted residual, S1.
     if (this._discovery) return this._discovery;
     const document = await this._fetchJson(`${this.issuer}${DISCOVERY_PATH}`);
     for (const field of ["authorization_endpoint", "token_endpoint", "jwks_uri"]) {
@@ -146,7 +151,10 @@ class OidcIdentityProvider {
     );
     url.searchParams.set("code_challenge_method", "S256");
 
-    return { authorizationUrl: url.toString(), state: { value: stateToken, expiresAt: null } };
+    // No expiresAt: the TTL belongs to identity_login_state, which is what
+    // actually enforces it. A second copy here would be a number nothing reads
+    // and that could disagree with the row.
+    return { authorizationUrl: url.toString(), state: { value: stateToken } };
   }
 
   /**
@@ -284,6 +292,10 @@ class OidcIdentityProvider {
   _normalize(claims) {
     if (!claims.sub)
       throw new IdentityAuthenticationError("Assertion carried no subject.");
+    // The email must be IN the id_token. S1 deliberately does not call the
+    // userinfo endpoint: it is a second round trip on the login path, and an
+    // IdP configured to withhold email from the token is a configuration
+    // problem to fix at the IdP, not something to work around here.
     if (!claims.email)
       throw new IdentityAuthenticationError("Assertion carried no email.");
     // An IdP that has not verified an address may not assert it: domain policy
