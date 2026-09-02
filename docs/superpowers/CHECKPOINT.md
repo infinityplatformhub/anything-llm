@@ -827,3 +827,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #138 driver 1822da5d6: comment-only (0 non-comment JS lines), task.sh check PASS, norm 9. TL-1 one-line pending → close/merge driver half (no lane overlap with #121 chain).
 - QA-1 queue-half harness staged (qa1-138-queue-harness.md): afterCandidates seam must be callable; no seam = finding. QA-3 #126 s2 oracle (qa3-126-slice2-oracle.md): privacy link is always in DOM, hidden by attribute — `toBeInTheDocument` passes for denied users (P8 checks the suite); single node under jsdom; fixtures: settings.write alone → link + users/api-keys absent; mirrors key.manage/user.read; single-user; loading via rerender; call-site assertions N1/N4/N6 with // and /* */ stripped.
 - 03:05 dry-runs: 1822da5d6, f76172fec, 5c9ea893d each merge onto main clean; edd8db6b7 and f76172fec onto 5c9ea893d clean. /tmp/merge-138.sh staged (runs on TL-1 confirm; issue stays open for queue half). Idle: Dev1 → post-#121 sidebar audit table; Dev4 → #132 RED tests in scratch.
+
+- #138 DRIVER HALF MERGED (1822da5d6; gate PASS, TL-1 PASS 410f9adeb, QA-1 PASS). Issue stays OPEN for queue half.
