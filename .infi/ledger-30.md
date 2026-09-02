@@ -96,4 +96,4 @@ Ruling C/C2 (FINDING-2): `unprovableVectorCount` returns three distinguishable o
 
 Note (not a regression, #57): `__tests__/jobs/providerDocIdCallSites.test.js` fails 3 tests intermittently on a 5s `beforeAll` that shells out to `prisma migrate deploy`. Reproduced on plain `aa437ade`; passes when run alone. Known and tracked.
 
-SHA: (below)
+SHA: 4db02e60 (branch approof/t5-vector-filter, base 05e18e79)
