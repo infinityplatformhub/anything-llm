@@ -78,3 +78,4 @@
 - [→ #52] 24 engine-less mutating routes rely on handler-level isSingleUserMode/multiUserMode checks (scheduled-jobs, telegram, outlook, update-password, api-key): safe only in one mode; sweep test allowlist must assert the check (QA-2)
 - [→ backlog] BrowserExtensionApiKey.create bypasses scope ceiling; any role gaining browser-extension.write could mint document.write credentials without holding it (QA-1 #35 NIT-2)
 - [→ backlog] #35 empty-trim branch has no test reaching it (fixture dies at key.manage first); use key.manage-only principal, assert /nothing to mint/ (QA-1 NIT-1)
+- [→ #55] agent generated-files have no owner row; any principal with a valid uuid reads any tenant's file; #41 blocks bound keys only (Dev1)
