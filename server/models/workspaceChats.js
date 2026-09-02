@@ -18,6 +18,51 @@ const MAX_SEARCH_LENGTH = 200;
 const escapeLike = (value) =>
   String(value).replace(/[\\%_]/g, (character) => `\\${character}`);
 
+/**
+ * V9 (#61): the searchable text of a response object.
+ *
+ * `response_text` is a projection of `response`, and EVERY write path that sets
+ * one must set the other -- a row whose projection is stale stays findable by
+ * text the user removed, and the search route (which returns response_text)
+ * hands back the old wording. There are four such paths: new, _update, upsert
+ * and bulkCreate.
+ *
+ * Non-string text stores NULL rather than a coerced "[object Object]": the read
+ * path already skips those rows (convertToChatHistory), so a row that cannot be
+ * rendered does not need to be findable either.
+ */
+function responseTextOf(response) {
+  return typeof response?.text === "string" ? response.text : null;
+}
+
+/**
+ * The same rule for a payload whose `response` has ALREADY been stringified --
+ * _update takes prisma data, not a response object.
+ *
+ * `response` is stored as a JSON string, so the searchable text has to be
+ * parsed back out. A payload that does not touch `response` is passed through
+ * untouched -- callers that only flip `include` or `feedbackScore` must not
+ * have their row's searchable text rewritten as a side effect.
+ *
+ * A `response` that will not parse, or whose `text` is not a string, stores
+ * NULL: the read path already skips such rows (convertToChatHistory), so a row
+ * that cannot be rendered does not need to be findable either. Failing the
+ * whole update instead would turn a malformed legacy row into an un-editable
+ * one.
+ */
+function withResponseTextFrom(data = {}) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, "response"))
+    return data;
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(data.response);
+  } catch {
+    parsed = null;
+  }
+  return { ...data, response_text: responseTextOf(parsed) };
+}
+
 const WorkspaceChats = {
   new: async function ({
     workspaceId,
@@ -40,8 +85,7 @@ const WorkspaceChats = {
           // text stores NULL rather than a coerced "[object Object]" — the read
           // path already skips such records (convertToChatHistory), so they are not
           // findable either.
-          response_text:
-            typeof response?.text === "string" ? response.text : null,
+          response_text: responseTextOf(response),
           user_id: user?.id || null,
           thread_id: threadId,
           api_session_id: apiSessionId,
@@ -367,7 +411,17 @@ const WorkspaceChats = {
     try {
       await prisma.workspace_chats.update({
         where: { id },
-        data,
+        // V9 (#61): response_text is a projection of `response`, so a write to
+        // one that skips the other leaves the row lying about itself -- an
+        // edited chat would stay findable by the text the user just removed,
+        // and the search route would hand back the old wording.
+        //
+        // Derived HERE rather than at each call site: this is the only write
+        // path to `response` other than `new`, and a rule that lives in the
+        // callers is a rule the next caller does not know about. Editing a
+        // chat goes through the two update-chat routes today; nothing stops a
+        // third from being added.
+        data: withResponseTextFrom(data),
       });
       return true;
     } catch (error) {
@@ -409,7 +463,9 @@ const WorkspaceChats = {
       const createdChats = [];
       for (const chatData of chatsData) {
         const chat = await prisma.workspace_chats.create({
-          data: chatData,
+          // Callers hand this an already-stringified `response` (import), so
+          // the payload form of the rule applies rather than the object form.
+          data: withResponseTextFrom(chatData),
         });
         createdChats.push(chat);
       }
@@ -435,6 +491,10 @@ const WorkspaceChats = {
       const payload = {
         workspaceId: data.workspaceId,
         response: safeJSONStringify(data.response),
+        // Agent chat history overwrites an existing row's response here
+        // (utils/agents/aibitat/plugins/chat-history.js), so without this the
+        // projection keeps the superseded text.
+        response_text: responseTextOf(data.response),
         user_id: data.user?.id || null,
         thread_id: data.threadId,
         api_session_id: data.apiSessionId,

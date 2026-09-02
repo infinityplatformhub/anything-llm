@@ -76,6 +76,37 @@ CREATE INDEX "workspace_chats_prompt_trgm"
 CREATE INDEX "workspace_chats_response_text_trgm"
     ON "workspace_chats" USING gin ("response_text" public.gin_trgm_ops);
 
+-- 2b. Warn -- do NOT fail -- when this database cannot make trigrams for Thai.
+--
+-- pg_trgm splits text using the database's LC_CTYPE. A database created with
+-- LC_CTYPE=C (initdb's default when the environment carries no locale, and the
+-- usual state of a slim container image) treats every non-ASCII byte as
+-- non-alphanumeric, so Thai yields ZERO trigrams:
+--
+--   ctype=C            show_trgm('ประวัติ') -> {}
+--   ctype=en_US.UTF-8  show_trgm('ประวัติ') -> 7 trigrams
+--
+-- Nothing errors. The index is built, queries are accepted, and ILIKE returns
+-- the correct rows -- by scanning the table. Thai search loses its index in
+-- silence, which is the "<1s at ten thousand messages" target quietly not
+-- holding for this product's primary language.
+--
+-- WARNING and not EXCEPTION: a database's collation is fixed at creation, so
+-- failing here would leave an operator with a migration they cannot apply and
+-- no way forward inside the migration. English search still works, and the
+-- rest of this migration is still correct and wanted. The same check runs at
+-- every boot (utils/chatSearch/localeSupport.js) so this is not a one-time
+-- message lost in migration output.
+DO $$
+DECLARE thai_trigrams INTEGER;
+BEGIN
+  SELECT COALESCE(array_length(public.show_trgm('ประวัติ'), 1), 0) INTO thai_trigrams;
+  IF thai_trigrams = 0 THEN
+    RAISE WARNING 'V9 chat search: this database (LC_CTYPE=%) produces no trigrams for Thai, so Thai search cannot use its index and will scan the whole table. Recreate the database with a UTF-8 locale (initdb --locale=en_US.UTF-8, or CREATE DATABASE ... LC_CTYPE ''en_US.UTF-8'' TEMPLATE template0) and reindex. English search is unaffected.',
+      (SELECT datctype FROM pg_database WHERE datname = current_database());
+  END IF;
+END $$;
+
 -- 3. The composite index the existing reads never had.
 --
 -- workspace_chats has carried no index but its primary key since the initial

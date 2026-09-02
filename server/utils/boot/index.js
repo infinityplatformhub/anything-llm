@@ -23,6 +23,9 @@ const { repairDeploymentShape } = require("./assertDeploymentShape");
 const {
   reportRetrievalFilterSupport,
 } = require("../authorization/retrievalSupport");
+const {
+  reportChatSearchLocaleSupport,
+} = require("../chatSearch/localeSupport");
 
 // Testing SSL? You can make a self signed certificate and point the ENVs to that location
 // make a directory in server called 'sslcert' - cd into it
@@ -74,6 +77,11 @@ async function bootSSL(app, port = 3001) {
         // the document ACL. Providers that cannot refuse retrieval rather than serve it
         // unfiltered, and that refusal must not be first discovered by a user.
         await reportRetrievalFilterSupport();
+        // V9 (#61): say at boot whether pg_trgm can index Thai on this database.
+        // A C-locale database yields no trigrams for Thai, so Thai chat search
+        // silently falls back to a full table scan — correct results, wrong
+        // performance, and nothing in the logs unless we say so.
+        await reportChatSearchLocaleSupport();
         console.log(`Primary server in HTTPS mode listening on port ${port}`);
       })
       .on("error", catchSigTerms);
@@ -122,6 +130,8 @@ async function bootHTTP(app, port = 3001) {
       await reportLegacyWildcardGrants();
       // T-5 (#30): see bootSSL.
       await reportRetrievalFilterSupport();
+      // V9 (#61): see bootSSL.
+      await reportChatSearchLocaleSupport();
       console.log(`Primary server in HTTP mode listening on port ${port}`);
     })
     .on("error", catchSigTerms);

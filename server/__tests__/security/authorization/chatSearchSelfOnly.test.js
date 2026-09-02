@@ -373,6 +373,287 @@ describe("V9 chat search: what is searchable", () => {
   });
 });
 
+describe("V9 chat search: an edited chat is searched as it now reads", () => {
+  // Techlead-1 FINDING-1. `response` is a JSON string and response_text is its
+  // projection, so an edit that writes one and not the other leaves the row
+  // findable by text the user deleted -- and the search route hands back the
+  // old wording, because it reads response_text.
+  //
+  // Both update-chat routes go through WorkspaceChats._update, which is where
+  // the derivation now lives; these tests drive the model the way those routes
+  // do.
+  beforeAll(async () => {
+    await prisma.workspace_chats.deleteMany({});
+    asUser(ALICE);
+  });
+
+  const OLD = "zygomorphic";
+  const NEW = "actinomorphic";
+
+  test("editing the answer makes the old wording unfindable and the new wording findable", async () => {
+    await prisma.workspace_chats.deleteMany({});
+    await seedChat({
+      user: ALICE,
+      prompt: "an unremarkable question",
+      text: `the answer mentions ${OLD}`,
+    });
+    expect((await search(OLD)).body.results).toHaveLength(1);
+
+    // Exactly what endpoints/workspaces.js:654 and workspaceThreads.js:260 do.
+    const [chat] = await prisma.workspace_chats.findMany({ take: 1 });
+    const parsed = JSON.parse(chat.response);
+    await WorkspaceChats._update(chat.id, {
+      response: JSON.stringify({ ...parsed, text: `the answer mentions ${NEW}` }),
+    });
+
+    expect((await search(OLD)).body.results).toEqual([]);
+    const hits = (await search(NEW)).body.results;
+    expect(hits).toHaveLength(1);
+    // The route returns response_text, so a stale projection shows up as the
+    // old wording being handed back even once the search itself is fixed.
+    expect(hits[0].response).toBe(`the answer mentions ${NEW}`);
+  });
+
+  test("an update that does not touch response leaves the searchable text alone", async () => {
+    await prisma.workspace_chats.deleteMany({});
+    await seedChat({
+      user: ALICE,
+      prompt: "another question",
+      text: `still mentions ${OLD}`,
+    });
+    const [chat] = await prisma.workspace_chats.findMany({ take: 1 });
+
+    // Flipping feedbackScore must not rewrite the row's searchable text as a
+    // side effect -- the derivation is keyed on `response` being present.
+    await WorkspaceChats._update(chat.id, { feedbackScore: true });
+    expect((await search(OLD)).body.results).toHaveLength(1);
+  });
+
+  // QA-3 F2: agent chat history overwrites an existing row through upsert
+  // (utils/agents/aibitat/plugins/chat-history.js), which is a `response` write
+  // like any other.
+  test("upsert overwriting a response updates the searchable text", async () => {
+    await prisma.workspace_chats.deleteMany({});
+    const created = await seedChat({
+      user: ALICE,
+      prompt: "agent question",
+      text: `agent said ${OLD}`,
+    });
+    expect((await search(OLD)).body.results).toHaveLength(1);
+
+    await WorkspaceChats.upsert(created.chat.id, {
+      workspaceId: workspace.id,
+      prompt: "agent question",
+      response: { text: `agent said ${NEW}` },
+      user: { id: ALICE.id },
+      threadId: null,
+      include: true,
+      apiSessionId: null,
+    });
+
+    expect((await search(OLD)).body.results).toEqual([]);
+    expect((await search(NEW)).body.results).toHaveLength(1);
+  });
+
+  // QA-3 F3: the import path. bulkCreate is handed rows whose `response` is
+  // already a JSON string, so an imported chat would arrive unsearchable.
+  test("bulkCreate imports arrive searchable", async () => {
+    await prisma.workspace_chats.deleteMany({});
+    await WorkspaceChats.bulkCreate([
+      {
+        workspaceId: workspace.id,
+        prompt: "imported question",
+        response: JSON.stringify({ text: `imported answer about ${NEW}` }),
+        user_id: ALICE.id,
+        include: true,
+      },
+    ]);
+
+    const hits = (await search(NEW)).body.results;
+    expect(hits).toHaveLength(1);
+    expect(hits[0].response).toBe(`imported answer about ${NEW}`);
+  });
+
+  // Every write path that sets `response` must set response_text. A new one
+  // added later would pass the four tests above (they name the paths that exist
+  // today) and still ship the bug, so this reads the model itself.
+  test("no write path sets response without deriving response_text", async () => {
+    // The four tests above name the write paths that exist today; a fifth added
+    // later would pass all of them and still ship the bug. So read the model.
+    const source = require("fs").readFileSync(
+      require("path").join(__dirname, "../../../models/workspaceChats.js"),
+      "utf8"
+    );
+
+    // Split on the prisma write calls and look at what follows each one, rather
+    // than trying to balance braces with a regex -- a pattern that matches
+    // nothing would make this test vacuous, so the count is asserted below.
+    const writes = source
+      .split(/prisma\.workspace_chats\.(?=create|update|upsert)/)
+      .slice(1)
+      .map((chunk) => chunk.slice(0, 600));
+    expect(writes.length).toBeGreaterThan(0);
+
+    const offenders = writes
+      .filter((chunk) => /\bresponse:/.test(chunk))
+      .filter(
+        (chunk) =>
+          !/response_text|withResponseTextFrom|responseTextOf/.test(chunk)
+      );
+
+    expect(offenders).toEqual([]);
+    // Guard the guard: if the model stops writing `response` anywhere, the
+    // filter above empties and this test would pass while checking nothing.
+    // Two write sites name `response` literally (new, upsert); the other two
+    // (_update, bulkCreate) hand their whole payload to withResponseTextFrom,
+    // so the literal never appears there.
+    const literalResponseWrites = writes.filter((chunk) =>
+      /\bresponse:/.test(chunk)
+    );
+    expect(literalResponseWrites.length).toBeGreaterThanOrEqual(2);
+    // And the derivation reaches the payload-shaped paths too.
+    expect(source).toMatch(/data: withResponseTextFrom\(data\)/);
+    expect(source).toMatch(/data: withResponseTextFrom\(chatData\)/);
+  });
+
+  test("an edit to a response whose text is not a string stores NULL, not a coerced value", async () => {
+    await prisma.workspace_chats.deleteMany({});
+    await seedChat({ user: ALICE, prompt: "third question", text: "findable" });
+    const [chat] = await prisma.workspace_chats.findMany({ take: 1 });
+
+    await WorkspaceChats._update(chat.id, {
+      response: JSON.stringify({ text: { nested: "object" } }),
+    });
+    const after = await prisma.workspace_chats.findUnique({
+      where: { id: chat.id },
+    });
+    expect(after.response_text).toBeNull();
+    // Not "[object Object]" -- a row that cannot be rendered is not findable.
+    expect((await search("object")).body.results).toEqual([]);
+  });
+});
+
+describe("V9 chat search: the trigram indexes serve the search predicate", () => {
+  // Ruling Q5 said: assert the plan, not the clock, because a wall-clock
+  // assertion in CI is a flake generator.
+  //
+  // Measured while writing this, on the real schema: at 10k rows the planner
+  // picks a Seq Scan (cost 393) and is RIGHT to -- the whole table is 56kB and
+  // reading it beats two bitmap builds. It switches to BitmapOr over both
+  // trigram indexes somewhere before 100k. So "the plan contains Index Scan"
+  // is not a property of the schema at the DoD's ten thousand messages; it is
+  // a property of table size, bloat and current statistics. Asserting it would
+  // be the flake Q5 set out to avoid, one level down.
+  //
+  // What IS deterministic, and what the regressions actually look like, is
+  // whether these indexes can serve this predicate at all. A predicate change,
+  // a dropped extension, an operator class that stops resolving, a column
+  // renamed out from under the index -- each makes the index unusable, and
+  // enable_seqscan=off exposes that immediately regardless of table size.
+  beforeAll(async () => {
+    await prisma.workspace_chats.deleteMany({});
+    asUser(ALICE);
+    const rows = [];
+    for (let index = 0; index < 500; index += 1) {
+      rows.push({
+        workspaceId: workspace.id,
+        prompt: `filler row ${index} about assorted unremarkable topics`,
+        response: JSON.stringify({ text: `filler answer ${index}` }),
+        response_text: `filler answer ${index}`,
+        user_id: ALICE.id,
+      });
+    }
+    await prisma.workspace_chats.createMany({ data: rows });
+    await prisma.$executeRawUnsafe(`ANALYZE "workspace_chats"`);
+  }, 120_000);
+
+  // One assertion per column. The combined OR predicate is not a stable target:
+  // with both trigram indexes available the planner may still reach the rows
+  // through the composite (user_id, workspaceId) index and filter, which is a
+  // perfectly good plan and says nothing about whether the trigram index on the
+  // OTHER column is sound. Asking each column its own question is the version
+  // that fails only when something is actually broken.
+  test.each([
+    ["prompt", "workspace_chats_prompt_trgm"],
+    ["response_text", "workspace_chats_response_text_trgm"],
+  ])(
+    "the trigram index on %s can serve an ILIKE substring match",
+    async (column, indexName) => {
+      // enable_seqscan=off does not force an unusable index into a plan -- it
+      // raises the cost of scanning, and the planner still refuses an index
+      // that cannot answer the predicate. An index scan here therefore means
+      // the index genuinely covers this query shape.
+      //
+      // SET LOCAL only lives inside a transaction; outside one it is a silent
+      // no-op and the EXPLAIN would return the ordinary plan while the test
+      // looked like it had forced something. Hence $transaction.
+      const plan = await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL enable_seqscan = off`);
+        return tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON)
+           SELECT id FROM "workspace_chats" WHERE "${column}" ILIKE $1`,
+          "%pterodactyl%"
+        );
+      });
+      const rendered = JSON.stringify(plan);
+
+      expect(rendered).toContain(indexName);
+      expect(rendered).toMatch(/Bitmap Index Scan|Index Scan/);
+    }
+  );
+
+  test("the trigram operator class resolves from the search path", async () => {
+    // The defect this pins really happened: CREATE EXTENSION without SCHEMA put
+    // pg_trgm in a per-connection schema, gin_trgm_ops stopped resolving from
+    // public, and the migration died with 42704. A connection that sets
+    // ?schema= is the ordinary case in this repo's test suite.
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT n.nspname AS schema
+         FROM pg_extension e
+         JOIN pg_namespace n ON n.oid = e.extnamespace
+        WHERE e.extname = 'pg_trgm'`
+    );
+    expect(rows).toEqual([{ schema: "public" }]);
+  });
+
+  test("a search over ten thousand of the caller's own messages returns the right rows", async () => {
+    // The DoD's size, asserted for CORRECTNESS rather than for a duration:
+    // at this volume the needle is still found, and still only in the caller's
+    // own chats. Timing is recorded in the ledger as evidence, not asserted
+    // here -- see the note at the top of this block.
+    const NEEDLE = "pterodactyl";
+    const rows = [];
+    for (let index = 0; index < 9_500; index += 1) {
+      rows.push({
+        workspaceId: workspace.id,
+        prompt: `bulk row ${index} of ordinary conversation`,
+        response: JSON.stringify({ text: `bulk answer ${index}` }),
+        response_text: `bulk answer ${index}`,
+        user_id: ALICE.id,
+      });
+    }
+    await prisma.workspace_chats.createMany({ data: rows });
+    await seedChat({
+      user: ALICE,
+      prompt: `the one about the ${NEEDLE}`,
+      text: "found it",
+    });
+    // Bob's chat carries the same needle: the row filter must still hold at
+    // volume, not only on the three-row fixtures above.
+    await seedChat({
+      user: BOB,
+      prompt: `bob also mentions the ${NEEDLE}`,
+      text: "bob answer",
+    });
+    await prisma.$executeRawUnsafe(`ANALYZE "workspace_chats"`);
+
+    asUser(ALICE);
+    const { body } = await search(NEEDLE);
+    expect(body.results).toHaveLength(1);
+    expect(body.results[0].prompt).toContain("the one about");
+  }, 180_000);
+});
+
 describe("V9 chat search: input handling", () => {
   beforeAll(async () => {
     await prisma.workspace_chats.deleteMany({});
