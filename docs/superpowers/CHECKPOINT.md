@@ -224,3 +224,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #88 36976c14c: QA-3 PASS (99/99, per-provider mutation red). Waiting TL-2 → close/merge.
 - #80 e1bf4adb8: QA-1 finishing (mask length = domain-only, not local-part oracle — maskEmail is first-char+***+domain). Then close/merge.
 - #40 a2bbb0de8 declared (contract 46 exact, R-2 walk-twice at routeGateSweep:414, wildcard identity exemption, 10/10 mutations red). Gate running; TL-1/QA-2/TL-2 dispatched. task.sh stall root cause logged on #62 (O(files×patterns) checkignore loop, 193k iterations).
+
+## 2026-09-02 — #30 T-5 slice 3 merged (68/88) — T-5 complete
+- fc182d413: gate PASS (102/102 bound), QA-1/QA-2/QA-3/TL-1/TL-2 PASS. Post-merge main after #78: see postmerge-78.log. Residual: scope-before-store not asserted by spy. Follow-up (Dev4): resolveActor arity throw, response.locals.actor, move buildVectorSearchResponse, namespaceCount spy. Then #49 #54 #56 #81.
+- Local engine version must match ci.yml pin (Dev4 chroma 0.5.20→1.0.0 on 8003).
