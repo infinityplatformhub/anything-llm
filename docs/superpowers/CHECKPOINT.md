@@ -220,3 +220,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 ## 2026-09-02 — #78 merged (67/88)
 - #78 86d2fe96: gate PASS (47/47 + #72 39/39), QA-2 PASS (20/20, mutation 10/10), TL-1 PASS (2 NIT). Post-merge commit queued (Dev1): drift union, _updateSettings comment, #72 NITs. Then #84.
 - #88 task.sh check bound at 36976c14c (see gate-88b).
+- #30 slice 3 fc182d413: task.sh check bound (102/102). Verdicts 4/5; waiting TL-2 → close/merge.
+- #88 36976c14c: QA-3 PASS (99/99, per-provider mutation red). Waiting TL-2 → close/merge.
+- #80 e1bf4adb8: QA-1 finishing (mask length = domain-only, not local-part oracle — maskEmail is first-char+***+domain). Then close/merge.
+- #40 a2bbb0de8 declared (contract 46 exact, R-2 walk-twice at routeGateSweep:414, wildcard identity exemption, 10/10 mutations red). Gate running; TL-1/QA-2/TL-2 dispatched. task.sh stall root cause logged on #62 (O(files×patterns) checkignore loop, 193k iterations).
