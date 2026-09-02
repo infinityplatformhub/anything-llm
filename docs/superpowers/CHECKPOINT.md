@@ -962,3 +962,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #135 TL-2 site-2 ruling: (a) offboard-first in ONE tx; 403 names role.revoke; atomic fixture; intended narrowing stated. Relayed to Dev2.
 
 - #142 MERGED 4c08b150b (plain): hookTimeouts structural guard; TL-2 PASS b94e31f27; QA-2 shapes 88/2/0/9; follow-ups: hook-scanner-shapes, 403-seam. Prose-describe false positive → .infi/checkignore.
+
+- #142 MERGED b40c0faec; follow-ups #143 (hook-scanner shapes), #144 (403 seam). #138-perm 46eb6256f gating (gate-138p-3). #138 queue 4c01ac1ca gating (gate-138q), TL-1/TL-2 verdicts + QA-1 RF-2c + QA-2 probe dispatched. #135 789e524f3 gating (gate-135), TL-1/TL-2/QA-2 dispatched. TL-1 rulings 214d39041: all-actions fix stays in #138; five sidebar rows gate on write action. QA-1 post-merge: doctor.test.js needs pgvector, ci.yml:16 postgres:16 → TL ruling pending. Still pending user: #121 approval (blocks #137→#138-perm merge, #132, #126s2, #140, audit).
