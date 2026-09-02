@@ -373,12 +373,15 @@ describe("S12 (d): removeGroupMember has a production caller", () => {
     });
   }, 60000);
 
+  // #142: explicit timeout. Draining live connections and closing the server is not
+  // guaranteed to fit in jest's 5 s hook default on a loaded machine, and when it does
+  // not, every test PASSES and the suite still reports `● Test suite failed to run`.
   afterAll(async () => {
     if (server) {
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));
     }
-  });
+  }, 30_000);
 
   const setup = async () => {
     const admin = await mkAdmin();

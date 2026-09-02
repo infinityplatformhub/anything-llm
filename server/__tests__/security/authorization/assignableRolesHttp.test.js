@@ -173,6 +173,23 @@ beforeAll(async () => {
   });
 }, 300_000);
 
+// #142: an explicit timeout, because jest's DEFAULT for a hook is 5 s and this one
+// does four things that are not guaranteed to fit in it — draining live HTTP
+// connections, closing the server, disconnecting the pool, and `DROP DATABASE ...
+// WITH (FORCE)` against a server that may be serving other worktrees' gates at the
+// same time. `beforeAll` above already carries `300_000` for the same reason; the
+// teardown was simply never given one.
+//
+// The failure this produces is worth naming, because it does not look like a timeout:
+// all 18 tests PASS and the suite still reports `● Test suite failed to run` with
+// exit 1. Read quickly that is indistinguishable from an import-time crash, which is
+// how it was first reported (as jsonwebtoken failing to load under node 22 — measured
+// not to be true: `require("buffer").SlowBuffer` is present under jest's `node`
+// environment and `jsonwebtoken` imports clean).
+//
+// 30 s rather than 300 s: this hook should take under a second, so the number is
+// there to absorb a loaded machine, not to hide a hang. A teardown that genuinely
+// needs minutes is a defect, and this timeout is short enough to still say so.
 afterAll(async () => {
   if (server) {
     server.closeAllConnections?.();
@@ -185,7 +202,7 @@ afterAll(async () => {
   });
   await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
   await admin.$disconnect();
-});
+}, 30_000);
 
 describe("RF-1: the answer follows grants, in three tiers", () => {
   it("a full admin may assign every role", async () => {
