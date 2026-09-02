@@ -76,3 +76,5 @@
 - [→ backlog] providerDocIdCallSites.test.js 5s hook timeout flakes under parallel load (C-1, #28); raise hook timeout or isolate (QA-2)
 - [→ #52] view-as-user mutation via engine-less routes (POST /system/user, /onboarding) — LIVE on main until hotfix merges; MAJOR-2 setup_admin cannot delegate (QA-1 T-7 baseline)
 - [→ #52] 24 engine-less mutating routes rely on handler-level isSingleUserMode/multiUserMode checks (scheduled-jobs, telegram, outlook, update-password, api-key): safe only in one mode; sweep test allowlist must assert the check (QA-2)
+- [→ backlog] BrowserExtensionApiKey.create bypasses scope ceiling; any role gaining browser-extension.write could mint document.write credentials without holding it (QA-1 #35 NIT-2)
+- [→ backlog] #35 empty-trim branch has no test reaching it (fixture dies at key.manage first); use key.manage-only principal, assert /nothing to mint/ (QA-1 NIT-1)
