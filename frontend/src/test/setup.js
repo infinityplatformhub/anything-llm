@@ -16,9 +16,7 @@ import "@testing-library/jest-dom/vitest";
 //
 // Imported, never copied: two spellings of "which Node is required" is the drift
 // this file's own neighbours (four .nvmrc files) demonstrate.
-import {
-  nodeVersionComplaint,
-} from "../../scripts/check-node-version.mjs";
+import { nodeVersionComplaint } from "../../scripts/check-node-version.mjs";
 
 const complaint = nodeVersionComplaint();
 if (complaint) {

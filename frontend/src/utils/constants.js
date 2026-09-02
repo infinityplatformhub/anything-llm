@@ -5,7 +5,8 @@ export const ONBOARDING_SURVEY_URL = BRAND_ONBOARDING_SURVEY_URL;
 export const AUTH_USER = "approofworkspace_user";
 export const AUTH_TOKEN = "approofworkspace_authToken";
 export const AUTH_TIMESTAMP = "approofworkspace_authTimestamp";
-export const COMPLETE_QUESTIONNAIRE = "approofworkspace_completed_questionnaire";
+export const COMPLETE_QUESTIONNAIRE =
+  "approofworkspace_completed_questionnaire";
 export const SEEN_DOC_PIN_ALERT = "approofworkspace_pinned_document_alert";
 export const SEEN_WATCH_ALERT = "approofworkspace_watched_document_alert";
 export const LAST_VISITED_WORKSPACE = "approofworkspace_last_visited_workspace";

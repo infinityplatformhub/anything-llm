@@ -149,8 +149,8 @@ export default function OMLXOptions({ settings }) {
                     tokens if the model supports more than that and no value is
                     specified.
                     <br /> <br />
-                    If an invalid value is entered, ApproofWorkspace will handle this
-                    for you so that chats do not fail.
+                    If an invalid value is entered, ApproofWorkspace will handle
+                    this for you so that chats do not fail.
                   </p>
                 </Tooltip>
               </div>

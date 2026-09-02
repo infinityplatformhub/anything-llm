@@ -61,12 +61,10 @@ const populatedBody = new Proxy(
 );
 
 /** Every field is absent — what omitting the keys, or sending null, would look like. */
-const undefinedBody = new Proxy(
-  {},
-  { get: () => undefined, has: () => true }
-);
+const undefinedBody = new Proxy({}, { get: () => undefined, has: () => true });
 
-const CONTROLLED = /uncontrolled|controlled input|value prop on|both value and defaultValue/i;
+const CONTROLLED =
+  /uncontrolled|controlled input|value prop on|both value and defaultValue/i;
 
 let warnings;
 let consoleError;
@@ -110,7 +108,9 @@ describe("issue 114 R10: an empty endpoint renders no worse than a configured on
     const { rerender } = render(<input value={undefined} readOnly />);
     rerender(<input value="now-controlled" readOnly />);
 
-    expect(warnings.filter((line) => CONTROLLED.test(line)).length).toBeGreaterThan(0);
+    expect(
+      warnings.filter((line) => CONTROLLED.test(line)).length
+    ).toBeGreaterThan(0);
   });
 
   test("switching a field from absent to a string is what React objects to", () => {
@@ -120,12 +120,16 @@ describe("issue 114 R10: an empty endpoint renders no worse than a configured on
     warnings = [];
     const { rerender } = render(<OllamaLLMOptions settings={undefinedBody} />);
     rerender(<OllamaLLMOptions settings={populatedBody} />);
-    const acrossSwitch = warnings.filter((line) => CONTROLLED.test(line)).length;
+    const acrossSwitch = warnings.filter((line) =>
+      CONTROLLED.test(line)
+    ).length;
 
     warnings = [];
     const stable = render(<OllamaLLMOptions settings={emptyBody} />);
     stable.rerender(<OllamaLLMOptions settings={emptyBody} />);
-    const acrossStable = warnings.filter((line) => CONTROLLED.test(line)).length;
+    const acrossStable = warnings.filter((line) =>
+      CONTROLLED.test(line)
+    ).length;
 
     expect(acrossStable).toBeLessThanOrEqual(acrossSwitch);
   });

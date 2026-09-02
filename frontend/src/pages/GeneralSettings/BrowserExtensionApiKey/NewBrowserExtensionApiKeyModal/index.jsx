@@ -74,13 +74,13 @@ export default function NewBrowserExtensionApiKeyModal({
           </p>
         )}
         <p className="text-xs text-zinc-400 light:text-slate-600">
-          After clicking "Create API Key", ApproofWorkspace will attempt to connect
-          to your browser extension automatically.
+          After clicking "Create API Key", ApproofWorkspace will attempt to
+          connect to your browser extension automatically.
         </p>
         <p className="text-xs text-zinc-400 light:text-slate-600">
-          If you see "Connected to ApproofWorkspace" in the extension, the connection
-          was successful. If not, please copy the connection string and paste it
-          into the extension manually.
+          If you see "Connected to ApproofWorkspace" in the extension, the
+          connection was successful. If not, please copy the connection string
+          and paste it into the extension manually.
         </p>
       </ModalBody>
       <ModalFooter>

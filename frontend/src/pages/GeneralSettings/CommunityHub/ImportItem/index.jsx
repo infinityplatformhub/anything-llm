@@ -85,8 +85,9 @@ export default function CommunityHubImportItemFlow() {
               </p>
             </div>
             <p className="text-xs leading-[18px] font-base text-theme-text-secondary">
-              Import items from the ApproofWorkspace Community Hub to enhance your
-              instance with community-created prompts, skills, and commands.
+              Import items from the ApproofWorkspace Community Hub to enhance
+              your instance with community-created prompts, skills, and
+              commands.
             </p>
           </div>
           <div className="flex-1 flex flex-col 2xl:flex-row h-full">

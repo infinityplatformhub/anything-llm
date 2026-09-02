@@ -46,13 +46,13 @@ vi.mock("@/models/system", () => ({
       if (mockCaps.defer) await mockCaps.defer;
       return (
         mockCaps.override ?? {
-        capabilities: {
-          "settings.write": mockKeys.current.role === "admin",
-          "user.manage": mockKeys.current.role !== "default",
-        },
-        workspace: null,
-        error: null,
-      }
+          capabilities: {
+            "settings.write": mockKeys.current.role === "admin",
+            "user.manage": mockKeys.current.role !== "default",
+          },
+          workspace: null,
+          error: null,
+        }
       );
     },
   },
@@ -161,9 +161,16 @@ describe("#108: the mailer route in main.jsx is actually mounted under AdminRout
 // string could not express at all.
 describe("#40 task 4: AdminRoute and ManagerRoute ask different capabilities", () => {
   async function renderWithCapabilities(Guard, capabilities) {
-    window.localStorage.setItem(AUTH_USER, JSON.stringify({ id: 1, role: "default" }));
+    window.localStorage.setItem(
+      AUTH_USER,
+      JSON.stringify({ id: 1, role: "default" })
+    );
     window.localStorage.setItem(AUTH_TOKEN, "a-valid-looking-token");
-    mockKeys.current = { MultiUserMode: true, RequiresAuth: true, role: "default" };
+    mockKeys.current = {
+      MultiUserMode: true,
+      RequiresAuth: true,
+      role: "default",
+    };
     resetCapabilities();
     mockCaps.override = { capabilities, workspace: null, error: null };
 
@@ -187,7 +194,9 @@ describe("#40 task 4: AdminRoute and ManagerRoute ask different capabilities", (
     await renderWithCapabilities(ManagerRoute, caps);
     // Holding settings.write must not open the user-administration pages the
     // server gates on user.manage.
-    await waitFor(() => expect(screen.queryByText("mailer settings")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("mailer settings")).toBeNull()
+    );
   });
 
   test("user.manage admits ManagerRoute but not AdminRoute", async () => {
@@ -199,7 +208,9 @@ describe("#40 task 4: AdminRoute and ManagerRoute ask different capabilities", (
 
     cleanup();
     await renderWithCapabilities(AdminRoute, caps);
-    await waitFor(() => expect(screen.queryByText("mailer settings")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("mailer settings")).toBeNull()
+    );
   });
 
   test("the guard waits rather than redirecting before the map arrives", async () => {

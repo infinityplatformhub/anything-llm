@@ -806,7 +806,8 @@ const TRANSLATIONS = {
   customization: {
     interface: {
       title: "Preferencje interfejsu użytkownika",
-      description: "Ustaw preferencje interfejsu użytkownika dla ApproofWorkspace.",
+      description:
+        "Ustaw preferencje interfejsu użytkownika dla ApproofWorkspace.",
     },
     branding: {
       title: "Branding i white-labeling",

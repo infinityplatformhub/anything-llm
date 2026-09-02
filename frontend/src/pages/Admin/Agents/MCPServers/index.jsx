@@ -126,7 +126,8 @@ export function MCPServersList({
 
 function MCPServerItem({ server, isFirst, isLast, isSelected, handleClick }) {
   const { t } = useTranslation();
-  const suppressedTools = server.config?.approofworkspace?.suppressedTools || [];
+  const suppressedTools =
+    server.config?.approofworkspace?.suppressedTools || [];
   const enabledToolCount = server.tools.length - suppressedTools.length;
   const showWarning = enabledToolCount > 10;
   const running = server.running;

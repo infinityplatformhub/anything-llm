@@ -126,9 +126,10 @@ export default function CommunityHubAuthentication() {
               </p>
             </div>
             <p className="text-xs leading-[18px] font-base text-theme-text-secondary">
-              Connecting your ApproofWorkspace Community Hub account allows you to
-              access your <b>private</b> ApproofWorkspace Community Hub items as well
-              as upload your own items to the ApproofWorkspace Community Hub.
+              Connecting your ApproofWorkspace Community Hub account allows you
+              to access your <b>private</b> ApproofWorkspace Community Hub items
+              as well as upload your own items to the ApproofWorkspace Community
+              Hub.
             </p>
           </div>
 
@@ -142,16 +143,16 @@ export default function CommunityHubAuthentication() {
                   </h1>
                 </div>
                 <p className="text-sm text-theme-text-secondary">
-                  Connecting your ApproofWorkspace Community Hub account allows you
-                  to pull in your <b>private</b> items from the ApproofWorkspace
-                  Community Hub as well as upload your own items to the
-                  ApproofWorkspace Community Hub.
+                  Connecting your ApproofWorkspace Community Hub account allows
+                  you to pull in your <b>private</b> items from the
+                  ApproofWorkspace Community Hub as well as upload your own
+                  items to the ApproofWorkspace Community Hub.
                   <br />
                   <br />
                   <i>
-                    You do not need to connect your ApproofWorkspace Community Hub
-                    account to pull in public items from the ApproofWorkspace
-                    Community Hub.
+                    You do not need to connect your ApproofWorkspace Community
+                    Hub account to pull in public items from the
+                    ApproofWorkspace Community Hub.
                   </i>
                 </p>
               </div>

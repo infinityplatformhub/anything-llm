@@ -51,7 +51,10 @@ vi.mock("@/hooks/useUser", () => ({
 import SettingsButton from "@/components/SettingsButton";
 import { resetCapabilities } from "@/hooks/useCapabilities";
 
-function renderButton({ capabilities = {}, user = { id: 1, role: "default" } }) {
+function renderButton({
+  capabilities = {},
+  user = { id: 1, role: "default" },
+}) {
   mockCapabilities.current = { capabilities, workspace: null, error: null };
   mockUser.current = user;
   return render(

@@ -1321,7 +1321,8 @@ const TRANSLATIONS = {
     },
     chat: {
       title: "チャット",
-      description: "ApproofWorkspace のチャット設定をカスタマイズしてください。",
+      description:
+        "ApproofWorkspace のチャット設定をカスタマイズしてください。",
       auto_submit: {
         title: "自動音声入力送信",
         description: "沈黙の後に自動で音声入力を行う",

@@ -37,8 +37,9 @@ export default function MobileConnectModal({ isOpen, onClose }) {
               Go mobile. Stay local. ApproofWorkspace Mobile.
             </p>
             <p className="text-[#FFF] text-lg">
-              ApproofWorkspace for mobile allows you to connect to your workspace's
-              chats, threads, tools, and documents for you to use on the go.
+              ApproofWorkspace for mobile allows you to connect to your
+              workspace's chats, threads, tools, and documents for you to use on
+              the go.
               <br />
               <br />
               Run with local models on your phone privately or relay chats
@@ -52,8 +53,8 @@ export default function MobileConnectModal({ isOpen, onClose }) {
               <ConnectionQrCode isOpen={isOpen} />
             </div>
             <p className="text-[#FFF] text-sm w-[300px] text-center">
-              Scan the QR code with the ApproofWorkspace Mobile app to enable live
-              sync of your workspaces, chats, threads and documents.
+              Scan the QR code with the ApproofWorkspace Mobile app to enable
+              live sync of your workspaces, chats, threads and documents.
               <br />
               <Link
                 to={paths.documentation.mobileIntroduction()}

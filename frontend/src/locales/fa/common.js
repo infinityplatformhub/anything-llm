@@ -1321,7 +1321,8 @@ const TRANSLATIONS = {
   customization: {
     interface: {
       title: "تنظیمات رابط کاربری",
-      description: "تنظیمات رابط کاربری خود را برای ApproofWorkspace تعیین کنید.",
+      description:
+        "تنظیمات رابط کاربری خود را برای ApproofWorkspace تعیین کنید.",
     },
     branding: {
       title: "برندسازی و ارائه خدمات با برچسب سفید",

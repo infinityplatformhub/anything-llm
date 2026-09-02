@@ -807,7 +807,8 @@ const TRANSLATIONS = {
     },
     branding: {
       title: "Marca & Etiqueta Branca",
-      description: "Personalize sua instância do ApproofWorkspace com sua marca.",
+      description:
+        "Personalize sua instância do ApproofWorkspace com sua marca.",
     },
     chat: {
       title: "Chat",

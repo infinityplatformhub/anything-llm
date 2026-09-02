@@ -183,7 +183,9 @@ function SelectedFeatureComponent({ feature, settings, refresh }) {
 
 function FeatureVerification({ children }) {
   if (
-    !window.localStorage.getItem("approofworkspace_tos_experimental_feature_set")
+    !window.localStorage.getItem(
+      "approofworkspace_tos_experimental_feature_set"
+    )
   ) {
     function acceptTos(e) {
       e.preventDefault();
@@ -217,10 +219,10 @@ function FeatureVerification({ children }) {
             <ModalBody>
               <div className="w-full text-zinc-300 light:text-slate-700 text-md flex flex-col gap-y-4">
                 <p>
-                  Experimental features of ApproofWorkspace are features that we are
-                  piloting and are <b>opt-in</b>. We proactively will condition
-                  or warn you on any potential concerns should any exist prior
-                  to approval of any feature.
+                  Experimental features of ApproofWorkspace are features that we
+                  are piloting and are <b>opt-in</b>. We proactively will
+                  condition or warn you on any potential concerns should any
+                  exist prior to approval of any feature.
                 </p>
 
                 <div>
