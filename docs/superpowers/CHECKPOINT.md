@@ -829,3 +829,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - 03:05 dry-runs: 1822da5d6, f76172fec, 5c9ea893d each merge onto main clean; edd8db6b7 and f76172fec onto 5c9ea893d clean. /tmp/merge-138.sh staged (runs on TL-1 confirm; issue stays open for queue half). Idle: Dev1 → post-#121 sidebar audit table; Dev4 → #132 RED tests in scratch.
 
 - #138 DRIVER HALF MERGED (1822da5d6; gate PASS, TL-1 PASS 410f9adeb, QA-1 PASS). Issue stays OPEN for queue half.
+- #138 DRIVER HALF MERGED eaf910819 (contract-s4b-slice3.md conflict resolved with branch version). Issue open for queue half; a8841bf86 rides with it. Post-merge check dispatched.
+- #136 slice 2 RED 4ee434ae3 (branch approof/offboard-user, 6/6 red TypeError, ACTOR placeholder). Dev5's F2 question answered by TL-1's slice-2 ruling (6aabd6b7d): N bumps is correct → option (b), F2 becomes "one bump per primitive, all-or-nothing on failure", no extraction of revokeGrant/revokeDocumentAcl internals.
+- QA-2 #135 oracle staged (qa2-135-oracle.md): P0 escalation reproduced live; P4 rollback leaves rows + 0 bump.
