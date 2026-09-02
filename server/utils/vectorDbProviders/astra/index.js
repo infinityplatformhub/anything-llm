@@ -174,6 +174,11 @@ class AstraDB extends VectorDatabase {
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // The ACL fields the filter reads. Resolved once and spread into every stored
+      // document below, including the cached path — a cache hit must not be a hole.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -202,7 +207,7 @@ class AstraDB extends VectorDatabase {
               return {
                 _id: _id,
                 $vector: chunk.values,
-                metadata: chunk.metadata || {},
+                metadata: { ...(chunk.metadata || {}), ...aclMetadata },
               };
             });
 
@@ -244,7 +249,7 @@ class AstraDB extends VectorDatabase {
           const vectorRecord = {
             _id: uuidv4(),
             $vector: vector,
-            metadata: { ...metadata, text: textChunks[i] },
+            metadata: { ...metadata, text: textChunks[i], ...aclMetadata },
           };
 
           vectors.push(vectorRecord);
@@ -361,6 +366,63 @@ class AstraDB extends VectorDatabase {
       sources: this.curateSources(sources),
       message: false,
     };
+  }
+
+  /**
+   * ACL-filtered search. See base.queryAuthorized for the contract.
+   *
+   * The predicate is the `find()` filter, applied inside the query before the limit, so
+   * the actor's own documents compete for the topN slots (S-17).
+   *
+   * Astra's Data API is Mongo-shaped, so absence is `$exists: false` on the dotted
+   * metadata path — the same path the strict clauses address, which keeps a field rename
+   * from silently diverging between the two halves.
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const filter = constraintFor(aclFilter).toAstraFilter();
+    if (filter === null) return empty;
+
+    const { client } = await this.connect();
+    const sanitizedNamespace = sanitizeNamespace(namespace);
+    if (!(await this.namespaceExists(client, sanitizedNamespace))) return empty;
+
+    const collection = await client.collection(sanitizedNamespace);
+    const responses = await collection
+      .find(filter, {
+        sort: { $vector: queryVector },
+        limit: topN,
+        includeSimilarity: true,
+      })
+      .toArray();
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    for (const response of responses) {
+      // Second layer, deliberately redundant with the pushdown (S-26/G4).
+      if (!isRowAllowed(response?.metadata, aclFilter)) continue;
+      if (response.$similarity < similarityThreshold) continue;
+      if (filterIdentifiers.includes(sourceIdentifier(response.metadata))) {
+        this.logger(
+          "A source was filtered from context as it's parent document is pinned."
+        );
+        continue;
+      }
+      result.contextTexts.push(response.metadata.text);
+      result.sourceDocuments.push({
+        ...response.metadata,
+        score: response.$similarity,
+      });
+      result.scores.push(response.$similarity);
+    }
+    return result;
   }
 
   async similarityResponse({

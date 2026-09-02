@@ -286,6 +286,11 @@ class Chroma extends VectorDatabase {
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // The ACL fields the filter reads. Resolved once and spread into every stored
+      // metadata below, including the cached path — a cache hit must not be a hole.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -315,7 +320,7 @@ class Chroma extends VectorDatabase {
               documentVectors.push({ docId, vectorId: id });
               submission.ids.push(id);
               submission.embeddings.push(chunk.values);
-              submission.metadatas.push(metadata);
+              submission.metadatas.push({ ...metadata, ...aclMetadata });
               submission.documents.push(metadata.text);
             });
 
@@ -372,7 +377,7 @@ class Chroma extends VectorDatabase {
 
           submission.ids.push(vectorRecord.id);
           submission.embeddings.push(vectorRecord.values);
-          submission.metadatas.push(metadata);
+          submission.metadatas.push({ ...metadata, ...aclMetadata });
           submission.documents.push(textChunks[i]);
 
           vectors.push(vectorRecord);

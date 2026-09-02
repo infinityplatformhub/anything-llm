@@ -95,6 +95,68 @@ class Weaviate extends VectorDatabase {
     }
   }
 
+  /**
+   * ACL-filtered search. See base.queryAuthorized for the contract.
+   *
+   * The predicate goes into `.withWhere()`, applied inside the GraphQL query before the
+   * limit, so the actor's own documents compete for the topN slots (S-17).
+   *
+   * Weaviate's operator enum is closed and has no `Not`, so the deny-list is rendered as a
+   * conjunction of NotEqual clauses rather than a negated ContainsAny — see
+   * `toWeaviateWhere`. It does have `IsNull`, so the pre-backfill escape clause IS
+   * expressible here.
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const where = constraintFor(aclFilter).toWeaviateWhere();
+    if (where === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const weaviateClass = await this.namespace(client, namespace);
+    const fields =
+      weaviateClass.properties?.map((prop) => prop.name)?.join(" ") ?? "";
+    const queryResponse = await client.graphql
+      .get()
+      .withClassName(camelCase(namespace))
+      .withFields(`${fields} _additional { id certainty }`)
+      .withNearVector({ vector: queryVector })
+      .withWhere(where)
+      .withLimit(topN)
+      .do();
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const responses = queryResponse?.data?.Get?.[camelCase(namespace)] ?? [];
+    for (const response of responses) {
+      const {
+        _additional: { id, certainty },
+        ...rest
+      } = response;
+      // Second layer, deliberately redundant with the pushdown (S-26/G4).
+      if (!isRowAllowed(rest, aclFilter)) continue;
+      if (certainty < similarityThreshold) continue;
+      if (filterIdentifiers.includes(sourceIdentifier(rest))) {
+        this.logger(
+          "A source was filtered from context as it's parent document is pinned."
+        );
+        continue;
+      }
+      result.contextTexts.push(rest.text);
+      result.sourceDocuments.push({ ...rest, id, score: certainty });
+      result.scores.push(certainty);
+    }
+    return result;
+  }
+
   async similarityResponse({
     client,
     namespace,
@@ -220,6 +282,11 @@ class Weaviate extends VectorDatabase {
       } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // The ACL fields the filter reads. Resolved once and spread into every stored
+      // object below, including the cached path — a cache hit must not be a hole.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -256,7 +323,7 @@ class Weaviate extends VectorDatabase {
                 id,
                 class: camelCase(namespace),
                 vector: chunk.vector || chunk.values || [],
-                properties: { ...flattenedMetadata },
+                properties: { ...flattenedMetadata, ...aclMetadata },
               };
               vectors.push(vectorRecord);
             });
@@ -315,7 +382,11 @@ class Weaviate extends VectorDatabase {
             // [DO NOT REMOVE]
             // LangChain will be unable to find your text if you embed manually and dont include the `text` key.
             // https://github.com/hwchase17/langchainjs/blob/5485c4af50c063e257ad54f4393fa79e0aff6462/langchain/src/vectorstores/weaviate.ts#L133
-            properties: { ...flattenedMetadata, text: textChunks[i] },
+            properties: {
+              ...flattenedMetadata,
+              text: textChunks[i],
+              ...aclMetadata,
+            },
           };
 
           submission.ids.push(vectorRecord.id);

@@ -7,13 +7,25 @@
 //
 // The translation is TWO-STEP on purpose (Techlead ruling):
 //
-//   filter -> RetrievalConstraint (neutral) -> toSqlString() | toStructured()
+//   filter -> RetrievalConstraint (neutral) -> one renderer PER DIALECT
 //
-// The neutral middle is what stops the SQL dialect from becoming the interchange format.
-// Providers that take an expression string (lance, pgvector, milvus) call toSqlString();
-// providers with object filter DSLs (qdrant, pinecone, chroma, weaviate, astra) call
-// toStructured(). Neither parses the other's output — a provider parsing a SQL string to
-// rebuild an object filter is how a subtly wrong predicate gets written.
+// The neutral middle is what stops any one dialect from becoming the interchange format.
+// No renderer parses another's output — a provider parsing a SQL string to rebuild an
+// object filter is how a subtly wrong predicate gets written.
+//
+// ADDING A PROVIDER: write its own renderer here, plus (a) a render test asserting it
+// differs between the two RETRIEVAL_FILTER_ALLOW_UNPROVABLE states, and (b) a REAL-STORE
+// test that sends the rendered predicate to an actual instance. There is no shared
+// "structured" shape to reuse, and that is deliberate: an earlier `toStructured()` promised
+// one, but implementing all five dialects proved they disagree about far more than
+// spelling, so it was deleted rather than left as a trap for the sixth provider.
+//
+// (b) is not optional. Three renderers shipped with predicates that read correctly and
+// were rejected by the engine — LanceDB needed backticks (bare identifiers throw,
+// double quotes silently return zero rows), pgvector had a placeholder off-by-one that
+// made every shape unexecutable, and Milvus needed each `not exists` parenthesised or the
+// whole escape clause failed to parse. All three passed review. None would have been
+// caught without a real store.
 //
 // Two enforcement layers, deliberately overlapping:
 //
@@ -189,10 +201,27 @@ class RetrievalConstraint {
     const strict = clauses.join(" and ");
     if (!allowUnprovableRows()) return strict;
     // Same all-or-nothing escape as toSqlString; Milvus spells "JSON key absent" as
-    // `not exists`.
-    const unlabelled = ACL_FIELDS
-      .map((key) => `not exists ${member(key)}`)
-      .join(" and ");
+    // `exists`.
+    //
+    // Each `not exists` is PARENTHESISED individually, which is not cosmetic. Measured
+    // against Milvus 2.3.9:
+    //
+    //   not exists a and not exists b       -> cannot parse expression:
+    //                                          'and' can only be used between boolean
+    //                                          expressions
+    //   (not exists a) and (not exists b)   -> correct
+    //
+    // `not` binds tighter than the operand here, so the parser sees `not (exists a and
+    // not exists b)` and rejects the shape. Without the parentheses the flagged state
+    // errored on every Milvus query while the strict state worked — the flag would have
+    // turned retrieval OFF on this provider rather than widening it, and only a
+    // deployment that set it would ever have found out.
+    //
+    // Caught by running the rendered expression through a real Milvus 2.3.9 parser. No
+    // amount of reading finds this: the string looks correct and reads correctly.
+    const unlabelled = ACL_FIELDS.map(
+      (key) => `(not exists ${member(key)})`
+    ).join(" and ");
     return `((${unlabelled}) or (${strict}))`;
   }
 
@@ -260,27 +289,6 @@ class RetrievalConstraint {
       .map((key) => `${column}->>'${key}' IS NULL`)
       .join(" AND ");
     return { sql: `((${unlabelled}) OR (${strict}))`, params };
-  }
-
-  /**
-   * For providers with an object filter DSL: qdrant, pinecone, chroma, weaviate, astra.
-   * Returns the conditions in a shape each driver maps to its own syntax — the mapping is
-   * the driver's job, the MEANING is decided here.
-   */
-  toStructured() {
-    if (this.matchNone) return null;
-    const must = [{ field: "orgId", op: "eq", value: String(this.orgId) }];
-    if (this.workspaceIds.length > 0) {
-      must.push({ field: "workspaceId", op: "in", value: this.workspaceIds });
-    }
-    if (this.allowedDocIds !== null) {
-      must.push({ field: "docId", op: "in", value: this.allowedDocIds });
-    }
-    const mustNot =
-      this.deniedDocIds.length > 0
-        ? [{ field: "docId", op: "in", value: this.deniedDocIds }]
-        : [];
-    return { must, mustNot };
   }
 
   // ---------------------------------------------------------------------------

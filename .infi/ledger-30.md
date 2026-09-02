@@ -97,3 +97,68 @@ Ruling C/C2 (FINDING-2): `unprovableVectorCount` returns three distinguishable o
 Note (not a regression, #57): `__tests__/jobs/providerDocIdCallSites.test.js` fails 3 tests intermittently on a 5s `beforeAll` that shells out to `prisma migrate deploy`. Reproduced on plain `aa437ade`; passes when run alone. Known and tracked.
 
 SHA: 4db02e60 (branch approof/t5-vector-filter, base 05e18e79)
+
+## Slice 1b — the remaining five providers
+
+Ruling: each of the five object-DSL providers gets its OWN renderer, and `toStructured()`
+is DELETED. It promised a shared intermediate shape that implementing all five disproved:
+Qdrant nests `must`/`must_not` and spells absence `is_null`, Pinecone is Mongo-ish with
+`$exists`, Chroma's operator set is closed with no `$exists` at all, Weaviate is a GraphQL
+operator tree with no `Not`, Astra is Mongo-like on dotted paths. A contract with no
+conforming implementation is a trap for the sixth provider — someone would route through it
+and get a predicate weaker than their dialect can express, visible only in that deployment.
+Replaced with a header note stating what a new provider must write instead.
+
+Ruling (§7.12): every new renderer needs BOTH a render test (differs between the two
+RETRIEVAL_FILTER_ALLOW_UNPROVABLE states) and a REAL-STORE test that sends the rendered
+predicate to an actual engine. Three renderers have now shipped with predicates that read
+correctly and were rejected at runtime — LanceDB's bare identifiers, pgvector's placeholder
+off-by-one, Milvus's unparenthesised `not exists`. All three passed review. None was
+reachable by reading.
+
+Ruling (Milvus, found by the real-store test): each `not exists` is parenthesised
+individually. Measured on Milvus 2.3.9 — `not exists a and not exists b` fails with "'and'
+can only be used between boolean expressions" because `not` binds tighter than its operand,
+so the parser sees `not (exists a and not exists b)`. The strict path was unaffected; only
+the flagged path broke, meaning RETRIEVAL_FILTER_ALLOW_UNPROVABLE would have turned Milvus
+retrieval OFF rather than widening it, and only a deployment that set the flag would have
+found out. Mutation-verified: removing the parentheses fails 3 of 7.
+
+Ruling (Chroma, option A): Chroma is in SUPPORTED_PROVIDERS and enforces normally, but
+cannot express the escape clause — its operator set is closed (`$gt $gte $lt $lte $ne $eq
+$in $nin`) with no `$exists`. It therefore renders IDENTICALLY in both flag states, asserted
+as equality rather than "does not throw", and the boot report says so at error level when
+the flag is set. The sentinel alternative was rejected: writing `""` into every pre-T-5 row
+so it could be matched IS the backfill, so it would solve a problem it created. Residual:
+Chroma has no escape clause until #56.
+
+Ruling (Weaviate): the deny-list is `And[NotEqual, NotEqual, …]`, one per denied id.
+Weaviate's operator enum is closed and contains no `Not`; an earlier draft emitted
+`operator: "Not"` around a ContainsAny, which would have errored or been dropped — and a
+dropped deny-list re-admits revoked documents, the worst direction for this to fail. Pinned
+by a test asserting no `Not` escapes on any path. It does have `IsNull`, so unlike Chroma
+the escape clause is expressible.
+
+Ruling (pgvector 42P01): `undefined_table` returns `{unlabelled: 0, total: 0}`, not an
+error. pgvector creates its table lazily on first embedding, so a fresh install has none —
+an empty store, not a fault. Reporting it as an error would put a red line in every fresh
+install's boot log and teach operators that this diagnostic cries wolf, which is how a real
+error later goes unread.
+
+Ruling (half-migrated table): `hasAclColumns` uses `.every()`, so a table carrying SOME ACL
+columns is NOT labelled and routes to the legacy branch. This is a real shape, not a
+hypothetical — #56's backfill must migrate the Arrow schema (LanceDB's `table.add()`
+silently drops fields absent from the schema), and a migration that adds columns one at a
+time or fails partway leaves exactly this. Treating it as labelled would build a predicate
+naming a column the schema lacks, which throws — retrieval down for that namespace,
+mid-migration. Four partial shapes asserted, plus the no-throw path and the second-layer
+refusal of a half-labelled row.
+
+Residual [→ CI]: `MILVUS_TEST_ADDRESS` must be set in CI or the Milvus real-store suite
+SKIPS rather than fails — a green run would then prove nothing about that provider.
+Embedded-etcd standalone segfaults on arm64; external etcd + minio containers are required,
+and the working commands are in the test file's header.
+
+Residual: Chroma has no escape clause until #56 backfills.
+
+SHA: 99440ee1 (branch approof/t5-slice-1b, base b512557e)

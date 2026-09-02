@@ -83,6 +83,14 @@ async function unprovableVectorCount(provider) {
           `SELECT COUNT(*)::int AS unlabelled, (SELECT COUNT(*)::int FROM "${PGVector.tableName()}") AS total FROM "${PGVector.tableName()}" WHERE metadata->>'orgId' IS NULL`
         );
         return { unlabelled: rows[0].unlabelled, total: rows[0].total };
+      } catch (error) {
+        // 42P01 = undefined_table. pgvector creates its table lazily, on the first
+        // embedding, so a deployment that has never ingested anything has no table yet.
+        // That is an empty store, not a fault: reporting it as an error would put a red
+        // line in the boot log of every fresh install and teach operators that this
+        // diagnostic cries wolf — which is exactly how a real error later goes unread.
+        if (error?.code === "42P01") return { unlabelled: 0, total: 0 };
+        throw error;
       } finally {
         await connection.end();
       }

@@ -276,3 +276,122 @@ describe("T-5: the boot count distinguishes its three outcomes", () => {
     expect(counts).toEqual({ unlabelled: 1, total: 2 });
   });
 });
+
+describe("T-5: a HALF-migrated table is not treated as labelled", () => {
+  // Techlead-2: `hasAclColumns` uses `.every()`, so a table carrying SOME of the ACL
+  // columns must come back false. This is a real shape, not a hypothetical: #56's backfill
+  // has to migrate the Arrow schema (LanceDB's `table.add()` silently DROPS fields not in
+  // the schema), and a migration that adds columns one at a time, or fails partway, leaves
+  // exactly this.
+  //
+  // Treating it as labelled would build a predicate naming `workspaceId` against a table
+  // that has no such column — which throws, taking retrieval down for that namespace. The
+  // `.every()` is what routes it to the legacy branch instead, where the flag decides.
+  const os = require("os");
+  const fs = require("fs");
+  const path = require("path");
+  const lancedb = require("@lancedb/lancedb");
+  const { LanceDb } = require("../../../utils/vectorDbProviders/lance");
+
+  const tableWith = async (row) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lance-half-"));
+    const client = await lancedb.connect(dir);
+    return client.createTable("t", [row]);
+  };
+
+  const BASE = { id: "1", vector: [0.1, 0.2], text: "x" };
+
+  test.each([
+    ["orgId only", { orgId: "1" }],
+    ["orgId + workspaceId, no docId", { orgId: "1", workspaceId: "7" }],
+    ["docId only", { docId: "d1" }],
+    ["workspaceId + docId, no orgId", { workspaceId: "7", docId: "d1" }],
+  ])("%s counts as NOT labelled", async (_name, partial) => {
+    const provider = new LanceDb();
+    const table = await tableWith({ ...BASE, ...partial });
+    expect(await provider.hasAclColumns(table)).toBe(false);
+  });
+
+  test("all three present counts as labelled", async () => {
+    const provider = new LanceDb();
+    const table = await tableWith({
+      ...BASE,
+      orgId: "1",
+      workspaceId: "7",
+      docId: "d1",
+    });
+    expect(await provider.hasAclColumns(table)).toBe(true);
+  });
+
+  test("a half-migrated table does not throw on search", async () => {
+    // The consequence that matters. Before `.every()` routed this correctly, the strict
+    // predicate would name a column the schema lacks and DataFusion would throw — a 500 on
+    // chat for that workspace, mid-migration.
+    const provider = new LanceDb();
+    const table = await tableWith({ ...BASE, orgId: "1" });
+    jest.spyOn(provider, "connect").mockResolvedValue({
+      client: { openTable: async () => table },
+    });
+    jest.spyOn(provider, "namespaceExists").mockResolvedValue(true);
+    jest.spyOn(provider, "namespaceCount").mockResolvedValue(1);
+
+    const previous = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    try {
+      const result = await provider.queryAuthorized({
+        namespace: "t",
+        queryVector: [0.1, 0.2],
+        similarityThreshold: 0,
+        topN: 10,
+        aclFilter: {
+          orgId: 1,
+          principalType: "user",
+          actorId: "5",
+          workspaceIds: ["7"],
+          orgWide: false,
+          deniedDocumentIds: [],
+          attributes: {},
+          matchNone: false,
+          policyVersion: "42",
+        },
+      });
+      // Refused, not thrown: fail-closed is the correct answer for a table whose rows
+      // cannot be proven readable.
+      expect(result.contextTexts).toEqual([]);
+    } finally {
+      jest.restoreAllMocks();
+      if (previous === undefined)
+        delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+      else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = previous;
+    }
+  });
+
+  test("the half-migrated row is still refused by isRowAllowed when served", async () => {
+    // With the flag set the legacy branch serves the table unfiltered, so the second layer
+    // is the only thing standing between a half-labelled row and the caller. A row
+    // claiming an orgId but no workspaceId must NOT pass by having no workspace.
+    const {
+      isRowAllowed,
+    } = require("../../../utils/authorization/vectorPredicate");
+    const previous = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = "1";
+    try {
+      expect(
+        isRowAllowed(
+          { orgId: 1, text: "half" },
+          {
+            orgId: 1,
+            workspaceIds: ["7"],
+            orgWide: false,
+            deniedDocumentIds: [],
+            matchNone: false,
+          }
+        )
+      ).toBe(false);
+    } finally {
+      if (previous === undefined)
+        delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+      else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = previous;
+    }
+  });
+});
