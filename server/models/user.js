@@ -574,4 +574,11 @@ const User = {
   },
 };
 
-module.exports = { User };
+module.exports = {
+  User,
+  // #135: the deletion ROUTES run the offboard and the delete in one transaction, so
+  // they cannot call `User.delete` (which opens its own). They call this instead, so
+  // the `revokedAt` stamp has exactly ONE implementation rather than a copy that drifts
+  // — the S12 record of when a key stopped working.
+  revokeCredentialsFor,
+};

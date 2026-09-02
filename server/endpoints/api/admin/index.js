@@ -2,13 +2,23 @@ const { scopeFor } = require("../../../utils/apiKeySecurity/scopes");
 const { emitAuditEvent } = require("../../../utils/events");
 const { Invite } = require("../../../models/invite");
 const { SystemSettings } = require("../../../models/systemSettings");
-const { User } = require("../../../models/user");
+const { User, revokeCredentialsFor } = require("../../../models/user");
 const { Workspace } = require("../../../models/workspace");
 const { WorkspaceChats } = require("../../../models/workspaceChats");
 const { WorkspaceUser } = require("../../../models/workspaceUsers");
 const { canModifyAdmin } = require("../../../utils/helpers/admin");
 const { multiUserMode, reqBody } = require("../../../utils/http");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
+const {
+  offboardUser,
+} = require("../../../utils/authorization/policyRepository");
+const {
+  resolveActor,
+} = require("../../../utils/authorization/actorResolver");
+const {
+  AuthorizationContractError,
+} = require("../../../utils/authorization/errors");
+const prisma = require("../../../utils/prisma");
 
 function apiAdminEndpoints(app) {
   if (!app) return;
@@ -272,12 +282,47 @@ function apiAdminEndpoints(app) {
 
         const { id } = request.params;
         const user = await User.get({ id: Number(id) });
-        await User.delete({ id: user.id });
+        // #135: this site resolves its OWN actor rather than sharing the session
+        // route's. `validApiKey` sets `locals.apiKeyContext`, not `locals.actor`, so
+        // there is no user principal here — `resolveActor` turns the key context into
+        // the creator's principal, narrowed by the key's scopes, with the `api-key:` id
+        // kept as audit provenance.
+        const actor = await resolveActor(request, response);
+        // One transaction with the delete: a crash between the two would leave the
+        // account gone and its grants behind, which is the orphan this issue closes
+        // arriving through a narrower window.
+        await prisma.$transaction(async (tx) => {
+          await offboardUser({ actor, userId: user.id, db: tx });
+          await revokeCredentialsFor(user.id, tx);
+          await tx.users.delete({ where: { id: user.id } });
+        });
         await emitAuditEvent("api_user_deleted", {
           userName: user.username,
         });
         response.status(200).json({ success: true, error: null });
       } catch (e) {
+        // #135, BEHAVIOUR CHANGE: a key whose creator lacks `role.revoke` could delete
+        // a user yesterday and cannot today. The permission was always wrong for an
+        // operation that removes grants. No seeded role holds `user.manage` without
+        // `role.revoke`, so default deployments are unaffected.
+        //
+        // 403 naming the permission, never a bare 500: the transaction rolled back, so
+        // the user and their grants are intact and the message should say why.
+        if (e instanceof AuthorizationContractError) {
+          // #135: 403, not the 500 `requirePermission` would produce for this error
+          // (middleware/requirePermission.js:92) — the request was understood and
+          // refused, and 500 sends the operator looking for an outage.
+          //
+          // The body is the same "Forbidden." every other route answers with. Which
+          // PERMISSION was missing is recorded server-side instead: telling an
+          // unauthorized caller exactly which grant would have let them through is a
+          // probing oracle, and the operator who needs it can read the log.
+          console.error(
+            `[#135] user deletion refused: ${e.message} (actor lacked role.revoke)`
+          );
+          response.status(403).json({ error: "Forbidden." });
+          return;
+        }
         console.error(e);
         response.sendStatus(500).end();
       }
