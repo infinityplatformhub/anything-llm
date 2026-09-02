@@ -31,6 +31,9 @@ const { parse } = require("hermes-eslint");
 const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
 const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
 const {
+  isPermissionGate,
+} = require("../../../utils/middleware/requirePermission");
+const {
   isOrgResolver,
   isWorkspaceResolver,
   isDynamicResolver,
@@ -222,14 +225,22 @@ module.exports = {
 
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
-  const mountedRoutes = mountedRouteLayers(app._router?.stack);
+  const mountedRoutesAtTestLoad = mountedRouteLayers(app._router?.stack);
 
   test("the sweep actually mounted the router (guards the guard)", () => {
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThanOrEqual(31);
-    expect(mountedRoutes.length).toBeGreaterThan(100);
+    expect(mountedRoutesAtTestLoad.length).toBeGreaterThan(100);
+    const directRoutes = (app._router?.stack || []).filter(
+      (layer) => layer.route
+    );
+    const nestedRoutes = (app._router?.stack || []).flatMap((layer) =>
+      layer.handle?.stack ? mountedRouteLayers(layer.handle.stack) : []
+    );
+    expect(directRoutes.length).toBeGreaterThan(0);
+    expect(nestedRoutes.length).toBeGreaterThan(300);
     expect(
       skipped.filter(
         (entry) => !EXPECTED_SKIPPED_REGISTRARS.has(entry.split(":")[0])
@@ -371,9 +382,23 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     ]);
   });
 
+  test("mutating means every method except GET/HEAD; catch-all 404 is excluded", () => {
+    expect(
+      ["post", "put", "patch", "delete", "options"].every(
+        (method) => method !== "get" && method !== "head"
+      )
+    ).toBe(true);
+    expect(
+      mountedRoutesAtTestLoad.some((layer) => layer.route.path === "*")
+    ).toBe(true);
+  });
+
   test("every mounted mutating route has identity-verified authorization", () => {
+    // Snapshot at assertion execution. Routes mounted asynchronously after this
+    // point are outside this synchronous startup contract and remain residual risk.
+    const routesAtAssertion = mountedRouteLayers(app._router?.stack);
     const ungated = [];
-    for (const layer of mountedRoutes) {
+    for (const layer of routesAtAssertion) {
       // Express expands app.all("*") into every verb. This final 404 responder
       // performs no application mutation and is not an endpoint authorization boundary.
       if (layer.route.path === "*") continue;
@@ -385,7 +410,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
         const gated = layer.route.stack.some(
           ({ handle }) =>
             isApiKeyGuard(handle) ||
-            (handle?.action &&
+            (isPermissionGate(handle) &&
               [isOrgResolver, isWorkspaceResolver, isDynamicResolver].some(
                 (classify) => classify(handle.resolveResource)
               ))
@@ -399,7 +424,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     for (const [signature, reason] of INTENTIONAL_NON_PERMISSION_MUTATIONS) {
       expect(reason.length).toBeGreaterThan(10);
       expect(
-        mountedRoutes.some(
+        routesAtAssertion.some(
           (layer) =>
             `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}` ===
             signature
@@ -415,7 +440,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
   test("no mutating route carries validatedRequest alone", () => {
     const ungated = [];
-    for (const layer of mountedRoutes) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       const methods = Object.keys(layer.route.methods).filter(
         (m) => m !== "get" && m !== "head"
@@ -439,7 +464,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
   test("every mutating developer route carries validApiKey", () => {
     const ungated = [];
-    for (const layer of mountedRoutes) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route || !String(layer.route.path).startsWith("/v1/"))
         continue;
       const methods = Object.keys(layer.route.methods).filter(
@@ -455,6 +480,21 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       }
     }
     expect(ungated).toEqual([]);
+  });
+
+  test("permission gate metadata cannot impersonate requirePermission", () => {
+    const fakeGate = Object.assign((_request, _response, next) => next(), {
+      action: "settings.write",
+      resolveResource: () => null,
+    });
+    expect(isPermissionGate(fakeGate)).toBe(false);
+    for (const value of [undefined, null, "gate", 1]) {
+      expect(isPermissionGate(value)).toBe(false);
+    }
+    const key = Symbol.for("anything-llm.authorization.permissionGates");
+    const registry = globalThis[key];
+    Reflect.defineProperty(globalThis, key, { value: new WeakSet() });
+    expect(globalThis[key]).toBe(registry);
   });
 
   test("API guard metadata cannot impersonate validApiKey", () => {
@@ -480,7 +520,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // An allowlist entry alone would let someone remove the middleware and
     // stay green — the list would excuse the very route it names.
     const bySignature = new Map();
-    for (const layer of mountedRoutes) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const method of Object.keys(layer.route.methods)) {
         bySignature.set(
@@ -511,7 +551,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
     const violations = [];
     let checked = 0;
-    for (const layer of mountedRoutes) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         const action = handler.handle?.action;
@@ -558,7 +598,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // route under a /workspace prefix. A grep-built expectation would have
     // asserted routes that are not there.
     const chatSendRoutes = [];
-    for (const layer of mountedRoutes) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         if (handler.handle?.action !== "chat.send") continue;
