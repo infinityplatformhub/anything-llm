@@ -9,7 +9,9 @@
     "build": "vite build && node scripts/postbuild.js",
     "lint:check": "eslint src",
     "lint": "eslint --fix src",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@lobehub/icons": "^4.0.3",
@@ -57,6 +59,10 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.1.1",
     "@eslint/js": "^9.39.2",
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@testing-library/user-event": "14.5.2",
     "@types/react": "^18.2.23",
     "@types/react-dom": "^18.2.8",
     "@types/react-router-dom": "^5.3.3",
@@ -76,11 +82,13 @@
     "flow-remove-types": "^2.217.1",
     "globals": "^16.5.0",
     "hermes-eslint": "^0.15.0",
+    "jsdom": "25.0.1",
     "postcss": "^8.4.23",
     "prettier": "^3.0.3",
     "rollup-plugin-visualizer": "^5.9.0",
     "tailwindcss": "^3.3.1",
-    "vite": "^4.3.0"
+    "vite": "^4.3.0",
+    "vitest": "2.1.9"
   },
   "engines": {
     "node": ">=22 <23"

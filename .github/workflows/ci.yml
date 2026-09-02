@@ -154,3 +154,29 @@ jobs:
       # very failure this issue closed. Run everything, or change the reporter first.
       - run: yarn test
         working-directory: server
+
+  # #111 — the frontend's first test job.
+  #
+  # A SEPARATE job rather than a step on `test`, deliberately: that job carries postgres,
+  # chroma, qdrant, weaviate and milvus so the real-store suites can run, and none of that is
+  # needed to render a component under jsdom. Appending there would make every frontend test
+  # wait on five containers, and — worse — a vector-store outage would fail the frontend suite
+  # for a reason that has nothing to do with it.
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - run: yarn install --frozen-lockfile
+        working-directory: frontend
+      # `yarn test` is `vitest --run` with passWithNoTests OFF (vitest.config.js). A runner
+      # that exits 0 having matched no files is the failure #73 closed on the server side —
+      # green CI proving nothing — so deleting every test file must turn this job RED.
+      # Verified before this job was trusted: a broken assertion exits 1, and a run with no
+      # test files exits 1.
+      - run: yarn test
+        working-directory: frontend
