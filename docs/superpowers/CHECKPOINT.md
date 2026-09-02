@@ -156,3 +156,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #78: rebased 5d47c31ab (has #72, 0 conflicts) but TL-1 on 3a10defc found: F2 three routes (`upload-logo`, `remove-logo`, `toggle-live-sync`) call `_updateSettings` below narrowing → manager writes 2 of the 23 forbidden keys; F3 manager + protected-not-supported key (`multi_user_mode`) → 200 silent drop. Rulings: bring 3 routes under same narrowing (keep keys in list); classify against protected ∪ supported (manager 403 / admin 400 / hub_api_key 403); `Object.create(null)`. Precedence: forbidden(403) → protected(400) → unknown(400). Waiting new SHA.
 - #84 ruling: fix system.js:672 route only; enable-multi-user out of scope.
 - #80 37712d41 gating (partial); Dev3 on route lane.
+
+## 2026-09-02 — #74 merged 8edd802be (64/86)
+- #74 c0c6472b0: gate PASS, QA-3 PASS (92/92 fresh+installed), TL-2 PASS (0 failed on stock16/fresh16/virgin; M1–M12 caught 10, M3/M10 explained → residual). Residual: getVectorDbClass raw switch. O2b waits user A/B.
+- #78: Dev1 confirmed F2/F3, retracted objection; impl78 on union classification + 3 routes + no filter + drift assert. Next SHA → gate + QA-2 6 cases + TL-1.
+- #80 37712d41 partial gate 70/70; route lane in progress.
