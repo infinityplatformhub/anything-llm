@@ -205,3 +205,11 @@ the first driver to use it, but the pattern belongs to whoever writes the interf
 - Q-3: S2 reads its config from identity_providers table; S1 stays env-only. Do not touch endpoints/identity.js providerConfig() in #43. Unifying OIDC onto the table → follow-up [→ needs issue].
 - Q-4: yes — XSW fixtures first, library chosen against them.
 - #36 close is PMO's step; do not run task.sh close.
+
+### PMO rulings after Techlead review of 79448c01 (2026-09-02)
+- Ruling: after the assertion-ID match, `doc` is out of scope. Every later read (NameID, Conditions, AudienceRestriction, SubjectConfirmationData/@InResponseTo, AttributeStatement) is relative to the verified `assertions[0]`. Techlead FINDING-1: a Subject in `<samlp:Extensions>` outside any Assertion passed every guard and won by document order.
+- Ruling: fixture `xswUnwrappedSubject` required, RED before the fix (§7.9).
+- Ruling: signing key comes from provider config only; KeyInfo/X509Certificate in the assertion is never used to verify. Test: self-signed assertion with matching KeyInfo → rejected.
+- Ruling: store-side username is not normalized because the `^[a-z][a-z0-9._@-]*$` regex + Prisma insensitive already bound it; comment marks this as load-bearing.
+- Ruling: `identity_links.email` NFC backfill goes into migration slot 082000 (no new slot).
+- Ruling: exhausting 5 suffix candidates raises `IdentityUnavailableError`, not `IdentityConflictError`.
