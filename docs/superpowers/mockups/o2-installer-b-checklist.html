@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>O2 — ตัวเลือก B: checklist หน้าเดียว</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#ffffff; --ink:#1c2733; --muted:#5b6773;
+  --line:#e3e1da; --accent:#0e7c66; --accent-soft:#e2f0ec;
+  --sec:#8a5a12; --sec-soft:#f5ead6;
+  --danger:#a33d2e; --danger-soft:#f6e5e1;
+  --chip:#eef2f0; --code:#f0efe9;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans Thai",ui-sans-serif,system-ui,sans-serif;line-height:1.6}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em;background:var(--code);padding:1px 5px;border-radius:4px}
+.note{max-width:860px;margin:0 auto;padding:14px 22px;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)}
+.shell{max-width:860px;margin:0 auto;padding:26px 22px 60px}
+h1{font-size:23px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 8px;font-size:14px}
+.bar{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:18px 0}
+.bar .count{font-size:15px;font-weight:600}
+.bar .count small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.bar .grow{flex:1}
+button.primary{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:500}
+button.primary[disabled]{background:#b9c4c0;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--line);padding:10px 18px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:14px;color:var(--muted)}
+.row{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start}
+.row.blocked{border-color:#e0bdb4}
+.dot{width:22px;height:22px;border-radius:50%;flex:none;margin-top:2px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff}
+.idle{background:var(--line)}
+.run{background:var(--sec);animation:pulse 1s infinite}
+.ok{background:var(--accent)}
+.warn{background:var(--sec)}
+.bad{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.body{flex:1;min-width:0}
+.title{font-weight:500;font-size:14.5px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.tag{font-size:11.5px;padding:2px 9px;border-radius:20px;background:var(--chip);color:var(--muted);white-space:nowrap;flex:none}
+.tag.b{background:var(--danger-soft);color:var(--danger)}
+.tag.w{background:var(--sec-soft);color:var(--sec)}
+.hint{color:var(--muted);font-size:13px;margin:3px 0 0}
+.fix{margin-top:10px;background:var(--danger-soft);border-left:3px solid var(--danger);padding:11px 13px;border-radius:0 6px 6px 0;font-size:13px}
+.warnbox{margin-top:10px;background:var(--sec-soft);border-left:3px solid var(--sec);padding:11px 13px;border-radius:0 6px 6px 0;font-size:13px}
+.fix pre,.warnbox pre{margin:7px 0 0;background:var(--code);padding:8px 10px;border-radius:5px;white-space:pre-wrap;word-break:break-all;font-family:"IBM Plex Mono",monospace;font-size:12.2px}
+.inline{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.inline button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:7px 13px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
+.inline button.sel{border-color:var(--accent);background:var(--accent-soft)}
+input[type=text]{width:100%;margin-top:9px;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-family:"IBM Plex Mono",monospace;font-size:12.5px}
+.secrets{margin-top:10px;background:var(--code);border-radius:7px;padding:11px 13px}
+.secrets div{display:flex;justify-content:space-between;padding:4px 0;font-family:"IBM Plex Mono",monospace;font-size:12.2px}
+.secrets span:last-child{color:var(--muted)}
+.state-picker{max-width:860px;margin:0 auto;padding:10px 22px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.state-picker span{font-size:12.5px;color:var(--muted);margin-right:4px}
+.state-picker button{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:5px 13px;cursor:pointer;font-family:inherit;font-size:12.5px}
+.state-picker button.sel{border-color:var(--sec);background:var(--sec-soft)}
+</style>
+</head>
+<body>
+<div class="note">
+  <strong>Mockup B — checklist หน้าเดียว</strong> (O2 installer) · เห็นทุกข้อพร้อมกัน แต่ละแถวคลี่คลายอยู่กับที่
+  · กดดูได้ทั้ง 4 สถานะด้วยปุ่มด้านล่าง · ของทิ้ง ไม่ใช่โค้ดจริง
+</div>
+
+<div class="state-picker" id="picker">
+  <span>สถานะ:</span>
+  <button data-s="idle">ยังไม่ตรวจ</button>
+  <button data-s="running">กำลังตรวจ</button>
+  <button data-s="pass">ผ่านทั้งหมด</button>
+  <button data-s="fail" class="sel">มีข้อไม่ผ่าน</button>
+</div>
+
+<div class="shell">
+  <h1>ติดตั้ง ApproofWorkspace</h1>
+  <p class="sub">ทุกอย่างที่ต้องมีก่อนเริ่มใช้งาน อยู่ในหน้านี้หน้าเดียว</p>
+  <div class="bar" id="bar"></div>
+  <div id="rows"></div>
+</div>
+
+<script>
+let state = "fail";
+let dbMode = "external";
+
+function shell(i){
+  if (state === "idle") return "idle";
+  if (state === "running") return i < 2 ? "ok" : (i === 2 ? "run" : "idle");
+  if (state === "pass") return "ok";
+  return null; // fail: per-row below
+}
+
+function rows(){
+  const s = state;
+  const st = (i, failState) => s === "fail" ? failState : shell(i);
+  const mark = k => ({idle:'<div class="dot idle"></div>',
+    run:'<div class="dot run"></div>', ok:'<div class="dot ok">✓</div>',
+    warn:'<div class="dot warn">!</div>', bad:'<div class="dot bad">✕</div>'}[k]);
+
+  const dbBody = `
+    <div class="inline">
+      <button class="${dbMode==="bundled"?"sel":""}" onclick="setDb('bundled')">ใช้ที่มากับระบบ</button>
+      <button class="${dbMode==="external"?"sel":""}" onclick="setDb('external')">PostgreSQL ขององค์กร</button>
+    </div>
+    ${dbMode==="external"?`<input type="text" value="postgresql://user:••••@db.internal:5432/approof" />`:""}`;
+
+  const list = [
+    { t:"ฐานข้อมูล PostgreSQL", tag:"จำเป็น", k:st(0,"ok"),
+      h: dbMode==="bundled" ? "ใช้ postgres:16 ที่มากับ docker compose" : "เชื่อมต่อได้ที่ db.internal:5432",
+      extra: dbBody },
+
+    { t:"ภาษาของฐานข้อมูล (LC_CTYPE)", tag: s==="fail"?"เตือน":"จำเป็น", tagCls: s==="fail"?"w":"", k:st(1,"warn"),
+      h: s==="fail" ? "ฐานข้อมูลนี้ตั้งเป็น C" : "en_US.utf8",
+      extra: s==="fail" ? `<div class="warnbox">
+        <code>LC_CTYPE=C</code> ทำให้ pg_trgm ไม่สร้าง trigram สำหรับภาษาไทยเลย
+        <b>ค้นหาประวัติแชทยังได้ผลถูกต้อง</b> แต่จะอ่านทั้งตารางแทนการใช้ index — ช้าเมื่อข้อความสะสมมาก
+        ภาษาอังกฤษไม่กระทบ และ<b>ติดตั้งต่อได้</b>
+        <pre>CREATE DATABASE approof
+  LC_CTYPE 'en_US.UTF-8'
+  LC_COLLATE 'en_US.UTF-8'
+  TEMPLATE template0;</pre>
+      </div>` : "" },
+
+    { t:"สิทธิ์สร้าง extension", tag: s==="fail"?"ต้องแก้ก่อน":"จำเป็น", tagCls: s==="fail"?"b":"", k:st(2,"bad"),
+      h:"vector และ pg_trgm",
+      blocked: s==="fail",
+      extra: s==="fail" ? `<div class="fix">
+        ผู้ใช้ <code>approof</code> ไม่มีสิทธิ์ <code>CREATE EXTENSION</code> — ต้องให้ superuser ของฐานข้อมูลรันให้ก่อน
+        <pre>CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;</pre>
+      </div>` : "" },
+
+    { t:"ความลับของระบบ", tag:"สร้างให้อัตโนมัติ", k: s==="idle"?"idle":"ok",
+      h:"ไม่ต้องแก้ .env เอง · ค่าที่ตั้งไว้เองอยู่แล้วจะไม่ถูกเขียนทับ",
+      extra: s==="idle" ? "" : `<div class="secrets">
+        <div><span>AUTH_TOKEN</span><span>สร้างแล้ว</span></div>
+        <div><span>JWT_SECRET</span><span>สร้างแล้ว</span></div>
+        <div><span>SIG_KEY</span><span>สร้างแล้ว</span></div>
+        <div><span>SIG_SALT</span><span>สร้างแล้ว</span></div>
+        <div><span>API_KEY_PEPPER</span><span>สร้างแล้ว</span></div>
+      </div>
+      <div class="warnbox"><b>ต้องสำรองห้าค่านี้</b> — อยู่ใน <code>.env</code> ที่ mount ไว้เท่านั้น
+      ถ้าหายแล้วสร้างใหม่: API key ทุกใบใช้ไม่ได้ และ credential store อ่านไม่ออก</div>` },
+
+    { t:"พื้นที่จัดเก็บและพอร์ต", tag:"จำเป็น", k:st(4,"ok"),
+      h:"server/storage เขียนได้ · พอร์ต 3001 ว่าง", extra:"" },
+
+    { t:"บัญชีผู้ดูแลระบบ", tag:"ขั้นสุดท้าย", k: s==="pass"?"idle":"idle",
+      h:"บัญชีแรกเป็นผู้ดูแลโดยอัตโนมัติ",
+      extra:`<input type="text" value="admin" /><input type="text" value="••••••••••••" />` }
+  ];
+
+  document.getElementById("rows").innerHTML = list.map(r=>`
+    <div class="row ${r.blocked?"blocked":""}">
+      ${mark(r.k)}
+      <div class="body">
+        <div class="title"><span>${r.t}</span>
+          <span class="tag ${r.tagCls||""}">${r.tag}</span></div>
+        <p class="hint">${r.h}</p>
+        ${r.extra}
+      </div>
+    </div>`).join("");
+
+  const bar = {
+    idle:  [`ยังไม่ได้ตรวจ`, `กด “ตรวจความพร้อม” เพื่อเริ่ม`, false],
+    running:[`กำลังตรวจ…`, `2 จาก 5 ข้อเสร็จแล้ว`, false],
+    pass:  [`พร้อมใช้งาน`, `ผ่านครบทุกข้อ`, true],
+    fail:  [`ติด 1 ข้อ`, `อีก 1 ข้อเป็นคำเตือน ไปต่อได้`, false]
+  }[s];
+
+  document.getElementById("bar").innerHTML = `
+    <div class="count">${bar[0]}<small>${bar[1]}</small></div>
+    <div class="grow"></div>
+    <button class="ghost" onclick="run()">ตรวจอีกครั้ง</button>
+    <button class="primary" ${bar[2]?"":"disabled"}>เริ่มใช้งาน</button>`;
+}
+
+function setDb(m){ dbMode = m; state = "idle"; rows(); }
+function run(){ state="running"; rows(); setTimeout(()=>{ state = dbMode==="external"?"fail":"pass"; sync(); rows(); }, 1400); }
+function sync(){ [...document.querySelectorAll("#picker button")].forEach(b=>b.classList.toggle("sel", b.dataset.s===state)); }
+document.getElementById("picker").addEventListener("click", e=>{
+  const s=e.target.dataset.s; if(!s) return; state=s; sync(); rows();
+});
+rows();
+</script>
+</body>
+</html>

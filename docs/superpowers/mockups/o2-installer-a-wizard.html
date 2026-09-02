@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>O2 — ตัวเลือก A: wizard เต็มหน้า</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#ffffff; --ink:#1c2733; --muted:#5b6773;
+  --line:#e3e1da; --accent:#0e7c66; --accent-soft:#e2f0ec;
+  --sec:#8a5a12; --sec-soft:#f5ead6;
+  --danger:#a33d2e; --danger-soft:#f6e5e1;
+  --chip:#eef2f0; --code:#f0efe9;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans Thai",ui-sans-serif,system-ui,sans-serif;line-height:1.6}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em}
+.note{max-width:920px;margin:0 auto;padding:14px 22px;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)}
+.shell{max-width:920px;margin:0 auto;padding:26px 22px 60px}
+.rail{display:flex;gap:6px;margin-bottom:26px;flex-wrap:wrap}
+.rail div{flex:1;min-width:90px;height:4px;border-radius:2px;background:var(--line)}
+.rail div.done{background:var(--accent)}
+.rail div.now{background:var(--sec)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:26px}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+.step-label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+label{display:block;font-weight:500;margin:16px 0 6px;font-size:14px}
+input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:7px;font-family:"IBM Plex Mono",monospace;font-size:13px;background:var(--surface);color:var(--ink)}
+.choice{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
+.choice button{flex:1;min-width:210px;text-align:left;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;font-family:inherit;font-size:14px;color:var(--ink)}
+.choice button.sel{border-color:var(--accent);background:var(--accent-soft)}
+.choice small{display:block;color:var(--muted);margin-top:4px;font-size:12.5px;line-height:1.45}
+.actions{display:flex;justify-content:space-between;margin-top:26px;gap:10px}
+button.primary{background:var(--accent);color:#fff;border:none;padding:11px 22px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:500}
+button.primary[disabled]{background:#b9c4c0;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--line);padding:11px 22px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:14px;color:var(--muted)}
+.check{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.check:last-child{border-bottom:none}
+.dot{width:20px;height:20px;border-radius:50%;flex:none;margin-top:2px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff}
+.idle{background:var(--line)}
+.run{background:var(--sec);animation:pulse 1s infinite}
+.ok{background:var(--accent)}
+.bad{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.check b{font-weight:500;font-size:14px}
+.check p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.fix{margin-top:8px;background:var(--danger-soft);border-left:3px solid var(--danger);padding:10px 12px;border-radius:0 6px 6px 0;font-size:13px}
+.fix code{display:block;margin-top:6px;background:var(--code);padding:7px 9px;border-radius:5px;white-space:pre-wrap;word-break:break-all}
+.warnbox{margin-top:8px;background:var(--sec-soft);border-left:3px solid var(--sec);padding:10px 12px;border-radius:0 6px 6px 0;font-size:13px}
+.secrets{background:var(--code);border-radius:8px;padding:14px;margin-top:12px}
+.secrets div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-family:"IBM Plex Mono",monospace;font-size:12.5px;border-bottom:1px solid var(--line)}
+.secrets div:last-child{border-bottom:none}
+.secrets span:last-child{color:var(--muted)}
+.banner{background:var(--sec-soft);border:1px solid #e6d3ad;border-radius:8px;padding:14px;margin-top:16px;font-size:13.5px}
+.state-picker{max-width:920px;margin:0 auto;padding:10px 22px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.state-picker span{font-size:12.5px;color:var(--muted);margin-right:4px}
+.state-picker button{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:5px 13px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--ink)}
+.state-picker button.sel{border-color:var(--sec);background:var(--sec-soft)}
+</style>
+</head>
+<body>
+<div class="note">
+  <strong>Mockup A — wizard เต็มหน้า</strong> (O2 installer) · หนึ่งการตัดสินใจต่อหนึ่งหน้าจอ
+  · หน้า preflight กดดูได้ทั้ง 4 สถานะด้วยปุ่มด้านล่าง · ของทิ้ง ไม่ใช่โค้ดจริง
+</div>
+
+<div class="shell">
+  <div class="rail" id="rail"></div>
+  <div class="card" id="card"></div>
+</div>
+
+<div class="state-picker" id="picker" style="display:none">
+  <span>ดูสถานะ preflight:</span>
+  <button data-s="idle">ยังไม่ตรวจ</button>
+  <button data-s="running">กำลังตรวจ</button>
+  <button data-s="pass">ผ่านทั้งหมด</button>
+  <button data-s="fail">มีข้อไม่ผ่าน</button>
+</div>
+
+<script>
+const STEPS = ["ฐานข้อมูล", "ตรวจความพร้อม", "ความลับของระบบ", "ผู้ดูแลระบบ", "เสร็จสิ้น"];
+let step = 0;
+let dbMode = "bundled";
+let preflight = "idle";
+
+const CHECKS = {
+  bundled: [
+    ["เชื่อมต่อ PostgreSQL ได้", "postgres:16 ใน compose ตอบ pg_isready"],
+    ["ภาษาของฐานข้อมูล (LC_CTYPE)", "en_US.utf8 — ค้นภาษาไทยใช้ index ได้"],
+    ["สร้าง extension ได้", "vector และ pg_trgm"],
+    ["พื้นที่จัดเก็บเขียนได้", "server/storage"],
+    ["พอร์ต 3001 ว่าง", ""]
+  ],
+  external: [
+    ["เชื่อมต่อ PostgreSQL ได้", "ที่ DATABASE_URL ที่ระบุ"],
+    ["ภาษาของฐานข้อมูล (LC_CTYPE)", ""],
+    ["สร้าง extension ได้", "ต้องมีสิทธิ์ CREATE EXTENSION"],
+    ["พื้นที่จัดเก็บเขียนได้", "server/storage"],
+    ["พอร์ต 3001 ว่าง", ""]
+  ]
+};
+
+function rail(){
+  document.getElementById("rail").innerHTML = STEPS
+    .map((_,i)=>`<div class="${i<step?"done":i===step?"now":""}"></div>`).join("");
+}
+
+function dotFor(i){
+  if (preflight === "idle") return `<div class="dot idle"></div>`;
+  if (preflight === "running") return i < 2
+    ? `<div class="dot ok">✓</div>`
+    : (i === 2 ? `<div class="dot run"></div>` : `<div class="dot idle"></div>`);
+  if (preflight === "pass") return `<div class="dot ok">✓</div>`;
+  // fail: locale เตือน (ไม่บล็อก), extension ไม่ผ่าน (บล็อก)
+  if (i === 1) return `<div class="dot" style="background:var(--sec)">!</div>`;
+  if (i === 2) return `<div class="dot bad">✕</div>`;
+  return `<div class="dot ok">✓</div>`;
+}
+
+function preflightBody(){
+  const rows = CHECKS[dbMode].map(([name, hint], i) => {
+    let extra = "";
+    if (preflight === "fail" && i === 1) {
+      extra = `<div class="warnbox">
+        ฐานข้อมูลนี้ตั้ง <code>LC_CTYPE=C</code> ⇒ pg_trgm ไม่สร้าง trigram สำหรับภาษาไทยเลย
+        <b>ค้นหาประวัติแชทยังได้ผลถูกต้อง</b> แต่จะอ่านทั้งตารางแทนการใช้ index — ช้าเมื่อข้อความเยอะ
+        ภาษาอังกฤษไม่กระทบ · ติดตั้งต่อได้ ไม่บล็อก
+        <code>CREATE DATABASE ... LC_CTYPE 'en_US.UTF-8' TEMPLATE template0</code>
+      </div>`;
+    }
+    if (preflight === "fail" && i === 2) {
+      extra = `<div class="fix">
+        ผู้ใช้ <code style="display:inline;padding:1px 4px">approof</code> ไม่มีสิทธิ์ <code style="display:inline;padding:1px 4px">CREATE EXTENSION</code>
+        — ต้องรันคำสั่งนี้ด้วยบัญชี superuser ของฐานข้อมูลก่อน แล้วกดตรวจอีกครั้ง
+        <code>CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;</code>
+      </div>`;
+    }
+    return `<div class="check">${dotFor(i)}<div style="flex:1">
+      <b>${name}</b>${hint?`<p>${hint}</p>`:""}${extra}</div></div>`;
+  }).join("");
+
+  const foot = {
+    idle: `<p class="sub" style="margin-top:18px">ยังไม่ได้ตรวจ — กด “ตรวจความพร้อม” เพื่อเริ่ม</p>`,
+    running: `<p class="sub" style="margin-top:18px">กำลังตรวจ…</p>`,
+    pass: `<p class="sub" style="margin-top:18px">ผ่านครบทุกข้อ ไปต่อได้</p>`,
+    fail: `<p class="sub" style="margin-top:18px">มี 1 ข้อที่ต้องแก้ก่อน และ 1 ข้อที่เตือนแต่ไปต่อได้</p>`
+  }[preflight];
+
+  return `<div class="step-label">ขั้นที่ 2 จาก 5</div>
+    <h1>ตรวจความพร้อมของเครื่อง</h1>
+    <p class="sub">ตรวจก่อนเริ่มระบบ เพื่อให้เห็นปัญหาตรงนี้แทนที่จะไปเจอเป็น stack trace ตอน boot</p>
+    ${rows}${foot}
+    <div class="actions">
+      <button class="ghost" onclick="go(-1)">ย้อนกลับ</button>
+      <div style="display:flex;gap:10px">
+        <button class="ghost" onclick="runPreflight()">ตรวจอีกครั้ง</button>
+        <button class="primary" ${preflight==="pass"||preflight==="fail"?"":"disabled"} onclick="go(1)">ถัดไป</button>
+      </div>
+    </div>`;
+}
+
+function render(){
+  rail();
+  document.getElementById("picker").style.display = step === 1 ? "flex" : "none";
+  const card = document.getElementById("card");
+
+  if (step === 0) {
+    card.innerHTML = `<div class="step-label">ขั้นที่ 1 จาก 5</div>
+      <h1>ฐานข้อมูล</h1>
+      <p class="sub">ApproofWorkspace ใช้ PostgreSQL เก็บทุกอย่างนอกจากไฟล์เอกสาร</p>
+      <div class="choice">
+        <button class="${dbMode==="bundled"?"sel":""}" onclick="setDb('bundled')">
+          ใช้ฐานข้อมูลที่มากับระบบ
+          <small>postgres:16 ใน docker compose · ตั้งค่าให้อัตโนมัติ · เส้นทางที่เร็วที่สุด</small>
+        </button>
+        <button class="${dbMode==="external"?"sel":""}" onclick="setDb('external')">
+          ใช้ PostgreSQL ขององค์กร
+          <small>ระบุ DATABASE_URL เอง · ระบบจะตรวจสิทธิ์และภาษาให้ในขั้นถัดไป</small>
+        </button>
+      </div>
+      ${dbMode==="external"?`
+        <label>DATABASE_URL</label>
+        <input type="text" value="postgresql://user:••••@db.internal:5432/approof" />
+        <div class="banner">ระบบไม่เปลี่ยนค่าอะไรบนฐานข้อมูลของคุณ — ตรวจอย่างเดียว แล้วบอกว่าอะไรไม่ผ่านและแก้ยังไง</div>
+      `:""}
+      <div class="actions"><span></span>
+        <button class="primary" onclick="go(1)">ถัดไป</button></div>`;
+  }
+
+  else if (step === 1) card.innerHTML = preflightBody();
+
+  else if (step === 2) {
+    card.innerHTML = `<div class="step-label">ขั้นที่ 3 จาก 5</div>
+      <h1>ความลับของระบบ</h1>
+      <p class="sub">สร้างให้อัตโนมัติแล้ว — ไม่ต้องแก้ไฟล์ .env เอง</p>
+      <div class="secrets">
+        <div><span>AUTH_TOKEN</span><span>สร้างแล้ว · 32 bytes</span></div>
+        <div><span>JWT_SECRET</span><span>สร้างแล้ว · 32 bytes</span></div>
+        <div><span>SIG_KEY</span><span>สร้างแล้ว · 32 bytes</span></div>
+        <div><span>SIG_SALT</span><span>สร้างแล้ว · 32 bytes</span></div>
+        <div><span>API_KEY_PEPPER</span><span>สร้างแล้ว · 32 bytes</span></div>
+      </div>
+      <div class="banner">
+        <b>ต้องสำรองห้าค่านี้ไว้</b> — เก็บอยู่ใน <code>.env</code> ที่ mount ไว้เท่านั้น
+        ถ้าหายแล้วสร้างใหม่: API key ทุกใบใช้ไม่ได้ และข้อมูลใน credential store อ่านไม่ออก
+        <div style="margin-top:6px;color:var(--muted)">ค่าที่คุณตั้งไว้เองอยู่แล้วจะไม่ถูกเขียนทับ</div>
+      </div>
+      <div class="actions">
+        <button class="ghost" onclick="go(-1)">ย้อนกลับ</button>
+        <button class="primary" onclick="go(1)">สำรองแล้ว ไปต่อ</button>
+      </div>`;
+  }
+
+  else if (step === 3) {
+    card.innerHTML = `<div class="step-label">ขั้นที่ 4 จาก 5</div>
+      <h1>บัญชีผู้ดูแลระบบ</h1>
+      <p class="sub">บัญชีแรกของระบบ เป็นผู้ดูแลโดยอัตโนมัติ</p>
+      <label>ชื่อผู้ใช้</label><input type="text" value="admin" />
+      <label>รหัสผ่าน</label><input type="text" value="••••••••••••" />
+      <div class="actions">
+        <button class="ghost" onclick="go(-1)">ย้อนกลับ</button>
+        <button class="primary" onclick="go(1)">สร้างบัญชี</button>
+      </div>`;
+  }
+
+  else {
+    card.innerHTML = `<div class="step-label">ขั้นที่ 5 จาก 5</div>
+      <h1>ติดตั้งเสร็จแล้ว</h1>
+      <p class="sub">ระบบพร้อมใช้งาน</p>
+      <div class="secrets"><div><span>เวลาที่ใช้</span><span>6 นาที 12 วินาที</span></div></div>
+      <div class="banner">อย่าลืมสำรอง <code>.env</code> — ในนั้นมีความลับห้าค่าที่กู้คืนไม่ได้ถ้าหาย</div>
+      <div class="actions"><span></span><button class="primary">เข้าใช้งาน</button></div>`;
+  }
+}
+
+function setDb(m){ dbMode = m; preflight = "idle"; render(); }
+function go(d){ step = Math.max(0, Math.min(STEPS.length-1, step+d)); if(step===1&&preflight==="running") preflight="idle"; render(); }
+function runPreflight(){
+  preflight = "running"; render();
+  setTimeout(()=>{ preflight = dbMode === "external" ? "fail" : "pass"; render(); }, 1400);
+}
+document.getElementById("picker").addEventListener("click", e=>{
+  const s = e.target.dataset.s; if(!s) return;
+  preflight = s;
+  [...e.currentTarget.querySelectorAll("button")].forEach(b=>b.classList.toggle("sel", b.dataset.s===s));
+  render();
+});
+render();
+</script>
+</body>
+</html>
