@@ -16,6 +16,13 @@ const path = require("path");
 const crypto = require("crypto");
 const { PrismaClient } = require("@prisma/client");
 const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
+// The SAML addresses come from the shared identity-test config, not literals:
+// a scheme+host written into a test file reads as a smuggled endpoint (§7.4),
+// and these tests need real SAML values to exercise the shape constraint.
+const {
+  IDP_ORIGIN,
+  APP_ORIGIN,
+} = require("../../../__testHelpers__/identity/urls");
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const SERVER_DIR = path.join(__dirname, "../../..");
@@ -139,5 +146,95 @@ describe("identity_providers carries an LDAP configuration", () => {
     });
     expect(created.certificates).toEqual(["MIIBcert"]);
     expect(created.ldapUrl).toBeNull();
+  });
+});
+
+// S3b (#68), FINDING-5 — the row-level CHECK.
+//
+// RED-first: written before the constraint exists. Before migration 092000 the
+// mixed rows below are ACCEPTED, which is the defect.
+//
+// The constraint is shape-derived and names neither provider, because
+// `provider` is the UNIQUE registry key rather than a type tag — the rows in
+// this very file write `ldap-<hex>` and `saml-<hex>` into it, so a CHECK that
+// branched on it would reject every one of them.
+describe("a provider row is ONE complete shape", () => {
+  const samlRow = (overrides = {}) => ({
+    provider: `saml-${crypto.randomBytes(4).toString("hex")}`,
+    entityId: `${APP_ORIGIN}/saml/metadata`,
+    ssoUrl: `${IDP_ORIGIN}/saml/sso`,
+    certificates: ["MIIBcert"],
+    ...overrides,
+  });
+
+  test("a complete SAML row is accepted", async () => {
+    // Guards the guard: without this, a constraint that rejected everything
+    // would pass every rejection test below and look correct.
+    const created = await prisma.identity_providers.create({ data: samlRow() });
+    expect(created.ldapUrl).toBeNull();
+  });
+
+  test("a complete LDAP row is accepted", async () => {
+    const created = await prisma.identity_providers.create({ data: ldapRow() });
+    expect(created.baseDn).toBe("ou=people,dc=example,dc=com");
+  });
+
+  test("SAML columns PLUS a directory URL is REJECTED", async () => {
+    // The half-configured row the finding is about, from the SAML side. Which
+    // half wins at login would be decided by whichever code path read first.
+    await expect(
+      prisma.identity_providers.create({
+        data: samlRow({ ldapUrl: "ldaps://directory.example.com:636" }),
+      })
+    ).rejects.toThrow();
+  });
+
+  test("LDAP columns PLUS a non-empty entityId is REJECTED", async () => {
+    // The SAME defect from the other direction, and it is a separate test for a
+    // reason: a constraint weakened to `ldapUrl IS NOT NULL` passes the three
+    // obvious cases above and only this one kills it.
+    await expect(
+      prisma.identity_providers.create({
+        data: ldapRow({ entityId: `${APP_ORIGIN}/saml/metadata` }),
+      })
+    ).rejects.toThrow();
+  });
+
+  test("an EMPTY ldapUrl is REJECTED, not treated as configured", async () => {
+    // `IS NOT NULL` without `<> ''` survives every test that inserts NULL. An
+    // empty string is not a directory address, and an ORM writes one happily —
+    // this is the input that separates the two spellings.
+    await expect(
+      prisma.identity_providers.create({ data: ldapRow({ ldapUrl: "" }) })
+    ).rejects.toThrow();
+  });
+
+  test("a row that is NEITHER shape is REJECTED", async () => {
+    // Empty SAML columns and no LDAP columns: a provider configured to
+    // authenticate against nothing, which the table accepted before 092000.
+    await expect(
+      prisma.identity_providers.create({
+        data: {
+          provider: `empty-${crypto.randomBytes(4).toString("hex")}`,
+          entityId: "",
+          ssoUrl: "",
+          certificates: [],
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  test("entityId and ssoUrl are NOT NULL — the empty-string contract cannot be flipped quietly", async () => {
+    // The constraint reads '' as "not a SAML provider". If someone later makes
+    // these columns optional and writes NULL, every clause inverts and the
+    // constraint stops meaning what it says — silently, because a comment is
+    // documentation and Prisma will not argue. This is the part that fails.
+    const columns = await prisma.$queryRawUnsafe(
+      `SELECT column_name, is_nullable FROM information_schema.columns
+       WHERE table_name = 'identity_providers'
+         AND column_name IN ('entityId', 'ssoUrl')`
+    );
+    expect(columns).toHaveLength(2);
+    for (const column of columns) expect(column.is_nullable).toBe("NO");
   });
 });

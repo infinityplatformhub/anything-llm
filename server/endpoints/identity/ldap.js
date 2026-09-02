@@ -26,7 +26,10 @@ const { linkPrincipal } = require("../../utils/identity/linkPrincipal");
 const { TemporaryAuthToken } = require("../../models/temporaryAuthToken");
 const { CredentialStore } = require("../../models/credentialStore");
 const { emitAuditEvent } = require("../../utils/events");
-const { inviteRateLimit } = require("../../utils/middleware/requestControls");
+const {
+  inviteRateLimit,
+  loginAccountRateLimit,
+} = require("../../utils/middleware/requestControls");
 
 const PROVIDER = "ldap";
 
@@ -69,11 +72,7 @@ async function providerConfig() {
 }
 
 // Everything an LDAP login needs before it can work.
-const REQUIRED_ENV = [
-  "SSO_LDAP_URL",
-  "SSO_LDAP_BASE_DN",
-  "SSO_LDAP_BIND_DN",
-];
+const REQUIRED_ENV = ["SSO_LDAP_URL", "SSO_LDAP_BASE_DN", "SSO_LDAP_BIND_DN"];
 
 /**
  * Name what is missing, at boot, one variable at a time.
@@ -139,6 +138,13 @@ function ldapIdentityEndpoints(app) {
   // Nothing about the directory belongs here — a URL, base DN or bind DN would
   // hand out the shape of an internal directory to anyone who curls it. The
   // answer is only "is this login method available".
+  //
+  // NIT-2: this SHARES the per-IP `inviteRateLimit` bucket with the login route
+  // below, deliberately. Both are unauthenticated and reachable by the same
+  // caller, so one bucket per IP is what actually bounds them; a private bucket
+  // here would let a caller spend the login budget and keep polling this one.
+  // The cost is that heavy polling of this endpoint eats into the same budget,
+  // which is correct — it is the same caller either way.
   app.get("/sso/ldap/enabled", inviteRateLimit, async (_request, response) => {
     return response.status(200).json({ enabled: ldapEnabled() });
   });
@@ -150,97 +156,124 @@ function ldapIdentityEndpoints(app) {
   // and every call costs a directory round trip — without a limiter it is both a
   // free CPU sink and an unmetered password-guessing endpoint pointed at the
   // customer's real directory, which is worse than one pointed at us.
-  app.post("/sso/ldap/login", inviteRateLimit, async (request, response) => {
-    const ip = request.ip || "Unknown IP";
-    // Held in the narrowest scope that works, and cleared in `finally`. JS gives
-    // no way to wipe a string from memory — the engine may keep copies — so this
-    // is best effort, and saying so plainly is better than implying a guarantee
-    // the language cannot make.
-    let password = request.body?.password;
+  //
+  // TWO buckets, matching local login (`/request-token`), because they bound
+  // different attacks. `inviteRateLimit` is per-IP and caps the volume one host
+  // can send. `loginAccountRateLimit` is keyed on ip+username, so guessing one
+  // account is capped far tighter (5/min) than the IP budget — without it, an
+  // attacker inside the IP budget can spend all of it on a single account.
+  //
+  // NIT-3: `simpleSSOLoginDisabled` deliberately does NOT gate this route. That
+  // flag governs the issuance of SSO login links, which are a bearer credential
+  // sent out of band; this route takes a password the caller already holds and
+  // checks it against the directory. Gating it would switch off LDAP login for
+  // deployments that turned off a feature they are not using.
+  app.post(
+    "/sso/ldap/login",
+    [inviteRateLimit, loginAccountRateLimit],
+    async (request, response) => {
+      const ip = request.ip || "Unknown IP";
+      // Held in the narrowest scope that works, and cleared in `finally`. JS gives
+      // no way to wipe a string from memory — the engine may keep copies — so this
+      // is best effort, and saying so plainly is better than implying a guarantee
+      // the language cannot make.
+      let password = request.body?.password;
 
-    try {
-      const username = request.body?.username;
-      if (!isKnownProvider(PROVIDER))
-        return response.status(404).json({ error: "Unknown identity provider." });
+      try {
+        const username = request.body?.username;
+        if (!isKnownProvider(PROVIDER))
+          return response
+            .status(404)
+            .json({ error: "Unknown identity provider." });
 
-      const config = await providerConfig();
-      if (!config)
-        return response
-          .status(404)
-          .json({ error: "This identity provider is not enabled." });
+        const config = await providerConfig();
+        if (!config)
+          return response
+            .status(404)
+            .json({ error: "This identity provider is not enabled." });
 
-      // Ruling 3: refuse plaintext outright unless explicitly allowed. Checked
-      // here rather than in the driver because it is a deployment decision, and
-      // the driver should not be reading environment variables.
-      const isPlaintext =
-        String(config.url ?? "").startsWith("ldap://") && !config.startTls;
-      if (isPlaintext && !insecureTransportAllowed()) {
-        console.error(
-          "[identity:ldap] refusing to authenticate over plaintext ldap://. " +
-            "Use ldaps://, set SSO_LDAP_START_TLS=true, or set LDAP_ALLOW_INSECURE=1 " +
-            "if the connection is already inside a trusted tunnel."
+        // Ruling 3: refuse plaintext outright unless explicitly allowed. Checked
+        // here rather than in the driver because it is a deployment decision, and
+        // the driver should not be reading environment variables.
+        const isPlaintext =
+          String(config.url ?? "").startsWith("ldap://") && !config.startTls;
+        if (isPlaintext && !insecureTransportAllowed()) {
+          console.error(
+            "[identity:ldap] refusing to authenticate over plaintext ldap://. " +
+              "Use ldaps://, set SSO_LDAP_START_TLS=true, or set LDAP_ALLOW_INSECURE=1 " +
+              "if the connection is already inside a trusted tunnel."
+          );
+          return response
+            .status(503)
+            .json({
+              error: "The identity provider is unavailable. Try again.",
+            });
+        }
+
+        const driver = getIdentityProvider(PROVIDER, config);
+        // The driver checks for an empty password BEFORE it opens a connection —
+        // RFC 4513 makes a blank password a successful anonymous bind, so it must
+        // never reach the server.
+        const principal = await driver.completeLogin({ username, password });
+
+        const { user, created } = await linkPrincipal(principal);
+
+        // The existing session path, not a second session type (PMO ruling).
+        const { token: tempToken, error: issueError } =
+          await TemporaryAuthToken.issue(user.id);
+        if (issueError) throw new Error(issueError);
+        const { sessionToken, error: validateError } =
+          await TemporaryAuthToken.validate(tempToken);
+        if (validateError) throw new Error(validateError);
+
+        // The audit event records WHO logged in and from where. It carries no
+        // credential: the audit log is exported, shipped, and read by people who
+        // have no business seeing a directory password.
+        await emitAuditEvent(
+          "login_event",
+          { ip, multiUserMode: true },
+          user.id
         );
+
+        return response.status(200).json({
+          valid: true,
+          user: { id: user.id, username: user.username, role: user.role },
+          token: sessionToken,
+          created,
+        });
+      } catch (error) {
+        // `error.message` only — never the error object, and never the request
+        // body. A client library can carry the bind credential on the error it
+        // throws, and this line is the one that would print it.
+        console.error(`[identity:ldap] login failed:`, error.message);
+        await emitAuditEvent("failed_login_invalid_temporary_auth_token", {
+          ip,
+          multiUserMode: true,
+        }).catch(() => {});
+
+        // A conflict is the one case the user can act on, so R1's message travels.
+        // Everything else is ONE flat refusal: an unknown user and a wrong password
+        // must be byte-for-byte identical, or the route is an oracle telling an
+        // attacker which usernames are worth their time.
+        if (error instanceof IdentityConflictError)
+          return response.status(409).json({ error: error.message });
+        if (error instanceof IdentityUnavailableError)
+          return response
+            .status(503)
+            .json({
+              error: "The identity provider is unavailable. Try again.",
+            });
         return response
-          .status(503)
-          .json({ error: "The identity provider is unavailable. Try again." });
+          .status(401)
+          .json({ error: "This login could not be verified." });
+      } finally {
+        // Best effort, and only that: reassigning the binding drops this reference,
+        // but the engine may hold others (the parsed body, an interned string). It
+        // shortens the window rather than closing it.
+        password = null;
       }
-
-      const driver = getIdentityProvider(PROVIDER, config);
-      // The driver checks for an empty password BEFORE it opens a connection —
-      // RFC 4513 makes a blank password a successful anonymous bind, so it must
-      // never reach the server.
-      const principal = await driver.completeLogin({ username, password });
-
-      const { user, created } = await linkPrincipal(principal);
-
-      // The existing session path, not a second session type (PMO ruling).
-      const { token: tempToken, error: issueError } = await TemporaryAuthToken.issue(
-        user.id
-      );
-      if (issueError) throw new Error(issueError);
-      const { sessionToken, error: validateError } =
-        await TemporaryAuthToken.validate(tempToken);
-      if (validateError) throw new Error(validateError);
-
-      // The audit event records WHO logged in and from where. It carries no
-      // credential: the audit log is exported, shipped, and read by people who
-      // have no business seeing a directory password.
-      await emitAuditEvent("login_event", { ip, multiUserMode: true }, user.id);
-
-      return response.status(200).json({
-        valid: true,
-        user: { id: user.id, username: user.username, role: user.role },
-        token: sessionToken,
-        created,
-      });
-    } catch (error) {
-      // `error.message` only — never the error object, and never the request
-      // body. A client library can carry the bind credential on the error it
-      // throws, and this line is the one that would print it.
-      console.error(`[identity:ldap] login failed:`, error.message);
-      await emitAuditEvent("failed_login_invalid_temporary_auth_token", {
-        ip,
-        multiUserMode: true,
-      }).catch(() => {});
-
-      // A conflict is the one case the user can act on, so R1's message travels.
-      // Everything else is ONE flat refusal: an unknown user and a wrong password
-      // must be byte-for-byte identical, or the route is an oracle telling an
-      // attacker which usernames are worth their time.
-      if (error instanceof IdentityConflictError)
-        return response.status(409).json({ error: error.message });
-      if (error instanceof IdentityUnavailableError)
-        return response
-          .status(503)
-          .json({ error: "The identity provider is unavailable. Try again." });
-      return response.status(401).json({ error: "This login could not be verified." });
-    } finally {
-      // Best effort, and only that: reassigning the binding drops this reference,
-      // but the engine may hold others (the parsed body, an interned string). It
-      // shortens the window rather than closing it.
-      password = null;
     }
-  });
+  );
 }
 
 module.exports = { ldapIdentityEndpoints };
