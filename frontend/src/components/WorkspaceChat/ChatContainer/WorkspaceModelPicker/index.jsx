@@ -134,8 +134,17 @@ export default function WorkspaceModelPicker({
           sidebarOpen ? "left-3" : "left-11"
         }`}
       >
+        {/* #124: the accessible name is CONSTANT and describes the control; the visible text
+            stays the current model. Before this the button's only name was `modelName`, so a
+            screen reader announced a value ("gpt-4o-mini") with nothing saying what the control
+            does — and that name changed under the user whenever the model changed, so it could
+            not be learned or searched for. Labelling it with `modelName` would have satisfied
+            "has an accessible name" and fixed none of that.
+            Reuses `chat_window.select_model`, which is already translated in 29 locales. */}
         <button
           type="button"
+          id="workspace-model-picker-btn"
+          aria-label={t("chat_window.select_model")}
           onClick={() => setShowSelector(!showSelector)}
           className={`group border-none cursor-pointer px-2.5 py-1 flex items-center rounded-full transition-all ${
             showSelector
