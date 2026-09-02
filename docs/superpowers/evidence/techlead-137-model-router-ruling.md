@@ -77,3 +77,40 @@ why : every "setup_admin's menu came back to 12 entries" fixture is green under 
 `scheduled-job.*` and the other `API_ACTIONS` pairs (`seeds/permissions.js:80-92`) do not — so the
 next entry gated on one of those hits the same undefined-capability trap. Worth one issue that
 audits sidebar entry → route action across the whole file, rather than discovering it per grant.
+
+---
+
+## Addendum — `GET /system/preflight` (`system.js:413`): **not a residual. It is the 22nd site, and it reconciles the count.**
+
+**Skills:** `superpowers:requesting-code-review`, `security-review` (authorization bypass).
+
+Measured. 22 `requirePermission("system.write")` sites across `endpoints/`; exactly **one** is not
+a direct element of a route middleware array — `gateUnlessPreUser` at `:413`, nested inside a
+named function. A route-table walk that reads middleware arrays sees 21. **That is the 21-vs-22
+discrepancy I flagged in the R5 ruling, and it is now explained rather than open.** Record the
+reconciliation; nothing further is needed on the count.
+
+**On "bypassable when `__preflightOpen`" — it is not a bypass.** `actorResolver.js:317-324`:
+
+```js
+if (await SystemSettings.isMultiUserMode()) return false;
+return (await db.users.count()) === 0;
+```
+
+Open requires multi-user mode off **and zero user rows**. There is no principal to escalate from
+and no data to expose that a fresh installer does not already control; `:387-392` re-evaluates it
+per request so the first `User.create` closes the window with no restart, and `:396-402` fails
+closed on an unreadable users table. Both halves are stated in the comment. This is the documented
+onboarding path, not a hole.
+
+**What is real, and is small:** the gate is invisible to the tooling everyone is using to reason
+about `system.write`'s blast radius — including me, an hour ago. A permission's reach measured by
+walking route arrays is wrong by exactly this route, silently, and the next person to grant
+`system.write` will under-count the same way. That is a **tooling** issue, not an authorization
+one: the audit needs to find gates wherever they are, not where they are conventionally written.
+
+Fold it into the residual issue already named above (sidebar entry → route action across the
+file): both are "the mapping from permission to reachable surface is derived by eye, and misses
+what is not shaped like the common case". One issue, two symptoms. Not a blocker on #137 — nothing
+about #137 changes this route's behaviour, since `setup_admin` gaining `system.write` gains it
+the gated branch only, which is the branch that was already correct.
