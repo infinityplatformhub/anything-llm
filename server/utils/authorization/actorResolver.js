@@ -281,6 +281,9 @@ module.exports = {
   resolveActor,
   resolveActorRef,
   jobActor,
+  // Exported for validatedRequest (#46): session auth had the same swallowed-error hole,
+  // and two different answers to "is this single-user?" is how the halves drift apart.
+  isConfirmedSingleUser,
   SINGLE_USER_ACTOR,
   SERVICE_PRINCIPALS,
 };

@@ -1,12 +1,25 @@
-const { SystemSettings } = require("../../models/systemSettings");
 const { User } = require("../../models/user");
 const { EncryptionManager } = require("../EncryptionManager");
 const { decodeJWT } = require("../http");
 const { UserMetaCache } = require("../userLocale");
+const {
+  isConfirmedSingleUser,
+} = require("../authorization/actorResolver");
 const EncryptionMgr = new EncryptionManager();
 
 async function validatedRequest(request, response, next) {
-  const multiUserMode = await SystemSettings.isMultiUserMode();
+  // #46: this used to read SystemSettings.isMultiUserMode() directly. That call catches
+  // its own errors and returns `false` (systemSettings.js:747), so an unreachable database
+  // — or a missing multi_user_mode row after a partial restore — landed in the single-user
+  // branch below, which calls next() with no check at all when NODE_ENV=development or
+  // AUTH_TOKEN/JWT_SECRET are unset. That is the default shape of a dev box.
+  //
+  // Same swallowed error as T-4b's FINDING-1, different door: that one handed an anonymous
+  // caller the super_admin service principal, this one skips session auth entirely.
+  // Single-user is now CONFIRMED (setting agrees AND there are no user rows) using the
+  // same helper the actor resolver uses, so the two halves of a request cannot disagree
+  // about which mode they are in.
+  const multiUserMode = !(await isConfirmedSingleUser());
   response.locals.multiUserMode = multiUserMode;
   if (multiUserMode)
     return await validateMultiUserRequest(request, response, next);
