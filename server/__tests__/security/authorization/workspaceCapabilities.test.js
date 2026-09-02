@@ -4,8 +4,10 @@ process.env.STORAGE_DIR =
     require("path").join(require("os").tmpdir(), "workspace-caps-")
   );
 
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { parse } = require("hermes-eslint");
 const {
   ORG_CAPABILITIES,
   WORKSPACE_CAPABILITIES,
@@ -20,10 +22,12 @@ const RESOLVERS_FILE = path.join(
   __dirname,
   "../../../utils/middleware/resourceResolvers.js"
 );
+const REPO_DIR = path.join(__dirname, "../../../..");
 const MOCKUP_FILE = path.join(
-  __dirname,
-  "../../../../docs/superpowers/mockups/frontend-authz-capabilities.html"
+  REPO_DIR,
+  "docs/superpowers/mockups/frontend-authz-capabilities.html"
 );
+const TASK_ENV_FILE = path.join(REPO_DIR, ".infi/task-40.env");
 
 function javascriptFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -33,53 +37,37 @@ function javascriptFiles(directory) {
   });
 }
 
-// Ignore comments and unrelated strings so examples and dead text cannot count
-// as live gates. Only the first string argument of a real requirePermission call
-// is retained as the action being gated.
+// Parse actual call expressions so comments, strings, regex literals, and longer
+// identifiers cannot masquerade as authorization gates.
 function permissionGates(source) {
   const gates = [];
-  let index = 0;
-
-  const whitespace = () => {
-    while (/\s/.test(source[index] || "")) index += 1;
-  };
-  const string = () => {
-    const quote = source[index++];
-    let value = "";
-    while (index < source.length && source[index] !== quote) {
-      if (source[index] === "\\") index += 1;
-      value += source[index++] || "";
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === "requirePermission" &&
+      node.arguments[0]?.type === "Literal" &&
+      typeof node.arguments[0].value === "string"
+    ) {
+      const resource = node.arguments[1];
+      const resolver =
+        resource?.type === "Identifier"
+          ? resource.name
+          : resource?.type === "CallExpression" &&
+              resource.callee?.type === "Identifier"
+            ? resource.callee.name
+            : null;
+      if (resolver) gates.push({ action: node.arguments[0].value, resolver });
     }
-    index += 1;
-    return value;
+
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === "object") visit(value);
+    }
   };
 
-  while (index < source.length) {
-    if (source.startsWith("//", index)) {
-      index = source.indexOf("\n", index);
-      if (index < 0) break;
-    } else if (source.startsWith("/*", index)) {
-      index = source.indexOf("*/", index + 2);
-      if (index < 0) break;
-      index += 2;
-    } else if ("\"'`".includes(source[index])) {
-      string();
-    } else if (source.startsWith("requirePermission", index)) {
-      index += "requirePermission".length;
-      whitespace();
-      if (source[index++] !== "(") continue;
-      whitespace();
-      if (!"\"'".includes(source[index])) continue;
-      const action = string();
-      whitespace();
-      if (source[index++] !== ",") continue;
-      whitespace();
-      const resolver = /^[A-Za-z_$][\w$]*/.exec(source.slice(index))?.[0];
-      if (resolver) gates.push({ action, resolver });
-    } else {
-      index += 1;
-    }
-  }
+  visit(parse(source, { sourceType: "script" }));
   return gates;
 }
 
@@ -105,6 +93,26 @@ const workspaceResolvers = new Set(
     (name) => !["orgResource", "grantScopeFromBody"].includes(name)
   )
 );
+
+describe("permissionGates", () => {
+  test("returns calls, not comments, strings, templates, or identifier substrings", () => {
+    const source = `
+      requirePermission("live.action", orgResource);
+      // requirePermission("line.comment", orgResource);
+      /* requirePermission("block.comment", orgResource); */
+      'requirePermission("string.literal", orgResource)';
+      notrequirePermission("prefixed.identifier", orgResource);
+      /requirePermission\("regex.literal", orgResource\)/;
+      \`template before requirePermission("template.literal", orgResource)\`;
+      requirePermission("second.live", workspaceBySlug);
+    `;
+
+    expect(permissionGates(source)).toEqual([
+      { action: "live.action", resolver: "orgResource" },
+      { action: "second.live", resolver: "workspaceBySlug" },
+    ]);
+  });
+});
 
 describe("capability vocabulary by resource scope", () => {
   test("workspace capabilities contain no org-scoped actions", () => {
@@ -161,14 +169,37 @@ describe("capability vocabulary by resource scope", () => {
   });
 
   test("workspace capabilities match the approved mockup", () => {
-    const mockup = fs.readFileSync(MOCKUP_FILE, "utf8");
-    const match = /const\s+WS_CAPS\s*=\s*(\[[^;]*\]);/.exec(mockup);
+    const taskEnv = fs.readFileSync(TASK_ENV_FILE, "utf8");
+    const approvedSha = /^MOCKUP_SHA=(\S+)$/m.exec(taskEnv)?.[1];
+    if (!approvedSha) throw new Error(`Missing MOCKUP_SHA in ${TASK_ENV_FILE}`);
+
+    const mockup = fs.readFileSync(MOCKUP_FILE);
+    const actualSha = crypto
+      .createHash("sha1")
+      .update(`blob ${mockup.length}\0`)
+      .update(mockup)
+      .digest("hex");
+    if (actualSha !== approvedSha) {
+      throw new Error(
+        "The mockup changed after approval — re-approval required, or update MOCKUP_SHA if the change was approved"
+      );
+    }
+
+    const match = /const\s+WS_CAPS\s*=\s*(\[[^;]*\]);/.exec(
+      mockup.toString("utf8")
+    );
     if (!match) throw new Error(`Could not parse WS_CAPS from ${MOCKUP_FILE}`);
     const approved = JSON.parse(match[1]);
 
     // Capability order has no meaning to authorizeMany or UI lookups. Sorting
     // both full arrays ignores order while still exposing omissions, additions,
     // and duplicates.
-    expect([...WORKSPACE_CAPABILITIES].sort()).toEqual([...approved].sort());
+    const actual = [...WORKSPACE_CAPABILITIES].sort();
+    const expected = [...approved].sort();
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error(
+        "WORKSPACE_CAPABILITIES drifted from the approved mockup WS_CAPS"
+      );
+    }
   });
 });
