@@ -1037,3 +1037,19 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #149 75d30834e (3 commits: prettier 43 files, globals.jest + env assertion, delete run-tests.yaml + widen ci.yml). PMO pushed + draft PR for CI; gate-149 spawned; CI monitor armed. Merge via merge-plain.sh after gate + CI run URL recorded on #149.
 
 - #143 MERGED 91fb3549d (plain).
+
+## CHECKPOINT — 2026-09-03 00:20 (user stop request; everything saved)
+
+**main approof/main @ 45a669efc+ pushed.** Merged this session: #142 b40c0faec, #135 5254da529, #146 4e0fa2b01, #143 89a6e24ab. Opened: #143 #144 #145 #146 #147 #149 #150.
+
+**Blocked on USER: `อนุมัติ #121`** → then in order: `sh /tmp/merge-121.sh` → `sh /tmp/merge-137.sh a89c38ebf` → `sh /tmp/merge-138.sh c81ae7d73 -` (scripts also in ~/.warroom/pmo-save-20260902/). Pre-gate of both stacked SHAs: gate-stack agent → /tmp/gate-137s.report, /tmp/gate-138s.report (read before merging; if lost, regate). QA-3 stacked check requested.
+Other user decisions: V8 mockup, O3 SIG_KEY, #113 Q4, #107, +1 Techlead, sweep ~173 worktrees + Dev5 stashes.
+
+**In flight at stop:**
+- #149 Dev5 9a89ec311 (approof/149-ci-env, rebased on main, pushed; draft PR #151 triggers CI). gate-149 was on 75d30834e → must regate 9a89ec311. Expect lint-server still RED (1063 pre-existing prettier drift, was 1072 on main) → separate issue "server prettier sweep". Close #149 needs CI run URL showing backend job reaching jest (carried #146 condition).
+- #150 Model Router gate (auth): code parked 0e9722774, 3 mutants unrun; needs #121 only.
+- #141 (Dev3) starts after #138 merge; recon-141 70a731126 accepted by TL-1.
+- #132 (Dev4 a8e6b1599), #147 (Dev4), #126 s2 (Dev2 13381fccd), #140 (Dev1 708aa3841): all after #121.
+- postmerge-146 agent running on 6d74e324e → /tmp/postmerge-146.report; #143 post-merge not yet run (main 45a669efc).
+- Known flakes: identityRoutesHttp, metrics, inviteMailRoutes, boundKeyDocumentsHttp, managerForbiddenKeysHttp, ldapRoutesHttp, cacheIsolation, chatReadOthersScopeHttp, embedServerMintedSession; env: doctor (pgvector locally).
+- Team sessions: Dev1=13 Dev2=6f Dev3=3d Dev4=ff Dev5=7c QA-1=af QA-2=e6 QA-3=ea TL-1=b2 TL-2=10 (Opus). TL-2 reports superpowers:requesting-code-review does not resolve in their session — reads template from disk; note for user.
