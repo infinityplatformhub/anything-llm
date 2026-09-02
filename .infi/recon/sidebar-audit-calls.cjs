@@ -76,6 +76,29 @@ function urlsIn(text) {
 // call of its own and delegates to a child (Interface/Branding/Chat -> ../components/*),
 // so a page-only scan reports zero and the zero looks like a finding. Depth-limited to 3
 // and confined to files under src/, so this cannot wander into node_modules.
+// Model objects RE-EXPORT other models as properties:
+//   models/system.js:1015  promptVariables: SystemPromptVariable
+// and pages call through them: `System.promptVariables.getAll()`. A `System.foo(` regex
+// cannot see that — it matched `System.promptVariables` with no `(` following, so the call
+// was dropped and system-prompt-variables reported as having no server calls. TL-2 caught
+// this on that row; the fix is general, and rerunning found whether others hid the same way.
+//
+// So: resolve the re-export map for each model file, then match BOTH `Local.method(` and
+// `Local.property.method(`.
+function reexportsOf(modelSrc, modelFile) {
+  const map = {};
+  const imports = {};
+  for (const m of modelSrc.matchAll(/import\s+(\w+)\s+from\s+["']([^"']+)["']/g)) {
+    const t = resolveModule(m[2], modelFile);
+    if (t) imports[m[1]] = t;
+  }
+  // `promptVariables: SystemPromptVariable,` — a bare identifier value that is an import
+  for (const m of modelSrc.matchAll(/(\w+)\s*:\s*(\w+)\s*,/g)) {
+    if (imports[m[2]]) map[m[1]] = imports[m[2]];
+  }
+  return map;
+}
+
 function pageCalls(pageFile, depth = 0, seen = new Set(), acc = null) {
   const state = acc || { calls: [], unresolved: [], models: new Set(), indirect: [] };
   if (!pageFile || depth > 3 || seen.has(pageFile)) return state;
@@ -94,8 +117,7 @@ function pageCalls(pageFile, depth = 0, seen = new Set(), acc = null) {
   }
 
   // `const Model = cond ? Admin : System; Model.getApiKeys()` — the object is chosen at
-  // runtime, so the method cannot be attributed to one model statically. Recorded rather
-  // than dropped: ApiKeys/index.jsx:26 is exactly this shape.
+  // runtime (ApiKeys/index.jsx:26), so attribute the call to BOTH candidates.
   for (const m of src.matchAll(/const\s+(\w+)\s*=\s*[^;]*\?\s*(\w+)\s*:\s*(\w+)\s*;/g)) {
     const [, alias, a, b] = m;
     for (const target of [a, b]) {
@@ -114,6 +136,20 @@ function pageCalls(pageFile, depth = 0, seen = new Set(), acc = null) {
   for (const [local, file] of Object.entries(models)) {
     const modelSrc = read(file);
     if (!modelSrc) continue;
+    const reexports = reexportsOf(modelSrc, file);
+
+    // Local.property.method( — through a re-exported model
+    for (const m of src.matchAll(new RegExp("\\b" + local + "\\.(\\w+)\\.(\\w+)\\s*\\(", "g"))) {
+      const target = reexports[m[1]];
+      if (!target) { state.unresolved.push(local + "." + m[1] + "." + m[2]); continue; }
+      const nested = read(target);
+      const body = nested && methodBody(nested, m[2]);
+      if (!body) { state.unresolved.push(local + "." + m[1] + "." + m[2]); continue; }
+      state.indirect.push(local + "." + m[1] + " -> " + path.basename(target) + "." + m[2]);
+      state.calls.push(...urlsIn(body));
+    }
+
+    // Local.method(  — but NOT the `Local.prop.method(` already handled above
     for (const m of src.matchAll(new RegExp("\\b" + local + "\\.(\\w+)\\s*\\(", "g"))) {
       const body = methodBody(modelSrc, m[1]);
       if (body === null) { state.unresolved.push(local + "." + m[1]); continue; }
@@ -122,7 +158,6 @@ function pageCalls(pageFile, depth = 0, seen = new Set(), acc = null) {
   }
   state.calls.push(...urlsIn(src)); // inline fetches
 
-  // follow local components/hooks
   for (const m of src.matchAll(/from\s+["']([^"']+)["']/g)) {
     const target = resolveModule(m[1], pageFile);
     if (!target || target.includes("/models/")) continue;

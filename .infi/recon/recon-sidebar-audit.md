@@ -3,6 +3,9 @@
 TL-1 residual from #137 (f26c1b6db, 9d32ae768). Base `origin/approof/main` @ `a58d2167f`.
 **Read-only. No code. Issue not opened.**
 
+> **Scope superseded by `contract-sidebar-audit.md`** (TL-2 ruling 998f4438a). Measurements below
+> stand, with the headline mismatch count corrected 19 → 20 and a sixth extraction bug recorded.
+
 Everything below was **measured by mounting the real router and evaluating the real
 `paths.js`**, not by grepping. The four harnesses are committed beside this file and rerunnable:
 
@@ -22,7 +25,7 @@ node .infi/recon/sidebar-audit-inhandler.cjs   # gates that live inside handler 
 |---|---|
 | sidebar entries parsed | 37 occurrences → **29 distinct** (the same entry object is rendered in several branches) |
 | mounted routes | **318**, of which **174** carry a `requirePermission` |
-| entries where the guard's capability is **not among** the actions its page's routes ask | **19 of 29** |
+| entries where the guard's capability is **not among** the actions its page's routes ask | **20 of 29** (was 19 — see bug 6) |
 | entries whose route actions are **all** in `ORG_CAPABILITIES` | **8 of 29** |
 | distinct actions asked by these pages but **absent** from `ORG_CAPABILITIES` | **16** |
 
@@ -113,7 +116,7 @@ and are almost certainly intentional — flagged for confirmation, not as findin
 
 ## What went wrong while measuring — worth reading before trusting any similar audit
 
-Five extraction bugs, each of which produced a **complete, plausible, wrong table**. None would
+**Six** extraction bugs, each of which produced a **complete, plausible, wrong table**. None would
 have been caught by reading the output; all were caught by checking a row I already knew.
 
 1. **Leaf-name path resolution.** `paths.settings.llmPreference` and
@@ -134,6 +137,14 @@ have been caught by reading the output; all were caught by checking a row I alre
    `../components/*`; ApiKeys picks its model at runtime
    (`const Model = !!user ? Admin : System`, `ApiKeys/index.jsx:26`). Both reported zero until the
    walk followed local components and resolved the ternary alias.
+
+6. **Model re-exports.** `models/system.js:1015` re-exports `promptVariables:
+   SystemPromptVariable`, and pages call through it: `System.promptVariables.getAll()`. A
+   `Local.method(` regex sees `System.promptVariables` with no `(` after it and drops the call,
+   so `settings.system-prompt-variables` reported no server calls and was recorded as a
+   non-mismatch. **Found by TL-2, not by me** — the second of these caught by someone else.
+   Harness re-pointed at re-exports and rerun: exactly one entry hid this way, and the `indirect`
+   field now records the hop so the path is auditable. Mismatch count 19 → 20.
 
 Every harness now **fails loudly** rather than returning a degraded result: extraction that finds
 nothing exits non-zero, and unresolved model methods are listed rather than counted as zero.

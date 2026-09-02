@@ -136,6 +136,22 @@ contract is "holds `system.read` or not"; the fixture supplies the map directly.
 call either of the page's routes; today it sees a page that 403s on load. #132 does **not** wait
 for #137.
 
+### Evidence contract — BOTH suites, named (TL-1, 6da7003ee)
+
+```
+frontend: vitest run src/components/PrivateRoute/
+server:   jest __tests__/security/systemReadCapabilityExposed.test.js
+```
+
+Naming only the frontend suite would be a real gap, not a formality: **a #121 revert, or a rename
+of the `system.read` key, reds only the server side.** The client tests mock `useCapabilities`,
+so the map they read is supplied by the fixture — no frontend test can witness the capability
+going missing from `ORG_CAPABILITIES`. That is the exact failure that shipped once already, at
+#121's SHA 7b3063bee: the frontend suite was green while 13 of 26 sidebar entries would have
+vanished in production.
+
+Both commands must be run and reported; a green frontend alone does not close this issue.
+
 Fixture requirements, each from a defect already paid for:
 
 - **`multiUserMode: true` in every fixture.** Both guards bypass on `|| !multiUserMode`, so a
@@ -187,6 +203,21 @@ what a route guard is *for* (reaching the page, or using it), and it is out of #
 The other route sites keep whatever approximation they have — 26 `AdminRoute`, 10 `ManagerRoute`,
 3 `SingleUserRoute`, counted with line comments stripped. #132 does **not** convert them and does
 **not** add `system.read` to `ORG_CAPABILITIES` (TL-2 condition 2; #121 owns that).
+
+## 5c. Residual — `SystemReadRoute` is a specific guard, and a conversion candidate
+
+#132 ships **`SystemReadRoute`**, a guard that answers one permission. It deliberately does NOT
+ship the first instance of the `<AdminRoute action="…">` prop pattern that TL-2's sidebar-audit
+ruling (998f4438a) adopts — that ruling arrived after this contract, and taking it here would
+widen a one-route fix into the first move of a 36-site migration.
+
+**Recorded as a conversion candidate for the sidebar-audit issue**, which owns the prop pattern
+and the rows it applies to. Whoever picks that up should expect `SystemReadRoute` to fold into
+`<AdminRoute action="system.read">` and should not read its existence as a competing design.
+
+Stating this in writing matters because the alternative is a later reader finding a fourth guard
+class next to a ruling that says guards take an action prop, and having to reconstruct which came
+first.
 
 ## 6. Tier
 
