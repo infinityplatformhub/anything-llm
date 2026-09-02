@@ -109,11 +109,12 @@ where it shows: its "read" column measures empty while the page plainly reads. T
 the action name as authoritative and treat the method as a hint. This is not hypothetical — my
 own table has the wrong split on that row, printed above unaltered.
 
-**12 capabilities remain absent from `ORG_CAPABILITIES`** after #121's four:
-`browser-extension.read/write`, `chat.write`, `embed.read/write/delete`,
-`invite.create/delete`, `model-router.read/write`, `workspace.delete`. A guard asking any of them
-refuses every caller including `super_admin` — the #132 precondition, same mechanism. `org.member`
-stays absent deliberately (#53). **Exposing these is a prerequisite slice, not part of the guard
+**10 capabilities remain absent** after #121's four — corrected from 12 in
+`recon-orgcaps-prereq.md`: `workspace.delete` is already exposed via `WORKSPACE_CAPABILITIES`
+(checked against that list too, not only the org one), and `org.member` stays absent deliberately
+(#53). The 10 are `browser-extension.read/write`, `chat.write`, `embed.read/write/delete`,
+`invite.create/delete`, `model-router.read/write`. A guard asking any of them refuses every
+caller including `super_admin` — the #132 precondition, same mechanism. **Exposing these is a prerequisite slice, not part of the guard
 conversion**, and it touches `endpoints/system.js`, so that slice is tier **auth**.
 
 ## Tier
