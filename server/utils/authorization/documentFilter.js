@@ -12,6 +12,7 @@
 
 const prisma = require("../prisma");
 const { AuthorizationContractError } = require("./errors");
+const { groupIdsFor, grantPrincipalPairs } = require("./groupMembership");
 
 // seam 07: an allow-list is for small explicit scopes (embed keys), never an org-wide
 // IN-list. Over the cap the filter degrades to match-none rather than truncating.
@@ -70,15 +71,19 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
     const deniedDocumentIds = new Set(hidden.map((row) => String(row.document_id)));
 
     // ---- step 3: principals the actor evaluates as ----
-    const groupIds =
-      actor.type === "user"
-        ? (
-            await tx.group_members.findMany({
-              where: { user_id: Number(actor.id) },
-              select: { group_id: true },
-            })
-          ).map((row) => String(row.group_id))
-        : [];
+    // #96: was an inline expansion keyed on `actor.id` and unfiltered by org. Both
+    // were wrong in ways that only showed on the DENY side: an api-key actor
+    // (`actor.id` = "api-key:7") matched no membership, so a deny row aimed at the
+    // creator's group never reached a key acting for them; and a group in another
+    // org could contribute a deny here. Now the same helper, org-filtered.
+    //
+    // This is the DENY side of the invariant stated at `readableScope`: an api-key
+    // IS expanded through its creator here, precisely because widening a denial
+    // cannot grant anything. The allow side does not expand it — that would hand
+    // the key authority nobody reviewed.
+    const denyPrincipal =
+      "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+    const groupIds = await groupIdsFor(denyPrincipal, orgId, tx);
 
     const { workspaceIds, orgWide } = await readableScope(tx, actor, action);
 
@@ -160,12 +165,38 @@ async function readableScope(tx, actor, action) {
     "grantPrincipal" in actor ? actor.grantPrincipal : actor;
   if (!grantPrincipal) return empty;
 
+  // #96: the ALLOW half read grants for the principal alone, exactly as the engine
+  // did. Fixing only the engine would have been WORSE than leaving both: authorize()
+  // would permit a read that this filter then answered with nothing, which reads as
+  // an empty workspace rather than as a refusal. Same helper as the engine, so the
+  // two cannot answer differently about who a user is.
+  //
+  // THE INVARIANT, stated once and true of all three read paths: group expansion
+  // widens what a key is DENIED, and never widens what it is ALLOWED. So an
+  // api-key is not expanded here or in the engine — its authority stays what its
+  // creator holds directly, rather than growing whenever someone edits a group —
+  // while the deny half below DOES expand it, so a prohibition aimed at the
+  // creator's department cannot be sidestepped by acting through a key.
+  const orgId = actor.orgId ?? 1;
+  const principalPairs =
+    "grantPrincipal" in actor
+      ? [
+          {
+            principal_type: grantPrincipal.type,
+            principal_id: String(grantPrincipal.id),
+          },
+        ]
+      : await grantPrincipalPairs(grantPrincipal, orgId, tx);
+
   const grants = await tx.principal_role_grants.findMany({
     where: {
-      orgId: actor.orgId ?? 1,
-      principal_type: grantPrincipal.type,
-      principal_id: String(grantPrincipal.id),
-      OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+      AND: [
+        {
+          orgId,
+          OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+        },
+        { OR: principalPairs },
+      ],
     },
     select: { role_id: true, workspace_id: true },
   });

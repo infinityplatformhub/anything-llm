@@ -570,3 +570,479 @@ describe("T-4b B-1: an API-key Actor evaluates grants as its creator", () => {
     expect(decision).toMatchObject({ allowed: true });
   });
 });
+
+describe("#96: a role granted to a GROUP authorizes that group's members", () => {
+  // The bug this proves: `principal_role_grants` accepts principal_type 'group',
+  // the admin UI offers it (admin/authorization.js:41), documentFilter and
+  // explainAccess both expand `group_members` — but `evaluate` queried grants for
+  // the ACTOR's own principal type only and never read the membership table. A
+  // group grant authorized nobody, while every other layer agreed that it did.
+  //
+  // Found in S4 (Lark org sync) recon: syncing a department to a group and
+  // granting the role to the group is the natural design, and it silently
+  // produced a sync that reported success and users who were denied.
+  //
+  // Each case below carries its own CONTROL, because "denied" on its own does not
+  // distinguish "the group edge is broken" from "this action never allows".
+
+  async function groupWithMember({ roleId, workspaceId = null, name }) {
+    const user = await prisma.users.create({
+      data: { username: `${name}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId: 1, name: `${name}-group`, source: "lark", externalId: `ext-${name}` },
+    });
+    await prisma.group_members.create({ data: { group_id: group.id, user_id: user.id } });
+    await repository.grantRole({
+      actor: SYS,
+      principalType: "group",
+      principalId: String(group.id),
+      roleId,
+      workspaceId: workspaceId === "W1" ? W1.id : workspaceId,
+      db: prisma,
+    });
+    return { actor: { type: "user", id: String(user.id), orgId: 1 }, user, group };
+  }
+
+  test("org-wide group grant reaches the member", async () => {
+    const { actor } = await groupWithMember({
+      roleId: roles.member.id,
+      name: `g96a-${dbSuffix}`,
+    });
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+  });
+
+  test("workspace-scoped group grant reaches the member, and does not leak to other workspaces", async () => {
+    const { actor } = await groupWithMember({
+      roleId: roles.viewer.id,
+      workspaceId: "W1",
+      name: `g96b-${dbSuffix}`,
+    });
+    expect(
+      await engine.authorize({ actor, action: "document.read", resource: docResource() })
+    ).toMatchObject({ allowed: true });
+
+    // The scope rule must survive group expansion: a grant scoped to W1 says
+    // nothing about W2. Expanding memberships and then ignoring workspace_id
+    // would turn every departmental grant into an org-wide one.
+    const w2 = await prisma.workspaces.create({
+      data: { name: "w2-96", slug: `t2-w2-96-${dbSuffix}` },
+    });
+    expect(
+      await engine.authorize({
+        actor,
+        action: "document.read",
+        resource: { type: "document", id: "8", orgId: 1, workspaceId: w2.id },
+      })
+    ).toMatchObject({ allowed: false });
+  });
+
+  test("a user in NO group is unaffected — the expansion adds nothing on its own", async () => {
+    // The control for the two above: if group expansion accidentally widened
+    // every actor, those tests would pass for the wrong reason.
+    const lonely = await prisma.users.create({
+      data: { username: `g96c-${dbSuffix}@example.com`, password: "x", role: "default" },
+    });
+    const actor = { type: "user", id: String(lonely.id), orgId: 1 };
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false, reason: "no_grants" });
+  });
+
+  test("membership is read at decision time: removing someone from the group revokes it", async () => {
+    // A grant that survives the membership being removed is a grant nobody can
+    // take away — offboarding (S12) depends on this being read fresh, not copied
+    // onto the user at sync time.
+    const { actor, user, group } = await groupWithMember({
+      roleId: roles.member.id,
+      name: `g96d-${dbSuffix}`,
+    });
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+
+    await prisma.group_members.delete({
+      where: { group_id_user_id: { group_id: group.id, user_id: user.id } },
+    });
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false });
+  });
+
+  test("deny-wins across the group edge: a deny on the group's role beats an allow on the user's own", async () => {
+    // Deny-wins is the engine's central rule. An expansion that collected group
+    // roles but applied deny only to the user's own roles would let a
+    // departmental prohibition be escaped by holding any personal grant.
+    const name = `g96e-${dbSuffix}`;
+    const user = await prisma.users.create({
+      data: { username: `${name}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId: 1, name: `${name}-group`, source: "lark", externalId: `ext-${name}` },
+    });
+    await prisma.group_members.create({ data: { group_id: group.id, user_id: user.id } });
+
+    const denyRole = await prisma.roles.create({
+      data: { name: `deny-chat-${name}`, scope: "org", orgId: 1, isSystem: false },
+    });
+    const chatSend = await prisma.permissions.findFirstOrThrow({
+      where: { action: "chat.send" },
+    });
+    await prisma.role_permissions.create({
+      data: { role_id: denyRole.id, permission_id: chatSend.id, effect: "deny" },
+    });
+
+    // the user personally holds member, which allows chat.send
+    await repository.grantRole({
+      actor: SYS,
+      principalType: "user",
+      principalId: String(user.id),
+      roleId: roles.member.id,
+      db: prisma,
+    });
+    const actor = { type: "user", id: String(user.id), orgId: 1 };
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+
+    // their group is denied it
+    await repository.grantRole({
+      actor: SYS,
+      principalType: "group",
+      principalId: String(group.id),
+      roleId: denyRole.id,
+      db: prisma,
+    });
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false });
+  });
+
+  test("an API key does not inherit its creator's group grants", async () => {
+    // An api-key Actor evaluates against `grantPrincipal` (its creator). Expanding
+    // the CREATOR's groups would widen every key beyond the grants its scope list
+    // was reviewed against — a key's authority must stay what was granted to it.
+    const name = `g96f-${dbSuffix}`;
+    const creator = await prisma.users.create({
+      data: { username: `${name}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId: 1, name: `${name}-group`, source: "lark", externalId: `ext-${name}` },
+    });
+    await prisma.group_members.create({ data: { group_id: group.id, user_id: creator.id } });
+    await repository.grantRole({
+      actor: SYS,
+      principalType: "group",
+      principalId: String(group.id),
+      roleId: roles.member.id,
+      db: prisma,
+    });
+
+    const keyActor = {
+      type: "api-key",
+      id: `api-key:${name}`,
+      orgId: 1,
+      grantPrincipal: { type: "user", id: String(creator.id) },
+    };
+    expect(
+      await engine.authorize({ actor: keyActor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false });
+  });
+});
+
+describe("#96 follow-ups: org boundary, precedence, impersonation, batch cost", () => {
+  async function userInGroup({ name, orgId = 1, roleId = null, workspaceId = null }) {
+    const user = await prisma.users.create({
+      data: { username: `${name}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId, name: `${name}-group`, source: "lark", externalId: `ext-${name}` },
+    });
+    await prisma.group_members.create({ data: { group_id: group.id, user_id: user.id } });
+    if (roleId)
+      await repository.grantRole({
+        actor: SYS, principalType: "group", principalId: String(group.id),
+        roleId, workspaceId: workspaceId === "W1" ? W1.id : workspaceId, db: prisma,
+      });
+    return { user, group, actor: { type: "user", id: String(user.id), orgId: 1 } };
+  }
+
+  test("a group in ANOTHER org does not carry its grant across the boundary", async () => {
+    // `group_members` has no orgId column, and callers filter grants by the GRANT
+    // row's orgId — which is not the group's. So a grant written {orgId: 1,
+    // principal: group:N} would match a member of group N even when that group
+    // lives in org 2, the moment expansion exists. The filter goes through the
+    // `groups` relation for exactly this.
+    const { user, group } = await userInGroup({
+      name: `g96org-${dbSuffix}`, orgId: 2,
+    });
+    // The grant row itself claims org 1 — the shape an attacker or a bug produces.
+    await repository.grantRole({
+      actor: SYS, principalType: "group", principalId: String(group.id),
+      roleId: roles.member.id, db: prisma,
+    });
+    const actor = { type: "user", id: String(user.id), orgId: 1 };
+    expect(
+      await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false });
+
+    // CONTROL: the identical setup with the group in org 1 allows — so the refusal
+    // above is the org boundary, not the fixture failing to grant anything.
+    const ok = await userInGroup({
+      name: `g96org-ctl-${dbSuffix}`, orgId: 1, roleId: roles.member.id,
+    });
+    expect(
+      await engine.authorize({ actor: ok.actor, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+  });
+
+  test("deny-precedence in all three directions", async () => {
+    // Deny-wins must hold wherever the deny is written. The seed has no deny rows
+    // at all, so each direction needs its own role fixture — without them these
+    // would pass by never exercising a deny.
+    const denyRole = async (label) => {
+      const role = await prisma.roles.create({
+        data: { name: `deny-${label}-${dbSuffix}`, scope: "org", orgId: 1, isSystem: false },
+      });
+      const perm = await prisma.permissions.findFirstOrThrow({ where: { action: "chat.send" } });
+      await prisma.role_permissions.create({
+        data: { role_id: role.id, permission_id: perm.id, effect: "deny" },
+      });
+      return role;
+    };
+
+    // (1) group allows, direct denies
+    {
+      const { user, actor } = await userInGroup({
+        name: `g96p1-${dbSuffix}`, roleId: roles.member.id,
+      });
+      const deny = await denyRole("p1");
+      await repository.grantRole({
+        actor: SYS, principalType: "user", principalId: String(user.id),
+        roleId: deny.id, db: prisma,
+      });
+      expect(
+        await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+      ).toMatchObject({ allowed: false });
+    }
+
+    // (2) direct allows, group denies — the direction a departmental prohibition
+    // must survive: holding any personal grant must not escape it.
+    {
+      const deny = await denyRole("p2");
+      const { user, group } = await userInGroup({ name: `g96p2-${dbSuffix}` });
+      await repository.grantRole({
+        actor: SYS, principalType: "user", principalId: String(user.id),
+        roleId: roles.member.id, db: prisma,
+      });
+      const actor = { type: "user", id: String(user.id), orgId: 1 };
+      expect(
+        await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+      ).toMatchObject({ allowed: true });
+      await repository.grantRole({
+        actor: SYS, principalType: "group", principalId: String(group.id),
+        roleId: deny.id, db: prisma,
+      });
+      expect(
+        await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+      ).toMatchObject({ allowed: false });
+    }
+
+    // (3) two groups, one allowing and one denying — neither is the actor's own
+    // principal, so this is the case an implementation that only compares "group
+    // vs self" would get wrong.
+    {
+      const deny = await denyRole("p3");
+      const { user, actor } = await userInGroup({
+        name: `g96p3-${dbSuffix}`, roleId: roles.member.id,
+      });
+      const second = await prisma.groups.create({
+        data: { orgId: 1, name: `g96p3b-${dbSuffix}`, source: "lark", externalId: `ext-p3b-${dbSuffix}` },
+      });
+      await prisma.group_members.create({ data: { group_id: second.id, user_id: user.id } });
+      await repository.grantRole({
+        actor: SYS, principalType: "group", principalId: String(second.id),
+        roleId: deny.id, db: prisma,
+      });
+      expect(
+        await engine.authorize({ actor, action: "chat.send", resource: wsResource() })
+      ).toMatchObject({ allowed: false });
+    }
+  });
+
+  test("an impersonated actor whose GROUP holds system.write still cannot mutate", async () => {
+    // R5's blanket refusal runs before any policy lookup, and group expansion must
+    // not sneak authority in behind it: view-as-user is a read-only lens whatever
+    // the viewed user's departments hold.
+    const { user } = await userInGroup({
+      name: `g96imp-${dbSuffix}`, roleId: roles.super_admin.id,
+    });
+    const impersonated = {
+      type: "user", id: String(user.id), orgId: 1, impersonatedBy: 1,
+    };
+    expect(
+      await engine.authorize({ actor: impersonated, action: "system.write", resource: orgResource() })
+    ).toMatchObject({ allowed: false, reason: "impersonated_mutation_denied" });
+
+    // CONTROL: the same user, not impersonated, IS allowed — so the refusal is
+    // impersonation, not the group grant failing to arrive.
+    expect(
+      await engine.authorize({
+        actor: { type: "user", id: String(user.id), orgId: 1 },
+        action: "system.write", resource: orgResource(),
+      })
+    ).toMatchObject({ allowed: true });
+  });
+
+  test("a service principal is not expanded, and never becomes NaN", async () => {
+    // Service and embed principals carry non-numeric ids ("core-jobs"). Passing
+    // that to `Number()` gives NaN, which Prisma rejects at runtime — turning a
+    // decision that must fail closed into a thrown error instead.
+    const jobs = SERVICE_PRINCIPALS.coreJobs;
+    await repository.grantRole({
+      actor: SYS, principalType: jobs.type, principalId: jobs.id,
+      roleId: roles.member.id, db: prisma,
+    });
+    expect(
+      await engine.authorize({ actor: jobs, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: true });
+
+    const embed = { type: "embed", id: "embed:abc", orgId: 1 };
+    expect(
+      await engine.authorize({ actor: embed, action: "chat.send", resource: wsResource() })
+    ).toMatchObject({ allowed: false });
+  });
+
+  test("authorizeMany reads group membership ONCE for the whole batch, not once per resource", async () => {
+    // Membership is a property of the actor, so a 100-resource batch must add ONE
+    // group_members query, not 100. Counted through a real Prisma middleware rather
+    // than asserted on the shape of the code — the claim is about queries issued.
+    const { actor } = await userInGroup({
+      name: `g96batch-${dbSuffix}`, roleId: roles.member.id,
+    });
+
+    // Prisma middleware cannot be removed once registered, so counting is gated by
+    // a flag this test owns rather than left running for every later suite.
+    let counting = true;
+    let groupMemberQueries = 0;
+    prisma.$use(async (params, next) => {
+      if (counting && params.model === "group_members") groupMemberQueries++;
+      return next(params);
+    });
+    try {
+      const resources = Array.from({ length: 100 }, () => wsResource());
+      const decisions = await engine.authorizeMany({
+        actor, action: "chat.send", resources,
+      });
+      expect(decisions.size).toBe(100);
+      expect([...decisions.values()].every((d) => d.allowed)).toBe(true);
+      expect(groupMemberQueries).toBe(1);
+    } finally {
+      counting = false;
+    }
+  });
+});
+
+describe("#96 follow-ups 2: view-as-user, and the three paths agree", () => {
+  test("view-as-user expands the TARGET's groups, never the admin's", async () => {
+    // An impersonated Actor carries the TARGET's id with `impersonatedBy` naming
+    // the admin. Expanding the wrong one is invisible on the deny side (R5 blocks
+    // mutations anyway) and shows only on reads — where an admin's departments
+    // would silently widen what view-as-user displays, or the target's own
+    // departmental access would vanish from a session meant to reproduce it.
+    const mk = async (label, roleId) => {
+      const user = await prisma.users.create({
+        data: { username: `${label}-${dbSuffix}@example.com`, password: "x", role: "default" },
+      });
+      const group = await prisma.groups.create({
+        data: { orgId: 1, name: `${label}-${dbSuffix}-grp`, source: "lark", externalId: `ext-${label}-${dbSuffix}` },
+      });
+      await prisma.group_members.create({ data: { group_id: group.id, user_id: user.id } });
+      await repository.grantRole({
+        actor: SYS, principalType: "group", principalId: String(group.id),
+        roleId, workspaceId: null, db: prisma,
+      });
+      return user;
+    };
+
+    // The admin's group holds a read the target's group does not, and vice versa.
+    const admin = await mk("g96va-admin", roles.super_admin.id);
+    const target = await mk("g96va-target", roles.member.id);
+
+    const viewing = {
+      type: "user", id: String(target.id), orgId: 1,
+      impersonatedBy: String(admin.id),
+    };
+
+    // The target's own group grant reaches the session. `org.member` is one of the
+    // exactly two actions the org `member` role holds — migration 102000 raises if
+    // that set is ever anything but chat.send + org.member — and it is read-shaped,
+    // so R5's blanket mutation refusal lets it through.
+    expect(
+      await engine.authorize({ actor: viewing, action: "org.member", resource: orgResource() })
+    ).toMatchObject({ allowed: true });
+
+    // And the admin's super_admin, held only through the ADMIN's group, does not:
+    // user.read is not in `member`. If expansion followed `impersonatedBy`, this
+    // would be allowed.
+    expect(
+      await engine.authorize({ actor: viewing, action: "user.read", resource: orgResource() })
+    ).toMatchObject({ allowed: false });
+
+    // CONTROL: the admin, acting as themselves, IS allowed user.read through their
+    // group — so the refusal above is about whose groups were expanded, not about
+    // the admin's grant never existing.
+    expect(
+      await engine.authorize({
+        actor: { type: "user", id: String(admin.id), orgId: 1 },
+        action: "user.read", resource: orgResource(),
+      })
+    ).toMatchObject({ allowed: true });
+  });
+
+  test("drift: authorize, readableScope and explainAccess agree about one group member", async () => {
+    // The three paths that read membership were written at different times and
+    // disagreed: the engine and readableScope read none, documentFilter's deny half
+    // had its own copy. This asserts one fixture is answered the same way by all
+    // three, so a future change to one that is not made to the others fails here
+    // rather than in production as "authorize said yes, the list came back empty".
+    const user = await prisma.users.create({
+      data: { username: `g96drift-${dbSuffix}@example.com`, password: "x", role: "default" },
+    });
+    const group = await prisma.groups.create({
+      data: { orgId: 1, name: `g96drift-${dbSuffix}-grp`, source: "lark", externalId: `ext-drift-${dbSuffix}` },
+    });
+    await prisma.group_members.create({ data: { group_id: group.id, user_id: user.id } });
+    await repository.grantRole({
+      actor: SYS, principalType: "group", principalId: String(group.id),
+      roleId: roles.viewer.id, workspaceId: W1.id, db: prisma,
+    });
+    const actor = { type: "user", id: String(user.id), orgId: 1 };
+
+    // (1) the engine
+    expect(
+      await engine.authorize({ actor, action: "document.read", resource: docResource() })
+    ).toMatchObject({ allowed: true });
+
+    // (2) and (3) through the PUBLIC filter, which exercises both halves: the
+    // ALLOW half (readableScope) must put the granted workspace in scope, and the
+    // DENY half must have expanded the same membership into `attributes.groupIds`.
+    // Asserted through buildDocumentFilter rather than by exporting the internals,
+    // so the test drives what callers actually call.
+    const { buildDocumentFilter } = require("../../../utils/authorization/documentFilter");
+    const filter = await buildDocumentFilter({
+      actor, action: "document.read", db: prisma,
+    });
+
+    // ALLOW half: without this the engine says yes to a read whose filter returns
+    // nothing — "authorize() allowed it, the list came back empty", which reads as
+    // an empty workspace rather than as a refusal.
+    expect(filter.matchNone).toBe(false);
+    expect(filter.workspaceIds.map(String)).toContain(String(W1.id));
+
+    // DENY half: the same membership, resolved by the same helper.
+    expect(filter.attributes.groupIds.map(String)).toContain(String(group.id));
+  });
+});
