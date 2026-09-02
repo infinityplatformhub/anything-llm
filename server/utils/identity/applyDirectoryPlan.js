@@ -10,6 +10,29 @@
 // delta API, so absence from a snapshot is the only departure signal, and a
 // misconfigured directory app produces a snapshot that is confidently wrong about the
 // entire organisation.
+//
+// RESIDUALS — what this module does NOT provide, written here because slice 3 reads
+// the checkpoint and would otherwise infer these guarantees from its shape:
+//
+// 1. STATUS 'failed' IS NEVER WRITTEN. The migration admits it, and nothing produces
+//    it: a crash mid-apply propagates the error and the checkpoint write is simply
+//    never reached (that is R5/RF-7 working — no row is better than a row claiming a
+//    run finished). The consequence is that a crashed run and a run that never
+//    started are the same absence. **Slice 3 must not read "no row" as "never ran"**
+//    when deciding whether a sync is overdue; that inference is wrong precisely in
+//    the case that matters. Writing 'failed' needs a durable catch that survives the
+//    crash it records, which is slice 3's concurrency work, not this module's.
+//
+// 2. THE COUNTS ARE CALLS, NOT NET CHANGES. `membershipsAdded` counts invocations of
+//    `addGroupMember`, and that call is an upsert — re-applying a converged plan
+//    reports 1, not 0, because the row was written idempotently rather than skipped.
+//    `usersCreated` and `groupsCreated` DO reflect real creations (both check first).
+//    So the membership counts answer "how much work was attempted", not "what
+//    changed", and an operator reading them as a change log will over-report.
+//    Measured, applying one plan twice:
+//      first  apply: usersCreated 1, groupsCreated 1, membershipsAdded 1
+//      second apply: usersCreated 0, groupsCreated 0, membershipsAdded 1
+//    with `group_members` still holding exactly one row.
 
 const prisma = require("../prisma");
 const {
@@ -135,15 +158,29 @@ async function applyDirectoryPlan({
   //     typeof db?.$transaction === "function" ? db.$transaction(fn) : fn(db);
   //
   // A Prisma transaction client has no `$transaction`, so handing one to
-  // `addGroupMember` makes it run INLINE in the caller's transaction. That is
-  // correct and deliberate for #39's callers, and wrong here: it would collapse
-  // every membership change in the run into ONE policy-version bump, and the cache
-  // subscriber consumes one invalidation per change. Nothing errors. The symptom is
-  // a cache invalidation that arrives once for a hundred changes.
+  // `addGroupMember` makes it run INLINE in the caller's transaction instead of
+  // opening its own. Passing `db` means each call gets its own transaction,
+  // carrying its own version bump and outbox publish (#113 RF-5). The next reader
+  // will think a transaction is missing here; it is not, and this is why.
   //
-  // So each membership write is its own transaction, carrying its own version bump
-  // and outbox publish (#113 RF-5). The next reader will think a transaction is
-  // missing here; it is not, and this is why.
+  // WHAT PASSING A TX WOULD AND WOULD NOT CHANGE — measured, because the earlier
+  // version of this comment claimed the wrong thing. It does NOT collapse the
+  // version bumps: `bumpVersion` runs once per `addGroupMember` invocation either
+  // way, so N changes produce N `policy_versions` rows and N outbox rows whether a
+  // tx or `db` is passed. Verified against a real database, and confirmed
+  // independently by TL-1 and by QA-1's MB mutant (whole loop in one transaction:
+  // 3 changes, 3 bumps, 3 outbox rows, suite green).
+  //
+  // What it WOULD change is rollback scope and lock duration. One transaction across
+  // the loop means a single conflicting row discards every membership change in the
+  // run, and a 100-page org holds its locks for the whole apply. Per entity, a
+  // mid-run failure leaves the earlier entries committed, and the next run re-derives
+  // the remainder from current state (R6) — which is the behaviour RF-4 pins.
+  //
+  // The risk this comment guards is therefore a future refactor that batches these
+  // writes for speed. NO TEST PINS IT: the difference is invisible to a row count,
+  // and observing it needs a conflict fixture. Recorded as a §7.9 survivor (M2/M3 in
+  // .infi/ledger-134.md), not silently assumed to be covered.
   for (const membership of plan.addMembership ?? []) {
     const ids = await membershipIds({ db, provider, membership, groupIdByExternalId, userIdBySubject });
     if (!ids) continue;
