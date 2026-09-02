@@ -7,12 +7,13 @@ import {
   useMemo,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useWorkspaceCapabilities } from "@/hooks/useCapabilities";
 import useUser from "@/hooks/useUser";
 import AgentSkillsTab from "./Tabs/AgentSkills";
 import SlashCommandsTab from "./Tabs/SlashCommands";
 
 export const TOOLS_MENU_KEYBOARD_EVENT = "tools-menu-keyboard";
-function getTabs(t, user) {
+function getTabs(t, user, canConfigureWorkspace) {
   const tabs = [
     {
       key: "slash-commands",
@@ -21,9 +22,14 @@ function getTabs(t, user) {
     },
   ];
 
-  // Only show agent skills tab for admins or when multiuser mode is off
-  const canSeeAgentSkills =
-    !user?.hasOwnProperty("role") || user.role === "admin";
+  // The decision is made by the CALLER and passed in. `getTabs` is a plain function invoked
+  // from `useMemo`, so a hook called here would violate the Rules of Hooks and break at
+  // runtime — which it did, in my first attempt; mutation testing surfaced it, not review.
+  // TL-1 F2: `!user ||`, matching every other site. The old
+  // `!user?.hasOwnProperty("role")` also short-circuits for a user object that
+  // simply lacks a `role` key — a shape that is not single-user mode and should
+  // still be asked about the capability.
+  const canSeeAgentSkills = !user || canConfigureWorkspace;
   if (canSeeAgentSkills) {
     tabs.push({
       key: "agent-skills",
@@ -54,7 +60,23 @@ export default function ToolsMenu({
 }) {
   const { t } = useTranslation();
   const { user } = useUser();
-  const TABS = useMemo(() => getTabs(t, user), [t, user]);
+
+  // #40 task 4: ask the engine, not the role string.
+  //
+  // `workspace.write`, not the org-level `settings.write`: this gates the agent-skill
+  // configuration OF THIS WORKSPACE, and an org capability would stop a workspace owner from
+  // configuring their own workspace unless they also held an instance-wide permission.
+  //
+  // `visible` is read separately from `can`: false means the caller cannot see this workspace
+  // at all, which the server answers identically for "absent" and "not yours".
+  const { can, visible, loading } = useWorkspaceCapabilities(
+    workspace?.id ?? null
+  );
+  const canConfigureWorkspace = !loading && visible && can("workspace.write");
+  const TABS = useMemo(
+    () => getTabs(t, user, canConfigureWorkspace),
+    [t, user, canConfigureWorkspace]
+  );
   const [activeTab, setActiveTab] = useState(TABS[0].key);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [maxHeight, setMaxHeight] = useState(360);

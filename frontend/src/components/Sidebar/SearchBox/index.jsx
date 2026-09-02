@@ -6,6 +6,7 @@ import paths from "@/utils/paths";
 import Preloader from "@/components/Preloader";
 import debounce from "lodash.debounce";
 import Workspace from "@/models/workspace";
+import useCapabilities from "@/hooks/useCapabilities";
 import { Tooltip } from "react-tooltip";
 
 const DEFAULT_SEARCH_RESULTS = {
@@ -187,9 +188,18 @@ function SearchResultItem({ to, name, hint }) {
   );
 }
 
-function ShortWidthNewWorkspaceButton({ user, showNewWsModal }) {
+export function ShortWidthNewWorkspaceButton({ user, showNewWsModal }) {
   const { t } = useTranslation();
-  if (!!user && user?.role === "default") return null;
+  const { can, loading } = useCapabilities();
+
+  // #40 task 4: the narrow-width twin of Sidebar's NewWorkspaceButton. Same
+  // capability, and it must stay the same — two spellings of one affordance
+  // that disagree is a worse bug than either being wrong alone.
+  // `loading ||` is redundant against can() as written today — an empty map
+  // already answers false — and is kept deliberately: the two are independent
+  // defences, and useCapabilities.test.jsx is what holds can()'s side of the
+  // contract, since no DOM test can distinguish them.
+  if (!!user && (loading || !can("workspace.create"))) return null;
 
   return (
     <>

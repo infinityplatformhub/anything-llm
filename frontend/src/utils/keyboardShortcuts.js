@@ -1,6 +1,7 @@
 import paths from "./paths";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import useCapabilities from "@/hooks/useCapabilities";
 import { userFromStorage } from "./request";
 import { TOGGLE_LLM_SELECTOR_EVENT } from "@/components/WorkspaceChat/ChatContainer/PromptInput/LLMSelector/action";
 
@@ -122,15 +123,22 @@ export function initKeyboardShortcuts(ctx = {}) {
 
 function useKeyboardShortcuts() {
   const navigate = useNavigate();
+  const { can, loading } = useCapabilities();
+  const mayUseAdminShortcuts = can("settings.write");
   useEffect(() => {
-    // If there is a user and the user is not an admin do not register the event listener
-    // since some of the shortcuts are only available in multi-user mode as admin
+    // #40 task 4: the shortcuts jump to settings pages, which AdminRoute guards
+    // on settings.write — so that is the capability, read off the routes the
+    // shortcuts navigate to rather than off the role string being replaced.
+    //
+    // Unlike a hidden button, an unregistered listener has no visible loading
+    // state: waiting simply means the shortcut does nothing for a moment. The
+    // effect re-runs when the map arrives, which registers it then.
     const user = userFromStorage();
-    if (!!user && user?.role !== "admin") return;
+    if (!!user && (loading || !mayUseAdminShortcuts)) return;
     const cleanup = initKeyboardShortcuts({ navigate });
 
     return () => cleanup();
-  }, [navigate]);
+  }, [navigate, loading, mayUseAdminShortcuts]);
   return;
 }
 

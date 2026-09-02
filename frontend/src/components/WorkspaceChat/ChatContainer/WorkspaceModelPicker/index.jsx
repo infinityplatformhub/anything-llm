@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "react-device-detect";
 import useUser from "@/hooks/useUser";
+import { useWorkspaceCapabilities } from "@/hooks/useCapabilities";
 import { useModal } from "@/hooks/useModal";
 import LLMSelectorModal from "../PromptInput/LLMSelector/index";
 import SetupProvider from "../PromptInput/LLMSelector/SetupProvider";
@@ -40,11 +41,15 @@ async function fetchModelName(slug, setModelName, t) {
   setModelName(await resolveModelName(workspace, systemSettings, t));
 }
 
-export default function WorkspaceModelPicker({ workspaceSlug = null }) {
+export default function WorkspaceModelPicker({
+  workspaceSlug = null,
+  workspaceId = null,
+}) {
   const { t } = useTranslation();
   const { slug: urlSlug } = useParams();
   const slug = urlSlug ?? workspaceSlug;
   const { user } = useUser();
+  const { can, visible, loading } = useWorkspaceCapabilities(workspaceId);
   const [showSelector, setShowSelector] = useState(false);
   const [modelName, setModelName] = useState("");
   const {
@@ -55,7 +60,9 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   const [config, setConfig] = useState({ settings: {}, provider: null });
   const [refreshKey, setRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(
-    () => window.localStorage.getItem("approofworkspace_sidebar_toggle") !== "closed"
+    () =>
+      window.localStorage.getItem("approofworkspace_sidebar_toggle") !==
+      "closed"
   );
 
   useEffect(() => {
@@ -92,8 +99,26 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
       window.removeEventListener(PROVIDER_SETUP_EVENT, handleProviderSetup);
   }, []);
 
-  // This feature is disabled for multi-user instances where the user is not an admin
-  if (!!user && user.role !== "admin") return null;
+  // #40 task 4: the engine decides, not the role string.
+  //
+  // `workspace.write`, not the org-level `settings.write`: this picks the model FOR THIS
+  // WORKSPACE, and an org capability would stop a workspace owner from configuring their own
+  // workspace without an instance-wide permission.
+  //
+  // `visible` is checked separately from `can`: false means the caller cannot see this
+  // workspace at all, which the server answers identically for "absent" and "not yours". A
+  // `can()`-only check would also be false there, so it would pass while proving nothing.
+  // `loading` is checked and is REDUNDANT today — mutation removed it and the suite stayed
+  // green. While the fetch is in flight `state.workspace` is null, so `visible` is already
+  // false and the gate is closed by that alone. It is kept because the two answers are
+  // independent in principle (a future hook could keep a stale workspace while refetching, and
+  // then `visible` would be true mid-flight), and because a reader who sees only `visible`
+  // here would reasonably conclude the loading case was never considered. Documented as
+  // redundant rather than defended with a contrived test.
+  //
+  // The `!user` branch stays: it is single-user mode, where nothing is gated and the operator
+  // would otherwise watch this disappear on every first paint.
+  if (!!user && !(!loading && visible && can("workspace.write"))) return null;
   if (!slug || isMobile) return null;
 
   return (

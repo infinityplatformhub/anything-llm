@@ -321,3 +321,35 @@ Ruling (TL-1 F2 — บั๊กจริงในโค้ดผม): `resetCap
 Ruling: เทสสองข้อข้างบนเขียนเป็น **สคริปต์ที่รันจริง** `frontend/scripts/capabilities-cache-check.mjs` + `yarn check:capabilities` ไม่ใช่ source scan · **จงใจไม่ scan ข้อความ** เพราะ probe รอบก่อนของผมแดงด้วยผลบวกปลอมจากคำว่า `localStorage` ในคอมเมนต์ · สคริปต์รันตรรกะ cache กับ stub fetcher แล้ว assert จำนวนครั้งที่ fetch จริง + สิ่งที่ reader เห็น · mutation: คืนบั๊ก F1 → แดง, ถอด reset ออกจาก logout path เดียว → แดง — ถ้าผิด: หลักฐานที่รันครั้งเดียวแล้วไม่ commit = ไม่มีใครรันซ้ำได้
 
 Residual (แก้ตามจริงตาม TL-1): positive control ใน `uiBypassStillRefused` มีแค่ `workspace.create` แถวเดียว (grant super_admin แล้ว `/workspace/new` ผ่าน) — อีก 8 route พิสูจน์แค่ว่า "ปฏิเสธ" ไม่ได้พิสูจน์ว่า "ปฏิเสธเพราะ gate" ต่อแถว · ปิดครบต้อง positive control ทุกแถวซึ่งต้องสร้าง state ต่อ route (user จริง, workspace จริง) = งานคนละก้อน
+
+## task 4 (base 87e3f9afb, tier plain)
+
+Ruling: 15 site ไม่ใช่ 16 — `NewUserModal:90` เป็น delegated admin ทรงเดียวกับ `UserRow/EditUserModal:105` เป๊ะ (โค้ดเหมือนกัน ซ่อน option "Administrator") · PMO ยืนยันตัดออก · **4 site ที่ห้ามแปลงอ่าน role ของคนอื่น ไม่ใช่ของ caller** — แปลงเป็น `can()` ไม่ใช่ widening แต่เป็น**เปลี่ยนคำถาม** — ถ้าผิด: manager เห็น option admin แล้วเซิร์ฟเวอร์ปฏิเสธ
+
+Ruling: capability ของแต่ละ site อ่านจาก **route ที่มันเปิด** ไม่ใช่จาก role string เดิม · `SettingsSidebar` privacy link → `/settings/privacy` → `main.jsx:213` ห่อ `AdminRoute` → `settings.write` · `keyboardShortcuts` shortcut ไปหน้า settings → เหมือนกัน · role string คือสิ่งที่กำลังถูกลบ ใช้มันเป็นแหล่งอ้างอิงจะพา drift ข้ามมาด้วย
+
+Ruling (TL-1 RF-3): `loading ||` ใน gate **ซ้ำซ้อนกับ `can()` วันนี้** (แมพว่าง → `=== true` เป็น false อยู่แล้ว) · ผมรัน mutation แล้วยืนยัน: ตัด `loading ||` → เขียว, ทำ hook fail-open → เขียว, **ตัดทั้งคู่ → แดง** = defence สองชั้นทับกันพอดี ไม่ใช่รูโหว่ · เก็บทั้งคู่ + เพิ่ม unit test บน hook (`useCapabilities.test.jsx`) ที่ mutation เดียวทำให้แดงได้ — ถ้าผิด: รายงานว่า RF-3 "แดงตามที่ขอ" ทั้งที่ไม่แดง
+
+Ruling (TL-1, บั๊กในเทสผม): `waitFor(() => expect(mockCapabilities.current).toBeDefined())` **จริงตั้งแต่ tick แรก** → 4 assertion เชิงลบรันตอน loading ไม่ใช่ตอน resolved · ผ่านเพราะ loading ซ่อน control ไม่ใช่เพราะ `can()` · แก้เป็น probe component ที่ flip เมื่อ hook settle · พิสูจน์: `can()` คืน true เสมอ → **แดง 7** (ก่อนแก้ แดง 0 ในสี่ข้อนั้น) — ถ้าผิด: เทสเชิงลบทั้งชุดผ่านฟรี
+
+Ruling: เทส `Home`/`SettingsSidebar` **transcribe gate** เพราะ render component จริงจะลากทั้งหน้าจอมาด้วย · **นี่คือความผิดพลาดเดียวกับ #115 เป๊ะ** (เทสขับ helper ตัวเอง production ไม่มีใครคุ้ม) · กันด้วย drift check ที่ assert source ของ component ยังมีเงื่อนไขนั้น + จำนวน call site + role string หายแล้ว · mutation ทั้งหมดแดงที่ drift check — ถ้าผิด: gate จริงเปลี่ยนแล้วเทสยังเขียวเพราะเทสของตัวเอง
+
+Ruling: query ของ `SearchBox` รอบแรกใช้ text แต่ control เป็นไอคอนล้วน (label อยู่ใน `data-tooltip-content`) · **selector ที่ไม่เจออะไรเลยทำให้ assertion เชิงลบผ่านฟรีทุกข้อ** · ต้องมี positive control ว่า selector เจอ control จริงตอนควรแสดง (§7.17)
+
+Residual (task 4):
+- **`capabilitiesLoading` ใน `PrivateRoute` ไม่มีเทสคุม** — `isAuthd === null` กันช่วง window ไว้เกือบหมด ตัดทิ้งแล้วไม่มีอะไรแดง · เก็บไว้เพราะ session check กับ capability map เป็น async คนละตัวไม่ order กัน · เขียนไว้ในโค้ดพร้อมเหตุผลว่าทำไมไม่เขียนเทส (ต้องขับ internals ของ `useIsAuthenticated` = เทสของ mock)
+- **gate ที่ transcribe** (`Home`, `SettingsSidebar`) พึ่ง drift check ไม่ใช่ render จริง · ทางที่ดีกว่าคือแตก gate เป็น component เล็กที่ render ได้ = follow-up issue
+- **14 site ที่เหลือ** → #121 (mapping ยังไม่ผ่าน review)
+- **3 site delegated admin** → รอ `assignableRoles` issue
+
+Ruling (gate แดง 2 จุด): (1) `yarn test` **exit 1** ทั้งที่ 75/75 ผ่าน — vitest นับ unhandled rejection เป็น failure · ผมประกาศ SHA โดยดูแค่จำนวน pass **ไม่ได้เช็ค exit code** · ต่อไปเช็ค exit code ทุกครั้ง (2) drift sweep `+2` **ไม่ใช่ caller ใหม่ มันคือคอมเมนต์** — `managerAllowedFieldsDrift.test.js:109` ใช้ `source.includes(...)` บนข้อความดิบ ไม่แยกโค้ด/คอมเมนต์ ไม่กรองไฟล์เทส · Dev4 เขียนคอมเมนต์อธิบายว่าทำไม Memories ใช้ `settings.write` แล้วโดนนับเป็น caller · **คลาสเดียวกับบทเรียนใหญ่ของ task 1** · PMO ruling (ก): **strip คอมเมนต์อย่างเดียว** ไม่มี filter ข้ามไฟล์เทส (walker ยัง visit `.test.jsx` และควร visit เพราะไฟล์เทสที่เรียก `updateSystemPreferences` จริงก็ต้องถูก classify) — คำว่า "ข้าม `*.test.jsx`" ในข้อความเดิมของผมมาจากที่ PMO เขียนมา **และผิด** ผมไม่ได้ตรวจกับ diff ของ Dev4 ก่อนจด · **ไม่ใช่** เพิ่มเข้า allowlist (allowlist จะบันทึกสิ่งที่เป็นเท็จ — ไฟล์พวกนั้นไม่ใช่ caller เลย — และรอบหน้าใครเขียนคอมเมนต์แบบเดียวกันก็ต้องเพิ่มอีก)
+
+Ruling (QA-3 M3): mutant `visible` ของ ToolsMenu **ฆ่าผ่าน DOM ไม่ได้** — hook คำนวณ `can` จาก `state.workspace?.capabilities` ดังนั้น workspace ที่มองไม่เห็นทำให้ `can()` false อยู่แล้ว ทั้งสอง implementation ซ่อนเหมือนกัน ไม่มี fixture แยกได้ · Dev4 พิสูจน์เรื่องนี้ไว้แล้วสำหรับ picker · ใช้ source assertion ฆ่า mutant + เทส DOM เก็บไว้บันทึกพฤติกรรม — ถ้าผิด: `visible` กลายเป็นของประดับที่ลบทิ้งได้เงียบ ๆ
+
+Ruling (QA-3 M4): site `:166` อยู่ใน **`SidebarMobileHeader` ไม่ใช่ default export `Sidebar`** · เทสรอบแรกของผม render `<Sidebar />` ซึ่ง**ไม่เคยไปถึง site นั้นเลย** — พิสูจน์ไม่ได้อะไร · แก้เป็น render `SidebarMobileHeader` แล้ว mutant (คืน role string ที่ :166) แดง · อีกจุด: query `queryByLabelText(/settings/i)` ไม่เจอเพราะ `SettingsButton` ใช้ label `"Home"` นอก `/settings/*` — selector ที่ไม่เจออะไรทำให้ assertion เชิงลบผ่านฟรี (§7.17 ซ้ำ)
+
+Ruling (QA-3 M6): เทส rejection ต้องวัดผ่าน **reader ตัวที่สอง** ไม่ใช่ผ่าน cache ตรง ๆ — บั๊กมองเห็นได้เฉพาะตอนมี mount ที่สอง · assert `mockFetch.calls` เพิ่มจาก 1 เป็น 2 (cache ที่เก็บ rejection จะตอบจากตัวเดิมโดยไม่ถามใหม่) + เทสคู่ว่า success **ยัง** cache อยู่ (ไม่ใช่ยิงรัวทุก mount)
+
+Ruling (TL-1 F1 — ความผิดพลาดเดียวกันรอบที่สาม): source assertion ที่ผมเขียนฆ่า mutant M3 **match ทั้งไฟล์รวมคอมเมนต์** · ผมรันพิสูจน์เอง: ตัด `visible` ออกจาก gate แล้ว**ทิ้งคอมเมนต์ที่มีสตริงนั้นไว้** → **เขียว 21/21 mutant รอด** ทั้งที่เทสรายงานว่าฆ่าแล้ว · แก้ด้วย `codeOf()` ที่ strip `//` ก่อน match ทั้ง 3 assertion → mutant แดง · **นี่คือคลาสเดียวกับ drift sweep ใน SHA เดียวกันนี้เป๊ะ และเป็นบทเรียนใหญ่ของ task 1** — ผมเขียนเครื่องมือที่ scan ข้อความเพื่อกันบั๊กที่เกิดจากการ scan ข้อความ — ถ้าผิด: ด่านที่รายงานว่าจับได้ทั้งที่ไม่ได้จับ แย่กว่าไม่มีด่าน
+
+Ruling (TL-1 F2): `canSeeAgentSkills` ใช้ `!user?.hasOwnProperty("role")` ซึ่งลัดผ่าน capability ให้ object ที่ไม่มีคีย์ `role` — ไม่ใช่ single-user mode แต่ได้สิทธิ์เหมือนกัน · แก้เป็น `!user ||` ให้ตรงกับอีก 14 site

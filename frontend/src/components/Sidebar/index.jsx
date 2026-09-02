@@ -5,6 +5,7 @@ import NewWorkspaceModal, {
 } from "../Modals/NewWorkspace";
 import ActiveWorkspaces from "./ActiveWorkspaces";
 import useLogo from "@/hooks/useLogo";
+import useCapabilities from "@/hooks/useCapabilities";
 import useUser from "@/hooks/useUser";
 import Footer from "../Footer";
 import SettingsButton from "../SettingsButton";
@@ -91,6 +92,10 @@ export function SidebarMobileHeader() {
     hideModal: hideNewWsModal,
   } = useNewWorkspaceModal();
   const { user } = useUser();
+  // #40 task 4: SettingsButton's own gate is settings.write; this wrapper hides
+  // the container around it, so it must ask the same question or the two
+  // disagree and an empty box renders.
+  const { can: canSettings, loading: settingsLoading } = useCapabilities();
 
   useEffect(() => {
     // Darkens the rest of the screen
@@ -158,7 +163,7 @@ export function SidebarMobileHeader() {
                   style={{ objectFit: "contain" }}
                 />
               </div>
-              {(!user || user?.role !== "default") && (
+              {(!user || (!settingsLoading && canSettings("settings.write"))) && (
                 <div className="flex gap-x-2 items-center text-slate-500 shink-0">
                   <SettingsButton />
                 </div>
@@ -188,9 +193,19 @@ export function SidebarMobileHeader() {
   );
 }
 
-function NewWorkspaceButton({ user, showNewWsModal }) {
+export function NewWorkspaceButton({ user, showNewWsModal }) {
   const { t } = useTranslation();
-  if (!!user && user?.role === "default") return null;
+  const { can, loading } = useCapabilities();
+
+  // #40 task 4: creating a workspace does not depend on owning one, so this
+  // asks only whether the caller may create. `!user` is single-user mode — no
+  // principal, empty map — and short-circuits before `loading`, so a
+  // single-user deployment never renders the loading state and cannot flash.
+  // `loading ||` is redundant against can() as written today — an empty map
+  // already answers false — and is kept deliberately: the two are independent
+  // defences, and useCapabilities.test.jsx is what holds can()'s side of the
+  // contract, since no DOM test can distinguish them.
+  if (!!user && (loading || !can("workspace.create"))) return null;
 
   return (
     <div className="flex gap-x-2 items-center justify-between">
