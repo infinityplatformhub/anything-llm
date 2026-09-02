@@ -731,3 +731,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #130 gate PASS on c1ae503be: contract 13/13, __tests__/utils 1170/0, sweeps 63/63, task check 0, result written. Waiting TL-2 pre-read → close/merge (plain).
 - #134 gate FINAL2 on 825139ce6 running; TL-1 one-line pending.
 - #130 MERGED (c1ae503be, plain: gate PASS + TL-2 PASS 9d8353a38). Closed via task.sh (comment read back). Lesson: `requesting-code-review` is a plugin skill — TLs must use the namespaced name.
+- #134 gate FINAL2 PASS on 825139ce6 (37/37, task check 0, result written). Ready to close/merge on TL-1 one-line confirm. Board 102/137.
