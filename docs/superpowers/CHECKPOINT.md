@@ -585,3 +585,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 89f396381 MERGED (1ac806cfc): TL-1 + QA-1 PASS; contract 43/43, dirs 1050, sweeps 63/63; closed gate-113-89f396381. #129 closes with it. Dev3 → #128 (+ QA-1 NIT-1 test + ternary nit). Q4 record shape still open for user.
 - #124 064f082c9 QA-3 PASS (a/b/c/d all dead); regate 96/96 exit 0. Closing/merging next.
 - #124 064f082c9 MERGED (5ed169d9c): QA-3 PASS (a/b/c/d dead), regate 96/96 exit 0; closed gate-124-064f082c9. Post-merge after #113's finishes. Dev4 on #127.
+- #120 caccf5514 (Dev5, approof/sep-class, 2 files): gate /tmp/wt-120 running; TL-2 pre-read dispatched; plain tier. §7.17 range-vs-set logged.
+- #119: Dev5 has the sealRoutes-mode fix measured (matches TL-2 ruling); go-ahead given to commit + RED tests → SHA.
