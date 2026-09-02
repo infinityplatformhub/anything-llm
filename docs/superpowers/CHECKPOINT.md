@@ -567,3 +567,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #124 ab11d35a8 TL-1 PASS (754b7011d), 2 nits → residual. Awaiting QA-3 → close/merge.
 - #119 c44b059d3 TL-2 PASS (M1-M6 all caught; seal+throw both required; F4 marker oracle). Awaiting QA-2 → close/merge.
 - Hotfix 52a802fa4 gating (/tmp/wt-hf). #121 lane = SettingsSidebar/ only; #127 (Dev4) main.jsx clear.
+- #113 next SHA (after 6e0c17d73) pending push: aclCount allow+deny, bar role.grant (Dev3 corrected the reason: member does NOT hold document.share post-044000; workspace owner does → org-wide scope leak), RF-9 6 cases + 2 controls, D4/D5/D6/C dead, 20/20. TL-1 informed; QA-1 fires on arrival.
