@@ -146,7 +146,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;</code>
     idle: `<p class="sub" style="margin-top:18px">ยังไม่ได้ตรวจ — กด “ตรวจความพร้อม” เพื่อเริ่ม</p>`,
     running: `<p class="sub" style="margin-top:18px">กำลังตรวจ…</p>`,
     pass: `<p class="sub" style="margin-top:18px">ผ่านครบทุกข้อ ไปต่อได้</p>`,
-    fail: `<p class="sub" style="margin-top:18px">มี 1 ข้อที่ต้องแก้ก่อน และ 1 ข้อที่เตือนแต่ไปต่อได้</p>`
+    fail: `<p class="sub" style="margin-top:18px">ติด 1 ข้อที่ต้องแก้ก่อน (สิทธิ์สร้าง extension) — ไปต่อไม่ได้จนกว่าจะแก้แล้วตรวจใหม่ · อีก 1 ข้อเป็นคำเตือน ข้ามได้</p>`
   }[preflight];
 
   return `<div class="step-label">ขั้นที่ 2 จาก 5</div>
@@ -157,7 +157,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;</code>
       <button class="ghost" onclick="go(-1)">ย้อนกลับ</button>
       <div style="display:flex;gap:10px">
         <button class="ghost" onclick="runPreflight()">ตรวจอีกครั้ง</button>
-        <button class="primary" ${preflight==="pass"||preflight==="fail"?"":"disabled"} onclick="go(1)">ถัดไป</button>
+        <button class="primary" ${preflight==="pass"?"":"disabled"} onclick="go(1)">ถัดไป</button>
       </div>
     </div>`;
 }

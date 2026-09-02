@@ -52,6 +52,8 @@ input[type=text]{width:100%;margin-top:9px;padding:9px 11px;border:1px solid var
 .secrets{margin-top:10px;background:var(--code);border-radius:7px;padding:11px 13px}
 .secrets div{display:flex;justify-content:space-between;padding:4px 0;font-family:"IBM Plex Mono",monospace;font-size:12.2px}
 .secrets span:last-child{color:var(--muted)}
+.admin{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-top:20px}
+.next{color:var(--muted);font-size:13px;margin:16px 2px 0;border-top:1px dashed var(--line);padding-top:14px}
 .state-picker{max-width:860px;margin:0 auto;padding:10px 22px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .state-picker span{font-size:12.5px;color:var(--muted);margin-right:4px}
 .state-picker button{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:5px 13px;cursor:pointer;font-family:inherit;font-size:12.5px}
@@ -77,6 +79,15 @@ input[type=text]{width:100%;margin-top:9px;padding:9px 11px;border:1px solid var
   <p class="sub">ทุกอย่างที่ต้องมีก่อนเริ่มใช้งาน อยู่ในหน้านี้หน้าเดียว</p>
   <div class="bar" id="bar"></div>
   <div id="rows"></div>
+
+  <div class="admin">
+    <div class="title"><span>บัญชีผู้ดูแลระบบ</span><span class="tag">คุณกรอกเอง</span></div>
+    <p class="hint">ไม่ใช่ข้อที่ระบบตรวจให้ — บัญชีแรกที่สร้างจะเป็นผู้ดูแลโดยอัตโนมัติ</p>
+    <input type="text" value="admin" />
+    <input type="text" value="••••••••••••" />
+  </div>
+
+  <p class="next">ขั้นถัดไปหลังกด “เริ่มใช้งาน”: เลือกผู้ให้บริการ LLM และ embedder (หน้า onboarding เดิม) — หน้านี้เตรียมเครื่องให้พร้อมเท่านั้น ยังคุยกับ AI ไม่ได้จนกว่าจะตั้งค่า LLM เสร็จ</p>
 </div>
 
 <script>
@@ -145,9 +156,6 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;</pre>
     { t:"พื้นที่จัดเก็บและพอร์ต", tag:"จำเป็น", k:st(4,"ok"),
       h:"server/storage เขียนได้ · พอร์ต 3001 ว่าง", extra:"" },
 
-    { t:"บัญชีผู้ดูแลระบบ", tag:"ขั้นสุดท้าย", k: s==="pass"?"idle":"idle",
-      h:"บัญชีแรกเป็นผู้ดูแลโดยอัตโนมัติ",
-      extra:`<input type="text" value="admin" /><input type="text" value="••••••••••••" />` }
   ];
 
   document.getElementById("rows").innerHTML = list.map(r=>`
@@ -165,7 +173,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;</pre>
     idle:  [`ยังไม่ได้ตรวจ`, `กด “ตรวจความพร้อม” เพื่อเริ่ม`, false],
     running:[`กำลังตรวจ…`, `2 จาก 5 ข้อเสร็จแล้ว`, false],
     pass:  [`พร้อมใช้งาน`, `ผ่านครบทุกข้อ`, true],
-    fail:  [`ติด 1 ข้อ`, `อีก 1 ข้อเป็นคำเตือน ไปต่อได้`, false]
+    fail:  [`ติด 1 ข้อที่ต้องแก้ก่อน (สิทธิ์สร้าง extension)`, `อีก 1 ข้อเป็นคำเตือน (LC_CTYPE) ข้ามได้ — แก้ข้อที่ติดแล้วกด “ตรวจอีกครั้ง”`, false]
   }[s];
 
   document.getElementById("bar").innerHTML = `
