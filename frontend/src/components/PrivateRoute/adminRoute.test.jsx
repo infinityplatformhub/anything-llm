@@ -102,3 +102,25 @@ describe("#108 N8: the mailer page's guard matches the permission the server enf
     expect(screen.getByText("mailer settings")).toBeInTheDocument();
   });
 });
+
+describe("#108: the mailer route in main.jsx is actually mounted under AdminRoute", () => {
+  test("the source pairs /settings/mailer with AdminRoute", async () => {
+    // The behavioural tests above prove what AdminRoute DOES. They cannot prove the mailer
+    // page is behind it — a route swapped to ManagerRoute would leave every one of them green
+    // while the page shipped to managers who get 403 from every call.
+    //
+    // Asserted on the source because the route table is lazy-loaded: importing main.jsx to
+    // inspect it would execute the app's entry point, mount the router, and pull in every
+    // page. Reading the file is the cheaper truth, and it fails on exactly the edit that
+    // matters.
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const source = readFileSync(resolve(process.cwd(), "src/main.jsx"), "utf8");
+
+    const block = source.slice(source.indexOf('path: "/settings/mailer"'));
+    const routeEnd = block.indexOf("},\n      {");
+    expect(block.slice(0, routeEnd)).toMatch(
+      /AdminRoute Component=\{GeneralMailer\}/
+    );
+  });
+});

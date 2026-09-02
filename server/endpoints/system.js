@@ -212,6 +212,68 @@ async function workspaceCapabilities({ actor, engine, user, workspaceId }) {
   }
 }
 
+/**
+ * #116 — the two credentials `/system/update-password` rotates together.
+ *
+ * Named once so the read, the failure test and the restore cannot drift apart: a restore that
+ * covered a different set from the read would silently leave a key half-applied, which is the
+ * defect this exists to close.
+ */
+const INSTANCE_CREDENTIAL_KEYS = ["AUTH_TOKEN", "JWT_SECRET"];
+
+/** What the store holds for both keys right now. `null` means no row, which is restorable. */
+async function readInstanceCredentials() {
+  const { CredentialStore } = require("../models/credentialStore");
+  const prior = {};
+  for (const envKey of INSTANCE_CREDENTIAL_KEYS)
+    prior[envKey] = await CredentialStore.get(envKey);
+  return prior;
+}
+
+/** Whether an `updateENV` error concerns one of the two keys we compensate for. */
+function mentionsInstanceCredential(error) {
+  return INSTANCE_CREDENTIAL_KEYS.some((envKey) => String(error).includes(envKey));
+}
+
+/**
+ * Put the store back the way `readInstanceCredentials` found it.
+ *
+ * A prior value is re-`set`; a prior ABSENCE is a `delete`, not `set(key, "")` —
+ * `CredentialStore.set` refuses an empty value ("a credential must have a value; delete the
+ * row to clear it"), so writing one would fail and leave the row it meant to remove.
+ *
+ * Restoring an absence returns the instance to its pre-password state, which `validatedRequest`
+ * treats as passthrough. That is not a hole this opens: it is where the operator already was
+ * before the attempt, and it is recorded as a residual rather than papered over.
+ *
+ * Returns a message rather than throwing. This runs under the same conditions that just caused
+ * the persist failure, so it can fail too — and an exception here would 500, discarding the
+ * original error, which is the one naming the credential that is not durable.
+ *
+ * @returns {Promise<string|null>}
+ */
+async function restoreInstanceCredentials(prior) {
+  const { CredentialStore } = require("../models/credentialStore");
+  const failed = [];
+  for (const envKey of INSTANCE_CREDENTIAL_KEYS) {
+    const previous = prior[envKey];
+    try {
+      if (previous) {
+        const { error } = await CredentialStore.set(envKey, previous);
+        if (error) failed.push(envKey);
+      } else {
+        const removed = await CredentialStore.delete(envKey);
+        if (!removed) failed.push(envKey);
+      }
+    } catch {
+      failed.push(envKey);
+    }
+  }
+  return failed.length
+    ? `The previous ${failed.join(" and ")} could not be restored in the credential store.`
+    : null;
+}
+
 function systemEndpoints(app) {
   if (!app) return;
 
@@ -1033,14 +1095,56 @@ function systemEndpoints(app) {
             });
             return;
           }
+          // #116: read BOTH credentials before anything is written.
+          //
+          // `updateENV` persists secrets one at a time, so a store that takes the first and
+          // refuses the second leaves it holding one new value and one old. #104 made that
+          // visible — the error names the key — but visible is not undone, and the operator
+          // may never retry.
+          //
+          // The order that matters is JWT_SECRET stored, AUTH_TOKEN not. `ensure-secrets.js`
+          // regenerates JWT_SECRET at boot but deliberately NOT AUTH_TOKEN (random bytes
+          // there is a permanent lockout, ensure-secrets:9-19), so the next boot comes up with
+          // AUTH_TOKEN unset — and `validatedRequest`'s passthrough is a DISJUNCTION
+          // (`!AUTH_TOKEN || !JWT_SECRET`, validatedRequest.js:29-36), so the instance serves
+          // every request unauthenticated while the operator believes they set a password.
+          //
+          // Read before, not after: reading afterwards returns the value just written, so the
+          // "restore" would rewrite the new value and change nothing.
+          const priorCredentials = await readInstanceCredentials();
+
+          // JWTSecret first, AuthToken second. `updateENV` iterates in key order, and a
+          // store that is failing usually fails on the FIRST write it is asked for — so this
+          // order makes the common failure "JWT_SECRET not persisted, AUTH_TOKEN persisted",
+          // which the next boot repairs by regenerating JWT_SECRET, rather than the reverse,
+          // which leaves AUTH_TOKEN absent and the instance open.
+          //
+          // This is NOT the protection — the compensation below is, and it makes the order
+          // stop mattering. It is a cheaper outcome in the window before compensation runs,
+          // and it costs nothing.
           const update = await updateENV(
             {
-              AuthToken: newPassword,
               JWTSecret: v4(),
+              AuthToken: newPassword,
             },
             true
           );
           error = update?.error;
+
+          // Compensate in the STORE only, and only when the failure was one of these two keys
+          // — `updateENV` reports errors from checks and preUpdate too, and those never wrote
+          // anything to compensate for.
+          if (error && mentionsInstanceCredential(error)) {
+            const restoreError = await restoreInstanceCredentials(priorCredentials);
+            // `process.env` is deliberately NOT rolled back (#104's ruling): this process is
+            // already running on the new values, and unsetting them would log the operator out
+            // of the session they are making the change from and break every request in
+            // flight — on top of the credential still being lost at the next restart. The
+            // store is what determines durability; the environment is what determines now.
+            error =
+              `${error.trim()}\nThis instance is running on the new values, but they will not survive a restart.` +
+              (restoreError ? `\n${restoreError}` : "");
+          }
         }
         response.status(200).json({ success: !error, error });
       } catch (e) {

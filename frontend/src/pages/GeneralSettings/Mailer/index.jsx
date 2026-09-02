@@ -72,9 +72,18 @@ export default function GeneralMailer() {
     Mailer.settings().then((response) => {
       if (!mounted) return;
       if (response?.settings) {
-        const { hasPassword, ...stored } = response.settings;
+        // QA-1 (#108): PICK the known keys rather than spreading everything except
+        // `hasPassword`. A spread is allow-by-default — it accepts whatever the response
+        // happens to carry, so the day a secret-bearing field is added to this endpoint (or a
+        // proxy injects one) it lands in form state and renders. Listing the fields means a
+        // new one is ignored until someone adds it here on purpose.
+        const stored = Object.fromEntries(
+          Object.keys(BLANK)
+            .filter((key) => response.settings[key] !== undefined)
+            .map((key) => [key, String(response.settings[key])])
+        );
         setSettings({ ...BLANK, ...stored });
-        setHasStoredPassword(Boolean(hasPassword));
+        setHasStoredPassword(Boolean(response.settings.hasPassword));
         // An already-verified deployment opens on the status view rather than on an empty
         // form, so an admin arriving to check the configuration is not asked to reconfigure
         // it. `verified` comes from the server; it is not a claim this page can make.

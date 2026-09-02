@@ -164,6 +164,79 @@ describe("#108 N7: the SMTP password does not leak into the page or storage", ()
     ).toBeInTheDocument();
   });
 
+  test("a HOSTILE server response carrying a secret is not rendered", async () => {
+    // QA-1 + TL-2 gap on #108. Every other test trusts the server to send `hasPassword` and
+    // never a value — which it does today. This one assumes it does NOT: a later change to the
+    // endpoint, or a proxy, could put a secret-bearing field in the body.
+    //
+    // The page used to spread everything except `hasPassword` into form state, which is
+    // allow-by-default: `smtp_password` would have landed in `settings` and rendered. It now
+    // picks the known keys, so an unrecognised field is dropped. This test is what keeps that
+    // true — a refactor back to a spread fails here rather than shipping.
+    mockFetch({
+      settings: {
+        settings: {
+          ...settingsResponse().settings,
+          hasPassword: true,
+          smtp_password: "leaked-secret-from-server",
+          password: "also-leaked",
+        },
+        verified: false,
+      },
+    });
+    renderPage();
+
+    const field = await screen.findByLabelText(/^Password$/i);
+    expect(field.value).toBe("");
+    expect(document.body.innerHTML).not.toContain("leaked-secret-from-server");
+    expect(document.body.innerHTML).not.toContain("also-leaked");
+
+    // The assertions above are necessary but NOT sufficient, and mutation proved it: reverting
+    // the pick to the old spread left them all green, because neither injected key is rendered
+    // by any field. The leak a spread actually causes is an unknown key reaching form STATE —
+    // so this asserts the state directly, by sending a hostile value under a key the form DOES
+    // render and checking it is dropped rather than displayed.
+    expect(screen.getByRole("textbox", { name: /SMTP host/i }).value).toBe("");
+  });
+
+  test("only the known settings keys reach form state — a spread would leak the rest", async () => {
+    // The mutation-killing half. `smtp_host` is a rendered field, so a hostile response can be
+    // detected through it; the point is the MECHANISM, not this key. With the old
+    // allow-by-default spread, any field the server sends lands in `settings` and is submitted
+    // back on the next test/save — including one added to the endpoint years from now.
+    //
+    // Asserted through what the page SENDS rather than what it shows: an unknown key that
+    // renders nowhere but rides along in the POST body is exactly the leak that is invisible
+    // on screen.
+    mockFetch({
+      settings: {
+        settings: {
+          ...settingsResponse().settings,
+          smtp_host: "real.example.com",
+          smtp_password: "leaked-secret-from-server",
+        },
+        verified: false,
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("button", { name: /Continue/i });
+
+    await user.type(screen.getByLabelText(/^Password$/i), PASSWORD);
+    await user.click(screen.getByRole("button", { name: /Continue/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /Send a test to/i }),
+      "me@example.com"
+    );
+    await user.click(screen.getByRole("button", { name: /Send test/i }));
+
+    await waitFor(() => expect(sentBodies("/mailer/test")).toHaveLength(1));
+    const body = sentBodies("/mailer/test")[0];
+    expect(body.smtp_host).toBe("real.example.com");
+    expect(body.smtp_password).toBeUndefined();
+    expect(body.password).toBe(PASSWORD);
+  });
+
   test("the recipient field is sent as `to`, the name the server reads", async () => {
     // Guards a bug this issue already made once: the mockup's field id is `testto`, and the
     // obvious client name is `sendTo`. The server reads `body.to` (endpoints/mailer.js:95),
