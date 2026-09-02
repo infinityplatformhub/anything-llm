@@ -853,3 +853,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Node 26 vs .nvmrc 22 → jsdom localStorage undefined → merged adminRoute 9/9 red. Opened #139 (plain: pretest guard). §7.17.
 - V8 contract + mockup LoadingChat note landed (Dev4 b493873ac).
 - #138 queue: suite 9/9 at 2cdb884ef; QM-1..5 killed with distinct sets (QM-5 = run-site-hardcoded reds RF-3b only → split justified). TL-1 blockers (2)/(3) were already fixed in 3836171c1/866d2db29. RULING → TL-1: sync-now endpoint permission (new seeded `directory.sync` vs reuse). Remaining: handler + schedule via materialization, RF-6 exact-N, _backoff skip + witness, ledger; ETA 45-60 min. #139 assigned to Dev2 (pretest node guard).
+- #132 TL-1 RED pre-read (6da7003ee): ready, no test changes; two contract items: (1) evidence contract names frontend suite AND systemReadCapabilityExposed.test.js; (2) #132 ships SystemReadRoute as-is (not the prop pattern) + residual line pointing at the audit issue.
