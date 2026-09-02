@@ -137,9 +137,25 @@ withDb("checks against a healthy database", () => {
   });
 
   it("says outright that the permission probe writes and rolls back (ruling 2c)", async () => {
-    const results = await doctor.runChecks(base());
-    const permitted = results.find((r) => r.id === "ext.permitted");
-    expect(permitted.detail.toLowerCase()).toMatch(/roll(ed)? ?back|rollback/);
+    // Only meaningful when something is actually probed, and an extension is
+    // probed only when it is not installed yet. On a migrated database pg_trgm
+    // is already there, so ask about pgvector as well to reach the branch that
+    // writes. If that is installed too, there is nothing to disclose and the
+    // detail correctly says so instead.
+    // Asking about pgvector as well would reach the probing branch on a server
+    // that ships it — but stock `postgres:16`, which CI runs, does not, and
+    // there the answer is "not checked" rather than a probe. So assert the
+    // property that holds on every server: whenever something WAS probed, the
+    // detail says it was rolled back.
+    const results = await doctor.runChecks({
+      ...base(),
+      vectorDb: "pgvector",
+    });
+    const detail = results
+      .find((r) => r.id === "ext.permitted")
+      .detail.toLowerCase();
+    if (detail.includes("probed")) expect(detail).toMatch(/rolled back/);
+    expect(detail).toMatch(/probed|already installed|not checked/);
   });
 
   it("distinguishes 'already installed' from 'permitted to install' (ruling 6)", async () => {
@@ -149,6 +165,64 @@ withDb("checks against a healthy database", () => {
     const results = await doctor.runChecks(base());
     const permitted = results.find((r) => r.id === "ext.permitted");
     expect(permitted.detail).toMatch(/installed|permitted/i);
+  });
+
+  it("does not require the vector extension on a default install", async () => {
+    // TL-2: stock `postgres:16` — the image in docker-compose.yml and in CI —
+    // does not ship pgvector, and no migration creates it. The default
+    // VECTOR_DB is lancedb (utils/helpers/index.js:88), which never touches
+    // PostgreSQL. Demanding `vector` always would block the boot of every
+    // default install, and turn this project's own CI red.
+    const results = await doctor.runChecks({ ...base(), vectorDb: "lancedb" });
+    expect(doctor.requiredExtensions("lancedb")).toEqual(["pg_trgm"]);
+    expect(results.find((r) => r.id === "ext.available").ok).toBe(true);
+  });
+
+  it("says why vector was not checked, rather than staying silent about it", async () => {
+    // An operator who meant to use pgvector must be able to tell "checked and
+    // fine" from "not checked at all" — otherwise a green preflight hides the
+    // one requirement their configuration actually has.
+    const results = await doctor.runChecks({ ...base(), vectorDb: "lancedb" });
+    expect(results.find((r) => r.id === "ext.available").detail).toMatch(
+      /VECTOR_DB is not pgvector/
+    );
+  });
+
+  it("requires vector once VECTOR_DB is pgvector", async () => {
+    expect(doctor.requiredExtensions("pgvector")).toEqual([
+      "pg_trgm",
+      "vector",
+    ]);
+  });
+
+  it("treats VECTOR_DB unset the same as a non-pgvector value", async () => {
+    // `??` on an unset variable, not `||` on an empty string: the failure to
+    // get this right is a doctor that demands pgvector from every install that
+    // has not chosen a vector store yet.
+    expect(doctor.requiredExtensions(undefined)).toEqual(["pg_trgm"]);
+    expect(doctor.requiredExtensions("")).toEqual(["pg_trgm"]);
+    expect(doctor.requiredExtensions("PGVector")).toEqual(["pg_trgm", "vector"]);
+  });
+
+  it("blocks when a needed extension is not shipped, and does not blame permissions", async () => {
+    // The pgvector-on-stock-postgres:16 case, driven directly: a server that
+    // does not ship the extension must fail ext.available and must NOT report
+    // ext.permitted as a permission the operator can request.
+    const { Client } = require("pg");
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      const [available, permitted] = await doctor.checkExtensions(client, [
+        "an_extension_no_server_ships",
+      ]);
+      expect(available.ok).toBe(false);
+      expect(available.level).toBe("block");
+      expect(available.detail).toMatch(/not a permission problem/i);
+      expect(permitted.ok).toBe(false);
+      expect(permitted.detail).toMatch(/cannot be created by anyone/i);
+    } finally {
+      await client.end();
+    }
   });
 
   it("reports availability separately from permission (ruling 2d)", async () => {

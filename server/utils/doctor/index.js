@@ -17,7 +17,24 @@ const fs = require("fs");
 const { Client } = require("pg");
 const { thaiTrigramSupport } = require("../chatSearch/localeSupport");
 
-const REQUIRED_EXTENSIONS = ["vector", "pg_trgm"];
+// pg_trgm is unconditional: migration 20260902100000 creates gin_trgm_ops
+// indexes on every install, so a database that cannot have it cannot migrate.
+//
+// `vector` is NOT. The default VECTOR_DB is lancedb (utils/helpers/index.js:88),
+// which stores vectors on disk and never touches PostgreSQL; no migration
+// creates the extension either. It matters only when the operator has chosen
+// `VECTOR_DB=pgvector` (utils/helpers/index.js:117). Demanding it always would
+// block the boot of every default install on stock `postgres:16`, which does
+// not ship pgvector — including this project's own CI.
+const ALWAYS_REQUIRED_EXTENSIONS = ["pg_trgm"];
+const PGVECTOR_EXTENSION = "vector";
+
+/** Which extensions this instance actually needs, given its configuration. */
+function requiredExtensions(vectorDb = process.env.VECTOR_DB) {
+  return String(vectorDb ?? "").toLowerCase() === "pgvector"
+    ? [...ALWAYS_REQUIRED_EXTENSIONS, PGVECTOR_EXTENSION]
+    : [...ALWAYS_REQUIRED_EXTENSIONS];
+}
 const REQUIRED_SECRETS = [
   "JWT_SECRET",
   "SIG_KEY",
@@ -52,12 +69,12 @@ const CHECKS = [
   {
     id: "ext.available",
     level: "block",
-    remedy: `Install the extension packages on the database SERVER: ${REQUIRED_EXTENSIONS.join(", ")}. This is not a permission problem — a role cannot be granted an extension the server does not ship.`,
+    remedy: `Install the missing extension package on the database SERVER. pg_trgm ships with PostgreSQL's contrib package; \`vector\` (pgvector) is a separate install and is only needed when VECTOR_DB=pgvector. This is not a permission problem — a role cannot be granted an extension the server does not ship.`,
   },
   {
     id: "ext.permitted",
     level: "block",
-    remedy: `Have a superuser run: ${REQUIRED_EXTENSIONS.map((name) => `CREATE EXTENSION IF NOT EXISTS ${name};`).join(" ")} — or grant the application role the right to create them.`,
+    remedy: `Have a superuser run CREATE EXTENSION IF NOT EXISTS <name>; for the extension named above, or grant the application role the right to create it.`,
   },
   {
     id: "env.writable",
@@ -248,10 +265,10 @@ async function checkLocale(client) {
   );
 }
 
-async function checkExtensions(client) {
+async function checkExtensions(client, needed) {
   const available = [];
   const unavailable = [];
-  for (const name of REQUIRED_EXTENSIONS) {
+  for (const name of needed) {
     const { rows } = await client.query(
       "SELECT installed_version FROM pg_available_extensions WHERE name = $1",
       [name]
@@ -265,7 +282,11 @@ async function checkExtensions(client) {
       ? result(
           "ext.available",
           true,
-          `The server ships every required extension: ${REQUIRED_EXTENSIONS.join(", ")}.`
+          `The server ships every extension this configuration needs: ${needed.join(", ")}.${
+            needed.includes(PGVECTOR_EXTENSION)
+              ? ""
+              : ` \`${PGVECTOR_EXTENSION}\` is not checked, because VECTOR_DB is not pgvector; set VECTOR_DB=pgvector and re-run if you intend to store vectors in PostgreSQL.`
+          }`
         )
       : result(
           "ext.available",
@@ -327,6 +348,7 @@ async function checkExtensions(client) {
  * @returns {Promise<Array<{id:string,level:string,ok:boolean,detail:string,remedy:string}>>}
  */
 async function runChecks({
+  vectorDb = process.env.VECTOR_DB,
   databaseUrl = process.env.DATABASE_URL,
   envPath = process.env.ENV_FILE_PATH ||
     require("path").join(__dirname, "../../.env"),
@@ -369,7 +391,7 @@ async function runChecks({
       `server_version_num is ${versionNum}; the minimum is ${MIN_SERVER_VERSION_NUM} (PostgreSQL 16).`
     );
 
-    const extensions = await checkExtensions(client);
+    const extensions = await checkExtensions(client, requiredExtensions(vectorDb));
 
     const localeCheck = await checkLocale(client);
 
@@ -407,7 +429,13 @@ const exitCodeFor = (results) =>
 module.exports = {
   CHECKS,
   CHECK_IDS,
-  REQUIRED_EXTENSIONS,
+  ALWAYS_REQUIRED_EXTENSIONS,
+  PGVECTOR_EXTENSION,
+  requiredExtensions,
+  // Exported for the test that drives the "server does not ship it" branch:
+  // reaching it through runChecks would need a PostgreSQL missing an extension
+  // it actually has, which is the one situation a dev box cannot arrange.
+  checkExtensions,
   REQUIRED_SECRETS,
   MIN_SERVER_VERSION_NUM,
   levelOf,

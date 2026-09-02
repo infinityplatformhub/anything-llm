@@ -87,7 +87,17 @@ Ruling: (TL-2 OBS-5) text assertions on the shell file for `exec`, for `&&` betw
 Ruling: (TL-2 note) generating `JWT_SECRET` alone does not close the no-auth passthrough. That branch is a disjunction, `!AUTH_TOKEN || !JWT_SECRET` (`validatedRequest.js:29-36`), so with AUTH_TOKEN still absent a fresh install stays open until the operator picks a password — which is what the onboarding flow expects. Recorded in the script's header comment beside `clearStoredCredential`'s own statement that AUTH_TOKEN is instance authentication (`updateENV.js:1886`).
 ถ้าผิด: a future reader "fixes" the asymmetry by generating AUTH_TOKEN too, and reintroduces the lockout.
 
+Ruling: (TL-2) `vector` is required only when `VECTOR_DB=pgvector`; `pg_trgm` is required always. The default vector store is lancedb (`utils/helpers/index.js:88`), which never touches PostgreSQL, and no migration creates the `vector` extension — whereas migration `20260902100000` creates gin_trgm_ops indexes on every install.
+ถ้าผิด: stock `postgres:16` — the image in `docker-compose.yml:9` and in `.github/workflows/ci.yml:16` — does not ship pgvector, so the doctor would block the boot of every default install and turn this project's own CI red. Found by TL-2 on a machine without pgvector; my own gate passed at `3165b913a` only because my database happened to have it.
+
+Ruling: when `vector` is not checked, `ext.available` says so and names the setting that would make it checked.
+ถ้าผิด: an operator who intends to use pgvector reads a green preflight that silently skipped their one real requirement.
+
+Ruling: `requiredExtensions` compares case-insensitively and treats an unset `VECTOR_DB` as not-pgvector.
+ถ้าผิด: `VECTOR_DB=PGVector` skips the check the operator needs, and an install that has not chosen a vector store yet is asked for an extension it will never use.
+
 ## Residual
 
 - **QA-3 ruling 1, the half that is not testable here.** `POST /system/update-password` with `usePassword:false` blanks `AUTH_TOKEN` and `JWT_SECRET` in memory only (`endpoints/system.js:705-707`) — no `updateENV` call, nothing written. Three tests cover what O2a controls: a restart finds no `AUTH_TOKEN`, `JWT_SECRET` is not rotated, and ensure-secrets never writes `AUTH_TOKEN` back. The in-memory/on-disk divergence itself is pre-existing behaviour outside this issue's diff; flagged for O2b, where the React step meets it.
+- **The doctor cannot be fully exercised on a dev box.** `ext.available`'s failing branch needs a server missing an extension it actually has, so it is driven through the exported `checkExtensions` with a made-up extension name rather than through `runChecks`. The `ext.permitted` probe likewise only reaches its writing branch on a server that ships an extension not yet installed; the test asserts the property that holds either way — whenever something WAS probed, the detail says it was rolled back — rather than pinning one server's shape.
 - **`providerDocIdCallSites` and `samlRoutesHttp` fail under parallel jest, pass with `--runInBand`.** Both pass alone and on a stashed tree. `server/package.json:18` already runs the suite with `--runInBand`, so the gate is unaffected; noted because `--findRelatedTests` without it looks like two broken suites.
