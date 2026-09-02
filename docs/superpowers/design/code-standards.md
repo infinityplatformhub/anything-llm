@@ -997,3 +997,4 @@ Every reviewer rejection names a class; PMO repeats it in the next dispatch to a
 - **Fail-open default** (#40 getWithUser(null)): missing id widens a filter. Guard before lookup, test that lookup is not called.
 - **Reuse ruling without reading** (#96): "reuse X" when X answers a different question. Techlead confirms structure before dispatch.
 - **Harness silence** (§7.9l, #40 `0 total`, TL-2 wrong path 76/76): a suite that never ran reports green. Always confirm the suite count moved.
+- **Merge verified by title, not content** (#49 cb0e3b75e: merge commit landed docs+tests, zero source, because a prior revert of the same ancestor won). After every merge: `git show HEAD:<file> | grep -c <new symbol>` on one production file, and run the issue's contract on main before closing.

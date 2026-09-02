@@ -339,3 +339,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #49: TL-2 PASS 2c9ae1f0f (110/110, T2/T4c/T-abs/T-rot/T7/T8 red, route +1 only). All verdicts in; close/merge on Dev4's cross-stamp test SHA (regate contract only).
 - #49 4bb9dc97e merged 528bb3f99, closed (infi-run:gate-49-4bb9dc97e). QA-1 + TL-2 PASS; cross-stamp tests added. Residuals → residual-risks + #110. Carries S11b recon b514727b7 (earlier revert superseded). wt-49/g49 reaped. 76/110.
 - USER: §7.11 relaxed (เอา) — see code-standards §7.11a. PMO classifies risk; TL pre-read stays. Reject-lesson rule added to CLAUDE.md + §7.17.
+- #49: first merge cb0e3b75e carried no source (revert 35d3dbcb4 won); reapplied 30b26cecd, content verified (firstIssuedAt 18, mint route 2), 107/107 on main, closed. Lesson → §7.17. Dev4 → #111 frontend harness (plain).
+- #96 dadac7b3c gate running at /tmp/wt-96 (g96); QA-3 + TL-1 dispatched (auth). S4a = #113 (auth, depends #96); Dev3 Q3/Q4 (emailVerified exemption scope; "Lark wins" = re-point identity_links = takeover shape) → user.
+- #112 O2b recon merged; tier: preflight route = auth (unauth only while no user, else system.write; §7.1d both states), UI/backfill = plain.
+- #104: real defect updateENV.js:1687 drops persistCredential return (JWT rotate not persisted; sessions die on restart, 200). Option 1 reverses #80 → TL-1 blast-radius confirm pending. #97 closed (A), lesson #109.
