@@ -8,6 +8,7 @@ import {
 import System from "./models/system";
 import { useNavigate } from "react-router-dom";
 import { safeJsonParse } from "@/utils/request";
+import { resetCapabilities } from "@/hooks/useCapabilities";
 
 export const AuthContext = createContext(null);
 export function AuthProvider(props) {
@@ -33,6 +34,10 @@ export function AuthProvider(props) {
       setStore({ user, authToken });
     },
     unsetUser: () => {
+      // #40 task 3: the capability map is cached per session, not per user. A
+      // second login in the same tab would otherwise read the previous user's
+      // answers and gate the UI on their grants.
+      resetCapabilities();
       localStorage.removeItem(AUTH_USER);
       localStorage.removeItem(AUTH_TOKEN);
       localStorage.removeItem(AUTH_TIMESTAMP);
@@ -53,6 +58,8 @@ export function AuthProvider(props) {
       if (success && refreshedUser === null) return;
 
       if (!success) {
+        // Same reason as unsetUser: this branch is a logout too.
+        resetCapabilities();
         localStorage.removeItem(AUTH_USER);
         localStorage.removeItem(AUTH_TOKEN);
         localStorage.removeItem(AUTH_TIMESTAMP);
