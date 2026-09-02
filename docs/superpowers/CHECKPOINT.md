@@ -534,3 +534,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 TL-2 ruling (4ea7c8dcf): do NOT widen system.read; client guard ManagerRoute→AdminRoute (Dev1 to confirm main.jsx:407 SHA); F1 route table, F2 multiUserMode true, F7 drift fixture. Dev1 after #121.
 - #119 TL-2 pre-read: .stack fails (sub-app no .stack; Object.assign fake; empty-router-filled-later beats recursion) → seal the use() argument by SEALED_METHODS; F2/F3/F8/F9 required. Relayed to Dev5.
 - Killed 22 stale jest procs in main server dir (>10 min, other sessions/earlier post-merges).
+- #119 136d069ae (approof/seal-use) NOT gated: still `.stack` discriminator (sealRoutes.js:95), pushed before TL-2 ruling reached Dev5. Dev5 reworking: SEALED_METHODS discriminator, seal use() argument, F2/F3/F8/F9.
+- Post-merge #125 frontend half still running (pid 38683).
