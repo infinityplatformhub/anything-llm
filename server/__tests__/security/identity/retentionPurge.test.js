@@ -23,6 +23,9 @@ function fakeDb({ loginStateDeleted = 0 } = {}) {
         return { count: loginStateDeleted };
       },
     },
+    // S2 (#43) added a second identity sweep to the same job. Stubbed to "nothing
+    // to delete" so these tests keep speaking only about the login-state half.
+    identity_assertion_ids: { deleteMany: async () => ({ count: 0 }) },
   };
 }
 

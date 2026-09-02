@@ -76,7 +76,17 @@ function verifyAndExtract(xml, publicKeyPem) {
       `the assertion read (${assertionId}) is not the one signed (${signedIds[0]})`
     );
 
-  const nameId = select("string(//saml:Subject/saml:NameID/text())", doc);
+  // Techlead FINDING-1: past this point `doc` is off limits. The signed
+  // assertion has been identified, so every read is relative to THAT element —
+  // `./`, anchored at assertions[0], never `//` against the document.
+  //
+  // A document-wide read is an XSW hole even when all three guards above pass: a
+  // forged `<saml:Subject>` loose in `<samlp:Extensions>` is not an assertion, so
+  // the assertion count is still one and it is still the one signed, but `//`
+  // finds the attacker's Subject first on document order. The same applies to
+  // every other field the driver will read — Conditions, AudienceRestriction,
+  // InResponseTo, AttributeStatement.
+  const nameId = select("string(./saml:Subject/saml:NameID/text())", assertions[0]);
   if (!nameId) throw new Error("no NameID");
   return String(nameId);
 }
@@ -148,6 +158,44 @@ describe("SAML library evaluation — xml-crypto as the candidate (recon §5)", 
     }
     expect(vouched).not.toBe(forgedNameId);
     expect(vouched).toBeNull();
+  });
+
+  test("DoD 3d: XSW — a forged Subject OUTSIDE any assertion is refused", () => {
+    // Techlead FINDING-1. This forgery passes every assertion-level guard: one
+    // signature, one assertion, and the assertion read IS the one signed. The
+    // hole was that the NameID was then read document-wide, so a bare Subject
+    // in Extensions won on document order.
+    const { xml, forgedNameId } = fixtures.xswUnwrappedSubject({
+      privateKeyPem: idp.privateKeyPem,
+      publicKeyPem: idp.publicKeyPem,
+    });
+    let vouched = null;
+    try {
+      vouched = verifyAndExtract(xml, idp.publicKeyPem);
+    } catch {
+      vouched = null;
+    }
+    // Here the safe outcomes differ from the other XSW cases: the signed
+    // assertion is intact and legitimate, so returning ITS NameID is correct.
+    // Returning the attacker's is the breach.
+    expect(vouched).not.toBe(forgedNameId);
+    expect(vouched).toBe("person@example.com");
+  });
+
+  test("DoD 2b: a key from the assertion's own KeyInfo is never trusted", () => {
+    // SAML's alg-confusion. The document is internally consistent — it carries
+    // the certificate its signature verifies against — so a verifier that reads
+    // its key from KeyInfo is asking the assertion to vouch for itself, and
+    // anyone can generate a keypair. The key comes from configuration.
+    const { xml, attackerPublicKeyPem } = fixtures.selfSignedWithKeyInfo();
+
+    // Against the CONFIGURED key: refused, as it must be.
+    expect(() => verifyAndExtract(xml, idp.publicKeyPem)).toThrow();
+
+    // And the proof that it is a real forgery rather than malformed XML: it
+    // verifies perfectly against the key it brought with it. That is precisely
+    // what makes trusting KeyInfo fatal.
+    expect(verifyAndExtract(xml, attackerPublicKeyPem)).toBe("person@example.com");
   });
 
   test("a tampered assertion body invalidates the signature", () => {

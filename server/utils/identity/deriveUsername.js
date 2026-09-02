@@ -42,6 +42,11 @@ function sanitize(text) {
  * name — so the same person arriving from an IdP that emits NFD would derive a
  * different username than the one they already own.
  */
+// LOAD-BEARING: the STORE side does not normalize, and does not need to, only
+// because `users.username` is constrained to `^[a-z][a-z0-9._@-]*$` — which
+// admits no uppercase and no non-NFC form — and Prisma compares it with
+// `mode: "insensitive"`. Widen that regex and the store side must normalize too,
+// or the two sides drift and the collision rule silently stops firing.
 function normalizeForCompare(text) {
   return String(text).normalize("NFC").toLowerCase();
 }

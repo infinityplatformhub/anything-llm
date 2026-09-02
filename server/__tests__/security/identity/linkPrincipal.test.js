@@ -29,6 +29,7 @@ const { deriveUsername } = require("../../../utils/identity/deriveUsername");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
+  IdentityUnavailableError,
 } = require("../../../utils/identityProviders/errors");
 
 beforeAll(async () => {
@@ -290,6 +291,32 @@ describe("R1 — email collision with an existing local account", () => {
     // R1's email-match refusal, not the handle rule's, and not a second account.
     expect(error.message).toMatch(/already linked to another identity/i);
     expect(await prisma.users.count()).toBe(usersBefore);
+  });
+
+  test("NIT-2: exhausting every candidate is UNAVAILABLE (retryable), not a conflict", async () => {
+    // Five random 4-byte suffixes all colliding is not "this identity belongs to
+    // someone else, an admin must sort it out" — it is the database misbehaving,
+    // and the very same login will almost certainly succeed on the next attempt.
+    // Only IdentityUnavailableError is retryable, and the caller decides what to
+    // do with the answer based on that flag.
+    const failing = {
+      identity_links: {
+        findUnique: async () => null,
+        findFirst: async () => null,
+      },
+      users: {
+        findFirst: async () => null,
+        create: async () => {
+          const error = new Error("duplicate key");
+          error.code = "P2002";
+          throw error;
+        },
+      },
+    };
+
+    const error = await linkPrincipal(principal(), { db: failing }).catch((e) => e);
+    expect(error).toBeInstanceOf(IdentityUnavailableError);
+    expect(error.retryable).toBe(true);
   });
 
   test("the refusal writes nothing — no user, no link", async () => {

@@ -68,6 +68,56 @@ and the retry quietly creates a second account for one mailbox; if this is wrong
 same address federated twice is refused where it might have been linkable, which is
 R1's intended answer anyway.
 
+
+## Techlead FINDING-1 (medium) — the read scope after the ID match
+
+FINDING-1 was real and reproduced RED before the fix: the harness verified the right
+assertion and then read `//saml:Subject` document-wide, so a forged `<saml:Subject>`
+loose in `<samlp:Extensions>` was returned as the vouched-for NameID. It passed every
+existing guard — one signature, one assertion, and the assertion read WAS the one
+signed — because a bare Subject is not an Assertion.
+
+Ruling: after the ID match, `doc` is off limits — every subsequent read (NameID,
+Conditions, AudienceRestriction, SubjectConfirmationData/@InResponseTo,
+AttributeStatement) is anchored at the verified `assertions[0]` with `./`, never `//`
+against the document; if this is wrong we pay one extra variable and nothing else,
+whereas the other way an attacker logs in as anyone.
+
+Ruling: the verifier's key comes from configuration ONLY — never from the assertion's
+own `KeyInfo`/`X509Certificate`, even when the document verifies against it — because
+a self-signed assertion carrying its own certificate is internally consistent and
+anyone can generate a keypair; if this is wrong an operator must configure the
+certificate by hand, which is the intended cost.
+
+Ruling: `identity_assertion_ids` claims by INSERT against the unique constraint, never
+read-then-write — two simultaneous presentations both read "not seen" and both get in,
+and a replay sent twice at once is not a hard attack to mount; if this is wrong we
+catch a P2002 we could have avoided asking about.
+
+Ruling (NIT-2): exhausting all five username candidates raises `IdentityUnavailableError`
+(retryable), not `IdentityConflictError` — five random 4-byte collisions is the database
+misbehaving, not "this identity belongs to someone else, an admin must resolve it"; if
+this is wrong a caller retries a login that was never going to succeed.
+
+Ruling (NIT-1): the `identity_links.email` NFC backfill ships in slot `082000` alongside
+the tables, not a new slot — the normalization and the data it assumes must land
+together, or a row written in decomposed form silently misses the R1 email check; PG16
+in the test stack was verified to have `normalize()` before relying on it.
+
+Ruling: the STORE side deliberately does not normalize, and the reason is written at
+`normalizeForCompare` — it is load-bearing on `users.username` being constrained to
+`^[a-z][a-z0-9._@-]*$` plus Prisma's insensitive compare. Widen that regex and the store
+side must normalize too.
+
+### Mutation proof (FINDING-1 round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `//saml:Subject` against `doc` instead of `./` at `assertions[0]` | DoD 3d | killed exactly that one; vouched `attacker@example.com` |
+| drop the UNIQUE from the assertion-ID index | replay + schema tests | killed 4, all of them replay-related |
+| read-then-write claim | (survived — the DB constraint still holds) documented, not a gap |
+| NIT-2 back to `IdentityConflictError` | the NIT-2 test | killed exactly that one |
+
 ## Mutation proof
 
 | mutant | expected kill | result |
@@ -78,5 +128,10 @@ R1's intended answer anyway.
 
 ## Evidence
 
-`__tests__/security/identity` — Tests: 101 passed, 101 total (10 suites), against real
-Postgres via `prisma migrate deploy`.
+`__tests__/security/identity` — Tests: 123 passed, 123 total (13 suites), against real
+Postgres via `prisma migrate deploy` (§7.1a, never `db push`).
+
+Note for anyone re-running these: jest must run under node@22. Under the default node 26
+`jsonwebtoken` throws at import and three suites fail to LOAD — which jest reports as
+suite-level failures while the test count still reads green, so "58 passed" appeared
+next to three broken suites.

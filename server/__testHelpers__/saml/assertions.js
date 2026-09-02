@@ -211,6 +211,59 @@ const fixtures = {
     };
   },
 
+  /**
+   * DoD 3d — XSW: the wrapper is not an Assertion at all.
+   *
+   * Techlead FINDING-1. Every guard so far asks about ASSERTIONS: one signature,
+   * one assertion, and the assertion read is the one signed. A forged
+   * `<saml:Subject>` sitting loose in `<samlp:Extensions>` satisfies all three —
+   * there is still exactly one assertion, and it is genuinely signed — while a
+   * document-wide `//saml:Subject` read picks the attacker's up first, because
+   * it comes earlier in document order.
+   *
+   * The lesson generalizes past NameID: once the signed assertion is
+   * identified, every subsequent read must be relative to THAT element.
+   * Conditions, AudienceRestriction, InResponseTo and the AttributeStatement are
+   * all forgeable this way.
+   */
+  xswUnwrappedSubject({ privateKeyPem, publicKeyPem, forgedNameId = "attacker@example.com" } = {}) {
+    const realId = `_assert-${crypto.randomBytes(8).toString("hex")}`;
+    const signedReal = sign(assertionXml({ assertionId: realId }), privateKeyPem, {
+      referenceId: realId,
+      publicKeyPem,
+    });
+    // A bare Subject, belonging to no assertion, placed ahead of the real one.
+    const forgedSubject = `<saml:Subject xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${forgedNameId}</saml:NameID></saml:Subject>`;
+    return {
+      xml: responseXml(
+        `<samlp:Extensions>${forgedSubject}</samlp:Extensions>${signedReal}`
+      ),
+      assertionId: realId,
+      forgedNameId,
+    };
+  },
+
+  /**
+   * DoD 2b — SAML's alg-confusion: a self-signed assertion carrying its own
+   * certificate in KeyInfo.
+   *
+   * The XML is internally consistent — the signature verifies against the key
+   * the document itself supplies — which is exactly the trap. A verifier that
+   * takes its key from KeyInfo is asking the assertion to vouch for itself, and
+   * anyone can generate a keypair. The key must come from configuration.
+   */
+  selfSignedWithKeyInfo(options = {}) {
+    const attacker = makeIdpKeypair();
+    return {
+      ...fixtures.valid({
+        privateKeyPem: attacker.privateKeyPem,
+        publicKeyPem: attacker.publicKeyPem,
+        ...options,
+      }),
+      attackerPublicKeyPem: attacker.publicKeyPem,
+    };
+  },
+
   /** DoD 4 — NotOnOrAfter already passed. */
   expired(options = {}) {
     return fixtures.valid({

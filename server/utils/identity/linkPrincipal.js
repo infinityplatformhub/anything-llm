@@ -17,6 +17,7 @@ const {
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
+  IdentityUnavailableError,
 } = require("../identityProviders/errors");
 
 // R2 (PMO ruling): a first-time SSO user is a plain member. Group→role mapping
@@ -177,9 +178,14 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
       lastError = error;
     }
   }
+  // Techlead NIT-2: exhausting five random suffixes is not a conflict. A
+  // conflict says "this identity belongs to someone else, an admin must sort it
+  // out"; five 4-byte collisions in a row says the database is not behaving, and
+  // the same login will very likely succeed on the next attempt. Only
+  // IdentityUnavailableError is retryable, which is what this actually is.
   if (!user)
-    throw new IdentityConflictError(
-      "Could not create an account for this identity. Contact an administrator.",
+    throw new IdentityUnavailableError(
+      "Could not create an account for this identity. Please try again.",
       { cause: lastError }
     );
 

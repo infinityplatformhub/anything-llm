@@ -416,6 +416,53 @@ model identity_login_state {
   @@index([expiresAt])
 }
 
+// S2 (#43): assertion IDs already spent.
+//
+// SAML has no PKCE and no nonce — the bearer assertion IS the credential, so a
+// captured response is a working login until it expires. Single use is enforced
+// HERE, by the unique constraint, not by a check in the ACS route: a check in
+// application code is one code path away from being skipped, and this one has
+// to hold under two requests racing.
+//
+// The T-6 retention purge deletes by expiresAt alone. Unswept, this table grows
+// by one row per login attempt forever, including failed and unauthenticated
+// ones whose rate an attacker chooses.
+model identity_assertion_ids {
+  id          Int      @id @default(autoincrement())
+  provider    String
+  assertionId String
+  expiresAt   DateTime @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  // Scoped to the provider: assertion IDs are unique only within an issuer, and
+  // a provider-blind constraint would let one tenant's traffic lock out another's.
+  @@unique([provider, assertionId])
+  @@index([expiresAt])
+}
+
+// S2 (#43): one identity provider's configuration.
+//
+// Public material only — entity ID, endpoints, signing certificates. The SP's
+// own private key belongs in CredentialStore (AES-256-GCM, bound to its key
+// name); this table is read on every login and sits in every backup, so a secret
+// column here is a secret in plaintext at rest.
+model identity_providers {
+  id          String   @id @default(uuid())
+  provider    String   @unique
+  entityId    String
+  ssoUrl      String
+  // A LIST, because Entra publishes the next certificate before it signs with
+  // it. A single-certificate column forces a flag-day cutover, and every login
+  // fails as a bad signature between the IdP rotating and someone noticing.
+  certificates String[]
+  // Fail closed. Configuration is saved field by field, and a provider that
+  // went live at the first save would accept logins against a half-written
+  // certificate list.
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+}
+
 model system_prompt_variables {
   id          Int      @id @default(autoincrement())
   key         String   @unique

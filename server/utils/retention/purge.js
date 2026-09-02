@@ -13,6 +13,7 @@
 const prismaDefault = require("../prisma");
 const { deleteAuditEvents } = require("../events/AuditEventSubscriber");
 const { IdentityLoginState } = require("../../models/identityLoginState");
+const { AssertionReplay } = require("../../models/assertionReplay");
 
 const RETENTION_LABEL = "audit_retention_days";
 const DEFAULT_BATCH = 500;
@@ -67,6 +68,14 @@ async function purge({
     now: now(),
   });
 
+  // S2 (#43): spent SAML assertion IDs, on the same footing and for the same
+  // reason. One row per login attempt, and an unauthenticated attacker sets the
+  // rate — so this is the sweep that stops a cheap disk fill, not housekeeping.
+  const assertionIdsPurged = await AssertionReplay.purgeExpired({
+    db,
+    now: now(),
+  });
+
   const retentionDays = await readRetentionDays(db);
   if (retentionDays === null)
     return {
@@ -75,6 +84,7 @@ async function purge({
       retentionDays: null,
       cutoff: null,
       loginStatesPurged,
+      assertionIdsPurged,
     };
 
   const cutoff = new Date(now().getTime() - retentionDays * DAY_MS);
@@ -109,6 +119,7 @@ async function purge({
     retentionDays,
     cutoff: cutoff.toISOString(),
     loginStatesPurged,
+    assertionIdsPurged,
   };
 }
 
