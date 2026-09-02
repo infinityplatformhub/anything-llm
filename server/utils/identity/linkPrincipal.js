@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prismaDefault = require("../prisma");
 const { syncLegacyRoleGrant } = require("../authorization/legacyRoleGrants");
+const { deriveUsername, usernameCandidates } = require("./deriveUsername");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
@@ -19,16 +20,9 @@ const {
 // must not be trusted with, and doing it here would mean two implementations.
 const DEFAULT_ROLE = "default";
 
-/**
- * Usernames are unix-style (`^[a-z][a-z0-9._@-]*$`, 2–64 chars) and an email
- * address already fits, apart from case and the odd unsupported character.
- */
-function usernameFromEmail(email) {
-  const candidate = String(email).toLowerCase().replace(/[^a-z0-9._@-]/g, "-");
-  const trimmed = candidate.replace(/^[^a-z]+/, "").slice(0, 64);
-  // A local part that was entirely non-alphabetic would leave nothing valid.
-  return trimmed.length >= 2 ? trimmed : `sso-${crypto.randomBytes(6).toString("hex")}`;
-}
+// Username derivation lives in its own module so every driver derives the same
+// way. QA-1 NIT-1: the previous version here deleted leading characters that
+// were not a-z, so `alice@`, `1alice@` and `_alice@` all became one username.
 
 /**
  * Fill the password column with a value nobody holds.
@@ -90,10 +84,42 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
   // local account is REFUSED, never auto-linked. Auto-linking is the classic
   // takeover — anyone who can register that address at the IdP inherits the
   // account. Deliberate linking happens from settings, while already logged in.
+  // Checked against BOTH the raw address and the username it would derive to.
+  // A local account is stored under its username, which for an SSO-created
+  // account is the derived form — so comparing only the raw address misses the
+  // collision and lets it fall through to a P2002 the caller sees as a bare
+  // 401. Techlead: this must reach the user as R1's 409, which is the answer
+  // that tells them what to do.
+  // Checked against BOTH the raw address and the username it would derive to.
+  // A local account created by an admin is stored under whatever username they
+  // chose, which may be the derived form — comparing only the raw address
+  // misses that and lets it fall through to a P2002 the caller sees as a bare
+  // 401, against the FIRST person's account.
+  //
+  // But the derived-username match is only a takeover when the account it hits
+  // is a LOCAL one. Two different mailboxes can sanitize to the same handle
+  // (`user+x@` and `user!x@` both derive `user-x@`), and refusing those with
+  // "an account with this email already exists" would be false — no account
+  // with their email exists, and they are not trying to take anything over.
+  // Those fall through to the suffix retry below and get their own account.
+  const derivedUsername = deriveUsername(normalizedEmail);
   const collision = await db.users.findFirst({
-    where: { username: { equals: normalizedEmail, mode: "insensitive" } },
+    where: {
+      OR: [
+        { username: { equals: normalizedEmail, mode: "insensitive" } },
+        { username: { equals: derivedUsername, mode: "insensitive" } },
+      ],
+    },
+    include: { identity_links: true },
   });
-  if (collision)
+  // An account already linked to some OTHER external identity is not a local
+  // account this person could sign into — it is someone else's SSO account that
+  // happens to share a derived handle.
+  const isLocalAccount = collision && collision.identity_links.length === 0;
+  const isSameAddress =
+    collision &&
+    collision.username?.toLowerCase() === normalizedEmail.toLowerCase();
+  if (collision && (isLocalAccount || isSameAddress))
     throw new IdentityConflictError(
       "An account with this email already exists. Sign in with your existing " +
         "credentials and link this identity provider from your settings."
@@ -110,13 +136,37 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
         "original provider and manage links from your settings."
     );
 
-  const user = await db.users.create({
-    data: {
-      username: usernameFromEmail(normalizedEmail),
-      password: unusablePassword(),
-      role: DEFAULT_ROLE,
-    },
-  });
+  // QA-1 NIT-1: two different mailboxes can legitimately derive the same
+  // handle. Retrying with a suffix turns that into a second account, where
+  // before it surfaced as a unique-constraint error the caller saw as a bare
+  // 401 — against the FIRST person's account, which had done nothing wrong.
+  //
+  // This is not the R1 takeover case: that is decided on the email, above, and
+  // has already refused by the time we get here.
+  let user = null;
+  let lastError = null;
+  for (const username of usernameCandidates(normalizedEmail)) {
+    try {
+      user = await db.users.create({
+        data: {
+          username,
+          password: unusablePassword(),
+          role: DEFAULT_ROLE,
+        },
+      });
+      break;
+    } catch (error) {
+      // Only a username collision is worth another attempt. Anything else —
+      // a dead connection, a constraint we did not anticipate — must surface.
+      if (error?.code !== "P2002") throw error;
+      lastError = error;
+    }
+  }
+  if (!user)
+    throw new IdentityConflictError(
+      "Could not create an account for this identity. Contact an administrator.",
+      { cause: lastError }
+    );
 
   // T-4a: a user with no grant is DENIED by the authorization engine, so a
   // login that skipped this would succeed into an account that can do nothing.
@@ -135,4 +185,6 @@ async function linkPrincipal(principal, { db = prismaDefault } = {}) {
   return { user, created: true };
 }
 
-module.exports = { linkPrincipal, usernameFromEmail };
+// `usernameFromEmail` is re-exported under its new name so callers and tests
+// have one place to import from; the derivation itself lives in deriveUsername.
+module.exports = { linkPrincipal, deriveUsername, usernameCandidates };

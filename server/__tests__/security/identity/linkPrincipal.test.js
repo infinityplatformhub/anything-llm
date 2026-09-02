@@ -25,6 +25,7 @@ const testUrl = baseDatabaseUrl?.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 let prisma;
 let linkPrincipal;
 const { RESERVED_APEX } = require("../../../__testHelpers__/identity/urls");
+const { deriveUsername } = require("../../../utils/identity/deriveUsername");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
@@ -196,6 +197,57 @@ describe("R1 — email collision with an existing local account", () => {
         db: prisma,
       })
     ).rejects.toThrow(IdentityConflictError);
+  });
+
+  test("QA-1 NIT-1: a collision on the DERIVED username is R1's 409, not a raw constraint error", async () => {
+    // An SSO-created account is stored under its derived username, not the raw
+    // address. Checking only the raw address misses that collision, and it then
+    // surfaces as a P2002 the caller sees as a bare 401 — against the FIRST
+    // person's account, which did nothing wrong. It has to be R1's conflict,
+    // which is the answer that tells the user what to do.
+    const local = `1derived-${crypto.randomBytes(4).toString("hex")}`;
+    const email = `${local}@${RESERVED_APEX}`;
+    await prisma.users.create({
+      data: {
+        username: deriveUsername(email),
+        password: "local-hash",
+        role: "default",
+      },
+    });
+
+    const error = await linkPrincipal(principal({ email }), { db: prisma }).catch(
+      (e) => e
+    );
+    expect(error).toBeInstanceOf(IdentityConflictError);
+    expect(error.message).toMatch(/settings/i);
+  });
+
+  test("QA-1 NIT-1: a derived-username clash yields a suffixed account, not an error", async () => {
+    // Two genuinely different mailboxes that sanitize to the same handle. This
+    // is NOT the takeover case — R1 checks the email and has already passed —
+    // so the second person must get their own account. Before the retry loop,
+    // this surfaced as a P2002 the caller saw as a bare 401, and the person who
+    // arrived FIRST is the one whose login appeared to break.
+    //
+    // `+` and `!` are both sanitized to `-`, so these two addresses derive the
+    // same username while remaining different mailboxes.
+    const suffix = crypto.randomBytes(4).toString("hex");
+    const first = await linkPrincipal(
+      principal({ email: `user+${suffix}@${RESERVED_APEX}` }),
+      { db: prisma }
+    );
+    const second = await linkPrincipal(
+      principal({ email: `user!${suffix}@${RESERVED_APEX}` }),
+      { db: prisma }
+    );
+
+    // Same derived handle, different people, two accounts.
+    expect(deriveUsername(`user+${suffix}@${RESERVED_APEX}`)).toBe(
+      deriveUsername(`user!${suffix}@${RESERVED_APEX}`)
+    );
+    expect(second.user.id).not.toBe(first.user.id);
+    expect(second.user.username).not.toBe(first.user.username);
+    expect(second.user.username).toMatch(/-sso-[0-9a-f]+$/);
   });
 
   test("the refusal writes nothing — no user, no link", async () => {
