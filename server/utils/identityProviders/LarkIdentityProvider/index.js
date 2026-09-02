@@ -231,7 +231,12 @@ class LarkIdentityProvider {
         // So is a timed-out one: a tenant that stops answering may answer the
         // retry, and the bound is what makes trying again safe.
         lastError = cause;
-        await this._backoff(attempt);
+        // #138 (TL-1): no backoff before the LAST failure. `_backoff` used to run on
+        // every attempt including the final one, so a doomed page slept once more
+        // before throwing — delaying only the error, and making the job's lease floor
+        // one backoff longer than the work could possibly need. Waiting is for the
+        // benefit of the NEXT attempt; on the last one there is none.
+        if (attempt < this.maxRetries) await this._backoff(attempt);
         continue;
       }
 
@@ -244,25 +249,31 @@ class LarkIdentityProvider {
         // run for as long as the header says — a day, if it says a day — which
         // stalls the job's lease exactly as a hung socket does. The wait itself is
         // correct and kept; only its ceiling is ours.
-        await this._backoff(
-          attempt,
-          Number.isFinite(retryAfter)
-            ? Math.min(retryAfter * 1000, MAX_RETRY_AFTER_MS)
-            : null
-        );
+        // Skipped on the last attempt for the same reason as above: this is the
+        // dominant term in the lease floor (a clamped Retry-After is 30s against our
+        // own 2s ceiling), so sleeping it before a throw is what made the floor one
+        // whole interval longer than the work.
+        if (attempt < this.maxRetries) {
+          await this._backoff(
+            attempt,
+            Number.isFinite(retryAfter)
+              ? Math.min(retryAfter * 1000, MAX_RETRY_AFTER_MS)
+              : null
+          );
+        }
         continue;
       }
 
       if (!response.ok) {
         lastError = new Error(`HTTP ${response.status}`);
-        await this._backoff(attempt);
+        if (attempt < this.maxRetries) await this._backoff(attempt);
         continue;
       }
 
       const body = await response.json();
       if (body.code !== 0) {
         lastError = new Error(body.msg ?? `code ${body.code}`);
-        await this._backoff(attempt);
+        if (attempt < this.maxRetries) await this._backoff(attempt);
         continue;
       }
 

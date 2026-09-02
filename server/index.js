@@ -55,6 +55,9 @@ const { auditEndpoints } = require("./endpoints/audit");
 const { identityEndpoints } = require("./endpoints/identity");
 const { samlIdentityEndpoints } = require("./endpoints/identity/saml");
 const { ldapIdentityEndpoints } = require("./endpoints/identity/ldap");
+const {
+  directorySyncEndpoints,
+} = require("./endpoints/identity/directorySync");
 const { httpLogger } = require("./middleware/httpLogger");
 const {
   apiIpRateLimit,
@@ -137,6 +140,9 @@ const ENDPOINT_REGISTRATIONS = Object.freeze([
   // S3 (#60): a concrete route under /sso/ must precede S1's wildcard, which
   // would otherwise swallow it (the cd4fda5e defect).
   ldapIdentityEndpoints,
+  // S4b slice 3 (#138): sync-now. Not under /sso/, so ordering against S1's
+  // wildcard does not apply — mounted beside its siblings for findability.
+  directorySyncEndpoints,
   identityEndpoints,
   // Public embed and browser-extension routes remain last.
   embeddedEndpoints,

@@ -587,3 +587,39 @@ describe("#138: what the timeout tests would otherwise miss (QA-1)", () => {
     expect(controller.signal.aborted).toBe(false);
   }, 60_000);
 });
+
+describe("#138 (TL-1): no backoff before the final failure", () => {
+  test("a doomed page does not sleep after its last attempt", async () => {
+    // `_backoff` used to run on EVERY attempt including the last, so a page that was
+    // going to fail slept once more before throwing. That delayed only the error —
+    // and, because the lease floor is derived from this loop, it made the floor one
+    // whole interval longer than the work could possibly need.
+    //
+    // The witness is elapsed time, measured against the interval that is actually
+    // skipped. With a clamped Retry-After of 30s the last sleep dominates everything
+    // else in the loop, so a run that still slept it cannot finish in under 30s. The
+    // ceiling below is far under that and far over the four request timeouts.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "429",
+      failTimes: Infinity, // never succeeds: every attempt 429s, then it throws
+      retryAfterSeconds: 30,
+    });
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 1, timeoutMs: 1_000 });
+
+    const started = Date.now();
+    await expect(driver.listPrincipals()).rejects.toThrow(IdentityUnavailableError);
+    const elapsed = Date.now() - started;
+
+    // maxRetries 1 = two attempts, so exactly ONE backoff should be served (between
+    // them) and the second skipped. Serving both would take ~60s.
+    expect(elapsed).toBeGreaterThan(25_000); // the one real backoff DID happen
+    expect(elapsed).toBeLessThan(50_000); // the final one did not
+
+    // And it really did retry rather than giving up early, which is the other way to
+    // be fast: 1 initial + 1 retry.
+    expect(fixture.userPages.filter((p) => p === 1)).toHaveLength(2);
+  }, 120_000);
+});

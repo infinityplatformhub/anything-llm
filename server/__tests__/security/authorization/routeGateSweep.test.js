@@ -276,6 +276,17 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // `removeGroupMember`. It is a MUTATION, so unlike #112's read it must also
     // appear in the gated set below — carrying `user.manage` on the org, since
     // no `group.*` permission is seeded.
+    //
+    // 319 -> 320 with S4b slice 3 (#138): POST /identity/directory/:provider/sync. It
+    // IS mutating, so it takes no exemption below — it carries
+    // `requirePermission("directory.sync", orgResource)` behind `validatedRequest`,
+    // which is what the sweep asks for. Declared here rather than silently absorbed,
+    // which is the whole point of this line.
+    //
+    // Both branches independently wrote 319 for their own route, which is what made
+    // this line conflict. The resolution is 320 because BOTH routes mount — and the
+    // count below is the MEASURED one, not 318 + 2: a pin that is arithmetic rather
+    // than observation is how two correct-looking halves produce a wrong total.
     expect(mountedRoutesAtTestLoad).toHaveLength(319);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
