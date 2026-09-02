@@ -7,7 +7,7 @@ process.env.STORAGE_DIR =
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { parse } = require("hermes-eslint");
+const { buildRouter } = require("./routeGateSweepHelper");
 const {
   ORG_CAPABILITIES,
   WORKSPACE_CAPABILITIES,
@@ -17,11 +17,6 @@ const {
   ALL_ACTIONS,
 } = require("../../../prisma/seeds/permissions");
 
-const ENDPOINTS_DIR = path.join(__dirname, "../../../endpoints");
-const RESOLVERS_FILE = path.join(
-  __dirname,
-  "../../../utils/middleware/resourceResolvers.js"
-);
 const REPO_DIR = path.join(__dirname, "../../../..");
 const MOCKUP_FILE = path.join(
   REPO_DIR,
@@ -29,90 +24,25 @@ const MOCKUP_FILE = path.join(
 );
 const TASK_ENV_FILE = path.join(REPO_DIR, ".infi/task-40.env");
 
-function javascriptFiles(directory) {
-  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) return javascriptFiles(entryPath);
-    return entry.isFile() && entry.name.endsWith(".js") ? [entryPath] : [];
-  });
-}
-
-// Parse actual call expressions so comments, strings, regex literals, and longer
-// identifiers cannot masquerade as authorization gates.
-function permissionGates(source) {
-  const gates = [];
-  const visit = (node) => {
-    if (!node || typeof node !== "object") return;
-    if (
-      node.type === "CallExpression" &&
-      node.callee?.type === "Identifier" &&
-      node.callee.name === "requirePermission" &&
-      node.arguments[0]?.type === "Literal" &&
-      typeof node.arguments[0].value === "string"
-    ) {
-      const resource = node.arguments[1];
-      const resolver =
-        resource?.type === "Identifier"
-          ? resource.name
-          : resource?.type === "CallExpression" &&
-              resource.callee?.type === "Identifier"
-            ? resource.callee.name
-            : null;
-      if (resolver) gates.push({ action: node.arguments[0].value, resolver });
-    }
-
-    for (const value of Object.values(node)) {
-      if (Array.isArray(value)) value.forEach(visit);
-      else if (value && typeof value === "object") visit(value);
-    }
-  };
-
-  visit(parse(source, { sourceType: "script" }));
-  return gates;
-}
-
-const endpointFiles = javascriptFiles(ENDPOINTS_DIR);
-const gatesByFile = new Map(
-  endpointFiles.map((file) => [
-    file,
-    permissionGates(fs.readFileSync(file, "utf8")),
-  ])
-);
-const allGates = [...gatesByFile.values()].flat();
-
-// Every exported resolver except orgResource and grantScopeFromBody always
-// resolves an existing workspace or an object contained by one and returns a
-// workspaceId. grantScopeFromBody is excluded because its no-workspace branch
-// intentionally resolves the org. Deriving exports keeps this aligned as the
-// centralized resolver module grows.
-const resolverExports = /module\.exports\s*=\s*{([^}]+)}/s.exec(
-  fs.readFileSync(RESOLVERS_FILE, "utf8")
-)?.[1];
-const workspaceResolvers = new Set(
-  (resolverExports?.match(/[A-Za-z_$][\w$]*/g) || []).filter(
-    (name) => !["orgResource", "grantScopeFromBody"].includes(name)
-  )
+const { app } = buildRouter();
+const mountedRoutes = app._router.stack.filter((layer) => layer.route);
+const mountedGates = mountedRoutes.flatMap((layer) =>
+  layer.route.stack
+    .map((handler) => handler.handle)
+    .filter((handler) => handler?.action && handler.resolveResource)
 );
 
-describe("permissionGates", () => {
-  test("returns calls, not comments, strings, templates, or identifier substrings", () => {
-    const source = `
-      requirePermission("live.action", orgResource);
-      // requirePermission("line.comment", orgResource);
-      /* requirePermission("block.comment", orgResource); */
-      'requirePermission("string.literal", orgResource)';
-      notrequirePermission("prefixed.identifier", orgResource);
-      /requirePermission\("regex.literal", orgResource\)/;
-      \`template before requirePermission("template.literal", orgResource)\`;
-      requirePermission("second.live", workspaceBySlug);
-    `;
-
-    expect(permissionGates(source)).toEqual([
-      { action: "live.action", resolver: "orgResource" },
-      { action: "second.live", resolver: "workspaceBySlug" },
-    ]);
-  });
-});
+async function scopeOf(resolveResource) {
+  try {
+    const resource = await resolveResource({}, {});
+    return resource && resource.workspaceId == null ? "org" : "workspace";
+  } catch {
+    // Workspace resolvers need route input and may consult stored rows. With an
+    // empty request they return null or throw; unlike orgResource, they cannot
+    // positively resolve the org and therefore cannot satisfy an org gate.
+    return "workspace";
+  }
+}
 
 describe("capability vocabulary by resource scope", () => {
   test("workspace capabilities contain no org-scoped actions", () => {
@@ -138,33 +68,41 @@ describe("capability vocabulary by resource scope", () => {
     }
   });
 
-  test("every org capability backs a server gate at org scope", () => {
-    expect(endpointFiles.length).toBeGreaterThan(0);
+  test("every org capability backs a mounted server gate at org scope", async () => {
+    expect(mountedRoutes.length).toBeGreaterThan(100);
+    const capabilityGates = mountedGates.filter((gate) =>
+      ORG_CAPABILITIES.includes(gate.action)
+    );
+    expect(capabilityGates.length).toBeGreaterThan(0);
+
     for (const action of ORG_CAPABILITIES) {
-      expect(
-        allGates.some(
-          (gate) => gate.action === action && gate.resolver === "orgResource"
-        )
-      ).toBe(true);
+      const scopes = await Promise.all(
+        capabilityGates
+          .filter((gate) => gate.action === action)
+          .map((gate) => scopeOf(gate.resolveResource))
+      );
+      expect(scopes).toContain("org");
     }
 
-    for (const filename of ["workspaces.js", "admin.js"]) {
-      const file = path.join(ENDPOINTS_DIR, filename);
-      expect(gatesByFile.get(file)).toContainEqual({
-        action: "workspace.create",
-        resolver: "orgResource",
-      });
-    }
+    expect(
+      capabilityGates.filter((gate) => gate.action === "workspace.create")
+    ).toHaveLength(2);
   });
 
-  test("every workspace capability backs a workspace-scoped server gate", () => {
+  test("every workspace capability backs a mounted workspace-scoped gate", async () => {
+    expect(mountedRoutes.length).toBeGreaterThan(100);
+    const capabilityGates = mountedGates.filter((gate) =>
+      WORKSPACE_CAPABILITIES.includes(gate.action)
+    );
+    expect(capabilityGates.length).toBeGreaterThan(0);
+
     for (const action of WORKSPACE_CAPABILITIES) {
-      expect(
-        allGates.some(
-          (gate) =>
-            gate.action === action && workspaceResolvers.has(gate.resolver)
-        )
-      ).toBe(true);
+      const scopes = await Promise.all(
+        capabilityGates
+          .filter((gate) => gate.action === action)
+          .map((gate) => scopeOf(gate.resolveResource))
+      );
+      expect(scopes).toContain("workspace");
     }
   });
 

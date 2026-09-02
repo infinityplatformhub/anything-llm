@@ -27,7 +27,7 @@ process.env.JWT_SECRET =
 
 const fs = require("fs");
 const path = require("path");
-const express = require("express");
+const { buildRouter } = require("./routeGateSweepHelper");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
 
@@ -68,32 +68,7 @@ const SELF_SERVICE_ROUTES = new Set([
   "POST /web-push/subscribe",
 ]);
 
-function buildRouter() {
-  const app = express();
-  const indexSource = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
-  const registrations = indexSource.match(/^[a-zA-Z]+\(apiRouter\);$/gm) ?? [];
-  const skipped = [];
-
-  for (const line of registrations) {
-    const fnName = line.replace("(apiRouter);", "");
-    const requireMatch = indexSource.match(
-      new RegExp(`\\{[^}]*\\b${fnName}\\b[^}]*\\}\\s*=\\s*require\\("([^"]+)"\\)`)
-    );
-    if (!requireMatch) {
-      skipped.push(fnName);
-      continue;
-    }
-    try {
-      require(path.join(SERVER_DIR, requireMatch[1]))[fnName](app);
-    } catch (error) {
-      // agentWebsocket needs express-ws; it registers no plain HTTP routes.
-      skipped.push(`${fnName}: ${error.message}`);
-    }
-  }
-  return { app, registrations, skipped };
-}
-
-module.exports = { SINGLE_USER_ONLY_ROUTES, SELF_SERVICE_ROUTES, buildRouter };
+module.exports = { SINGLE_USER_ONLY_ROUTES, SELF_SERVICE_ROUTES };
 
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
@@ -103,7 +78,9 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThan(20);
-    expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(100);
+    expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(
+      100
+    );
     // Only the websocket registration may fail to mount.
     expect(skipped.length).toBeLessThanOrEqual(1);
   });
@@ -159,9 +136,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // The engine now refuses this at runtime (AuthorizationContractError), which
     // is the enforcement. This is the second layer: it names the offending route
     // at test time instead of leaving it to a 500 in production.
-    const {
-      ACTION_SCOPES,
-    } = require("../../../prisma/seeds/permissions");
+    const { ACTION_SCOPES } = require("../../../prisma/seeds/permissions");
     const orgScoped = Object.entries(ACTION_SCOPES)
       .filter(([, scope]) => scope === "org")
       .map(([action]) => action);
@@ -257,7 +232,9 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       expect(index).toBeGreaterThan(-1);
       const body = sources.slice(index, index + 1200);
       expect(
-        /isSingleUserMode|multiUserMode\(response\)|locals\.multiUserMode/.test(body)
+        /isSingleUserMode|multiUserMode\(response\)|locals\.multiUserMode/.test(
+          body
+        )
       ).toBe(true);
     }
   });
