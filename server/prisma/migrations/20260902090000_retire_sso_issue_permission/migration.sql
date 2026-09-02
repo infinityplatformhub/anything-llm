@@ -12,8 +12,10 @@
 -- ran — the drift the slot discipline exists to prevent.
 
 -- 1. Detach it from every role before deleting the row it points at.
---    role_permissions has no ON DELETE CASCADE (20260902020000:33-39), so the
---    order matters: deleting the permission first would orphan these rows.
+--    The FK at 20260902020000:199 DOES cascade, so this DELETE is not required
+--    for correctness. It is kept because it is explicit and idempotent: the
+--    statement says what this migration removes rather than leaving it to a
+--    constraint the reader has to go look up, and re-running it is a no-op.
 DELETE FROM "role_permissions"
 WHERE "permission_id" IN (SELECT "id" FROM "permissions" WHERE "action" = 'sso.issue');
 

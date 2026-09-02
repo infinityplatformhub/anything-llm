@@ -79,8 +79,13 @@ operator สั่งปิด
 
 Ruling: (3) `sso.issue` ลบผ่าน migration slot ใหม่ 090000 ไม่แก้ 020000/045000
 (applied migration = immutable, `_prisma_migrations` เก็บ checksum)
-ลำดับใน migration: `role_permissions` ก่อน `permissions` เพราะไม่มี ON DELETE CASCADE
-(020000:33-39) ลบสลับลำดับ = orphan rows ถ้าผิด: FK ค้าง ชี้ไป id ที่ไม่มีแล้ว
+ลำดับใน migration: `role_permissions` ก่อน `permissions`
+**แก้หลัง Techlead-1**: เหตุผลเดิมที่ผมเขียน ("ไม่มี ON DELETE CASCADE, 020000:33-39")
+ผิด — ผมอ่านแค่ CREATE TABLE แล้วสรุป FK จริงอยู่ที่ 020000:199 และ **cascade อยู่แล้ว**
+DELETE แถวแรกจึงไม่จำเป็นต่อความถูกต้อง เก็บไว้เพราะ explicit + idempotent:
+statement บอกตรง ๆ ว่า migration นี้เอาอะไรออก ไม่ต้องให้คนอ่านไปตาม constraint เอง
+ถ้าผิด: ไม่มีผลต่อ behaviour (cascade ทำงานอยู่แล้ว) แต่ comment ที่โกหกเรื่อง schema
+คือสิ่งที่คนอ่านรอบหน้าจะเชื่อ
 
 Ruling: key ที่เหลือ scope ว่างหลัง strip → ปล่อยเป็น `[]` **ไม่ revoke** (PMO ruling)
 + migration RAISE NOTICE บอก count และ keyPrefix ทุกตัวที่กลายเป็น `[]`
