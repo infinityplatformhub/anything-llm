@@ -523,3 +523,63 @@ describe("#138: the timeout's two implementation rulings", () => {
     expect(fixture.userPages.filter((p) => p === 1)).toHaveLength(1);
   }, 60_000);
 });
+
+/**
+ * #138, QA-1's baseline findings turned into fixtures.
+ *
+ * Both are cases where a test LOOKS like it covers the timeout and does not.
+ */
+describe("#138: what the timeout tests would otherwise miss (QA-1)", () => {
+  test("the token timeout is not masked by memoisation — a fresh provider per case", async () => {
+    // `_tenantAccessToken` caches on `_tokenExpiresAt`. A provider that already
+    // fetched a token successfully never calls the endpoint again, so a hangToken
+    // assertion made on a REUSED instance passes whether or not the token call is
+    // bounded — the request under test is never made.
+    //
+    // This asserts the memo exists (one token call across two enumerations) and then
+    // proves the bound holds on an instance that has NOT primed it. Both halves:
+    // without the first, the second is just the hangToken test again.
+    fixture = await startLarkFixture({ users: 10 });
+    const warm = driverFor(fixture, { timeoutMs: 5_000 });
+    await warm.listPrincipals();
+    await warm.listGroups();
+    const tokenCalls = fixture.requests.filter((r) =>
+      r.path.endsWith("/auth/v3/tenant_access_token/internal")
+    );
+    expect(tokenCalls).toHaveLength(1);
+    await fixture.close();
+
+    // A COLD provider against a hung token endpoint: the memo cannot help it.
+    fixture = await startLarkFixture({ users: 10, hangToken: true });
+    const cold = driverFor(fixture, { timeoutMs: 150 });
+    const started = Date.now();
+    await expect(cold.listPrincipals()).rejects.toThrow(IdentityUnavailableError);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 60_000);
+
+  test("the DRIVER's timeout wins when the caller's signal never fires", async () => {
+    // The pairing for the caller-abort test. That one proves the caller can still
+    // cancel — but it is green on unfixed code too, because passing the caller's
+    // signal through is inherited behaviour. This is the half that is not: a caller
+    // supplies a signal it never aborts, and the driver's own timeout must still end
+    // the request. An implementation that forwards only the caller's signal hangs
+    // here forever.
+    fixture = await startLarkFixture({
+      users: 100,
+      pageSize: 50,
+      failOnPage: 1,
+      failMode: "hang",
+      failTimes: Infinity,
+    });
+    const driver = driverFor(fixture, { pageSize: 50, maxRetries: 1, timeoutMs: 200 });
+
+    // A real signal, never aborted.
+    const controller = new AbortController();
+    const started = Date.now();
+    await expect(
+      driver.listPrincipals({ signal: controller.signal })
+    ).rejects.toThrow(IdentityUnavailableError);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(controller.signal.aborted).toBe(false);
+  }, 60_000);
+});
