@@ -75,10 +75,16 @@ const PATTERNS = [
   // losing those audit records. `scrubString` walks every string at every depth,
   // so one value pattern closes all of those paths at once.
   //
-  // ALL THREE issued prefixes, not just invites: `apw-key-` (API keys) and
-  // `apw-brx-` (browser extension) are the same shape and the same risk, and
-  // nothing was guarding them either. A pattern that covered only the credential
-  // that happened to be reported would leave its siblings live.
+  // EVERY issued `apw-*-` credential, not just invites. Today that is `apw-inv-`
+  // (invites), `apw-key-` (API keys), `apw-brx-` (browser extension) and
+  // `apw-tat-` (temporary auth tokens) — all the same shape, all the same risk,
+  // and none of them was guarded. `apw-tat-` was missed by an explicit
+  // three-prefix alternation and caught in review, which is the argument for
+  // matching the FAMILY rather than a list: the next generator someone adds is
+  // covered on the day it is added, instead of leaking until someone notices.
+  // The cost is that a non-credential string shaped `apw-xyz-<16 chars>` would
+  // also be redacted; nothing in the tree is, and over-redacting a log line is
+  // recoverable in a way that publishing a live credential is not.
   //
   // The bound is 16 rather than the 43 these generate today: the `apw-*-` prefix
   // already makes a false positive impossible, and a bound tied to the current
@@ -91,7 +97,7 @@ const PATTERNS = [
   // character). Measured — four of five probe shapes leaked. The prefix is
   // distinctive enough to need no anchor, and an anchor that fails open on
   // string concatenation is worse than none.
-  { name: "credential", re: () => /apw-(?:inv|key|brx)-[A-Za-z0-9_-]{16,}/g },
+  { name: "credential", re: () => /apw-[a-z]{3}-[A-Za-z0-9_-]{16,}/g },
 ];
 
 // Fields whose BEFORE value is as sensitive as its after value. `changes` stores

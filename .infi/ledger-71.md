@@ -39,11 +39,15 @@ carrying anything redeemable, the same trade `keyPrefix` already makes for API
 keys. A short prefix was considered and rejected: there is no prefix length that
 is both useful for correlation and safe against a narrowed brute force.
 
-Ruling: the pattern covers ALL THREE issued prefixes — `apw-inv-`, `apw-key-`,
-`apw-brx-`. If this is wrong we redact slightly more than the reported bug; the
-alternative is worse, because API keys and extension keys are the same shape,
-the same risk, and were equally unguarded. A fix scoped to the credential that
-happened to be reported would leave its siblings live.
+Ruling: the pattern matches the `apw-<three letters>-` FAMILY, not a list of
+known prefixes. An explicit `(?:inv|key|brx)` alternation shipped first and
+missed `apw-tat-` (`models/temporaryAuthToken.js`), caught by Techlead review —
+which is the argument for the family: a list is only as complete as the last
+person to grep for generators, and the failure mode is silent leakage until
+someone notices. If this is wrong, a non-credential string shaped
+`apw-xyz-<16 chars>` gets redacted too; nothing in the tree is shaped that way,
+and over-redacting a log line is recoverable in a way that publishing a live
+credential is not.
 
 Ruling: the length bound is `{16,}`, not `{40,}` as first proposed. If this is
 wrong we accept a theoretical false positive — impossible in practice, since the
@@ -95,6 +99,7 @@ reasoning would later have read an invite URL in `link` as safe. Corrected in an
 |---|---|---|
 | remove the `credential` pattern entirely | the key-carrier table | 89 of 98 failed |
 | restore the `\b` anchor | the concatenation cases | 44 of 143 failed |
+| narrow the family back to `(?:inv\|key\|brx)` | the sibling-credential case | exactly 1 failed |
 | rename the constraint (#68, for contrast) | — | n/a, different issue |
 
 The first number is the useful one: the table is load-bearing, not decoration.
