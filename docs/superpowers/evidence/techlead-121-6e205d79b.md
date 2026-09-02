@@ -132,3 +132,6 @@ loading→resolved transition rather than the loading state alone.
 **PASS**, with F-B's comment to correct — one line either way, and it does not change behaviour
 today. Everything F-A required landed, and the two server tests are independent in the way that
 makes the pair meaningful.
+
+## Addendum — F-B fix 5c9ea893d: PASS (TL-1, 22:25)
+One-liner `if (hasChildren && (!visible || !hasVisibleChildren)) return null;` matches the docblock. RF-7 has both halves: fixture is a hidden parent with a child holding a real capability (the only shape that separates the two versions), asserts the child vanishes with the parent, and a `hidden:false` control guards against an unconditional `return null`.
