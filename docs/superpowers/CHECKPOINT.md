@@ -653,3 +653,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #121 Dev1: F-A is 4 missing ORG_CAPABILITIES (system.read, system.write, user.read, invite.read), found by deriving expectation from sidebar source not a hardcoded list; all 4 verified org-scoped (0 workspace gates). ETA ~20:45 after authorization suite. Tier stays auth (server capability list changes).
 - Board rewritten bf68a3835 for user (99/133, 3 decisions pending). Artifact publish unavailable in this session (ANTHROPIC_AUTH_TOKEN); file committed.
 - #121 TL-1 pre-check on F-A x4: key-shape tests won't go red (both sides derive from ORG_CAPABILITIES — §7.9f) → require a literal 11-entry server test; ledger reason = "none of the 4 in ACTION_SCOPES" not "org-scoped"; note +4 authorizeMany per my-capabilities request. Sent to Dev1 for same SHA.
+- GitHub push timed out once (~20:40), recovered; main pushed 245ea0045+.
+- #131 delta 58433f7bb (per-match, origin[] code-unit, overlap label, adversarial 5 + surviving-astral fixture, /g twin removed w/ honest no-test comment, U+2800 OUT): regating /tmp/wt-131; TL-2 delta read requested → close/merge.
+- #133 Dev3: F1 (MEMBERSHIP_FLOOR=25 / MEMBERSHIP_RATIO=0.5 separate guard, refused clears both lists), F2 quarantined keep membership, NIT-1 30/100 fixture, NIT-2 removeMembership [] on T1/T3; 21/21, +5 mutants dead; SHA after sweep.
