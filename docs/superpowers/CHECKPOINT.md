@@ -921,3 +921,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - 08:25 requests: Dev5 #135 status; QA-2 sync-now probe report; TL-1 #140 GREEN pre-read; postmerge-136s2 agent launched (parallel to postmerge-139, separate DB).
 - #138 sync-now oracle staged (QA-2): 15 assertions; M2 (direct create) survives counts but 500s the second click → assertion "second click 202" added. Forwarded to Dev3 (upsert / P2002 → 202). Fires on Dev3 queue SHA + Dev1 permission SHA together.
 - 08:35 dispatch: QA-3 #132 GREEN dry-fire; QA-1 audit RF-P harness; Dev2 #141 recon. Pending replies: Dev5 #135, TL-2 (seam review + #132 one-liners), TL-1 #140 pre-read, Dev3 #138 final, Dev1 #138-perm RED, postmerge-139/136s2.
+- Post-merge #139 (main): frontend 0, caps 0, node-26 guard exit 1 (fires). Server line read from log (see below).
