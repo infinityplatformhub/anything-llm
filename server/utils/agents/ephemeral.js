@@ -8,7 +8,9 @@ const { User } = require("../../models/user");
 const { Workspace } = require("../../models/workspace");
 const { WorkspaceChats } = require("../../models/workspaceChats");
 const { WorkspaceParsedFiles } = require("../../models/workspaceParsedFiles");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { safeJsonParse } = require("../http");
 const {
   USER_AGENT,
@@ -436,13 +438,12 @@ class EphemeralAgentHandler extends AgentHandler {
 
     const user = this.#userId ? { id: this.#userId } : null;
     const thread = this.#threadId ? { id: this.#threadId } : null;
-    const documentManager = new DocumentManager({
-      workspace: this.#workspace,
-    });
 
     return Promise.all([
-      WorkspaceParsedFiles.getContextFiles(this.#workspace, thread, user),
-      documentManager.pinnedDocs(),
+      WorkspaceParsedFiles.getContextFiles(this.#workspace, thread, user ?? { systemActor: true }),
+      // T-5 slice 2: an agent acts on behalf of its user, so it reads what that user
+      // reads. With no user it gets a match-none filter — nothing, never everything.
+      authorizedPinnedDocs({ workspace: this.#workspace, user: user }),
     ])
       .then(([parsedFiles, pinnedDocs]) => {
         const allDocuments = [

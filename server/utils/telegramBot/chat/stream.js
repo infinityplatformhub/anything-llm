@@ -1,7 +1,9 @@
 const { WorkspaceChats } = require("../../../models/workspaceChats");
 const { getVectorDbClass, resolveProviderConnector } = require("../../helpers");
 const { addChatCostToMetrics } = require("../../helpers/modelPricing");
-const { DocumentManager } = require("../../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../../authorization/pinnedContext");
 const {
   sourceIdentifier,
   recentChatHistory,
@@ -120,7 +122,7 @@ async function streamResponse({
     contextTexts: pinnedContextTexts,
     sources: pinnedSources,
     pinnedDocIdentifiers,
-  } = await collectPinnedDocs(workspace, LLMConnector);
+  } = await collectPinnedDocs(workspace, LLMConnector, actor);
 
   const {
     contextTexts: searchContextTexts,
@@ -194,15 +196,22 @@ async function streamResponse({
  * Gather context texts, sources, and identifiers from pinned documents.
  * @returns {Promise<{ contextTexts: string[], sources: object[], pinnedDocIdentifiers: string[] }>}
  */
-async function collectPinnedDocs(workspace, LLMConnector) {
+// `actor` is a PARAMETER, not an outer-scope read. It was the latter once: the helper
+// referenced `streamResponse`'s `actor`, which is not in its scope, so every Telegram chat
+// threw ReferenceError before reaching retrieval. `node --check` cannot see that — an
+// undefined identifier is a runtime error, not a syntax error — so only executing the line
+// catches it.
+async function collectPinnedDocs(workspace, LLMConnector, actor) {
   const contextTexts = [];
   const sources = [];
   const pinnedDocIdentifiers = [];
 
-  const pinnedDocs = await new DocumentManager({
+  const pinnedDocs = await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
-  }).pinnedDocs();
+    // The resolved actor W-11 already threads here, the same one the search path uses.
+    actor,
+  });
 
   for (const doc of pinnedDocs) {
     const { pageContent, ...metadata } = doc;

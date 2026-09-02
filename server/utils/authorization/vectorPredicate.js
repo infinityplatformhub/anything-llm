@@ -428,7 +428,7 @@ class RetrievalConstraint {
    *      `And` of one `NotEqual` per denied id, which the enum does support.
    *   2. There IS `IsNull`, so unlike Chroma this dialect CAN express the escape clause.
    */
-  toWeaviateWhere({ allowUnprovable = true } = {}) {
+  toWeaviateWhere() {
     if (this.matchNone) return null;
     const operands = [
       {
@@ -465,14 +465,12 @@ class RetrievalConstraint {
     }
     const strict =
       operands.length === 1 ? operands[0] : { operator: "And", operands };
-    // `allowUnprovable: false` is how the provider says THIS CLASS cannot answer an
-    // IsNull filter — a class created before T-5 has neither the declared properties nor
-    // indexNullState, and neither can be added afterwards. Emitting the escape clause
-    // there does not widen the result, it fails the query outright.
-    //
-    // The flag still governs everything else; this narrows to the one case where the
-    // engine physically cannot express the question.
-    if (!allowUnprovable || !allowUnprovableRows()) return strict;
+    // A class that cannot answer an IsNull filter never reaches this renderer: the
+    // provider checks `hasAclSchema` and returns an empty result before building a
+    // predicate at all. An earlier draft carried an `allowUnprovable` parameter for that
+    // case, which became dead the moment refusing the namespace replaced it — a
+    // never-false flag reads like a live decision point and invites someone to pass it.
+    if (!allowUnprovableRows()) return strict;
     // All-or-nothing escape, using the one operator that can express absence here.
     return {
       operator: "Or",

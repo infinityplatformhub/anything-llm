@@ -845,6 +845,13 @@ model documents {
   @@index([orgId])
 }
 
+// WRITE THROUGH `policyRepository` ONLY — `grantDocumentAcl` / `revokeDocumentAcl`.
+//
+// Those bump `policy_versions` inside the same transaction, and `FilterCache` keys on that
+// version. A direct `prisma.document_acl.create/update/delete` changes the row without
+// moving the clock, so every cached filter in the process keeps serving pre-change policy
+// and cannot tell that it is stale — a revoked grant stays effective for the cache TTL,
+// silently. Asserted in pinnedContextAcl.test.js ("a raw ACL write leaves caches stale").
 model document_acl {
   id             Int         @id @default(autoincrement())
   orgId          Int         @default(1)

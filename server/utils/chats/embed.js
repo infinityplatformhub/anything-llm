@@ -7,7 +7,9 @@ const {
   convertToPromptHistory,
   writeResponseChunk,
 } = require("../helpers/chat/responses");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
 const {
   authorizedSimilaritySearch,
@@ -99,10 +101,17 @@ async function streamChatWithForEmbed(
 
   const pinnedDocs =
     prefetchedPinnedDocs ??
-    (await new DocumentManager({
+    (await authorizedPinnedDocs({
       workspace: embed.workspace,
       maxTokens: LLMConnector.promptWindowLimit(),
-    }).pinnedDocs());
+      // The same principal REFERENCE the search path uses below — an embed visitor must
+      // not read pinned documents its own embed cannot (S-12).
+      actorRef: {
+        type: "embed",
+        id: String(embed.uuid),
+        workspaceIds: [String(embed.workspace_id)],
+      },
+    }));
   pinnedDocs.forEach((doc) => {
     const { pageContent, ...metadata } = doc;
     pinnedDocIdentifiers.push(sourceIdentifier(doc));
@@ -305,6 +314,16 @@ async function resolveLLMConnectorForEmbed({
       await resolveProviderConnector({
         workspace,
         prompt: message,
+        // The router PREFETCHES pinned documents, and this path has no `user` — so
+        // without the embed's own principal reference the prefetch resolved to nobody and
+        // returned []. The chat path then reuses that empty array instead of fetching,
+        // so a router-backed embed silently lost every pinned document it was entitled
+        // to. Fail-closed, but still wrong: it is the SAME ref the search path uses.
+        actorRef: {
+          type: "embed",
+          id: String(embed.uuid),
+          workspaceIds: [String(embed.workspace_id)],
+        },
         chatHistoryOverride: embedHistory,
         // +1 to include the current in-flight message to ensure routing rules are evaluated against the real total.
         messageCountOverride: embedMessageCount + 1,

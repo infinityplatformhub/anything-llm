@@ -410,3 +410,135 @@ describe("T-5 slice 1b: the boot report tells the truth about chroma", () => {
     expect(result.escapeClauseUnavailable).toBe(true);
   });
 });
+
+describe("T-5: the boot report names what an operator must act on", () => {
+  // Techlead-2 NITs on 1b. Both of these guard a report that stays SILENT when it should
+  // speak — the failure mode is an operator who reads a clean boot log and concludes their
+  // ACL is enforced.
+  const {
+    reportRetrievalFilterSupport,
+    UNVERIFIED_PROVIDERS,
+    NO_ESCAPE_CLAUSE_PROVIDERS,
+  } = require("../../../utils/authorization/retrievalSupport");
+
+  const ORIGINAL = process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (ORIGINAL === undefined)
+      delete process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE;
+    else process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = ORIGINAL;
+  });
+
+  test("UNVERIFIED_PROVIDERS is not empty", () => {
+    // If someone empties this list, pinecone and astra silently become "supported" in the
+    // report without anyone having run their predicates against a real engine. The list
+    // being non-empty IS the claim; asserting its membership is asserting the claim.
+    expect(UNVERIFIED_PROVIDERS.length).toBeGreaterThan(0);
+    expect(UNVERIFIED_PROVIDERS).toContain("pinecone");
+    expect(UNVERIFIED_PROVIDERS).toContain("astra");
+  });
+
+  test("an unverified provider is warned about at boot", async () => {
+    const log = { warn: jest.fn(), error: jest.fn() };
+    await reportRetrievalFilterSupport("pinecone", log);
+    const said = log.warn.mock.calls.map((call) => call[0]).join("\n");
+    expect(said).toMatch(/never been run against a real/i);
+    // The word that must NOT appear for these two.
+    expect(said).not.toMatch(/\bis supported\b/i);
+  });
+
+  test("a verified provider gets no such warning", async () => {
+    // The boundary: a warning printed for everything is a warning nobody reads.
+    const log = { warn: jest.fn(), error: jest.fn() };
+    await reportRetrievalFilterSupport("lancedb", log);
+    const said = log.warn.mock.calls.map((call) => call[0]).join("\n");
+    expect(said).not.toMatch(/never been run against a real/i);
+  });
+
+  test("staleClasses lists the CLASS NAMES, not just a count", async () => {
+    // NIT: the report must name the classes. An operator told "3 classes are affected"
+    // cannot act; one told "Workspaceabc, Workspacedef" knows exactly what to re-embed.
+    // Weaviate cannot fix these in place, so the names are the entire remedy.
+    const weaviate = require("../../../utils/vectorDbProviders/weaviate");
+    jest.spyOn(weaviate.Weaviate.prototype, "connect").mockResolvedValue({
+      client: {
+        schema: {
+          getter: () => ({
+            do: async () => ({
+              classes: [
+                // Pre-T-5: no ACL properties, no indexNullState.
+                { class: "Legacyone", properties: [{ name: "text" }] },
+                {
+                  class: "Legacytwo",
+                  properties: [{ name: "text" }],
+                  invertedIndexConfig: { indexNullState: false },
+                },
+                // Created since: properties declared, field-tokenized, null state indexed.
+                {
+                  class: "Modernone",
+                  properties: [
+                    { name: "orgId", tokenization: "field" },
+                    { name: "workspaceId", tokenization: "field" },
+                    { name: "docId", tokenization: "field" },
+                  ],
+                  invertedIndexConfig: { indexNullState: true },
+                },
+              ],
+            }),
+          }),
+        },
+      },
+    });
+
+    process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = "1";
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const result = await reportRetrievalFilterSupport("weaviate", log);
+
+    expect(result.staleClasses).toEqual(["Legacyone", "Legacytwo"]);
+    expect(result.staleClasses).not.toContain("Modernone");
+
+    const said = log.error.mock.calls.map((call) => call[0]).join("\n");
+    expect(said).toContain("Legacyone");
+    expect(said).toContain("Legacytwo");
+    expect(said).not.toContain("Modernone");
+    // And it must say WHY it cannot be fixed in place, or the operator will try.
+    expect(said).toMatch(/IndexNullState cannot be changed/i);
+  });
+
+  test("no stale classes means no error at all", async () => {
+    const weaviate = require("../../../utils/vectorDbProviders/weaviate");
+    jest.spyOn(weaviate.Weaviate.prototype, "connect").mockResolvedValue({
+      client: {
+        schema: {
+          getter: () => ({
+            do: async () => ({
+              classes: [
+                {
+                  class: "Modernone",
+                  properties: [
+                    { name: "orgId", tokenization: "field" },
+                    { name: "workspaceId", tokenization: "field" },
+                    { name: "docId", tokenization: "field" },
+                  ],
+                  invertedIndexConfig: { indexNullState: true },
+                },
+              ],
+            }),
+          }),
+        },
+      },
+    });
+
+    process.env.RETRIEVAL_FILTER_ALLOW_UNPROVABLE = "1";
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const result = await reportRetrievalFilterSupport("weaviate", log);
+    expect(result.staleClasses).toEqual([]);
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  test("chroma is still declared as having no escape clause", () => {
+    // The 1b ruling, re-pinned here so removing it from the list is a visible test change
+    // rather than a silent behaviour change.
+    expect(NO_ESCAPE_CLAUSE_PROVIDERS).toContain("chroma");
+  });
+});

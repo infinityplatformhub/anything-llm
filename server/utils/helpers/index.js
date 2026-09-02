@@ -661,6 +661,10 @@ function humanFileSize(bytes, si = false, dp = 1) {
  * @param {Object} opts.workspace - The workspace record (required)
  * @param {string} [opts.prompt] - The current user prompt
  * @param {Object|null} [opts.user] - The user object
+ * @param {Object|null} [opts.actorRef] - A principal reference for callers with no `user`
+ *   (an embed visitor). The router PREFETCHES pinned documents, so a caller that omits it
+ *   prefetches as nobody and gets none — which is fail-closed, but it is still a
+ *   regression: the embed's own documents disappear from its context.
  * @param {Object|null} [opts.thread] - The thread object
  * @param {Object[]} [opts.attachments] - Attachments array
  * @param {Object|null} [opts.chatHistoryOverride] - Pre-fetched chat history
@@ -672,6 +676,7 @@ async function resolveProviderConnector({
   workspace,
   prompt = "",
   user = null,
+  actorRef = null,
   thread = null,
   attachments = [],
   chatHistoryOverride = null,
@@ -707,6 +712,7 @@ async function resolveProviderConnector({
   const ctx = await ModelRouterService.gatherRoutingContext({
     workspace,
     user,
+    actorRef,
     thread,
     message: prompt,
     chatHistoryOverride,

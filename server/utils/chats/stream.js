@@ -1,5 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { WorkspaceChats } = require("../../models/workspaceChats");
 const { WorkspaceParsedFiles } = require("../../models/workspaceParsedFiles");
 const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
@@ -152,10 +154,11 @@ async function streamChatWithWorkspace(
   // Pinned docs — reuse pre-fetched if available, otherwise fetch with token cap.
   const pinnedDocs =
     prefetchedPinnedDocs ??
-    (await new DocumentManager({
+    (await authorizedPinnedDocs({
       workspace,
       maxTokens: LLMConnector.promptWindowLimit(),
-    }).pinnedDocs());
+      user,
+    }));
   pinnedDocs.forEach((doc) => {
     const { pageContent, ...metadata } = doc;
     pinnedDocIdentifiers.push(sourceIdentifier(doc));
@@ -173,7 +176,8 @@ async function streamChatWithWorkspace(
     (await WorkspaceParsedFiles.getContextFiles(
       workspace,
       thread || null,
-      user || null
+      // Required now: an absent user used to mean "every user's files".
+      user ?? { systemActor: true }
     ));
   parsedFiles.forEach((doc) => {
     const { pageContent, ...metadata } = doc;

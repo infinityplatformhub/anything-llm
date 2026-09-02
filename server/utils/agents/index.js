@@ -17,7 +17,9 @@ const ImportedPlugin = require("./imported");
 const { AgentFlows } = require("../agentFlows");
 const MCPCompatibilityLayer = require("../MCP");
 const { getAndClearInvocationAttachments } = require("../chats/agents");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 
 class AgentHandler {
   #invocationUUID;
@@ -791,17 +793,16 @@ class AgentHandler {
     const thread = this.invocation.thread_id
       ? { id: this.invocation.thread_id }
       : null;
-    const documentManager = new DocumentManager({
-      workspace: this.invocation.workspace,
-    });
 
     return Promise.all([
       WorkspaceParsedFiles.getContextFiles(
         this.invocation.workspace,
         thread,
-        user
+        user ?? { systemActor: true }
       ),
-      documentManager.pinnedDocs(),
+      // T-5 slice 2: an agent acts on behalf of its user, so it reads what that user
+      // reads. With no user it gets a match-none filter — nothing, never everything.
+      authorizedPinnedDocs({ workspace: this.invocation.workspace, user: user }),
     ])
       .then(([parsedFiles, pinnedDocs]) => {
         const allDocuments = [
