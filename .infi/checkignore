@@ -20,3 +20,4 @@ server/__tests__/security/identity/ldapFilterEscape.test.js
 server/__tests__/security/identity/ldapProviderConfig.test.js
 server/__tests__/utils/events/auditRedaction.test.js
 server/utils/apiKeySecurity/index.js
+server/__tests__/models/updateSettingsReturns.test.js
