@@ -657,3 +657,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #131 delta 58433f7bb (per-match, origin[] code-unit, overlap label, adversarial 5 + surviving-astral fixture, /g twin removed w/ honest no-test comment, U+2800 OUT): regating /tmp/wt-131; TL-2 delta read requested → close/merge.
 - #133 Dev3: F1 (MEMBERSHIP_FLOOR=25 / MEMBERSHIP_RATIO=0.5 separate guard, refused clears both lists), F2 quarantined keep membership, NIT-1 30/100 fixture, NIT-2 removeMembership [] on T1/T3; 21/21, +5 mutants dead; SHA after sweep.
 - #131 58433f7bb gate GREEN: check-local pass, audit+bundle 354/354, sweeps 63/63, ledger 9; result written (run-id gate-131-58433f7bb). Awaiting TL-2 delta read → close/merge.
+- #133 62fcc66e6 (Dev3: F1 membership guard w/ separate constants, F2 quarantine keep, NIT-1 30/100, NIT-2, 21/21) regating /tmp/wt-133; TL-1 + QA-1 dispatched. Dev3 pattern (3× fixture never reaches the claimed guard) already in §7.17.
