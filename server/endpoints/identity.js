@@ -96,7 +96,9 @@ function identityEndpoints(app) {
     }
   });
 
-  app.get("/sso/:provider/callback", async (request, response) => {
+  // Also rate limited: unauthenticated, and a callback carrying a wrong state
+  // still costs a database read before it can be refused.
+  app.get("/sso/:provider/callback", inviteRateLimit, async (request, response) => {
     const { provider } = request.params;
     const ip = request.ip || "Unknown IP";
     try {

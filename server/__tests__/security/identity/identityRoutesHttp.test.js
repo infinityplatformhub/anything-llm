@@ -253,4 +253,21 @@ describe("rate limiting (Q-4)", () => {
     }
     expect(sawLimit).toBe(true);
   });
+
+  test("the CALLBACK route is limited too — a wrong state still costs a DB read", async () => {
+    // Techlead: an unauthenticated callback with a junk state is refused, but
+    // only after a lookup. Without a limiter that is a free way to make the
+    // database do work, and the login limiter does not cover this path.
+    let sawLimit = false;
+    for (let i = 0; i < 40; i++) {
+      const response = await request(app).get(
+        `/api/sso/oidc/callback?code=x&state=junk-${i}`
+      );
+      if (response.status === 429) {
+        sawLimit = true;
+        break;
+      }
+    }
+    expect(sawLimit).toBe(true);
+  });
 });
