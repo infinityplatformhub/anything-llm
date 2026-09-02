@@ -58,144 +58,149 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">3327b34ac</span> · 2026-09-02 (merged วันนี้ 30 · gate เขียวรอ verdict: #131 · fix รอบใหม่: #121 · กำลังทำ #133 · รอ #121: #126-s2 #130 #132 · รอ user: #113 Q4, #107, +1 TL?)</div>
-  <h1>ApproofWorkspace — งานถึงไหน (7 เดือน)</h1>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">2acc9a837</span> · 2026-09-02 20:35</div>
+  <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
 <section class="overall">
   <div class="big">99<small>/ 133 issues ปิด</small></div>
   <div>
-    <div class="bar" aria-label="47 closed, 3 in review, 3 in dev, 6 queued of 59">
-      <span style="width:79.7%;background:var(--done)"></span>
-      <span style="width:5.1%;background:var(--gate)"></span>
-      <span style="width:5.1%;background:var(--dev)"></span>
-      <span style="width:10.1%;background:var(--queue)"></span>
+    <div class="bar" aria-label="99 closed, 3 in review, 3 in dev, 5 queued of 133">
+      <span style="width:74.4%;background:var(--done)"></span>
+      <span style="width:2.3%;background:var(--gate)"></span>
+      <span style="width:2.3%;background:var(--dev)"></span>
+      <span style="width:3.8%;background:var(--queue)"></span>
     </div>
     <div class="legend">
-      <span><i style="background:var(--done)"></i>ปิดแล้ว 47</span>
-      <span><i style="background:var(--gate)"></i>รอ review/merge 3</span>
-      <span><i style="background:var(--dev)"></i>กำลังทำ 3</span>
-      <span><i style="background:var(--queue)"></i>คิว 6</span>
-      <span>· merge วันนี้ 15 · เทสบน main <span class="mono">3033/3033 (+frontend)</span></span>
+      <span><i style="background:var(--done)"></i>ปิดแล้ว 99</span>
+      <span><i style="background:var(--gate)"></i>รอ review 2</span>
+      <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
+      <span><i style="background:var(--queue)"></i>คิว 5</span>
+      <span>· merge วันนี้ 28 issue · เทสบน main <span class="mono">server 3136 · frontend 107</span> เขียวหมด</span>
     </div>
   </div>
 </section>
 
-
 <section>
-  <h2 style="margin-bottom:10px">Program 7 เดือน — เดือน 1 Phase 0 ปิดครบ (P0-1..P0-7) · backlog เดือน 2–7 ทั้ง 34 รายการ</h2>
+  <h2 style="margin-bottom:10px">รอคุณตัดสิน 3 เรื่อง</h2>
   <div class="tbl"><table>
-    <thead><tr><th>#</th><th>รายการ</th><th>เดือน</th><th>สถานะ 2 ก.ย.</th></tr></thead>
+    <thead><tr><th>เรื่อง</th><th>ทางเลือก</th><th>ถ้าไม่ตอบ</th></tr></thead>
     <tbody>
-<tr><td class="mono">S1</td><td>OIDC generic (Google/Entra)</td><td class="mono">2</td><td><span class="chip ok">ปิด</span> ปิด #36</td></tr>
-<tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip ok">ปิด</span> #43 merged</td></tr>
-<tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip ok">ปิด</span> #60 merged (092000 follow-up)</td></tr>
-<tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S5</td><td>Audit ครบ + export + retention</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> บางส่วน: audit export + retention ผ่าน T-6 #28</td></tr>
-<tr><td class="mono">S6</td><td>Data governance PDPA redaction</td><td class="mono">3–4</td><td><span class="chip wait">บางส่วน</span> บางส่วน: redaction hook ผ่าน T-6 #28</td></tr>
-<tr><td class="mono">S7</td><td>LLM policy + model catalog</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S8</td><td>Guardrails + agent runtime policy</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S9</td><td>Air-gap switch</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S10</td><td>Analytics + token budget</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S11</td><td>SMTP/mailer</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> #80 S11a + #108 S11b merged · S11c log #107 queued</td></tr>
-<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">S13</td><td>MFA + session</td><td class="mono">2–5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V1</td><td>ภาษาไทยครบวงจร (UI th, embedding, eval, OCR)</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> บางส่วน: Thai splitter #37 + eval set #44 · UI th / OCR ยังไม่เริ่ม</td></tr>
-<tr><td class="mono">V2</td><td>Lark bot</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V3</td><td>Connectors Drive + Lark Docs</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V4</td><td>Assistant templates + governance</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V5</td><td>Answer quality + eval harness</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V6</td><td>แชร์บทสนทนาในทีม</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V7</td><td>Embed widget harden</td><td class="mono">5</td><td><span class="chip wait">บางส่วน</span> บางส่วน: session token #32 · widget PR → #49</td></tr>
-<tr><td class="mono">V8</td><td>Mobile responsive</td><td class="mono">2</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V9</td><td>ค้นหาประวัติแชท</td><td class="mono">2</td><td><span class="chip ok">ปิด</span> #61 merged (Thai-locale detection → O2)</td></tr>
-<tr><td class="mono">V10</td><td>Org-wide doc search + ACL</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> T-5 #30 ปิดแล้ว (slice 1a/1b/2/3) เปิดได้</td></tr>
-<tr><td class="mono">V11</td><td>RAG tuning admin + reindex UI</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V12</td><td>Image generation</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V13</td><td>Knowledge curation</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">V14</td><td>Deep research</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> เปิดได้เมื่อ S10+O6 เสร็จ</td></tr>
-<tr><td class="mono">V15</td><td>Code interpreter sandbox</td><td class="mono">6</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">O1</td><td>License per-seat</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">O2</td><td>Installer/setup wizard</td><td class="mono">2–3</td><td><span class="chip ok">ปิด</span> #74 O2a + #112 O2b merged</td></tr>
-<tr><td class="mono">O3</td><td>Backup/restore</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">O4</td><td>Model lifecycle</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">O5</td><td>Diagnostic bundle + Prometheus</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
-<tr><td class="mono">O6</td><td>GPU queue</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> </td></tr>
+      <tr><td class="mono">#113 Q4</td><td>อีเมลเดียวกันมีทั้ง Lark และ LDAP: (a) ปฏิเสธ + รายงาน conflict ทุกรอบจนมีคนแก้ (Techlead แนะนำ) · (b) Lark ทับ link เดิมทุก full sync (เสี่ยง takeover เงียบ)</td><td>S4b slice 4 (identity matching) เริ่มไม่ได้ · slice 1–3 เดินต่อได้</td></tr>
+      <tr><td class="mono">#107</td><td>สร้าง mail log ไหม · retention แนะนำ 30 วัน · เก็บ recipient เต็มหรือ mask</td><td>S11c ค้าง</td></tr>
+      <tr><td class="mono">+1 Techlead</td><td>คอขวดคือคนตรวจ ไม่ใช่ dev — เพิ่ม Techlead 1 คนหรือไม่</td><td>คิว review ยาวตามเดิม</td></tr>
     </tbody>
   </table></div>
-  <p class="note" style="margin-top:8px">ปิด 1 · กำลังทำ 1 · บางส่วน 4 · ยังไม่เริ่ม 28 — เดือน 6 feature freeze · เดือน 7 integration + pen-test ภายนอก (จองผู้ให้บริการภายในเดือน 5)</p>
 </section>
 
-<h2 style="margin-bottom:-14px">Phase 0 + follow-up — 59 issue</h2>
+<h2 style="margin-bottom:-14px">งานที่ยังเปิดอยู่</h2>
 <section class="lanes">
   <div class="lane" style="--c:var(--gate)">
-    <h2>รอ review / merge <span class="mono">3</span></h2>
+    <h2>รอ review / merge <span class="mono">2</span></h2>
     <div class="card">
-      <div class="top"><span class="id">#30 T-5 slice 1a</span><span class="who">Dev4 · 05e18e79</span></div>
-      <p>ACL filter ทุก retrieval path. LanceDB ผ่าน 6/6 แล้ว แต่รอบนี้เจอ pgvector placeholder ผิดทั้ง provider (QA-2) + ตาราง pre-T-5 ไม่มี ACL column ทำ escape hatch throw (Techlead) แก้แล้วใน b35c73eb (22 เทสใหม่ยิง pg จริง + ตารางไม่มี ACL column) gate รอบ 3 กำลังรัน</p>
-      <div class="chips"><span class="chip ok">gate 1310/1310</span><span class="chip ok">1a merged f12e8108</span><span class="chip wait">1b rebase</span></div>
+      <div class="top"><span class="id">#131 zero-width redaction</span><span class="who">Dev5 · aa6d7de6d</span></div>
+      <p>อักขระล่องหน 19 ตัวทำให้ทุก pattern PDPA/credential มองไม่เห็นค่า ทั้ง audit และ diagnostic bundle. class = Cf ∪ Default_Ignorable ไม่มี hand-list. TL-2 + QA-2 ผ่านแล้ว · ruling สุดท้าย: strip เฉพาะช่วง match (กัน emoji เปลี่ยนรูป) → Dev5 กำลัง commit delta</p>
+      <div class="chips"><span class="chip ok">gate 347/347</span><span class="chip ok">TL-2 PASS</span><span class="chip ok">QA-2 PASS</span><span class="chip wait">delta per-match</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 66cb5e7d</span></div>
-      <p>DELETE /system/credential/:envKey. รอบ 4: denylist AUTH_TOKEN/JWT_SECRET/SIG_KEY/SIG_SALT/API_KEY_PEPPER + เทสมีแถวก่อนแล้วปฏิเสธ + sweep เทียบ passthrough condition gate กำลังรัน</p>
-      <div class="chips"><span class="chip ok">merged</span><span class="chip ok">QA-1 PASS</span><span class="chip ok">Techlead PASS</span></div>
-    </div>
-    <div class="card">
-      <div class="top"><span class="id">#43 S2 Entra SAML</span><span class="who">Dev3 · 79448c01</span></div>
-      <p>S2 SAML ครบ: verifier ผูก assertion ที่ verify, key จาก config, replay table, Recipient/Issuer, cross-provider state merged 69a64bf7 → Dev3 ต่อ S3 LDAP (#60)</p>
-      <div class="chips"><span class="chip ok">merged</span><span class="chip ok">QA-2 40/40</span><span class="chip ok">Techlead PASS</span></div>
+      <div class="top"><span class="id">#133 S4b slice 1 directory diff</span><span class="who">Dev3 · f0d016be0</span></div>
+      <p>diff ล้วน: enumeration ที่ไม่สมบูรณ์แทนค่าเป็น input ไม่ได้ (Symbol), scale guard FLOOR 10 / ratio 0.5. TL-1 reject: membership removal ไม่มี guard (scope แคบ = ถอด grant ทั้งองค์กรเงียบ ๆ) + quarantined ต้องไม่เสีย membership → SHA ใหม่</p>
+      <div class="chips"><span class="chip ok">gate 15/15</span><span class="chip no">TL-1 REJECT</span><span class="chip wait">QA-1 รอ SHA</span></div>
     </div>
   </div>
 
   <div class="lane" style="--c:var(--dev)">
-    <h2>กำลังทำ <span class="mono">3</span></h2>
+    <h2>กำลังแก้ <span class="mono">3</span></h2>
     <div class="card">
-      <div class="top"><span class="id">#30 slice 1b</span><span class="who">Dev4</span></div>
-      <p>OR-unlabelled ครบ 5 dialect. ruling วันนี้: chroma ไม่มี $exists → flag inert + log ดังตอน boot; weaviate ห้าม emit <span class="mono">Not</span> ใช้ And[NotEqual]</p>
+      <div class="top"><span class="id">#121 SettingsSidebar 29 sites</span><span class="who">Dev1 · เกิน ETA</span></div>
+      <p>เมนู settings ทุกตัวถาม capability แทน role string. gate แดง: vitest exit 1 (mock ขาด 2 method) + ledger ไม่ได้ commit + system.read ยังไม่เข้า ORG_CAPABILITIES (3 เมนูจะหายจากทุกคนใน prod) · SHA ใหม่ค้าง — ปลดล็อก #126 s2 #130 #132</p>
+      <div class="chips"><span class="chip no">gate RED</span><span class="chip wait">SHA ใหม่</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#58 follow-up</span><span class="who">Dev2</span></div>
-      <p>merged a05c8796 — repair เช็ค _updateSettings.success + เทส ruling A</p>
+      <div class="top"><span class="id">#133 fix</span><span class="who">Dev3</span></div>
+      <p>guard ตัวที่สองบน membership removal + quarantined คง membership + RF-6/RF-7</p>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#50 S1-cleanup</span><span class="who">Dev2 · กำลังทำ</span></div>
-      <p>merged ba486811 — ลบ simple-SSO + issue-auth-token + sso.issue scope (migration 090000), NO_LOGIN ปลอดภัยบน shape (b), SSOProviders</p>
+      <div class="top"><span class="id">#131 delta</span><span class="who">Dev5</span></div>
+      <p>per-match strip ด้วย origin[] map · fixture non-BMP U+13430 · emoji ข้าง PII รอด</p>
     </div>
   </div>
 
   <div class="lane" style="--c:var(--queue)">
-    <h2>คิว <span class="mono">6</span></h2>
-    <div class="card"><div class="top"><span class="id">#53 org.member</span><span class="who">Dev2 หลัง #50</span></div><p>แทน chat.send ที่ใช้เป็น membership proxy บน 7 route + permissions.scope</p></div>
-    <div class="card"><div class="top"><span class="id">#40 frontend authz</span><span class="who">หลัง #53</span></div><p>capabilities endpoint + can(action)</p></div>
-    <div class="card"><div class="top"><span class="id">#49 #54 #56</span><span class="who">Dev4 หลัง #30</span></div><p>embed server-minted session · upload asymmetry · vector metadata backfill</p></div>
-    <div class="card"><div class="top"><span class="id">#51 #55 #57 #59</span><span class="who">Dev1 หลัง #48</span></div><p>2 flake · generated-files owner · enable-multi-user rollback (เปิดวันนี้จาก QA-1 finding)</p></div>
+    <h2>คิว <span class="mono">5</span></h2>
+    <div class="card"><div class="top"><span class="id">#126 slice 2</span><span class="who">Dev2 · หลัง #121</span></div><p>SettingsSidebar privacy link เป็น component (ไฟล์ชนกับ #121)</p></div>
+    <div class="card"><div class="top"><span class="id">#132 SystemReadRoute</span><span class="who">Dev4 · หลัง #121</span></div><p>guard ที่ถาม system.read ตรง (ruling B) ปิดช่อง setup_admin เปิดหน้า mobile แล้ว 403</p></div>
+    <div class="card"><div class="top"><span class="id">#130 connectionBudget</span><span class="who">Dev1 · หลัง #121</span></div><p>timeout 500→2000ms + แทน source-grep guard</p></div>
+    <div class="card"><div class="top"><span class="id">S4b slice 2–3</span><span class="who">Dev3 · หลัง #133</span></div><p>apply + checkpoint · job + lock (session lock vs row+heartbeat = ruling) · slice 4 รอ Q4</p></div>
+    <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
   </div>
 </section>
 
 <section>
-  <h2 style="margin-bottom:10px">merge วันนี้ 15 รายการ</h2>
+  <h2 style="margin-bottom:10px">merge วันนี้ 28 issue</h2>
   <div class="tbl"><table>
-    <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุจาก review</th></tr></thead>
+    <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุ</th></tr></thead>
     <tbody>
-      <tr><td class="mono">#58</td><td>Mode source of truth: shape (b) repair ตอน boot + /request-token runtime guard</td><td>gate 1250, QA-1 · QA-2 12/12 · Techlead PASS; นำไปสู่ #59</td></tr>
-      <tr><td class="mono">#41</td><td>Bound API key หลุดข้าม tenant ผ่าน 7 /v1/document route</td><td>NFC/NFD path เป็นเคสจริง (Dev1 RED-proved)</td></tr>
-      <tr><td class="mono">#36</td><td>S1 SSO OIDC (Google/Entra) identity_links</td><td>slots 080000/081000</td></tr>
-      <tr><td class="mono">#52</td><td>hotfix T-7: view-as-user mutate ได้โดยไม่ผ่าน requirePermission</td><td>เกิดจาก #31 merge ก่อน QA verdict → ตั้งกฎ §7.11</td></tr>
-      <tr><td class="mono">#35</td><td>PR-4d: API-key scope ceiling = creator grants ผ่าน engine</td><td></td></tr>
-      <tr><td class="mono">#31</td><td>T-7: delegated admin + view-as-user</td><td></td></tr>
-      <tr><td class="mono">#32</td><td>Embed session token HMAC-signed</td><td>widget → #49</td></tr>
-      <tr><td class="mono">#45</td><td>apiKeyContext.keyKind required, fail closed</td><td></td></tr>
-      <tr><td class="mono">#27</td><td>PR-4c: drop api_keys.scopes default ["*"]</td><td></td></tr>
-      <tr><td class="mono">#15</td><td>E2E Playwright suite</td><td>12/12</td></tr>
-      <tr><td class="mono">#39</td><td>hotfix circular require → SERVICE_PRINCIPALS undefined</td><td></td></tr>
-      <tr><td class="mono">#28</td><td>T-6 audit export + retention purge + PDPA redaction</td><td>slots 050000/051000</td></tr>
-      <tr><td class="mono">#47 #44 #46</td><td>cacheIsolation flake · Thai retrieval eval set · validatedRequest fail-open hotfix</td><td></td></tr>
+      <tr><td class="mono">#40 (4 tasks)</td><td>Frontend authz: capabilities endpoint + can() แทน role string ทุก site</td><td>ปิดครบ 4 task · drift sweep และ source assertion ต้องตัดคอมเมนต์ก่อน match (บทเรียนซ้ำ 3 รอบ)</td></tr>
+      <tr><td class="mono">#113 #129</td><td>S4a Lark directory sync + guard บน addGroupMember/removeGroupMember</td><td>ACL-only group และ deny group ปิดครบ · bar = role.grant</td></tr>
+      <tr><td class="mono">#128</td><td>heldPermissionIds เห็น grant ผ่านกลุ่ม</td><td>ลงหลัง #113 ตามลำดับ (กัน self-add escalation)</td></tr>
+      <tr><td class="mono">#123</td><td>assignableRoles จาก permission set จริง</td><td>exempt principal โดยชื่อ ไม่ใช่ type</td></tr>
+      <tr><td class="mono">#119</td><td>route mount guard seal ทั้ง use() sub-router และ app._router</td><td>QA-2 เจาะทะลุ app._router ก่อน — ปิดด้วย keepRouteFactory</td></tr>
+      <tr><td class="mono">#118 #120</td><td>credit_card redaction: fullwidth digits + separators</td><td>comma ถอดออกหลังวัด FP บน id list</td></tr>
+      <tr><td class="mono">#125 #115 #116</td><td>credentialStore memoize (ปิด timing side channel) · hydrate ก่อน listen · restore ครบ</td><td></td></tr>
+      <tr><td class="mono">#122 #106-class</td><td>pg connection_limit=5 + central disconnect</td><td>too-many-clients หายจาก post-merge</td></tr>
+      <tr><td class="mono">#124 #126 s1 #127</td><td>a11y model picker · Home gate เป็น component · mobile-connections guard</td><td>ทั้งสามโดน QA จับเทสเขียวด้วยเหตุผลผิด แล้วแก้</td></tr>
+      <tr><td class="mono">#84 #91 #94 #95 #96 #98 #102 #104 #108 #111 #112 #114 #99 #101</td><td>authz engine, group expansion, S11b SMTP guided setup, O2b installer, route seal, ฯลฯ</td><td></td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section>
-  <h2 style="margin-bottom:8px">กฎที่ตั้งเพิ่มวันนี้ (code-standards §7)</h2>
-  <p class="note">§7.3a describe title ห้ามขึ้นต้น <span class="mono">#</span> · §7.9 RED ต้องแดงด้วยเหตุผลที่ถูก · §7.10 prisma singleton → resetModules · §7.11 ขอ review แล้วต้องรอ verdict ก่อน merge แม้ gate ผ่าน · main checkout เป็นของ PMO เท่านั้น</p>
+  <h2 style="margin-bottom:10px">Program 7 เดือน — สถานะ 2 ก.ย.</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>รายการ</th><th>เดือน</th><th>สถานะ</th></tr></thead>
+    <tbody>
+<tr><td class="mono">S1</td><td>OIDC generic (Google/Entra)</td><td class="mono">2</td><td><span class="chip ok">ปิด</span></td></tr>
+<tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip ok">ปิด</span></td></tr>
+<tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip ok">ปิด</span></td></tr>
+<tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> S4a driver merged · S4b slice 1 ใน review · slice 4 รอ Q4</td></tr>
+<tr><td class="mono">S5</td><td>Audit ครบ + export + retention</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span></td></tr>
+<tr><td class="mono">S6</td><td>Data governance PDPA redaction</td><td class="mono">3–4</td><td><span class="chip wait">บางส่วน</span> redaction hardened 3 รอบวันนี้ (#118 #120 #131)</td></tr>
+<tr><td class="mono">S7</td><td>LLM policy + model catalog</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">S8</td><td>Guardrails + agent runtime policy</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">S9</td><td>Air-gap switch</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">S10</td><td>Analytics + token budget</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">S11</td><td>SMTP/mailer</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> S11a + S11b merged · S11c log รอ #107</td></tr>
+<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> (จะใช้ addGroupMember guard ที่มีแล้ว)</td></tr>
+<tr><td class="mono">S13</td><td>MFA + session</td><td class="mono">2–5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V1</td><td>ภาษาไทยครบวงจร</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> splitter + eval set · UI th / OCR ยังไม่เริ่ม</td></tr>
+<tr><td class="mono">V2</td><td>Lark bot</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V3</td><td>Connectors Drive + Lark Docs</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V4</td><td>Assistant templates + governance</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V5</td><td>Answer quality + eval harness</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V6</td><td>แชร์บทสนทนาในทีม</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V7</td><td>Embed widget harden</td><td class="mono">5</td><td><span class="chip wait">บางส่วน</span></td></tr>
+<tr><td class="mono">V8</td><td>Mobile responsive</td><td class="mono">2</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V9</td><td>ค้นหาประวัติแชท</td><td class="mono">2</td><td><span class="chip ok">ปิด</span></td></tr>
+<tr><td class="mono">V10</td><td>Org-wide doc search + ACL</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> เปิดได้</td></tr>
+<tr><td class="mono">V11</td><td>RAG tuning admin + reindex UI</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V12</td><td>Image generation</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V13</td><td>Knowledge curation</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V14</td><td>Deep research</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">V15</td><td>Code interpreter sandbox</td><td class="mono">6</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">O1</td><td>License per-seat</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">O2</td><td>Installer/setup wizard</td><td class="mono">2–3</td><td><span class="chip ok">ปิด</span></td></tr>
+<tr><td class="mono">O3</td><td>Backup/restore</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">O4</td><td>Model lifecycle</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">O5</td><td>Diagnostic bundle + Prometheus</td><td class="mono">5</td><td><span class="chip wait">บางส่วน</span> bundle มีแล้ว</td></tr>
+<tr><td class="mono">O6</td><td>GPU queue</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:8px">ปิด 5 · กำลังทำ 2 · บางส่วน 5 · ยังไม่เริ่ม 22 — เดือน 6 feature freeze · เดือน 7 integration + pen-test ภายนอก</p>
+</section>
+
+<section>
+  <h2 style="margin-bottom:8px">กฎที่เพิ่มวันนี้</h2>
+  <p class="note">CLAUDE.md: reject = บทเรียนส่งทุก dev + ลง §7.17 · ruling โครงสร้างผ่าน Techlead ก่อน · ห้ามสองคนในไฟล์เดียว · §7.11a tier auth/plain · §7.17 วันนี้ +20 บท (scan ข้อความไม่ใช่โค้ด, green report แต่ exit 1, mutation แรก = ลบบรรทัดที่ diff เพิ่ม, fixture ต้องอยู่ตรงที่ guard ตัวเดียวตัดสิน)</p>
 </section>
 </main>
