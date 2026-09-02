@@ -381,3 +381,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #96 + #111 complete: server 2892/2892, frontend 8/8 (frontend needed `yarn install` on main first — exit 127 was missing vitest, not a failure). Post-merge suite now = server + frontend.
 - #40 task 3 c5a7c6aa0 merged a1e3df19f (verified: resetCapabilities in AuthContext, check script present). First attempt ran in the worktree (cwd drift) — main untouched, push rejected; redone from main. wt-40t3/g40t3 reaped. Dev2 → #115.
 - #112 43cf5da87 (both halves, 121/6 suites) gate running at wt-112. #113 TL-2 Lark facts → evidence + Dev3 (user_id key, full reconcile, email = trust boundary).
+- #112 43cf5da87 (both halves): gate PASS at wt-112 (g112) — check-local, contract 121/121 (6 suites), sweeps 63/63, ledger normalized /tmp/ledger-112.norm.md. Waiting QA-2 A–G + TL-1 RF-1..5 (auth). Sweep pin 317→318 (READ route). Post-merge after #40 t3 running (/tmp/postmerge-40t3.log).
