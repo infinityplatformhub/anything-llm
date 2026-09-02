@@ -490,3 +490,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #123 7b4fe4f34 (Dev1): gate running at wt-123 (g123); TL-1 + QA-1 dispatched (auth). Contract updated #issuecomment-5509138577. Residual: legacy manager → [] when #121 consumes (release note).
 - Queue: Dev1 → #121 after #123 (MenuOption capability prop + 14 sites, TL-1 mapping ruling done; delegated-admin 3 wait #123 merge); Dev5 → #117 memoize after #122 (TL-2 pre-ruling cache-keyed-by-SIG_KEY, QA-2 baseline ready) — reassigned from Dev2 who stays on #40 t4.
 - #123 7b4fe4f34: gate PASS at wt-123 (g123) — check-local, assignableRolesHttp 16/16, siblings 38/38, sweeps 63/63, ledger 6 normalized. Waiting TL-1 + QA-1 (auth).
+- #122 final SHA a69c2705b (test-only: setupFilesAfterEnv assert, empty-hook assert, default cap ≤10; 15/15); wt-122 rebound. Waiting QA-2/QA-1 → close/merge. #117 = #125 (Dev5, approof/memoize-key, contract posted, RED starting; real encryptionKey call sites credentialStore.js:76,103). #40 t4 14/15, keyboardShortcuts last.
+- PMO note: two docs commits landed in /tmp/wt-122 via cwd drift; both reset. Use `git -C <main>` for all docs commits.
