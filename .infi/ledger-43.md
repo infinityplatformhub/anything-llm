@@ -54,13 +54,13 @@ because refusing them names an account that does not exist and blocks a legitima
 login; if this is wrong an SSO account can be shadowed by a second account sharing its
 handle, which the email checks above still catch whenever the address matches.
 
-Ruling (PMO condition 1): both sides of every handle comparison go through one exported
+Ruling: (PMO condition 1) both sides of every handle comparison go through one exported
 `normalizeForCompare` (NFC then lowercase), and `linkPrincipal` normalizes the incoming
 address with that same function — comparing on anything else means `User+X@` and
 `user+x@` are two handles for one mailbox and the collision rule silently stops firing;
 if this is wrong we normalize slightly more than strictly needed.
 
-Ruling (PMO condition 2): the checks run in a FIXED order — (1a) email already in
+Ruling: (PMO condition 2) the checks run in a FIXED order — (1a) email already in
 `identity_links`, (1b) local account under the raw address, then (2) derived handle.
 The handle rule must not shadow the email rule: reversed, an account federated to a
 DIFFERENT provider under the same address looks like "someone else sharing a handle"
@@ -94,12 +94,12 @@ read-then-write — two simultaneous presentations both read "not seen" and both
 and a replay sent twice at once is not a hard attack to mount; if this is wrong we
 catch a P2002 we could have avoided asking about.
 
-Ruling (NIT-2): exhausting all five username candidates raises `IdentityUnavailableError`
+Ruling: (NIT-2) exhausting all five username candidates raises `IdentityUnavailableError`
 (retryable), not `IdentityConflictError` — five random 4-byte collisions is the database
 misbehaving, not "this identity belongs to someone else, an admin must resolve it"; if
 this is wrong a caller retries a login that was never going to succeed.
 
-Ruling (NIT-1): the `identity_links.email` NFC backfill ships in slot `082000` alongside
+Ruling: (NIT-1) the `identity_links.email` NFC backfill ships in slot `082000` alongside
 the tables, not a new slot — the normalization and the data it assumes must land
 together, or a row written in decomposed form silently misses the R1 email check; PG16
 in the test stack was verified to have `normalize()` before relying on it.
@@ -139,11 +139,11 @@ Ruling: a driver built with an empty certificate list throws at construction —
 certificate configured" must never read as "accept anything"; if this is wrong an
 operator sees an error instead of a silently unsafe provider.
 
-Ruling (NOTE-A): `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
+Ruling: (NOTE-A) `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
 SQL, because Prisma's `@default(uuid())` is generated CLIENT-side and any other writer
 (psql, a repair script, a later migration) would hit a NOT NULL with no default.
 
-Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack is PG16,
+Ruling: (NOTE-B/C) the NFC backfill states `requires PG13+` in a comment (stack is PG16,
 verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
 re-run is a no-op rather than a full-table rewrite. No `DO` block.
 
@@ -183,12 +183,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -317,12 +317,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -473,12 +473,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -607,12 +607,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -753,11 +753,11 @@ Ruling: a driver built with an empty certificate list throws at construction —
 certificate configured" must never read as "accept anything"; if this is wrong an
 operator sees an error instead of a silently unsafe provider.
 
-Ruling (NOTE-A): `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
+Ruling: (NOTE-A) `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
 SQL, because Prisma's `@default(uuid())` is generated CLIENT-side and any other writer
 (psql, a repair script, a later migration) would hit a NOT NULL with no default.
 
-Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack is PG16,
+Ruling: (NOTE-B/C) the NFC backfill states `requires PG13+` in a comment (stack is PG16,
 verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
 re-run is a no-op rather than a full-table rewrite. No `DO` block.
 
@@ -797,12 +797,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -931,12 +931,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -1087,12 +1087,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
@@ -1221,12 +1221,12 @@ trusted key signed this" is not enough, because a trust list holds several certi
 during a rotation and a deployment may configure more than one provider, so without it
 any IdP whose certificate we hold could mint assertions in another's name.
 
-Ruling (NIT-1): when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
+Ruling: (NIT-1) when a Response carries no assertion, `samlp:StatusCode` goes to the LOG
 and never to the response — it usually means the IdP refused (disabled account, declined
 MFA, unknown user), which an operator needs and an attacker would read as an account
 oracle.
 
-Ruling (NIT-2): `_checkConditions` and `_checkAudience` each carry a comment saying they
+Ruling: (NIT-2) `_checkConditions` and `_checkAudience` each carry a comment saying they
 carry weight for each other — conditions bound WHEN, audience bounds WHERE, recipient
 bounds WHERE-DELIVERED — so a reviewer cannot remove "the duplicate" without opening one
 of three distinct holes.
