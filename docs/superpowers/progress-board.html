@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">4aaacbf27</span> · 2026-09-02 23:20</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">9d783ae05</span> · 2026-09-02 23:30</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -110,7 +110,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="card">
       <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5 · 49f7a0cd9</span></div>
-      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository · SHA แล้ว: revokedAt ใน tx เดียวกับ suspend, endpoint ถอดสมาชิกกลุ่ม, 5 mutants ตาย · QA-2 พบ blocker: key ที่ mint หลัง suspend ยังใช้ได้ (sweep เป็น edge-triggered) รอ TL-2 ตัดสินรูปแบบแก้</p>
+      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository · SHA แล้ว: revokedAt ใน tx เดียวกับ suspend, endpoint ถอดสมาชิกกลุ่ม, 5 mutants ตาย · blocker (QA-2): User._update / re-suspend ทิ้ง key ที่ยังใช้ได้ · TL-2 ตัดสิน: อ่าน suspended ที่ reader (keyGrantPrincipal) + sweep แบบ level-triggered · Dev5 กำลังแก้ 5 fixtures</p>
     </div>
     <div class="card">
       <div class="top"><span class="id">V8 mobile</span><span class="who">Dev4 · หลัง #132</span></div>
