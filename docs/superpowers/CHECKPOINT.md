@@ -632,3 +632,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #119 (+#120 #127 aaed2b475 14a4df287 on main): server 3128 passed / 1 red inviteMailRoutes (123s, #106 class, rerunning alone); frontend 107/107 exit 0. Dev3 opening S4b slice-1 issue (recon on main ab388f424).
 - inviteMailRoutes green alone 28/28 (#106). Main fully green at eb8fbc507.
 - #131 217343aba (Dev5, zw-strip: redaction.js + auditRedaction.test + bundle.test + ledger) gating /tmp/wt-131; TL-2 pre-read+verdict + QA-2 probe dispatched. Waiting: #121 SHA (Dev1), S4b slice-1 issue (Dev3), #126 s2/#130/#132 blocked on #121.
+- #131 217343aba gate GREEN (audit+bundle 320/320, sweeps 63/63, ledger 6). TL-2 pre-read (59ad6506c) arrived after SHA: 19 codepoints, 7 required items (value-gone asserts, non-empty-redactions leak case, deep changes/array, dropped control, docs "170 Cf" + U+17B5). Dev5 diffs against SHA → delta SHA if needed; TL-2 verdict + QA-2 pending.
+- S4b slice-1 TL-1 pre-read (a072c96a3) relayed to Dev3: completeness as type, plan-level scale guard with floor, lock kind ruling, RF-5 mandatory.
