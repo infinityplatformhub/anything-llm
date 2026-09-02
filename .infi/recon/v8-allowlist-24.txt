@@ -1,0 +1,24 @@
+components/Footer/index.jsx:100:          {!isMobile && <SettingsButton />}
+components/Footer/index.jsx:133:        {!isMobile && <SettingsButton />}
+components/Modals/ManageWorkspace/index.jsx:47:  if (isMobileOnly) {
+components/WorkspaceChat/LoadingChat/index.jsx:24:        width={isMobile ? "70%" : "45%"}
+components/WorkspaceChat/LoadingChat/index.jsx:33:        width={isMobile ? "55%" : "30%"}
+components/WorkspaceChat/LoadingChat/index.jsx:42:        width={isMobile ? "88%" : "25%"}
+components/WorkspaceChat/ChatContainer/TextSizeMenu/index.jsx:51:  if (isMobile) return null;
+components/WorkspaceChat/ChatContainer/ChatHistory/HistoricalMessage/Actions/RenderMetrics/index.jsx:106:  if (!metrics?.duration || !metrics?.outputTps || isMobile) return null;
+components/WorkspaceChat/ChatContainer/WorkspaceModelPicker/index.jsx:122:  if (!slug || isMobile) return null;
+components/WorkspaceChat/ChatContainer/SourcesSidebar/index.jsx:23:  if (isMobile) {
+pages/GeneralSettings/CommunityHub/ImportItem/index.jsx:14:        isMobile ? "w-full" : "min-w-[360px] w-fit"
+pages/GeneralSettings/ChatEmbedWidgets/index.jsx:12:  if (isMobile) {
+pages/GeneralSettings/ChatEmbedWidgets/index.jsx:128:      className={`bg-theme-bg-secondary text-white rounded-xl ${isMobile ? "w-full" : "min-w-[360px] w-fit"}`}
+pages/OnboardingFlow/Steps/index.jsx:43:  if (isMobile) {
+pages/Admin/Agents/index.jsx:258:    if (isMobile) setShowSkillModal(true);
+pages/Admin/Agents/index.jsx:265:    if (isMobile) setShowSkillModal(true);
+pages/Admin/Agents/index.jsx:272:    if (isMobile) setShowSkillModal(true);
+pages/Admin/Agents/index.jsx:279:    if (isMobile) setShowSkillModal(true);
+pages/Admin/Agents/index.jsx:349:  if (isMobile) {
+pages/Admin/Agents/index.jsx:823:          isMobile ? "w-full" : "min-w-[360px] w-fit"
+pages/WorkspaceSettings/index.jsx:82:      {!isMobile && <Sidebar />}
+pages/WorkspaceChat/index.jsx:21:      {!isMobile && <Sidebar />}
+pages/Main/index.jsx:17:      {!isMobile ? <Sidebar /> : <SidebarMobileHeader />}
+pages/Main/Home/index.jsx:314:          {isMobile && <SidebarMobileHeader />}
