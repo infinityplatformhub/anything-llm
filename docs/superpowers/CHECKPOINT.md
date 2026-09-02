@@ -181,3 +181,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 719b7eee verdicts complete: QA-1 PASS (NIT-1/2 closed, 5-needle clean), QA-3 FAIL (limiter only), QA-2 FAIL (limiter), TL-1 blockers (limiter + email listing → #85 folded), TL-2 PASS w/ 3 gaps. Contract 85/85, check-local passed. All → step 6 final SHA.
 - #78 e52553fc7 NOT final: filter renamed to loop (manager+unknown still 200 empty), route 4 still settings.write. §7.9f evidence added. Waiting SHA with function-run proof.
 - #87 e6908fd54 on branch; Dev5 asked to declare + post contract.
+- #87 e6908fd54: gate PASS (contract vectorDbSelection 28 tests; related 1525/0). Removes O2a spelling gate (app now resolves). QA-3 + TL-2 verdicts requested. §7.6e (backup full path) added.
+- #30 slice 3: Dev4 pushed b9bce7fce + ledger f77433728 (19 files, cardinalityHttp.test.js present); worktree /tmp/wt-30s3 staged; early cardinalityHttp run to check the reported hang; QA-2/TL-2 pre-read sent. Awaiting Dev4 declaration + contract + hang cause.
+- wt-40 reaped (Dev2 has not declared a SHA).
