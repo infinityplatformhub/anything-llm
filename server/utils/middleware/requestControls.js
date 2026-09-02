@@ -139,6 +139,53 @@ const loginKey = (request) => {
   return digest(`login:${canonicalIp(request, true)}:${username}`);
 };
 
+/**
+ * S11a (#80), ruling D: bucket by the CREDENTIAL, not the source address.
+ *
+ * Sending mail costs a relay round trip and can burn a provider's sending
+ * quota, so the budget belongs to whoever is spending it. Keying on IP is wrong
+ * in both directions here: every admin behind one office NAT would share a
+ * bucket, while one key rotating through addresses would get a fresh budget per
+ * address — which is the shape an abuser has and a legitimate admin does not.
+ *
+ * A limiter runs BEFORE `requirePermission`, so `response.locals.actor` does not
+ * exist yet. The credential itself is what is available at this point, and it is
+ * the thing being metered anyway.
+ */
+const actorKey = (request) => {
+  const authorization = request.get("authorization") || "";
+  const bearer = authorization.replace(/^Bearer\s+/i, "").trim();
+  // Falls back to the address only when there is no credential at all. Those
+  // requests are about to be rejected as unauthenticated; the fallback exists so
+  // an unauthenticated flood still meets a limit rather than sharing one global
+  // bucket.
+  if (!bearer) return digest(`actor:anon:${canonicalIp(request, true)}`);
+
+  // TL-1 OBS-2: for a SESSION token, bucket by the user it names rather than by
+  // the token string. Sessions are reissued — on login, on refresh — so keying
+  // on the token hands the same person a fresh budget every time they sign in,
+  // which is the one case a per-actor limit is supposed to cover.
+  //
+  // DECODED, NOT VERIFIED, and that is safe here precisely because this is a
+  // rate-limit bucket and nothing else: a forged `id` picks which bucket to
+  // spend from, never what the caller may do. `validatedRequest` verifies the
+  // signature further down the chain, so a forged token is rejected there —
+  // it just cannot dodge a limit by rewriting a claim, since spending someone
+  // else's bucket is a worse deal for the attacker than spending their own.
+  //
+  // API keys are opaque strings with no claims, so they keep hashing whole.
+  const [, payload] = bearer.split(".");
+  if (payload) {
+    try {
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+      if (claims?.id) return digest(`actor:user:${claims.id}`);
+    } catch {
+      // Not a JWT, or not one we can read. Fall through to the raw credential.
+    }
+  }
+  return digest(`actor:${bearer}`);
+};
+
 const loginIpRateLimit = limiter({
   windowEnv: "LOGIN_RATE_LIMIT_WINDOW_MS",
   limitEnv: "LOGIN_IP_RATE_LIMIT_MAX",
@@ -185,6 +232,47 @@ const chatSearchRateLimit = limiter({
   limit: 60,
   keyGenerator: ipKey,
 });
+// S11a (#80): sending an invite by mail. Low by design — this is an admin action
+// measured in a handful per sitting, and every call spends a relay round trip
+// plus a slice of the deployment's sending reputation. A number that feels
+// generous here is a number that lets one compromised key mail a customer list.
+const inviteMailRateLimit = limiter({
+  windowEnv: "INVITE_MAIL_RATE_LIMIT_WINDOW_MS",
+  limitEnv: "INVITE_MAIL_RATE_LIMIT_MAX",
+  windowMs: 60_000,
+  limit: 10,
+  keyGenerator: actorKey,
+});
+// The SMTP connection test. Also per-credential, and also cheap to abuse: it
+// opens a socket to an arbitrary host:port the caller supplies, which is a port
+// scanner if left unmetered.
+const mailerTestRateLimit = limiter({
+  windowEnv: "MAILER_TEST_RATE_LIMIT_WINDOW_MS",
+  limitEnv: "MAILER_TEST_RATE_LIMIT_MAX",
+  windowMs: 60_000,
+  limit: 6,
+  keyGenerator: actorKey,
+});
+/**
+ * S11a (#80), QA-2: apply the mail limiter ONLY to requests that will send mail.
+ *
+ * `/admin/invite/new` serves two shapes through one route. A copy-link invite
+ * costs a database row and nothing else, so metering it at ten a minute would
+ * throttle ordinary admin work to protect a resource it never touches. A mailed
+ * invite spends a relay round trip and a slice of the deployment's sending
+ * reputation, and that is what the budget is for.
+ *
+ * A middleware that skips is the only way to say that on a shared route: an
+ * unconditional mount would rate-limit the wrong thing, and mounting nothing —
+ * which is what shipped in 719b7eee — rate-limits nothing at all.
+ */
+const whenMailing = (middleware) => (request, response, next) => {
+  const email = request.body?.email;
+  const sending = email !== undefined && email !== null && email !== "";
+  if (!sending) return next();
+  return middleware(request, response, next);
+};
+
 const embedHistoryRateLimit = limiter({
   windowEnv: "EMBED_RATE_LIMIT_WINDOW_MS",
   limitEnv: "EMBED_RATE_LIMIT_MAX",
@@ -238,6 +326,7 @@ function ipAllowlist(request, response, next) {
 
 module.exports = {
   BoundedMemoryStore,
+  actorKey,
   apiIpRateLimit,
   apiKeyRateLimit,
   bearerKey,
@@ -245,8 +334,11 @@ module.exports = {
   canonicalIp,
   embedHistoryRateLimit,
   ipAllowlist,
+  inviteMailRateLimit,
   inviteRateLimit,
   loginAccountRateLimit,
   loginIpRateLimit,
+  mailerTestRateLimit,
   resetRequestControls,
+  whenMailing,
 };

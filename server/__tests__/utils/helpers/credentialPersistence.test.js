@@ -20,9 +20,21 @@ describe("dumpENV no longer writes credential values to the file", () => {
   const { dumpENV } = require("../../../utils/helpers/updateENV");
 
   const SECRET_CANARY = "sk-should-never-reach-disk-4f2a";
+  // S11a (#80), QA-3 ruling 2: an SMTP password, in the shape a real one has.
+  // Asserted by GREPPING THE FILE rather than by checking KEY_MAPPING, because
+  // the mapping says what was declared and the file says what was written — and
+  // the second is the claim that matters. It matters more for this credential
+  // than most: QA-3 measured that an SMTP password matches no redaction pattern
+  // at all, so nothing downstream catches a copy that escapes to disk.
+  const SMTP_CANARY = "Sup3rSecret!Mail#2026";
   const PLAIN_VALUE = "openai";
   const URL_VALUE = "http://127.0.0.1:11434";
-  const KEYS = ["OPEN_AI_KEY", "LLM_PROVIDER", "OLLAMA_BASE_PATH"];
+  const KEYS = [
+    "OPEN_AI_KEY",
+    "LLM_PROVIDER",
+    "OLLAMA_BASE_PATH",
+    "SMTP_PASSWORD",
+  ];
 
   let written;
   let dir;
@@ -33,6 +45,7 @@ describe("dumpENV no longer writes credential values to the file", () => {
     process.env.OPEN_AI_KEY = SECRET_CANARY;
     process.env.LLM_PROVIDER = PLAIN_VALUE;
     process.env.OLLAMA_BASE_PATH = URL_VALUE;
+    process.env.SMTP_PASSWORD = SMTP_CANARY;
 
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "dumpenv-"));
     const target = path.join(dir, ".env");
@@ -53,12 +66,18 @@ describe("dumpENV no longer writes credential values to the file", () => {
     expect(written).not.toContain("OPEN_AI_KEY=");
   });
 
+  test("the SMTP password does not reach the file", () => {
+    expect(written).not.toContain(SMTP_CANARY);
+    expect(written).not.toContain("SMTP_PASSWORD=");
+  });
+
   test("no credential-declared setting appears at all", () => {
     const secretEnvKeys = Object.values(KEY_MAPPING)
       .filter((entry) => entry.secret === true)
       .map((entry) => entry.envKey);
     expect(secretEnvKeys.length).toBeGreaterThan(50);
-    for (const envKey of secretEnvKeys) expect(written).not.toContain(`${envKey}=`);
+    for (const envKey of secretEnvKeys)
+      expect(written).not.toContain(`${envKey}=`);
   });
 
   test("ordinary settings are still written", () => {
@@ -124,7 +143,10 @@ describe("boot loads stored credentials back into the environment", () => {
     delete process.env.ANTHROPIC_API_KEY;
 
     const result = await loadStoredCredentials(
-      storeWith({ ANTHROPIC_API_KEY: "unreachable" }, { failing: ["ANTHROPIC_API_KEY"] })
+      storeWith(
+        { ANTHROPIC_API_KEY: "unreachable" },
+        { failing: ["ANTHROPIC_API_KEY"] }
+      )
     );
 
     expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();

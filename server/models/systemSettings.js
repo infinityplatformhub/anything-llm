@@ -67,6 +67,24 @@ const SystemSettings = {
     "memory_auto_extraction",
   ],
   supportedFields: [
+    // S11a (#80), ruling E: the mailer's NON-SECRET connection settings. The
+    // password is not here and must never be — it goes to CredentialStore via
+    // KEY_MAPPING, because this table is read on every page load and sits in
+    // every backup.
+    //
+    // `smtp_verified_hash` is the proof that these exact settings once sent a
+    // message. It is a digest, not a secret, and it belongs beside the settings
+    // it describes so the two are written together.
+    "smtp_host",
+    "smtp_port",
+    "smtp_secure",
+    "smtp_allow_insecure",
+    "smtp_allow_untrusted_cert",
+    "smtp_username",
+    "smtp_from_address",
+    "smtp_from_name",
+    "smtp_verified_hash",
+
     "logo_filename",
     "telemetry_id",
     "footer_data",

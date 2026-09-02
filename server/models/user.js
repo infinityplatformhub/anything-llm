@@ -335,6 +335,31 @@ const User = {
     }
   },
 
+  /**
+   * S11a (#80): the caller-fixable half of `create`, without touching the
+   * database.
+   *
+   * Split out for the invite redemption route, which must answer "your username
+   * is malformed" before it looks at the invite code — otherwise the mere fact
+   * that a specific answer came back tells the caller their code was real.
+   *
+   * PURE by requirement, not by accident: it runs before any lookup, so it must
+   * not read a row, and it must never report whether a username is TAKEN. That
+   * is a fact about the database and belongs behind the flat refusal.
+   *
+   * @returns {string|null} the message to show, or null when the input is fine.
+   */
+  validateNewCredentials: function ({ username, password } = {}) {
+    const passwordCheck = this.checkPasswordComplexity(password);
+    if (!passwordCheck.checkedOK) return passwordCheck.error;
+    try {
+      this.validations.username(username);
+    } catch (error) {
+      return error.message;
+    }
+    return null;
+  },
+
   checkPasswordComplexity: function (passwordInput = "") {
     const passwordComplexity = require("joi-password-complexity");
     // Can be set via ENV variable on boot. No frontend config at this time.

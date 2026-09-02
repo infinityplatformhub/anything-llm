@@ -13,8 +13,11 @@ const { validApiKey } = require("../../../utils/middleware/validApiKey");
 function apiAdminEndpoints(app) {
   if (!app) return;
 
-  app.get("/v1/admin/is-multi-user-mode", [validApiKey(scopeFor("GET", "/v1/admin/is-multi-user-mode"))], (_, response) => {
-    /*
+  app.get(
+    "/v1/admin/is-multi-user-mode",
+    [validApiKey(scopeFor("GET", "/v1/admin/is-multi-user-mode"))],
+    (_, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Check to see if the instance is in multi-user-mode first. Methods are disabled until multi user mode is enabled via the UI.'
     #swagger.responses[200] = {
@@ -35,12 +38,16 @@ function apiAdminEndpoints(app) {
       }
     }
     */
-    const isMultiUser = multiUserMode(response);
-    response.status(200).json({ isMultiUser });
-  });
+      const isMultiUser = multiUserMode(response);
+      response.status(200).json({ isMultiUser });
+    }
+  );
 
-  app.get("/v1/admin/users", [validApiKey(scopeFor("GET", "/v1/admin/users"))], async (request, response) => {
-    /*
+  app.get(
+    "/v1/admin/users",
+    [validApiKey(scopeFor("GET", "/v1/admin/users"))],
+    async (request, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Check to see if the instance is in multi-user-mode first. Methods are disabled until multi user mode is enabled via the UI.'
     #swagger.responses[200] = {
@@ -69,22 +76,26 @@ function apiAdminEndpoints(app) {
       description: "Instance is not in Multi-User mode. Method denied",
     }
     */
-    try {
-      if (!multiUserMode(response)) {
-        response.sendStatus(401).end();
-        return;
+      try {
+        if (!multiUserMode(response)) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const users = await User.where();
+        response.status(200).json({ users });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
       }
-
-      const users = await User.where();
-      response.status(200).json({ users });
-    } catch (e) {
-      console.error(e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
-  app.post("/v1/admin/users/new", [validApiKey(scopeFor("POST", "/v1/admin/users/new"))], async (request, response) => {
-    /*
+  app.post(
+    "/v1/admin/users/new",
+    [validApiKey(scopeFor("POST", "/v1/admin/users/new"))],
+    async (request, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Create a new user with username and password. Methods are disabled until multi user mode is enabled via the UI.'
     #swagger.requestBody = {
@@ -126,23 +137,27 @@ function apiAdminEndpoints(app) {
       description: "Instance is not in Multi-User mode. Method denied",
     }
     */
-    try {
-      if (!multiUserMode(response)) {
-        response.sendStatus(401).end();
-        return;
+      try {
+        if (!multiUserMode(response)) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const newUserParams = reqBody(request);
+        const { user: newUser, error } = await User.create(newUserParams);
+        response.status(newUser ? 200 : 400).json({ user: newUser, error });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
       }
-
-      const newUserParams = reqBody(request);
-      const { user: newUser, error } = await User.create(newUserParams);
-      response.status(newUser ? 200 : 400).json({ user: newUser, error });
-    } catch (e) {
-      console.error(e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
-  app.post("/v1/admin/users/:id", [validApiKey(scopeFor("POST", "/v1/admin/users/:id"))], async (request, response) => {
-    /*
+  app.post(
+    "/v1/admin/users/:id",
+    [validApiKey(scopeFor("POST", "/v1/admin/users/:id"))],
+    async (request, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.parameters['id'] = {
       in: 'path',
@@ -187,31 +202,32 @@ function apiAdminEndpoints(app) {
       description: "Instance is not in Multi-User mode. Method denied",
     }
     */
-    try {
-      if (!multiUserMode(response)) {
-        response.sendStatus(401).end();
-        return;
+      try {
+        if (!multiUserMode(response)) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const { id } = request.params;
+        const updates = reqBody(request);
+        const user = await User.get({ id: Number(id) });
+        const validAdminRoleModification = await canModifyAdmin(user, updates);
+
+        if (!validAdminRoleModification.valid) {
+          response
+            .status(200)
+            .json({ success: false, error: validAdminRoleModification.error });
+          return;
+        }
+
+        const { success, error } = await User.update(id, updates);
+        response.status(200).json({ success, error });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
       }
-
-      const { id } = request.params;
-      const updates = reqBody(request);
-      const user = await User.get({ id: Number(id) });
-      const validAdminRoleModification = await canModifyAdmin(user, updates);
-
-      if (!validAdminRoleModification.valid) {
-        response
-          .status(200)
-          .json({ success: false, error: validAdminRoleModification.error });
-        return;
-      }
-
-      const { success, error } = await User.update(id, updates);
-      response.status(200).json({ success, error });
-    } catch (e) {
-      console.error(e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
   app.delete(
     "/v1/admin/users/:id",
@@ -268,8 +284,11 @@ function apiAdminEndpoints(app) {
     }
   );
 
-  app.get("/v1/admin/invites", [validApiKey(scopeFor("GET", "/v1/admin/invites"))], async (request, response) => {
-    /*
+  app.get(
+    "/v1/admin/invites",
+    [validApiKey(scopeFor("GET", "/v1/admin/invites"))],
+    async (request, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.description = 'List all existing invitations to instance regardless of status. Methods are disabled until multi user mode is enabled via the UI.'
     #swagger.responses[200] = {
@@ -300,22 +319,26 @@ function apiAdminEndpoints(app) {
       description: "Instance is not in Multi-User mode. Method denied",
     }
     */
-    try {
-      if (!multiUserMode(response)) {
-        response.sendStatus(401).end();
-        return;
+      try {
+        if (!multiUserMode(response)) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const invites = await Invite.whereWithUsers();
+        response.status(200).json({ invites });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
       }
-
-      const invites = await Invite.whereWithUsers();
-      response.status(200).json({ invites });
-    } catch (e) {
-      console.error(e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
-  app.post("/v1/admin/invite/new", [validApiKey(scopeFor("POST", "/v1/admin/invite/new"))], async (request, response) => {
-    /*
+  app.post(
+    "/v1/admin/invite/new",
+    [validApiKey(scopeFor("POST", "/v1/admin/invite/new"))],
+    async (request, response) => {
+      /*
     #swagger.tags = ['Admin']
     #swagger.description = 'Create a new invite code for someone to use to register with instance. Methods are disabled until multi user mode is enabled via the UI.'
     #swagger.requestBody = {
@@ -355,33 +378,55 @@ function apiAdminEndpoints(app) {
       description: "Instance is not in Multi-User mode. Method denied",
     }
     */
-    try {
-      if (!multiUserMode(response)) {
-        response.sendStatus(401).end();
-        return;
+      try {
+        if (!multiUserMode(response)) {
+          response.sendStatus(401).end();
+          return;
+        }
+
+        const body = reqBody(request);
+
+        // S11a (#80), ruling D: this route does NOT mail invites, and says so
+        // rather than ignoring the field.
+        //
+        // Mailing requires `user.manage`, and the API-key scope vocabulary has no
+        // such scope — it stops at `user.read` and `user.write`. So a key cannot
+        // demonstrate the permission the rule demands, and there is no honest way
+        // to gate it here. Silently dropping the address would be worse than
+        // refusing: the caller would get a 200 and reasonably believe someone was
+        // invited when nothing was sent and nobody is coming.
+        if (
+          body?.email !== undefined &&
+          body?.email !== null &&
+          body?.email !== ""
+        )
+          return response.status(400).json({
+            invite: null,
+            error:
+              "This endpoint creates invite links only. Sending an invitation by email requires user management permission, which an API key cannot hold; use the admin UI.",
+          });
+
+        const { invite, error } = await Invite.create({
+          workspaceIds: body?.workspaceIds ?? [],
+        });
+
+        // #71: this route created invites with NO audit record at all — the UI
+        // route emitted one, this one did not, so an invite minted through the API
+        // left no trace of who could now join the instance. `api_` prefix and no
+        // userId, matching `api_user_deleted` above: the actor is an API key, and
+        // claiming a user id it does not have would be worse than recording none.
+        //
+        // The invite's ID, never its CODE — see the note in endpoints/admin.js.
+        if (invite)
+          await emitAuditEvent("api_invite_created", { inviteId: invite.id });
+
+        response.status(200).json({ invite, error });
+      } catch (e) {
+        console.error(e);
+        response.sendStatus(500).end();
       }
-
-      const body = reqBody(request);
-      const { invite, error } = await Invite.create({
-        workspaceIds: body?.workspaceIds ?? [],
-      });
-
-      // #71: this route created invites with NO audit record at all — the UI
-      // route emitted one, this one did not, so an invite minted through the API
-      // left no trace of who could now join the instance. `api_` prefix and no
-      // userId, matching `api_user_deleted` above: the actor is an API key, and
-      // claiming a user id it does not have would be worse than recording none.
-      //
-      // The invite's ID, never its CODE — see the note in endpoints/admin.js.
-      if (invite)
-        await emitAuditEvent("api_invite_created", { inviteId: invite.id });
-
-      response.status(200).json({ invite, error });
-    } catch (e) {
-      console.error(e);
-      response.sendStatus(500).end();
     }
-  });
+  );
 
   app.delete(
     "/v1/admin/invite/:id",
@@ -452,7 +497,11 @@ function apiAdminEndpoints(app) {
 
   app.get(
     "/v1/admin/workspaces/:workspaceId/users",
-    [validApiKey(scopeFor("GET", "/v1/admin/workspaces/:workspaceId/users"), { workspaceParam: "workspaceId" })],
+    [
+      validApiKey(scopeFor("GET", "/v1/admin/workspaces/:workspaceId/users"), {
+        workspaceParam: "workspaceId",
+      }),
+    ],
     async (request, response) => {
       /*
       #swagger.tags = ['Admin']
@@ -507,7 +556,12 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/workspaces/:workspaceId/update-users",
-    [validApiKey(scopeFor("POST", "/v1/admin/workspaces/:workspaceId/update-users"), { workspaceParam: "workspaceId" })],
+    [
+      validApiKey(
+        scopeFor("POST", "/v1/admin/workspaces/:workspaceId/update-users"),
+        { workspaceParam: "workspaceId" }
+      ),
+    ],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']
@@ -574,7 +628,12 @@ function apiAdminEndpoints(app) {
 
   app.post(
     "/v1/admin/workspaces/:workspaceSlug/manage-users",
-    [validApiKey(scopeFor("POST", "/v1/admin/workspaces/:workspaceSlug/manage-users"), { workspaceSlugParam: "workspaceSlug" })],
+    [
+      validApiKey(
+        scopeFor("POST", "/v1/admin/workspaces/:workspaceSlug/manage-users"),
+        { workspaceSlugParam: "workspaceSlug" }
+      ),
+    ],
     async (request, response) => {
       /*
     #swagger.tags = ['Admin']

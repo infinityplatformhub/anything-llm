@@ -41,6 +41,25 @@ const KEY_MAPPING = {
     secret: true,
     checks: [isNotEmpty],
   },
+
+  // S11a (#80): the SMTP relay password.
+  //
+  // `secret: true` is what routes it into CredentialStore (AES-256-GCM) and
+  // keeps `dumpENV` from writing it to the .env file. That matters more here
+  // than for most credentials: QA-3 measured that an SMTP password matches NO
+  // redaction pattern — not the PDPA classes, not the apw- credential pattern —
+  // so nothing downstream would catch a copy that escaped. The encrypted store
+  // is the only thing keeping it off disk in the clear.
+  //
+  // The connection is described by separate non-secret settings (host, port,
+  // TLS) in `system_settings`, deliberately: a `smtps://user:pass@host` URL
+  // would carry the credential as one string, and QA-3 showed a dotless host
+  // defeats even the accidental email-pattern match.
+  SmtpPassword: {
+    envKey: "SMTP_PASSWORD",
+    secret: true,
+    checks: [isNotEmpty],
+  },
   AzureOpenAiModelPref: {
     envKey: "AZURE_OPENAI_MODEL_PREF",
     secret: false,
@@ -1646,7 +1665,8 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
     // where the value *persists* — a credential goes to the encrypted store, and
     // dumpENV no longer writes it to the file.
     process.env[envKey] = nextValue;
-    if (KEY_MAPPING[key]?.secret === true) await persistCredential(envKey, nextValue);
+    if (KEY_MAPPING[key]?.secret === true)
+      await persistCredential(envKey, nextValue);
 
     for (const postUpdateFunc of postUpdate)
       await postUpdateFunc(key, prevValue, nextValue);
@@ -1765,13 +1785,26 @@ async function persistCredential(envKey, value) {
   // An empty value means "unset this credential", which is a delete, not a stored "".
   if (!value) {
     await CredentialStore.delete(envKey);
-    return;
+    return { error: null };
   }
   const { error } = await CredentialStore.set(envKey, value);
   if (error)
     console.error(
       `[credential-store] ${envKey} is live for this process but was not persisted; it will be lost on restart: ${error}`
     );
+  // S11a (#80), TL-1: the outcome is RETURNED as well as logged. Existing callers
+  // ignore it and keep their behaviour exactly — the value stays live for this
+  // process and the log is the warning, which is deliberate (see the note at the
+  // `process.env` assignment above).
+  //
+  // The mailer save path is the caller that must not ignore it. It writes a
+  // "these settings were verified" hash, and that hash is only true while the
+  // credential it was verified with still exists. If the write failed, the
+  // password is live now but gone after a restart — so a hash written anyway
+  // would claim verified against a credential the next boot cannot find, and
+  // every send would fail while the settings page said the configuration was
+  // confirmed working.
+  return { error: error ?? null };
 }
 
 /**
@@ -1809,7 +1842,10 @@ async function loadStoredCredentials(store = null) {
     }
   } catch (error) {
     // Boot must not depend on the store being reachable.
-    console.error("[credential-store] could not load stored credentials:", error.message);
+    console.error(
+      "[credential-store] could not load stored credentials:",
+      error.message
+    );
   }
   return { loaded, skipped };
 }
@@ -2069,7 +2105,10 @@ function writeEnvFileAtomic(envPath, contents) {
       );
       return false;
     }
-    if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+    if (
+      typeof process.getuid === "function" &&
+      stats.uid !== process.getuid()
+    ) {
       console.error(
         `Refusing to write ${envPath}: file is owned by uid ${stats.uid}, not by the uid this process runs as.`
       );
@@ -2113,6 +2152,10 @@ module.exports = {
   INSTANCE_AUTH_KEYS,
   ENV_KEY_PATTERN,
   dumpENV,
+  // S11a (#80): the mailer save path stores its credential directly rather than
+  // through `updateENV`, because it must know whether the write SUCCEEDED before
+  // recording that the configuration was verified.
+  persistCredential,
   updateENV,
   writeEnvFileAtomic,
   maskSecretValues,
