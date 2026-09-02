@@ -857,3 +857,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #138 (server log): 3292 passed / 1 failed = cacheIsolation.test.js — fails ALONE on main HEAD too (known #51 flake, in watchdog rules). Not a merge regression. Frontend pending from agent.
 - QA-1 dry-fire 2cdb884ef: 4/4 RF pass, Dev3 accurate. LATENT: tick claims every type at max lease → 30s jobs unclaimable for 160s after a claim-then-die → RULING (TL-1): accept + comment, or per-type claim; test pins it either way.
 - Dev1 /utils/metrics recon landed (98294de49).
+- Post-merge #136 slice 1 (8520e1a8c+): server 3317/0, frontend 0, caps 0 → main fully green. Post-merge #138: 3292/1 (cacheIsolation, #51 flake, red alone on main too).
+- /utils/metrics → #140 (auth): unauthenticated full commit SHA + disk oracle; single logged-in caller; propose validatedRequest whole route. Ruling → TL-2: storage field to members or system.read. Dev1 owns (lane endpoints/utils.js + frontend models/system.js:919).
