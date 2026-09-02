@@ -7,12 +7,18 @@
  * nothing asked, and a support engineer viewing as a user could set that user's
  * username and password and then log in as them for real.
  *
- * The fix is at `validatedRequest`, not on the two routes: adding
- * `requirePermission` to these two closes the two doors found today and leaves
- * the class open for the next route someone writes with session auth alone.
- * An impersonated session is read-only, so it refuses every non-GET regardless
- * of which route it reached. The engine's blanket deny stays as the second
- * layer — two independent refusals, neither relying on the other.
+ * The fix is per-route, and deliberately NOT a blanket 403 on every non-GET
+ * from an impersonated session: five POST routes are gated on READ actions
+ * (local-files/by-docpaths, custom-models, event-logs, transcribe-audio,
+ * community-hub/item), which such a guard would refuse even though the engine
+ * allows them. HTTP method is not a proxy for read-vs-write; the ACTION is.
+ *
+ * So routes that can name an action got one (`POST /onboarding` and
+ * `POST /system/enable-multi-user` → settings.write), and the two self-service
+ * routes got `requireSelfSession`, which keys on what the route MEANS: acting
+ * on your own account, which an impersonated session by definition is not.
+ * The engine's blanket deny remains the second layer for everything that asks
+ * it, and `routeGateSweep.test.js` is what stops the class reopening.
  */
 
 process.env.STORAGE_DIR =
@@ -121,10 +127,12 @@ beforeAll(async () => {
 
   const { systemEndpoints } = require("../../../endpoints/system");
   const { adminEndpoints } = require("../../../endpoints/admin");
+  const { webPushEndpoints } = require("../../../endpoints/webPush");
   const app = express();
   app.use(express.json());
   systemEndpoints(app);
   adminEndpoints(app);
+  webPushEndpoints(app);
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -209,10 +217,43 @@ describe("#52: an impersonated session cannot write, on any route", () => {
   });
 
   test("no chaining: the second layer still answers on its own", async () => {
-    // validatedRequest refuses this now, before admin.js is reached. The guard
-    // at admin.js:202 stays anyway — this asserts the refusal, not which layer
-    // produced it, so removing either one leaves the test meaningful.
+    // Refused by the no-chaining guard in admin.js itself: view-as-user is
+    // gated on user.manage, which the victim does not hold, and the guard
+    // refuses an already-impersonated session regardless. This asserts the
+    // REFUSAL, not which layer produced it, so it stays meaningful whichever
+    // one is removed.
     const res = await call("POST", `/admin/view-as-user/${admin.id}`, impersonatedToken);
     expect(res.status).toBe(403);
+  });
+
+  test("web-push subscribe is refused for an impersonated session", async () => {
+    // Binds a caller-supplied endpoint to locals.user: an impersonated session
+    // could point the victim's notifications at an attacker's endpoint.
+    const res = await call("POST", "/web-push/subscribe", impersonatedToken, {
+      endpoint: "https://attacker.example/push",
+      keys: { p256dh: "x", auth: "y" },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("an ORDINARY user still edits their own profile", async () => {
+    // The control that matters most for this fix. Gating these routes on any
+    // seeded action would have refused here — user.write is super_admin only
+    // and member holds just chat.send — trading the hole for a lockout.
+    const { makeJWT } = require("../../../utils/http");
+    const plainToken = makeJWT({ id: victim.id, username: victim.username });
+    // The handler validates `username` whenever it differs from the session
+    // user's, so a body omitting it validates the string "undefined" and comes
+    // back 200 with success:false. Send the whole profile, and assert the BODY
+    // — this route answers 200 for a refused update too.
+    const res = await call("POST", "/system/user", plainToken, {
+      username: victim.username,
+      bio: "my own bio",
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+
+    const after = await prisma.users.findUnique({ where: { id: victim.id } });
+    expect(after.bio).toBe("my own bio");
   });
 });
