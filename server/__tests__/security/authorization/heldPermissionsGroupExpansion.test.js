@@ -70,6 +70,9 @@ const { SERVICE_PRINCIPALS } = require("../../../utils/authorization/principals"
 const {
   DatabaseAuthorizationEngine,
 } = require("../../../utils/authorization/engine");
+const {
+  AuthorizationContractError,
+} = require("../../../utils/authorization/errors");
 const SYS = SERVICE_PRINCIPALS.singleUser;
 
 let seq = 0;
@@ -284,6 +287,54 @@ describe("#128 RF-3: an api-key does not inherit its creator's groups", () => {
         roleId: targetRole.id, db: prisma,
       })
     ).rejects.toThrow(/does not hold/);
+  }, 120_000);
+
+  test("a key whose creator is GONE holds nothing — it does not throw", async () => {
+    // QA-1's residual on `6087af79c`: I added `if (!grantPrincipal) return new Set()`
+    // and shipped it with no test, so deleting the guard survived 49/49.
+    //
+    // A null `grantPrincipal` is not hypothetical — `engine.js:143` documents it as
+    // the state of a key whose creator can no longer be resolved, and the engine
+    // answers `no_grant_principal` there. Without the guard, `grantPrincipalPairs`
+    // receives null, reads `principal.type`, and the caller gets a TypeError instead
+    // of a refusal.
+    //
+    // That distinction is the whole point. A thrown TypeError escapes the
+    // authorization decision entirely: `canAssignLegacyRole` never returns false, it
+    // rejects, and whether that ends as a 500 or an unhandled rejection is the
+    // caller's business rather than a denial. Failing closed means answering "no",
+    // not exploding on the way to answering.
+    const orphanKey = {
+      type: "service",
+      id: "api-key:3",
+      orgId: 1,
+      grantPrincipal: null,
+    };
+
+    await expect(
+      repository.canAssignLegacyRole({
+        actor: orphanKey,
+        targetRole: "admin",
+        db: prisma,
+      })
+    ).resolves.toBe(false);
+
+    // And through a write, since that is the path an orphaned key actually takes.
+    const target = await prisma.users.create({
+      data: { username: uniq("orphantarget"), password: "x", role: "default" },
+    });
+    const targetRole = await prisma.roles.findFirstOrThrow({
+      where: { name: "content_moderator", scope: "org" },
+    });
+    await expect(
+      repository.grantRole({
+        actor: orphanKey,
+        principalType: "user",
+        principalId: String(target.id),
+        roleId: targetRole.id,
+        db: prisma,
+      })
+    ).rejects.toThrow(AuthorizationContractError);
   }, 120_000);
 
   test("a key whose creator holds the role DIRECTLY still works", async () => {
