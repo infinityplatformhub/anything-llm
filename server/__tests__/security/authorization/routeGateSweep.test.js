@@ -28,6 +28,7 @@ process.env.JWT_SECRET =
 const fs = require("fs");
 const path = require("path");
 const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
+const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
 
@@ -125,14 +126,21 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       );
       if (methods.length === 0) continue;
 
-      const guarded = layer.route.stack.some(
-        (handler) => handler.handle?.isApiKeyGuard === true
+      const guarded = layer.route.stack.some((handler) =>
+        isApiKeyGuard(handler.handle)
       );
       if (!guarded) {
         ungated.push(`${methods[0].toUpperCase()} ${layer.route.path}`);
       }
     }
     expect(ungated).toEqual([]);
+  });
+
+  test("API guard metadata cannot impersonate validApiKey", () => {
+    const fakeGuard = Object.assign((_request, _response, next) => next(), {
+      isApiKeyGuard: true,
+    });
+    expect(isApiKeyGuard(fakeGuard)).toBe(false);
   });
 
   test("the self-service routes really carry requireSelfSession", () => {
