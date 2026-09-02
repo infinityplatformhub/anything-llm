@@ -216,6 +216,15 @@ describe("unknown settings keys over HTTP", () => {
     });
   });
 
+  test("model writes hub_api_key despite its protectedFields membership", async () => {
+    await expect(
+      SystemSettings.updateSettings({ hub_api_key: "model-community-key" })
+    ).resolves.toEqual({ success: true, error: null });
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "hub_api_key" } })
+    ).resolves.toMatchObject({ value: "model-community-key" });
+  });
+
   test("community hub writes its supported API key", async () => {
     const response = await update(
       "/api/community-hub/settings",
@@ -262,9 +271,9 @@ describe("unknown settings keys over HTTP", () => {
     async (_name, path, authorization, bodyFor) => {
       jest.spyOn(SystemSettings, "updateSettings").mockResolvedValue({
         success: false,
-        error: "Protected setting keys: hub_api_key",
+        error: "Protected setting keys: multi_user_mode",
         code: "protected_keys",
-        protectedKeys: ["hub_api_key"],
+        protectedKeys: ["multi_user_mode"],
       });
 
       const response = await update(
@@ -277,7 +286,7 @@ describe("unknown settings keys over HTTP", () => {
       expect(response.body).toMatchObject({
         success: false,
         code: "protected_keys",
-        protectedKeys: ["hub_api_key"],
+        protectedKeys: ["multi_user_mode"],
       });
     }
   );
