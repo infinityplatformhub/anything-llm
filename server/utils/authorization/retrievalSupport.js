@@ -53,6 +53,53 @@ const SUPPORTED_PROVIDERS = Object.freeze([
 const NO_ESCAPE_CLAUSE_PROVIDERS = Object.freeze(["chroma"]);
 
 /**
+ * Providers whose renderer exists and is unit-tested, but has NEVER been executed against
+ * the real engine.
+ *
+ * Pinecone and Astra are hosted-only: there is no local instance to test against, so their
+ * predicates are asserted as strings and nothing more. Three renderers have already
+ * shipped in exactly that state and were rejected at runtime — LanceDB's identifiers,
+ * pgvector's placeholder numbering, Milvus's unparenthesised `not exists`, plus Qdrant's
+ * is_null and Weaviate's tokenization. Every one of them read correctly.
+ *
+ * So the boot report does NOT call these "supported". The word would be a claim this
+ * codebase has repeatedly earned the right to distrust, and an operator reading it would
+ * reasonably conclude their ACL is enforced. It says "unverified" until someone runs a
+ * real-store test against a hosted instance.
+ */
+const UNVERIFIED_PROVIDERS = Object.freeze(["pinecone", "astra"]);
+
+/**
+ * Weaviate classes that cannot support the escape clause, named individually.
+ *
+ * Unlike Chroma — where the limitation is the whole provider — this is PER CLASS. A class
+ * created since T-5 declares the ACL properties and sets `indexNullState`, so the escape
+ * clause works on it; a class created before cannot have either added, because
+ * `PUT /v1/schema/<class>` refuses with 422 "IndexNullState cannot be changed when
+ * updating a schema".
+ *
+ * So the boot report names the classes rather than the provider. "Weaviate does not
+ * support this" would be false for half a deployment, and an operator cannot act on it;
+ * a list of class names tells them exactly which workspaces need re-embedding.
+ *
+ * Returns [] when the schema cannot be read — an empty list means "nothing to report",
+ * and a failure to read is reported by the count path instead.
+ */
+async function weaviateClassesWithoutAclSchema() {
+  try {
+    const { Weaviate, hasAclSchema } = require("../vectorDbProviders/weaviate");
+    const instance = new Weaviate();
+    const { client } = await instance.connect();
+    const { classes = [] } = await client.schema.getter().do();
+    return classes
+      .filter((weaviateClass) => !hasAclSchema(weaviateClass))
+      .map((weaviateClass) => weaviateClass.class);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Count vectors with no ACL metadata, per provider.
  *
  * THREE outcomes, never conflated (Ruling C2):
@@ -166,6 +213,29 @@ async function reportRetrievalFilterSupport(
   // Said BEFORE anything about counts, and at error level rather than warn, because it is
   // the one case where the operator's own action has no effect. Everything below assumes
   // the flag means something; on Chroma it does not, and they need to know that first.
+  // Weaviate is per-CLASS rather than per-provider: classes created since T-5 support the
+  // escape clause, older ones cannot have it added (422 "IndexNullState cannot be changed
+  // when updating a schema"). Naming the classes is the whole point — "Weaviate does not
+  // support this" would be false for half a deployment and actionable for none of it.
+  const staleClasses =
+    normalized === "weaviate" ? await weaviateClassesWithoutAclSchema() : [];
+  if (staleClasses.length > 0 && allowUnprovableRows()) {
+    logger.error(
+      `\x1b[31m[authorization]\x1b[0m RETRIEVAL_FILTER_ALLOW_UNPROVABLE has NO EFFECT on ${staleClasses.length} Weaviate class(es): ${staleClasses.join(", ")}. ` +
+        `They were created before the ACL metadata existed, so they declare no orgId/workspaceId/docId properties and have indexNullState off. ` +
+        `Weaviate refuses to add either afterwards ("IndexNullState cannot be changed when updating a schema"), so these classes stay strictly filtered and their pre-T-5 vectors remain EXCLUDED. ` +
+        `Fixing this requires recreating the class and re-embedding its documents — see the vector metadata backfill.`
+    );
+  }
+
+  if (UNVERIFIED_PROVIDERS.includes(normalized)) {
+    logger.warn(
+      `\x1b[33m[authorization]\x1b[0m VECTOR_DB="${normalized}" has an ACL filter that has never been run against a real ${normalized} instance — it is hosted-only, so this deployment is the first to execute it. ` +
+        `Every other provider's predicate was rejected by its engine on first contact despite reading correctly (identifier quoting, placeholder numbering, operator precedence, tokenization). ` +
+        `Treat retrieval results here as UNVERIFIED: confirm that a document you cannot read is absent from chat context before relying on this.`
+    );
+  }
+
   const escapeClauseUnavailable =
     NO_ESCAPE_CLAUSE_PROVIDERS.includes(normalized);
   if (escapeClauseUnavailable && allowUnprovableRows()) {
@@ -233,6 +303,7 @@ async function reportRetrievalFilterSupport(
     provider: normalized,
     counts,
     escapeClauseUnavailable,
+    ...(normalized === "weaviate" ? { staleClasses } : {}),
   };
 }
 
@@ -241,4 +312,5 @@ module.exports = {
   unprovableVectorCount,
   SUPPORTED_PROVIDERS,
   NO_ESCAPE_CLAUSE_PROVIDERS,
+  UNVERIFIED_PROVIDERS,
 };

@@ -186,3 +186,83 @@ describeIfPg("T-5: toJsonbSql executes on real PostgreSQL", () => {
     expect(used).toEqual(params.map((_, i) => i + 3));
   });
 });
+
+describe("T-5: a pgvector deployment with no table yet", () => {
+  // Techlead-2 item 6: the 42P01 handling shipped with no test — deleting the catch left
+  // the suite green, which means the branch was documentation rather than behaviour.
+  //
+  // pgvector creates its table lazily, on the first embedding, so a fresh install has
+  // none. That is an EMPTY STORE, not a fault: reporting it as an error would put a red
+  // line in every fresh boot log and teach operators that this diagnostic cries wolf,
+  // which is how a real error later goes unread.
+  const { Client } = require("pg");
+  const {
+    unprovableVectorCount,
+    reportRetrievalFilterSupport,
+  } = require("../../../utils/authorization/retrievalSupport");
+
+  const DATABASE_URL = process.env.DATABASE_URL;
+  const canRun = DATABASE_URL?.startsWith("postgresql://");
+  const maybe = canRun ? test : test.skip;
+
+  /** Point PGVector at a database that definitely has no vector table. */
+  const withMissingTable = async (fn) => {
+    const { PGVector } = require("../../../utils/vectorDbProviders/pgvector");
+    const table = PGVector.tableName();
+    const client = new Client({ connectionString: DATABASE_URL });
+    await client.connect();
+    await client.query(`DROP TABLE IF EXISTS "${table}"`);
+    await client.end();
+    // PGVector reads PGVECTOR_CONNECTION_STRING, not DATABASE_URL. Pointing it at the
+    // test database is what makes this exercise the real 42P01 path rather than a
+    // "no connection string" error, which is a different branch entirely.
+    const previous = {
+      db: process.env.VECTOR_DB,
+      conn: process.env.PGVECTOR_CONNECTION_STRING,
+    };
+    process.env.VECTOR_DB = "pgvector";
+    process.env.PGVECTOR_CONNECTION_STRING = DATABASE_URL;
+    try {
+      return await fn();
+    } finally {
+      if (previous.db === undefined) delete process.env.VECTOR_DB;
+      else process.env.VECTOR_DB = previous.db;
+      if (previous.conn === undefined)
+        delete process.env.PGVECTOR_CONNECTION_STRING;
+      else process.env.PGVECTOR_CONNECTION_STRING = previous.conn;
+    }
+  };
+
+  maybe("an absent table counts as an empty store, not an error", async () => {
+    const counts = await withMissingTable(() =>
+      unprovableVectorCount("pgvector")
+    );
+    expect(counts).toEqual({ unlabelled: 0, total: 0 });
+    expect(counts.error).toBeUndefined();
+  });
+
+  maybe("and it is not reported at error level", async () => {
+    // The behaviour that matters to an operator: a fresh install boots clean.
+    const log = { warn: jest.fn(), error: jest.fn() };
+    await withMissingTable(() => reportRetrievalFilterSupport("pgvector", log));
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  maybe("a DIFFERENT pg error is still reported as an error", async () => {
+    // The boundary. Swallowing 42P01 must not become swallowing everything — the whole
+    // point of the three-outcome return is that a real failure stays visible.
+    const { PGVector } = require("../../../utils/vectorDbProviders/pgvector");
+    jest
+      .spyOn(PGVector.prototype, "connect")
+      .mockRejectedValue(
+        Object.assign(new Error("connection refused"), { code: "08006" })
+      );
+    try {
+      const counts = await unprovableVectorCount("pgvector");
+      expect(counts.error).toMatch(/connection refused/);
+      expect(counts.unlabelled).toBeUndefined();
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+});

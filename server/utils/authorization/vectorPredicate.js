@@ -323,14 +323,26 @@ class RetrievalConstraint {
     if (!allowUnprovableRows()) return filter;
     // The same all-or-nothing escape as every other dialect, expressed with Qdrant's
     // `should` (OR) at the top level: either the point carries no ACL payload at all, or
-    // it satisfies the strict filter. `is_null` is Qdrant's own condition for it.
+    // it satisfies the strict filter.
+    //
+    // `is_empty`, NOT `is_null`. Qdrant distinguishes two states that this filter must
+    // treat alike, measured on qdrant 1.9.0:
+    //
+    //                    key absent   key present, value null
+    //   is_null               NO               YES
+    //   is_empty              YES              YES
+    //
+    // A vector written before T-5 has the keys ABSENT — the write path never set them —
+    // so `is_null` matched none of them and the flag served no legacy rows at all while
+    // the boot report said it did. `is_empty` covers both states, which is also what
+    // `isRowAllowed` does when it treats undefined and null as the same absence.
     //
     // Nested under `should` rather than added as another `must`, because a flag that only
     // narrowed would be inert — which is exactly the bug slice 1a was failed for.
     return {
       should: [
         {
-          must: ACL_FIELDS.map((key) => ({ is_null: { key } })),
+          must: ACL_FIELDS.map((key) => ({ is_empty: { key } })),
         },
         filter,
       ],
@@ -416,7 +428,7 @@ class RetrievalConstraint {
    *      `And` of one `NotEqual` per denied id, which the enum does support.
    *   2. There IS `IsNull`, so unlike Chroma this dialect CAN express the escape clause.
    */
-  toWeaviateWhere() {
+  toWeaviateWhere({ allowUnprovable = true } = {}) {
     if (this.matchNone) return null;
     const operands = [
       {
@@ -453,7 +465,14 @@ class RetrievalConstraint {
     }
     const strict =
       operands.length === 1 ? operands[0] : { operator: "And", operands };
-    if (!allowUnprovableRows()) return strict;
+    // `allowUnprovable: false` is how the provider says THIS CLASS cannot answer an
+    // IsNull filter — a class created before T-5 has neither the declared properties nor
+    // indexNullState, and neither can be added afterwards. Emitting the escape clause
+    // there does not widen the result, it fails the query outright.
+    //
+    // The flag still governs everything else; this narrows to the one case where the
+    // engine physically cannot express the question.
+    if (!allowUnprovable || !allowUnprovableRows()) return strict;
     // All-or-nothing escape, using the one operator that can express absence here.
     return {
       operator: "Or",
