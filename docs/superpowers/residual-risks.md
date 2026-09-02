@@ -64,3 +64,4 @@
 - [→ #47 flake] modelPricing/cacheIsolation.test.js (added by #38) fails ~1/5 on clean main — unawaited constructor refresh race. Two independent reports. Blocks §2.5 three-run until fixed.
 - [→ #48] Stored credential cannot be cleared via updateENV: value validators reject "" before the delete branch runs; row stays decryptable. Needs explicit clear endpoint. (QA-1 #33p3 post-merge)
 - [→ #49] Embed widget must return x-allm-session-token; until it lands EMBED_REQUIRE_SESSION_TOKEN stays off on every deployment (#32 carve-out)
+- [→ backlog] require cycle actorResolver→systemSettings→utils/http→models/user still present after #39 (principals.js leaf fixed only SERVICE_PRINCIPALS); isConfirmedSingleUser catch should console.error (QA-2 #46)
