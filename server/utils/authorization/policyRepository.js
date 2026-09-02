@@ -383,6 +383,11 @@ async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
 module.exports = {
   grantRole,
   canAssignLegacyRole,
+  // Exported for issue 123: the capabilities endpoint has to make the same
+  // exemption this module makes internally. A second copy of the rule is how the
+  // two answers drift — the hazard the S-9 comment above describes for the
+  // opposite direction.
+  isExemptPrincipal,
   revokeGrant,
   grantDocumentAcl,
   revokeDocumentAcl,
