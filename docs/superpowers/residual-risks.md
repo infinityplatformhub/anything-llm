@@ -221,3 +221,8 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Boot ~2.5s slower on 97 secret rows until #117 memoize lands (not a hang; try/catch kept).
 - credentialsBeforeListen suite needs --forceExit (background services hold handles).
 - Fallback path passes {credentialStore} redundantly (bootSSL hydrates before try).
+
+## #114 residuals (setup-complete)
+- Pre-user branch returns all keys (provider/model names visible) on fresh install — onboarding mounts 37 provider components that need them.
+- Tier-1 public fields have 3 value types (boolean / array / null).
+- One unreproduced 500 in TL-2 run (#122 class).

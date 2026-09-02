@@ -463,3 +463,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #122 pre-SHA (QA-2): postgresUrl.js forPrismaTest/forPostgresClient delete connection_limit → 3 helper-routed suites would miss the fix silently. Ruling: forPrismaTest keeps/sets connection_limit; test + mutation. connection_limit verified exact with Prisma (limit=3 → 3 backends). Forwarded to Dev5.
 - Post-merge after #116 + #115: 3007/3007 green (frontend line pending).
 - #40 t4: QA-3 held verdict (e7a30ae61 is WIP — Sidebar RED by design); RF-4 confirmed on main (only AuthContext/SettingsButton/hook consume useCapabilities). Probe list ready (single-user disjunct, loading, visible vs can, cross-site swap, resetCapabilities behaviour, rejection retry). Waits for Dev2 "ready" SHA.
+- #114 fdb32d825 merged 701b22ce0, closed (infi-run:gate-114-fdb32d825); TL-2 PASS M1–M5; recon-114.md conflict resolved (theirs). 89/123. wt-114/g114 reaped.
+- #123 (Dev1): default legacy role = manager set via ORG_ROLE_FOR_LEGACY; PMO leans option 1 (compute only when user.manage held) → TL-1 confirm pending.
