@@ -23,7 +23,7 @@ describe("PR-4a key scope HTTP enforcement", () => {
   test.each([
     ["user.read", "user.write"],
     ["invite.read", "invite.delete"],
-    ["system.read", "sso.issue"],
+    ["system.read", "audit.read"],
   ])("scope %s cannot call route requiring %s", async (owned, required) => {
     ApiKey.resolve.mockResolvedValueOnce(key([owned]));
     const response = await request(appFor(required)).get("/api/test").set("Authorization", "Bearer apw-key-test-secret");

@@ -141,6 +141,10 @@ function identityEndpoints(app) {
         user.id
       );
       if (issueError) throw new Error(issueError);
+      // #50: after simple-SSO was deleted this is the ONLY caller of
+      // TemporaryAuthToken.validate left in the tree. The token never leaves
+      // this function — issued and redeemed in the same request — so it is an
+      // internal step of the OIDC exchange, not a credential anyone transports.
       const { sessionToken, error: validateError } =
         await TemporaryAuthToken.validate(tempToken);
       if (validateError) throw new Error(validateError);

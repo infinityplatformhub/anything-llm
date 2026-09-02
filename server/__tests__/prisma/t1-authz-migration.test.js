@@ -170,7 +170,24 @@ describe("T-1 migration on real Postgres", () => {
 
   test("vocabulary table == seed file (single source)", async () => {
     const actions = (await prisma.permissions.findMany({ select: { action: true } })).map((p) => p.action).sort();
-    expect(actions).toEqual([...ALL_ACTIONS].sort());
+    // #50: this suite replays 020000's step-7a AFTER `migrate deploy`, to
+    // rebuild legacy state. That re-INSERTs the vocabulary as 020000 wrote it,
+    // including `sso.issue` — which migration 090000 has since retired. On a
+    // real boot the migrations run in order and the row stays deleted (see
+    // __tests__/prisma/ssoIssueRetirement.test.js, which asserts exactly that
+    // against a plain `migrate deploy`).
+    //
+    // So the replay's extra row is an artifact of the rewind, not drift between
+    // seed and schema. Subtracting retired actions keeps this test measuring
+    // what it is for — that step-7a and the seed file agree — without it
+    // failing every time a later migration retires a permission.
+    const RETIRED_BY_LATER_MIGRATIONS = ["sso.issue"];
+    expect(actions.filter((a) => !RETIRED_BY_LATER_MIGRATIONS.includes(a)))
+      .toEqual([...ALL_ACTIONS].sort());
+    // And the replayed row really is the only difference.
+    expect(actions).toEqual(
+      [...ALL_ACTIONS, ...RETIRED_BY_LATER_MIGRATIONS].sort()
+    );
   });
 
   test("idempotency: backfill re-runs (rounds 2 and 3) change nothing", async () => {

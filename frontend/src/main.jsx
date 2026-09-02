@@ -8,7 +8,6 @@ import PrivateRoute, {
   SingleUserRoute,
 } from "@/components/PrivateRoute";
 import Login from "@/pages/Login";
-import SimpleSSOPassthrough from "@/pages/Login/SSO/simple";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import "@/index.css";
 
@@ -30,10 +29,6 @@ const router = createBrowserRouter([
       {
         path: "/login",
         element: <Login />,
-      },
-      {
-        path: "/sso/simple",
-        element: <SimpleSSOPassthrough />,
       },
       {
         path: "/workspace/:slug/settings/:tab",

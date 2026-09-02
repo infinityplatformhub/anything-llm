@@ -80,7 +80,6 @@ const { EncryptionManager } = require("../utils/EncryptionManager");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { MobileDevice } = require("../models/mobileDevice");
 const {
-  simpleSSOEnabled,
   simpleSSOLoginDisabled,
 } = require("../utils/middleware/simpleSSOEnabled");
 const { TemporaryAuthToken } = require("../models/temporaryAuthToken");
@@ -428,48 +427,6 @@ function systemEndpoints(app) {
     }
   );
 
-  app.get(
-    "/request-token/sso/simple",
-    [simpleSSOEnabled],
-    async (request, response) => {
-      const { token: tempAuthToken } = request.query;
-      const { sessionToken, token, error } =
-        await TemporaryAuthToken.validate(tempAuthToken);
-
-      if (error) {
-        await emitAuditEvent("failed_login_invalid_temporary_auth_token", {
-          ip: request.ip || "Unknown IP",
-          multiUserMode: true,
-        });
-        return response.status(401).json({
-          valid: false,
-          token: null,
-          message: `[001] An error occurred while validating the token: ${error}`,
-        });
-      }
-
-      await Telemetry.sendTelemetry(
-        "login_event",
-        { multiUserMode: true },
-        token.user.id
-      );
-      await emitAuditEvent(
-        "login_event",
-        {
-          ip: request.ip || "Unknown IP",
-          username: token.user.username || "Unknown user",
-        },
-        token.user.id
-      );
-
-      response.status(200).json({
-        valid: true,
-        user: User.filterFields(token.user),
-        token: sessionToken,
-        message: null,
-      });
-    }
-  );
 
   app.post(
     "/system/recover-account",

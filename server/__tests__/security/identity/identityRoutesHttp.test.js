@@ -195,6 +195,36 @@ describe("GET /api/sso/:provider/callback", () => {
     expect(grants[0].roles.name).toBe("member");
   });
 
+  test("issue 50: the temporary auth token a login mints is single-use", async () => {
+    // Inherited from ssoIssuanceLockHttp.test.js, deleted with simple-SSO. That
+    // file held the ONLY HTTP proof that TemporaryAuthToken is consumed on use.
+    // OIDC now depends on the same property (identity.js issues and validates
+    // in-process), so the proof moves here rather than leaving with the feature
+    // that used to carry it.
+    const response = await login();
+    expect(response.status).toBe(200);
+
+    // The row is gone the moment it was redeemed: `validate` deletes in a
+    // `finally`, so a token cannot be exchanged twice even if it leaked.
+    const leftover = await prisma.temporary_auth_tokens.findMany({});
+    expect(leftover).toEqual([]);
+
+    // And redeeming a token directly a second time fails — the same call the
+    // callback makes, with the same token.
+    const {
+      TemporaryAuthToken,
+    } = require("../../../models/temporaryAuthToken");
+    const decoded = JWT.decode(response.body.token);
+    const { token: minted } = await TemporaryAuthToken.issue(decoded.id);
+    const first = await TemporaryAuthToken.validate(minted);
+    expect(first.error).toBeNull();
+    expect(first.sessionToken).toEqual(expect.any(String));
+
+    const second = await TemporaryAuthToken.validate(minted);
+    expect(second.sessionToken).toBeNull();
+    expect(second.error).toMatch(/invalid token/i);
+  });
+
   test("case 1: replaying the same state is refused and issues no second session", async () => {
     const start = await request(app).get("/api/sso/oidc/login");
     const location = new URL(start.headers.location);

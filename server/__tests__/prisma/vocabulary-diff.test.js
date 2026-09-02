@@ -46,7 +46,7 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
       "workspace.read", "workspace.write", "workspace.delete",
       "document.read", "document.write", "document.delete",
       "chat.read", "chat.write", "user.read", "user.write",
-      "system.read", "system.write", "sso.issue",
+      "system.read", "system.write",
       "invite.read", "invite.create", "invite.delete",
       "embed.read", "embed.write", "embed.delete",
       "agent-flow.read", "agent-flow.write",
@@ -69,6 +69,6 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
       "audit.read",
     ];
     expect(approved.filter((a) => !ALL_ACTIONS.includes(a))).toEqual([]);
-    expect(ALL_ACTIONS.length).toBe(62);
+    expect(ALL_ACTIONS.length).toBe(61);
   });
 });

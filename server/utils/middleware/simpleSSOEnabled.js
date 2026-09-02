@@ -1,38 +1,6 @@
-const { SystemSettings } = require("../../models/systemSettings");
-
-/**
- * Checks if simple SSO is enabled for issuance of temporary auth tokens.
- * Note: This middleware must be called after `validApiKey`.
- * @param {import("express").Request} request
- * @param {import("express").Response} response
- * @param {import("express").NextFunction} next
- * @returns {void}
- */
-async function simpleSSOEnabled(_, response, next) {
-  if (!("SIMPLE_SSO_ENABLED" in process.env)) {
-    return response
-      .status(403)
-      .send(
-        "Simple SSO is not enabled. It must be enabled to validate or issue temporary auth tokens."
-      );
-  }
-
-  // If the multi-user mode response local is not set, we need to check if it's enabled.
-  if (!("multiUserMode" in response.locals)) {
-    const multiUserMode = await SystemSettings.isMultiUserMode();
-    response.locals.multiUserMode = multiUserMode;
-  }
-
-  if (!response.locals.multiUserMode) {
-    return response
-      .status(403)
-      .send(
-        "Multi-User mode is not enabled. It must be enabled to use Simple SSO."
-      );
-  }
-
-  next();
-}
+const {
+  isConfirmedSingleUser,
+} = require("../authorization/actorResolver");
 
 /**
  * Checks if simple SSO login is disabled by checking if the
@@ -63,8 +31,13 @@ function simpleSSOLoginDisabled() {
  */
 async function simpleSSOLoginDisabledMiddleware(_, response, next) {
   if (!("multiUserMode" in response.locals)) {
-    const multiUserMode = await SystemSettings.isMultiUserMode();
-    response.locals.multiUserMode = multiUserMode;
+    // #58 rulings A/B, handed to #50 by #58's ledger: the raw setting and
+    // `validatedRequest` disagree in shape (b) (multi_user_mode false WITH user
+    // rows). Reading the raw setting here made this guard fail OPEN — it skipped
+    // the NO_LOGIN block on an instance the session layer treats as multi-user,
+    // leaving credential login available where the operator forbade it.
+    // Inverted from the confirmed helper, so the local keeps its meaning.
+    response.locals.multiUserMode = !(await isConfirmedSingleUser());
   }
 
   if (response.locals.multiUserMode && simpleSSOLoginDisabled()) {
@@ -78,7 +51,6 @@ async function simpleSSOLoginDisabledMiddleware(_, response, next) {
 }
 
 module.exports = {
-  simpleSSOEnabled,
   simpleSSOLoginDisabled,
   simpleSSOLoginDisabledMiddleware,
 };

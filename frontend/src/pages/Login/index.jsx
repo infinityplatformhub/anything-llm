@@ -9,9 +9,6 @@ import useSimpleSSO from "@/hooks/useSimpleSSO";
 /**
  * Login page that handles both single and multi-user login.
  *
- * If Simple SSO is enabled and no login is allowed, the user will be redirected to the SSO login page
- * which may not have a token so the login will fail.
- *
  * @returns {JSX.Element}
  */
 export default function Login() {
@@ -21,13 +18,36 @@ export default function Login() {
 
   if (loading || ssoLoading) return <FullScreenLoader />;
 
-  // If simple SSO is enabled and no login is allowed, redirect to the SSO login page.
+  // #50: SIMPLE_SSO_NO_LOGIN still disables credential login and the server
+  // still enforces it. What changed is the destination: /sso/simple is deleted,
+  // so a forced user goes to a real IdP login instead.
   if (ssoConfig.enabled && ssoConfig.noLogin) {
-    // If a noLoginRedirect is provided and no token is provided, redirect to that webpage.
+    // An explicit redirect URL is the operator's own choice and wins.
     if (!!ssoConfig.noLoginRedirect && !query.has("token"))
       return window.location.replace(ssoConfig.noLoginRedirect);
-    // Otherwise, redirect to the SSO login page.
-    else return <Navigate to={paths.sso.login()} />;
+
+    // Otherwise start a login with the first enabled provider. Not a <Navigate>:
+    // this is a server route that redirects to the IdP, not a client one.
+    const [provider] = ssoConfig.providers ?? [];
+    if (provider) {
+      window.location.replace(paths.sso.login(provider));
+      return <FullScreenLoader />;
+    }
+
+    // Credential login disabled with no provider configured and no redirect set
+    // is a locked-out instance. Say so, rather than navigating somewhere that
+    // renders a blank screen.
+    return (
+      <div className="w-screen h-screen overflow-hidden bg-theme-bg-primary flex items-center justify-center flex-col gap-4">
+        <p className="text-theme-text-primary font-mono text-lg">
+          Login via credentials has been disabled by the administrator.
+        </p>
+        <p className="text-theme-text-secondary font-mono text-sm">
+          No identity provider is enabled, so there is no way to sign in. The
+          system administrator must enable one or unset SIMPLE_SSO_NO_LOGIN.
+        </p>
+      </div>
+    );
   }
 
   if (requiresAuth === false) return <Navigate to={paths.home()} />;

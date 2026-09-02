@@ -24,7 +24,6 @@ const EXPECTED = {
   "POST /v1/admin/workspace-chats": "chat.read",
   "POST /v1/admin/preferences": "system.write",
   "GET /v1/users": "user.read",
-  "GET /v1/users/:id/issue-auth-token": "sso.issue",
   "GET /v1/auth": "system.read",
 
   // PR-4b(1) workspace
