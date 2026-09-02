@@ -14,7 +14,7 @@
 - **hotfix #39** (Dev2): SERVICE_PRINCIPALS → principals.js (require cycle, silent grant skip) — merge before/after t4b whichever first
 - **§2.5 PASS** on 190a5b88: 3×85/940 identical, org-wide grants = super_admin only
 - **T-4b merged `800292ff`** (#29 closed) · next: Dev2 rebase #39 (legacyRoleGrants merge-both, JobRuntime 2 imports) → merge → Dev1 rebase #27 → merge · Dev4: #46 → #32 → #45 → #30 · T-7 t7 `2147faaa` 953/953 (rebase after #39) · #39 rebase must merge-both in legacyRoleGrants.js (§7.7) · #38 merged 3f4ee30d · #45 keyKind-required + #46 validatedRequest fail-open hotfix (Dev4 after #29) · #44 V1-c (dev-44 died silently; dev-44b resumed from v1c uncommitted work) · #43 S2 queued · **#39 `19647b03`** (3 commits incl. tx no-swallow + inTransaction) rebase after t4b · #40(A) → T-7 · #41 opened (7 document routes bound-key gap, Dev1 after #27) · gates running: #38 0fce7589, AAD 47f30790, t4b 4c32bce3 (check-29c) · #42 pg-literal cleanup opened (after #29/#27) · #15 11/12 (login 429 root cause) · trial-merge recipes sent: JobRuntime 2 imports (Dev2), validApiKey line 115 + regression single row (Dev1) · **#39 `d4fbe651`** (gate PASS at 10b7fe44 948/948; +routeWiring STORAGE_DIR fix) conflicts t4b in JobRuntime.js → Dev2 rebases after t4b · checklist §2.5 merged 3bf21384 · #33p2 QA-1 PASS
-- **main**:  7f4da824 — 33/48 closed (#46 merged 1b57c539; Techlead §6 env + #15 PASS 7f4da824)
+- **main**:  cdb03d1d — 36/48 closed (#46 1b57c539, #44/#47/#28B merged cdb03d1d)
 - **contract ใหม่** ทุก task.sh start: `yarn test 2>&1 | grep -E "Tests:" | grep -v failed; exit 0` (เทสแดง = ไม่ match)
 - **รอ dev ใหม่ 2 คน** (user จะเพิ่ม): Dev1 → PR-4b/4c (recon จาก Techlead b2), Dev2 → T-4a (recon จาก architect 6f) · ทักมาที่ PMO แล้วแจกทันที · reboot แล้ว session ชื่อใหม่: PMO=anything-llm-47, Dev1=13 (#26 PR-4b → #27 PR-4c), Dev2=6f (#25 T-4a), Dev3=3d (#15 → #28 T-6), Dev4=ff (#22 → T-4b), QA-1=af, QA-2=e6, Techlead=b2 · (13/6f เคยตอบ roll call เป็น security/architect — แก้ role แล้ว)
 - **test PG หลัง reboot**: docker down → ใช้ local PG17 `postgresql://approof:approof@localhost:5432/approofworkspace_<name>` + API_KEY_PEPPER 32+ bytes
@@ -93,10 +93,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 ## In-flight gates (2026-09-02)
 - #39 4270f79c (ledger hfprin/.infi/ledger-39.md, 10 rulings) → merge FIRST → Dev1 rebase #27, Dev2 rebase t7 after pr4c
 - #15 e77d0b78 (QA-1 witness 12/12 ×3, evidence/qa1-e2e-witness.md)
-- #28B 82010b1b (ruling: 8 providers incl. lance; flag default on, =0 disables)
-- #44 224ef2a3 (51 pairs; RECALL_AT_5_THRESHOLD null until real-embedder baseline)
-- #47 dada93d0 (cacheIsolation flake; 40 runs clean)
+- #28B merged; #44 merged; #47 merged (cdb03d1d)
 - pairwise merge-tree across all six: 0 conflicts
 - #32 ruling (ข): EMBED_REQUIRE_SESSION_TOKEN default off; widget → anythingllm-embed submodule PR [→ needs issue]
 - T-7 rulings: grants endpoint stays in #31; migrations → 070000/071000; frontend/src/models/system.js reserved for t7
 - ledger-46 reconstructed by PMO from commit bodies (QA-2 confirmed content)
+- RULE: main checkout is PMO-only; trial merges in detached /tmp worktrees (63beadd3 stray merge reset 2026-09-02)
