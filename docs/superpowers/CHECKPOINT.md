@@ -598,3 +598,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #121 TL-1 pre-verdict: F-A BLOCK (system.read not added to ORG_CAPABILITIES; 3 entries vanish for all in prod; client mock hid it), F-B comment on hidden-vs-parent, F-C unused capabilities[] → all folded into Dev1's next SHA with mock gap + ledger. §7.17 logged.
 - #131 (Dev2 recon): invisible format chars (9 codepoints) defeat every redaction pattern, audit + O5b bundle; redactions:[] gives false clean evidence. Auth tier → Dev5 after #119.
 - #120 caccf5514 TL-2 pre-read (75a1b0757): PASS except ASCII comma creates new FP (id lists/CSV redacted). PMO comma ruling reversed → drop both commas (option 1). Dev5 new SHA + ledger (add -f). §7.17 logged. #131 zero-width → Dev5 after #119.
+- #121 QA-3 on e3fbcf775: exit 1 deterministic (parent exit 0); M1-M5 dead; M6/M7 survive → sent to Dev1 for same SHA. Evidence committed.
+- #119 0e2317834 (Dev5 sealRoutes-mode fix) pushed: regating /tmp/wt-119. #127 2ba5ca93a gate green (98/98, drift 4/4, sweeps); result written; TL-2 verdict + QA-3 probe pending.

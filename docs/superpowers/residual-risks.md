@@ -261,3 +261,6 @@ Exempt set pinned only by type: mutant `actor?.type !== "user"` survives 43/43; 
 
 ## #126 slice 1 (QA-3 P3)
 Call-site guard strips only `//` comments; a `/* */` block containing the condition text makes N1 red on correct code (false positive, fails closed). If tightened later, strip block comments too; never loosen the pattern.
+
+## #121 (QA-3 on e3fbcf775, carried to next SHA)
+`capabilities.some()` OR-semantics has no caller in this slice (M6 some→every survives); parent-honours-child-`hidden` unproven (M7 survives, fixture requested). Both must be closed in the next #121 SHA or slice 2.
