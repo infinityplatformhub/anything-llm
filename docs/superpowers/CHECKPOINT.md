@@ -872,3 +872,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #136 slice 2: Dev5 surfaced GREEN 11/11 + 10 mutants (M1/M7/M8 survived first → F9/F10/F11 added), F2 = rollback scope via $use, idempotency F7 exact, real super_admin actor. Reassignment WITHDRAWN; Dev2 stood down. Dev5 commits + chunked suite → SHA.
 - #132 QA-3 dry-fire (qa3-132-dryfire.md): alias stub confirmed; P1–P7+P9 hold; P8 block-comment plant SURVIVES (false negative) → Dev4 fix strip; R1 sole behavioural assertion; systemReadCapabilityExposed is a dependency pin.
 - #141 opened (Lark provider registry, auth, after #138).
+- TL-2 (a4d011377): #126 s2 RED PASS (6/3 correct for an extraction; all 9 mutants incl. P8 proven; PrivacyLinkGate is the right cut; GREEN note: component reads hooks itself, no `hidden` prop; residual: mirrors depend on :294 user.read / :432 key.manage). #139 PASS on the guard; GAP collector/.nvmrc still v18 vs engines 22 → Dev2 fold; suggest .nvmrc==engines check + CI node-version-file. #140 ruling: storage behind system.read on the same route (validatedRequest whole route).
+- Dev2 #139 third commit 1e717b980 (ledger).
