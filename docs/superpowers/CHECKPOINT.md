@@ -472,3 +472,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #114 running; pg 23/100.
 - #40 t4: 4/15 GREEN (f6bcda5f1); RF-2 hold-A-not-B fixtures adopted; RF-3 `loading ||` redundant with can() contract → ruling: hook unit test for loading, keep gate guard as documented defence-in-depth; Dev2 ships 11-site SHA first, Dev4 lane follows (no commits yet, pinged ×2).
 - #122: code done — forPrismaTest keeps/defaults connection_limit (QA-2 fix), cap=5 in wt-bootstrap/ci/code-standards, central disconnectPrisma.js via setupFilesAfterEnv (lazy require), connectionBudget 10/10, RF-1..3 (RF-2 negative control = round-trip to dead port; RF-3 two tests in one file for ordering). Measured: uncapped 37 backends, cap=3 → 3, 60 queries 49ms. SHA after full --runInBand (RF-5).
+- Post-merge after #114: 3021/3021 green.
+- #40 t4 Dev4 lane f2b5d01d7 GREEN 12/12 (3 sites + 3 parent call sites); self-caught: hook inside plain function (no test on ToolsMenu), visible/can inseparable by hook construction (pinned at source), eslint --fix scope creep reverted; LLMSelector/action.jsx dead code; a11y gap → small issue. Dev2 to merge lane.
