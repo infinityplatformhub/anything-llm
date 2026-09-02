@@ -108,7 +108,7 @@ afterAll(async () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-describe("#71: creating an invite writes no code to the audit log", () => {
+describe("issue 71: creating an invite writes no code to the audit log", () => {
   test("the code the route returns appears nowhere in event_logs", async () => {
     const response = await request(app)
       .post("/api/admin/invite/new")

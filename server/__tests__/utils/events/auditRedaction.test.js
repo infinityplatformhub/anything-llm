@@ -171,7 +171,7 @@ describe("audit sink redacts PDPA data before the row exists", () => {
   });
 });
 
-// #71: an invite code is a BEARER CREDENTIAL, not metadata.
+// issue 71: an invite code is a BEARER CREDENTIAL, not metadata.
 //
 // RED-first: written before the fix. `inviteCode` was on the allowlist and no
 // PDPA pattern matches `apw-inv-<base64url>`, so the code reached event_logs
@@ -181,7 +181,7 @@ describe("audit sink redacts PDPA data before the row exists", () => {
 // an account with workspace access, invites have no expiry, and the audit log is
 // built to be exported to a SIEM. The credential therefore outlives, and travels
 // further than, the system that issued it.
-describe("#71: invite codes never reach the audit log", () => {
+describe("issue 71: invite codes never reach the audit log", () => {
   const { Invite } = require("../../../models/invite");
   const { ALLOWED_KEYS } = require("../../../utils/events/redaction");
 
@@ -302,6 +302,35 @@ describe("#71: invite codes never reach the audit log", () => {
       const glued = await storedFor(auditEvent({ name: `token${secret}` }));
       expect(glued.metadata).not.toContain(secret);
     }
+  });
+
+  test("QA-3 R4: the displayed keyPrefix survives, and only just", async () => {
+    // `keyPrefix` is an allowlisted audit JOIN KEY — it exists so an operator can
+    // tie an event to an API key without holding the key. It is the first
+    // DISPLAY_PREFIX_LENGTH (16) characters of the secret, which is `apw-key-`
+    // plus 8: exactly one character short of the pattern's {16,} bound.
+    //
+    // The two numbers are therefore COUPLED, and nothing in the source says so.
+    // Raise DISPLAY_PREFIX_LENGTH to 24 and every keyPrefix starts matching the
+    // credential pattern — audit rows silently lose their join key, and the
+    // suite would stay green because no other test looks at this. This is that
+    // test.
+    const { ApiKey } = require("../../../models/apiKeys");
+    const {
+      keyPrefix,
+      DISPLAY_PREFIX_LENGTH,
+    } = require("../../../utils/apiKeySecurity");
+
+    const prefix = keyPrefix(ApiKey.makeSecret());
+    expect(prefix).toHaveLength(DISPLAY_PREFIX_LENGTH);
+
+    const row = await storedFor(auditEvent({ keyPrefix: prefix }));
+    expect(JSON.parse(row.metadata).keyPrefix).toBe(prefix);
+
+    // Say the relationship out loud, so a future change to either number fails
+    // HERE — where the comment explains it — rather than in a puzzling audit bug.
+    // `apw-key-` is 8 characters, and the pattern needs 16 after it.
+    expect(DISPLAY_PREFIX_LENGTH - "apw-key-".length).toBeLessThan(16);
   });
 
   test("`inviteCode` is no longer an allowlisted key at all", async () => {
