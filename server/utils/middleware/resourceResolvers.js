@@ -173,6 +173,35 @@ const watchedDocumentInWorkspaceBySlug = async (request) => {
   };
 };
 
+/**
+ * The scope a grant is being written INTO — the org, or one workspace.
+ *
+ * `workspaceId` here is a caller-supplied parameter by necessity: it names the
+ * scope of the grant, not the location of an existing row. B-3 still holds,
+ * because the resolver looks the workspace UP and authorizes against the stored
+ * row — a caller who names a workspace that does not exist gets a 404, and a
+ * caller who names one they hold no `role.grant` in gets refused in that
+ * workspace's scope rather than the org's.
+ */
+const grantScopeFromBody = async (request) => {
+  const raw = request.body?.workspaceId ?? request.query?.workspaceId;
+  if (raw === undefined || raw === null || raw === "") return orgResource();
+
+  const id = Number(raw);
+  if (!Number.isInteger(id)) return null;
+  const workspace = await prisma.workspaces.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!workspace) return null;
+  return {
+    type: "workspace",
+    id: String(workspace.id),
+    orgId: ORG_ID,
+    workspaceId: workspace.id,
+  };
+};
+
 module.exports = {
   orgResource,
   workspaceBySlug,
@@ -183,4 +212,5 @@ module.exports = {
   promptHistoryByIdParam,
   memoryByIdParam,
   watchedDocumentInWorkspaceBySlug,
+  grantScopeFromBody,
 };
