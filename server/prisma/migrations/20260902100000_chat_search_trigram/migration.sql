@@ -48,13 +48,33 @@ UPDATE "workspace_chats"
 -- pgvector: utils/vectorDbProviders/pgvector/index.js:49 runs
 -- `CREATE EXTENSION IF NOT EXISTS vector;` against the operator's database and
 -- pgvector/SETUP.md documents it as a setup step.
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Pinned to `public`, not left to the session's search_path.
+--
+-- CREATE EXTENSION with no SCHEMA installs into the FIRST schema on the
+-- search_path, which for a Prisma connection carrying `?schema=<name>` is that
+-- per-connection schema. The extension then lives somewhere the tables do not,
+-- `gin_trgm_ops` is not resolvable from `public`, and the very next statement
+-- fails with 42704 -- taking the migration down and leaving the database in the
+-- failed-migration state that blocks every later one. Several suites in this
+-- repo connect exactly that way (samlRoutesHttp, keyScopeCeiling, purge.postgres
+-- and others all set ?schema=), so this is the ordinary case here, not an exotic
+-- one.
+--
+-- IF NOT EXISTS is schema-blind: it matches an installation in ANY schema, so a
+-- database that already has pg_trgm somewhere unhelpful is not repaired by
+-- re-running this. Explicit SCHEMA public is what makes a fresh database land it
+-- where the indexes below can see it.
+--
+-- The privilege this needs is the one the deployment already exercises for
+-- pgvector (see above).
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
 
 CREATE INDEX "workspace_chats_prompt_trgm"
-    ON "workspace_chats" USING gin ("prompt" gin_trgm_ops);
+    ON "workspace_chats" USING gin ("prompt" public.gin_trgm_ops);
 
 CREATE INDEX "workspace_chats_response_text_trgm"
-    ON "workspace_chats" USING gin ("response_text" gin_trgm_ops);
+    ON "workspace_chats" USING gin ("response_text" public.gin_trgm_ops);
 
 -- 3. The composite index the existing reads never had.
 --

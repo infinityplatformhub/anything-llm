@@ -104,6 +104,9 @@ beforeAll(async () => {
     SERVICE_PRINCIPALS,
   } = require("../../../utils/authorization/actorResolver");
 
+  const {
+    syncLegacyRoleGrant,
+  } = require("../../../utils/authorization/legacyRoleGrants");
   for (const user of [ALICE, BOB, CAROL]) {
     await prisma.users.create({
       data: {
@@ -113,6 +116,10 @@ beforeAll(async () => {
         role: user.role,
       },
     });
+    // A raw users insert carries no grant, so CAROL would hold no
+    // chat.read_others and the test that says the permission does not widen
+    // search would pass for the wrong reason. Grant the way production does.
+    await syncLegacyRoleGrant(user, { db: prisma });
   }
 
   workspace = await prisma.workspaces.create({

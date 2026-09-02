@@ -8,11 +8,7 @@ const { moveProcessedDocsToFolder } = require("../utils/files");
 const { Workspace } = require("../models/workspace");
 const { Document } = require("../models/documents");
 const { DocumentVectors } = require("../models/vectors");
-const {
-  WorkspaceChats,
-  MIN_SEARCH_LENGTH,
-  MAX_SEARCH_LENGTH,
-} = require("../models/workspaceChats");
+const { WorkspaceChats, MIN_SEARCH_LENGTH, MAX_SEARCH_LENGTH } = require("../models/workspaceChats"); // §5.1: single line — the gate greps the model name on the same line as require(
 const {
   chatSearchRateLimit,
 } = require("../utils/middleware/requestControls");
