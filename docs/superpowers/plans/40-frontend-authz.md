@@ -22,9 +22,17 @@ subset is **21 sites in 16 files**.
 RED first: `server/__tests__/security/authorization/workspaceCapabilities.test.js`.
 
 Add `WORKSPACE_CAPABILITIES` beside `ORG_CAPABILITIES` in `server/endpoints/system.js` and export
-both for the test. Members, from the mockup: `workspace.read`, `workspace.write`,
-`workspace.delete`, `document.create`, `document.read`, `document.update`, `document.delete`,
-`document.search`, `document.pin`, `document.watch`, `chat.send`, `chat.read`.
+both for the test. Members — **exactly** the approved mockup's `WS_CAPS` (`frontend-authz-capabilities.html:150`),
+seven entries: `workspace.read`, `workspace.write`, `workspace.delete`,
+`workspace.members.manage`, `document.create`, `document.delete`, `chat.send`.
+
+An earlier draft of this plan listed twelve, invented rather than copied from the mockup. Two of the
+five extras were not merely unapproved but wrong: `document.update` has no `requirePermission` gate
+anywhere in the tree, and `document.search` is gated only at `orgResource` — both would have been
+capabilities the UI could ask about that no route decides. A third, `workspace.members.manage`, was
+in the mockup and got dropped. Actions with real workspace gates that the mockup does not list
+(`document.read`, `document.pin`, `document.watch`, `chat.read`) stay out; whether to widen the list
+is an open question on #66, not a decision to make here.
 
 Add `workspace.create` to `ORG_CAPABILITIES` — genuinely org-scoped, confirmed by two server gates
 at `orgResource` (`workspaces.js:58`, `admin.js:361`). Ruling amended by PMO: the org set is never
@@ -41,9 +49,18 @@ Tests, all five required — the first two are the ruling, the last three stop i
    gate in `server/endpoints/` — this is what makes `workspace.create`'s admission a rule rather
    than an exception. Scan the endpoint tree; do not hardcode a list.
 
-Test 5 is the one that can rot into a tautology. It must fail if an action is added to
-`ORG_CAPABILITIES` with no org-resource gate — prove that by adding a fake entry locally and seeing
-it go red before deleting it.
+6. **every member of `WORKSPACE_CAPABILITIES` has at least one `requirePermission` gate at a
+   workspace-bearing resolver** — the counterpart to assertion 5. Its absence in the first draft is
+   exactly how `document.update` and `document.search` got in unnoticed. Prove red by re-adding
+   `document.update`.
+
+Tests 5 and 6 are the ones that rot into tautologies, and 5 already did once: a purely lexical scan
+went green when both live gates were deleted and replaced by a commented-out
+`// requirePermission("workspace.create", orgResource)`. It proved a string existed in a file, not
+that a route decided anything. **Strip comments and string literals before scanning**, assert the
+scan collected sources at all, and assert `workspace.create` is found specifically in `workspaces.js`
+and `admin.js`. Prove each red with a mutation — including the commented-gate one — before believing
+any of them.
 
 ## Task 2 — endpoint answers workspace scope
 
