@@ -76,5 +76,17 @@ export default [
         }
       ]
     }
+  },
+
+  // #111: test files run under vitest in Node, not in a browser tab. Without this they are
+  // linted against `globals.browser` alone, so reading `process.cwd()` or a Node builtin is
+  // reported as `no-undef` — a real rule catching a false positive. Scoped to test files and
+  // the setup file rather than relaxed globally: `process` in a COMPONENT is still an error,
+  // which is the thing that rule is there to prevent.
+  {
+    files: ["src/**/*.test.{js,jsx}", "src/test/**/*.{js,jsx}"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node }
+    }
   }
 ]
