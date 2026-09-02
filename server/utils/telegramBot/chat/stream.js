@@ -122,7 +122,7 @@ async function streamResponse({
     contextTexts: pinnedContextTexts,
     sources: pinnedSources,
     pinnedDocIdentifiers,
-  } = await collectPinnedDocs(workspace, LLMConnector);
+  } = await collectPinnedDocs(workspace, LLMConnector, actor);
 
   const {
     contextTexts: searchContextTexts,
@@ -196,7 +196,12 @@ async function streamResponse({
  * Gather context texts, sources, and identifiers from pinned documents.
  * @returns {Promise<{ contextTexts: string[], sources: object[], pinnedDocIdentifiers: string[] }>}
  */
-async function collectPinnedDocs(workspace, LLMConnector) {
+// `actor` is a PARAMETER, not an outer-scope read. It was the latter once: the helper
+// referenced `streamResponse`'s `actor`, which is not in its scope, so every Telegram chat
+// threw ReferenceError before reaching retrieval. `node --check` cannot see that — an
+// undefined identifier is a runtime error, not a syntax error — so only executing the line
+// catches it.
+async function collectPinnedDocs(workspace, LLMConnector, actor) {
   const contextTexts = [];
   const sources = [];
   const pinnedDocIdentifiers = [];

@@ -210,15 +210,40 @@ async function reportRetrievalFilterSupport(
     };
   }
 
-  // Said BEFORE anything about counts, and at error level rather than warn, because it is
-  // the one case where the operator's own action has no effect. Everything below assumes
-  // the flag means something; on Chroma it does not, and they need to know that first.
+  if (UNVERIFIED_PROVIDERS.includes(normalized)) {
+    logger.warn(
+      `\x1b[33m[authorization]\x1b[0m VECTOR_DB="${normalized}" has an ACL filter that has never been run against a real ${normalized} instance — it is hosted-only, so this deployment is the first to execute it. ` +
+        `Every other provider's predicate was rejected by its engine on first contact despite reading correctly (identifier quoting, placeholder numbering, operator precedence, tokenization). ` +
+        `Treat retrieval results here as UNVERIFIED: confirm that a document you cannot read is absent from chat context before relying on this.`
+    );
+  }
+
   // Weaviate is per-CLASS rather than per-provider: classes created since T-5 support the
   // escape clause, older ones cannot have it added (422 "IndexNullState cannot be changed
   // when updating a schema"). Naming the classes is the whole point — "Weaviate does not
   // support this" would be false for half a deployment and actionable for none of it.
   const staleClasses =
     normalized === "weaviate" ? await weaviateClassesWithoutAclSchema() : [];
+
+  const escapeClauseUnavailable =
+    NO_ESCAPE_CLAUSE_PROVIDERS.includes(normalized);
+
+  // ONE builder for every success return. Each field here is something a caller uses to
+  // decide whether the ACL is actually enforced, and four hand-written return objects had
+  // already drifted: two of them dropped `staleClasses`, so a Weaviate deployment — which
+  // always takes the "cannot count" path — reported nothing about its unfixable classes.
+  // A missing field reads as "no problem", which is the wrong default for all of these.
+  const report = (extra) => ({
+    supported: true,
+    provider: normalized,
+    escapeClauseUnavailable,
+    ...(normalized === "weaviate" ? { staleClasses } : {}),
+    ...extra,
+  });
+
+  // Said BEFORE anything about counts, and at error level rather than warn, because it is
+  // the one case where the operator's own action has no effect. Everything below assumes
+  // the flag means something; on Chroma it does not, and they need to know that first.
   if (staleClasses.length > 0 && allowUnprovableRows()) {
     logger.error(
       `\x1b[31m[authorization]\x1b[0m RETRIEVAL_FILTER_ALLOW_UNPROVABLE has NO EFFECT on ${staleClasses.length} Weaviate class(es): ${staleClasses.join(", ")}. ` +
@@ -228,16 +253,6 @@ async function reportRetrievalFilterSupport(
     );
   }
 
-  if (UNVERIFIED_PROVIDERS.includes(normalized)) {
-    logger.warn(
-      `\x1b[33m[authorization]\x1b[0m VECTOR_DB="${normalized}" has an ACL filter that has never been run against a real ${normalized} instance — it is hosted-only, so this deployment is the first to execute it. ` +
-        `Every other provider's predicate was rejected by its engine on first contact despite reading correctly (identifier quoting, placeholder numbering, operator precedence, tokenization). ` +
-        `Treat retrieval results here as UNVERIFIED: confirm that a document you cannot read is absent from chat context before relying on this.`
-    );
-  }
-
-  const escapeClauseUnavailable =
-    NO_ESCAPE_CLAUSE_PROVIDERS.includes(normalized);
   if (escapeClauseUnavailable && allowUnprovableRows()) {
     logger.error(
       `\x1b[31m[authorization]\x1b[0m RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set but has NO EFFECT on VECTOR_DB="${normalized}". ` +
@@ -256,7 +271,7 @@ async function reportRetrievalFilterSupport(
       `\x1b[31m[authorization]\x1b[0m failed to count vectors missing ACL metadata for "${normalized}": ${counts.error}. ` +
         `This is a fault in the diagnostic, not a statement about your data — retrieval enforcement is unaffected, but this deployment cannot report how many vectors predate the ACL metadata.`
     );
-    return { supported: true, provider: normalized, counts };
+    return report({ counts });
   }
 
   // Distinct from the above: nothing is broken, the question just cannot be asked cheaply
@@ -274,12 +289,7 @@ async function reportRetrievalFilterSupport(
     // `counts` is the three-outcome object from 1a, not null: it distinguishes
     // {unsupported} from {error}, and flattening it here would put back the conflation
     // that hid the bare-identifier bug.
-    return {
-      supported: true,
-      provider: normalized,
-      counts,
-      escapeClauseUnavailable,
-    };
+    return report({ counts });
   }
 
   if (counts.unlabelled > 0) {
@@ -298,13 +308,7 @@ async function reportRetrievalFilterSupport(
     );
   }
 
-  return {
-    supported: true,
-    provider: normalized,
-    counts,
-    escapeClauseUnavailable,
-    ...(normalized === "weaviate" ? { staleClasses } : {}),
-  };
+  return report({ counts });
 }
 
 module.exports = {

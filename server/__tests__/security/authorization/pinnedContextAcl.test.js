@@ -313,3 +313,234 @@ describe("T-5 slice 2: parsed files require a user", () => {
     ).resolves.toEqual([]);
   });
 });
+
+describe("T-5 slice 2: QA-1 mutation survivors", () => {
+  // Each of these killed a mutant that the original suite let live. A mutation that
+  // survives is a line the tests do not actually constrain — the code could be replaced
+  // with something wrong and nothing would go red.
+
+  test("M3: an explicit allow-list excludes a pinned document outside it", async () => {
+    // Embed and service actors carry `allowedDocumentIds`. Flipping the allow-list check
+    // to allow-all survived, because nothing exercised a pinned document that was NOT on
+    // the list — the filter was being applied and never being tested for the case it
+    // exists to catch. Same class as #41 NIT-1.
+    const aclFilter = {
+      orgId: 1,
+      principalType: "embed",
+      actorId: "embed-1",
+      workspaceIds: [String(W1.id)],
+      orgWide: false,
+      deniedDocumentIds: [],
+      // Only the readable document; the "denied" fixture is deliberately absent.
+      allowedDocumentIds: [String(pinned.readableDocument.id)],
+      attributes: {},
+      matchNone: false,
+      policyVersion: "1",
+    };
+
+    const docs = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter, db: prisma });
+
+    const contents = contentsOf(docs);
+    expect(contents).toContain("CONTENT OF READABLE");
+    // On the list => in. Off the list => out, even with no deny row anywhere.
+    expect(contents).not.toContain("CONTENT OF DENIED");
+  });
+
+  test("M3b: an EMPTY allow-list returns nothing, not everything", async () => {
+    // [] means "allow nothing". Read as "no restriction" it would turn the most
+    // restrictive filter into the least — the single most dangerous misreading available
+    // in this file.
+    const docs = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({
+      aclFilter: {
+        orgId: 1,
+        principalType: "embed",
+        actorId: "embed-1",
+        workspaceIds: [String(W1.id)],
+        orgWide: false,
+        deniedDocumentIds: [],
+        allowedDocumentIds: [],
+        attributes: {},
+        matchNone: false,
+        policyVersion: "1",
+      },
+      db: prisma,
+    });
+    expect(docs).toEqual([]);
+  });
+
+  test("M8: the bridge asks about document.read, not document.search", async () => {
+    // The finding from implementation, now pinned as a test. One document, two ACL rows:
+    // ALLOW on document.search, DENY on document.read. A filter built for the wrong action
+    // returns the document — and looks completely healthy doing it.
+    const document = await prisma.documents.create({
+      data: {
+        orgId: 1,
+        filename: "split-action.txt",
+        dedupe_key: `/t5s2/${dbSuffix}/split-action.txt`,
+      },
+    });
+    await prisma.workspace_documents.create({
+      data: {
+        docId: crypto.randomUUID(),
+        filename: "split-action.txt",
+        docpath: writeDocFile("split-action", "CONTENT OF SPLIT"),
+        workspaceId: W1.id,
+        documentId: document.id,
+        pinned: true,
+      },
+    });
+    await prisma.document_acl.create({
+      data: {
+        orgId: 1,
+        document_id: document.id,
+        principal_type: "workspace",
+        principal_id: String(W1.id),
+        action: READER,
+        source: "inherited_workspace",
+      },
+    });
+
+    const actor = await actorFor(9101);
+    // Allowed to SEARCH it...
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "user",
+      principalId: "9101",
+      action: "document.search",
+      effect: "allow",
+      db: prisma,
+    });
+    // ...denied READING it.
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "user",
+      principalId: "9101",
+      action: READER,
+      effect: "deny",
+      db: prisma,
+    });
+
+    const readFilter = await retrievalFilterFor({
+      actor,
+      action: READER,
+      db: prisma,
+    });
+    const withRead = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter: readFilter, db: prisma });
+    expect(contentsOf(withRead)).not.toContain("CONTENT OF SPLIT");
+
+    // And the proof that the action is what makes the difference: the search filter, which
+    // is `retrievalFilterFor`'s DEFAULT, lets it straight through.
+    const searchFilter = await retrievalFilterFor({
+      actor,
+      action: "document.search",
+      db: prisma,
+    });
+    const withSearch = await new DocumentManager({
+      workspace: W1,
+      maxTokens: 10_000,
+    }).pinnedDocs({ aclFilter: searchFilter, db: prisma });
+    expect(contentsOf(withSearch)).toContain("CONTENT OF SPLIT");
+  });
+
+  test("M8b: the bridge names document.read in its source", async () => {
+    // M8 above proves the BEHAVIOUR through the database. This pins the bridge itself,
+    // because every call site inherits its choice of action — and `retrievalFilterFor`
+    // defaults to `document.search`, so omitting the argument here would silently enforce
+    // the wrong question at all ten sites at once.
+    //
+    // Asserted on the source rather than by mocking: `pinnedContext` destructures
+    // `retrievalFilterFor` at import, so a spy on the module object never reaches it.
+    const source = require("fs").readFileSync(
+      require.resolve("../../../utils/authorization/pinnedContext"),
+      "utf-8"
+    );
+    expect(source).toMatch(/action:\s*"document\.read"/);
+    expect(source).not.toMatch(/action:\s*"document\.search"/);
+  });
+});
+
+describe("T-5 slice 2: a raw ACL write leaves caches stale", () => {
+  // Not a test-only trap. `FilterCache` keys on the policy version, and only the
+  // repository bumps it — so ANY write that reaches document_acl directly leaves every
+  // cached filter serving pre-change policy, for the whole TTL, across the process.
+  // This cost me a debugging detour during implementation; it would cost a stale
+  // permission decision in production.
+  const {
+    FilterCache,
+  } = require("../../../utils/authorization/cache");
+
+  test("M7: a repository write is visible to a fresh filter", async () => {
+    const document = await prisma.documents.create({
+      data: {
+        orgId: 1,
+        filename: "cache-repo.txt",
+        dedupe_key: `/t5s2/${dbSuffix}/cache-repo.txt`,
+      },
+    });
+    const actor = await actorFor(9201);
+    const before = await retrievalFilterFor({
+      actor,
+      action: READER,
+      db: prisma,
+    });
+
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "user",
+      principalId: "9201",
+      action: READER,
+      effect: "deny",
+      db: prisma,
+    });
+
+    const cache = new FilterCache({ db: prisma });
+    // The version moved, so the earlier filter is now stale — which is exactly what makes
+    // a cached filter safe to hold: it can always tell.
+    expect(await cache.isStale(before, prisma)).toBe(true);
+  });
+
+  test("M7b: a RAW write does not move the clock, so a stale filter looks fresh", async () => {
+    const document = await prisma.documents.create({
+      data: {
+        orgId: 1,
+        filename: "cache-raw.txt",
+        dedupe_key: `/t5s2/${dbSuffix}/cache-raw.txt`,
+      },
+    });
+    const actor = await actorFor(9202);
+    const before = await retrievalFilterFor({
+      actor,
+      action: READER,
+      db: prisma,
+    });
+
+    // The mistake, written out: bypassing the repository.
+    await prisma.document_acl.create({
+      data: {
+        orgId: 1,
+        document_id: document.id,
+        principal_type: "user",
+        principal_id: "9202",
+        action: READER,
+        effect: "deny",
+        source: "manual",
+      },
+    });
+
+    const cache = new FilterCache({ db: prisma });
+    // Still "fresh" — the deny exists in the database and no cache anywhere will notice.
+    expect(await cache.isStale(before, prisma)).toBe(false);
+  });
+});
