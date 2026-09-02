@@ -198,3 +198,10 @@ month 3) fits neither OAuth nor SAML shapes, so this is not a two-driver questio
 Likewise `refreshPrincipal`: S1 should establish that a driver lacking a capability
 throws `IdentityCapabilityError` rather than returning something empty. SAML will be
 the first driver to use it, but the pattern belongs to whoever writes the interface.
+
+## §PMO rulings (2026-09-02, #43 recon diff)
+- Q-1: separate file server/endpoints/identity/saml.js (POST ACS, metadata endpoint); mounted in index.js after identity. inviteRateLimit on /sso/saml/acs from the first commit.
+- Q-2: identity_assertion_ids sibling table (consume-not-delete, same purge); ONE migration slot 082000 for identity_providers + identity_assertion_ids.
+- Q-3: S2 reads its config from identity_providers table; S1 stays env-only. Do not touch endpoints/identity.js providerConfig() in #43. Unifying OIDC onto the table → follow-up [→ needs issue].
+- Q-4: yes — XSW fixtures first, library chosen against them.
+- #36 close is PMO's step; do not run task.sh close.
