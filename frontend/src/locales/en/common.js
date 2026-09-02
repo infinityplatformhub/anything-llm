@@ -92,6 +92,7 @@ const TRANSLATIONS = {
     "image-generation": "Image Generation",
     "voice-speech": "Voice & Speech",
     "vector-database": "Vector Database",
+    mailer: "Email Delivery",
     embeds: "Chat Embed",
     security: "Security",
     "event-logs": "Event Logs",
