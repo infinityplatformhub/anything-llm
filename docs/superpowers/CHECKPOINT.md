@@ -551,3 +551,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #119 c44b059d3 gate: check-local pass, sweeps 63/63; contract line lost → rerunning alone.
 - #119 c44b059d3 gate GREEN: check-local pass, contract routeMountGuard+routeGateSweep 71/71, sweeps 63/63. Result/env/ledger (8 rulings) prepped in /tmp/wt-119. Awaiting TL-2 verdict + QA-2 probe.
 - Post-merge #40 t4 server: 3023 passed, 2 failed in metrics.test.js + inviteMailRoutes.test.js (+ known assignableRolesSession helper suite). Rerunning the two alone; inviteMailRoutes is a known #106 flake class. Frontend half still running.
+- Post-merge #40 t4: metrics + inviteMailRoutes red in full run, green alone 46/46 → #106 flake (logged). Only real red on main = assignableRolesSession helper suite (Dev1 hotfix pending). Frontend half running.
+- Waiting: Dev3 #113 fix SHA (~19:50) · TL-2 + QA-2 on #119 c44b059d3 · Dev1 hotfix + #121 · Dev2 #126 Home half · Dev4 #124.
