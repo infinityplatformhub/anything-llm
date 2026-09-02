@@ -621,3 +621,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 0e466bccd regate green (frontend 98/98 exit 0, drift 4/4, ledger 3); awaiting QA-3 re-fire → close/merge.
 - Post-merge #128: server 222 suites / 3079 passed / 0 failed, frontend 101/101 exit 0. Post-merge #119 launched → /tmp/postmerge-119.log.
 - Dev3: null-principal test branch approof/128-null-principal-test (test-only, plain) incoming; S4b recon started with Q4 as (a)/(b) options, no contract until user answers.
+- #121 Dev1 ETA ~20:30: mock gap fixed (vitest exit 0, 107), F-A system.read in ORG_CAPABILITIES + sidebar-source-derived server test, F-B comment, F-C array removed, M7 2 tests; waiting server suite. #119 NIT → Dev5 separate test-only SHA (assert app still sealed with undefined sibling target). Dev3 aaed2b475 gating /tmp/wt-128b.
