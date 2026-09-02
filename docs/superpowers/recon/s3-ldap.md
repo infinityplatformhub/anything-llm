@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 
 ### PMO rulings after Techlead-1 fixture review (da87ec42 FAIL)
 - Every mock entry carries `objectClass`; the mock parses `&`/`|`/nested filters; injection fixture is the naive-driver shape `(&(objectClass=…)(uid=*)(uid=*))` and must return everyone.
@@ -8,7 +7,6 @@
 - `escapeDn` escapes NUL; legit `(`/`*` in cn/mail must still match.
 - Zero-result byte-identity is a route-level assertion.
 - Ruling (FINDING-5, slot 092000 after route merge): shape-derived row CHECK on identity_providers, no discriminator column; `entityId`/`ssoUrl` empty-string = "not SAML" is a documented contract (COMMENT ON COLUMN + information_schema nullable test); 5 tests incl. mixed rows both directions and literal empty ldapUrl; no NOT VALID.
-=======
 # Recon — S3 LDAP (#?) · read-only, nothing committed to code
 
 Read against `approof/s2-saml` @ `4765dbae`. No files outside this one were touched.
@@ -175,4 +173,3 @@ One `identity_providers` row (`provider='ldap'`) is expected to suffice: url,
 baseDn, userFilter and the attribute map fit the existing config columns, and
 there is no secret column by design. If a new column proves necessary it takes
 slot `091000` — `090000` belongs to #50.
->>>>>>> 17aadd2f
