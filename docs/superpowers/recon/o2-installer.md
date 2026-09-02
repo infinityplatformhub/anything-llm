@@ -116,3 +116,205 @@ If wrong: O2 ships a wizard that no fresh install ever reaches — the auto-gene
 What actually needs changing is one branch: `isLegacyOnboarded()` (`markOnboarded.js:45`) treating `AUTH_TOKEN || JWT_SECRET` as proof of prior use. With generation moved into the entrypoint, that variable is always set by the time Node boots, so **every** fresh install takes the legacy path, gets the flag written, and never sees the wizard. The other three signals in that function (`LLM_PROVIDER`, `VECTOR_DB`, multi-user mode) are genuine evidence of prior use and stay.
 
 Removing that branch has a cost worth stating rather than discovering: a legacy instance whose ONLY signal is `AUTH_TOKEN`/`JWT_SECRET` — no LLM provider, no vector DB, single-user — would start seeing the wizard. That is a real population (a single-user instance configured entirely through the UI), so the backfill must run **before** the branch is removed, in the same release, not after.
+
+---
+
+# Part 2 — doctor CLI and the handoff to OnboardingFlow
+
+Written after rulings (1)–(3), against the tree at `approof/main`. Everything below is measured,
+not designed from memory; where the ruling's wording and the code disagree, the code is quoted.
+
+## 7. The doctor subcommand
+
+### 7.1 The invocation in the ruling does not exist yet, for two reasons
+
+Ruling (2) names `docker compose run --rm app doctor`. Two corrections, both mechanical:
+
+- **There is no service called `app`.** `docker/docker-compose.yml` defines `postgres` and
+  `anything-llm` (container_name `approofworkspace`). The command is
+  `docker compose run --rm anything-llm doctor`.
+- **The entrypoint ignores arguments.** `docker/Dockerfile:182` is
+  `ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]`, and the script never reads
+  `$1` or `"$@"`. Today `… run --rm anything-llm doctor` starts the whole server and drops the
+  word `doctor` on the floor — it does not fail, which is worse, because the operator gets a
+  booting app and concludes the doctor passed.
+
+So the subcommand is not "expose an existing check"; it is a dispatch the entrypoint does not
+have. The shape:
+
+```bash
+# docker-entrypoint.sh
+case "${1:-serve}" in
+  doctor)  exec node /app/server/scripts/doctor.js ;;
+  serve|"") ;;                       # fall through to the existing block
+  *) echo "unknown command: $1" >&2; exit 64 ;;
+esac
+```
+
+`exec` matters: without it the doctor's exit code is the script's only if it is the last command,
+and the existing file ends with `wait -n; exit $?`.
+
+### 7.2 Two callers, one module, different failure semantics
+
+Ruling (2) requires the checks to run **both** on demand and automatically before boot. That is
+one check module with two callers, and they must not behave identically:
+
+| caller | when | on blocking failure | on warning |
+|---|---|---|---|
+| `scripts/doctor.js` | operator runs it | print checklist, `exit 1` | print, `exit 0` |
+| entrypoint, before `migrate deploy` | every boot | print checklist, `exit 1` (never boots) | print, continue |
+
+The automatic run must sit **after** the existing `until node -e '…pg connect…'` loop and
+**before** `prisma migrate deploy`. Before the wait loop it would fail on a database that is
+merely still starting — compose's `depends_on: service_healthy` covers the happy path but not an
+external `DATABASE_URL`. After `migrate deploy` is too late: the "can this role create
+extensions" check exists precisely because migrations are what fail without it, and #61's own
+`CREATE EXTENSION pg_trgm` is one of them (§7.13 exists because that failure leaves the database
+in a failed-migration state that blocks every later migration — a doctor that runs after the
+migration is a post-mortem, not a preflight).
+
+### 7.3 The checks, and which of them can block
+
+Blocking = the boot genuinely cannot succeed. Everything else warns. The list is short on
+purpose; a doctor that reports twenty things trains the operator to skim it.
+
+| check | how | blocking? |
+|---|---|---|
+| PostgreSQL reachable | `pg.Client.connect()` on `DATABASE_URL` | yes |
+| server version ≥ 16 | `SHOW server_version_num` | yes — `pg_input_is_valid` (used by #61's migration, `20260902100000`) landed in PostgreSQL 16, and the migration is not conditional, so 15 fails at `migrate deploy` with a syntax-level error that names nothing about versions |
+| `CREATE EXTENSION` permitted | `SELECT rolsuper OR pg_has_role(current_user,'pg_create_extension','member')` is not reliable across versions; the honest probe is `CREATE EXTENSION IF NOT EXISTS <x>` inside a transaction that is **rolled back** | yes, for `vector` and `pg_trgm` |
+| extension available in the image | `SELECT 1 FROM pg_available_extensions WHERE name=$1` | yes — distinguishes "no permission" from "not installed on this server", which have completely different remedies |
+| `LC_CTYPE` produces Thai trigrams | `SELECT datctype FROM pg_database WHERE datname=current_database()` + `array_length(public.show_trgm('ประวัติ'),1)` | **no** — ruling Q4. Reuses `server/utils/chatSearch/localeSupport.js` from #61 rather than restating the probe |
+| the five secrets present | `process.env` after the generation step | yes |
+| `STORAGE_DIR` writable | `fs.accessSync(dir, W_OK)` — not a write-then-delete, which races a second container | yes |
+| port free | skipped in-container; the port is published by compose, and a bound port fails at `docker compose up` with a clearer message than anything we can print | not a check |
+
+The `pg_available_extensions` row is the one worth defending: without it, an operator on a
+managed PostgreSQL that simply does not ship `vector` is told to ask for permissions they can
+never be granted.
+
+**The transaction-rollback probe is the only honest permission check**, and it has a cost worth
+stating: on a database where the extension is *absent and creatable*, the probe creates it and
+rolls it back, which is a real DDL write inside a transaction. On PostgreSQL that is safe
+(extension DDL is transactional), but the doctor is then no longer strictly read-only, and the
+recon should not pretend otherwise.
+
+### 7.4 Ruling Q5 (no network calls) constrains the doctor specifically
+
+Every check above talks to `DATABASE_URL` and the local filesystem, nothing else. The temptation
+to add "can we reach the LLM provider" must be refused: it would make the doctor fail on an
+air-gapped install that is otherwise perfectly healthy, and provider reachability belongs to the
+OnboardingFlow step where the operator is choosing a provider anyway.
+
+### 7.5 The doctor must not import the server
+
+`scripts/doctor.js` imports `pg`, `fs`, and `utils/chatSearch/localeSupport.js`. It must **not**
+reach `server/index.js`, `utils/boot/`, or anything that pulls `apiKeySecurity` — the pepper
+throws at import (the same trap ruling (1) names for `ensure-secrets.js`), and a doctor that
+crashes on a missing pepper cannot diagnose a missing pepper. This is a `--findRelatedTests`-able
+invariant: one test that requires `scripts/doctor.js` with `API_KEY_PEPPER` unset and asserts it
+loads.
+
+## 8. Handoff to OnboardingFlow (ruling 3)
+
+### 8.1 The split the mockups imply but do not show
+
+Both mockups render the preflight as a page in a browser. The doctor runs in the entrypoint,
+**before Node boots**. Those cannot be the same surface: if a blocking check fails, there is no
+server to serve the page. Stating the division plainly, because it decides what gets built:
+
+- **Blocking failures → terminal only.** Extension permission, unreachable database, unwritable
+  storage. The operator sees the checklist in `docker compose logs`, fixes it, restarts.
+- **Warnings and choices → browser.** `LC_CTYPE`, the five generated secrets and their backup
+  notice, and the admin account. These are the rows that survive into a React step, and they are
+  exactly the rows mockup B ended up marking "เตือน", "สร้างให้อัตโนมัติ", and "คุณกรอกเอง"
+  after the QA-3 pass.
+
+The QA-3 fix that moved the admin account out of the auto-checked list is therefore not
+cosmetic — it is this boundary showing up in the design.
+
+### 8.2 What already exists, measured
+
+- `SystemSettings.markOnboardingComplete()` — `models/systemSettings.js:806`, writes
+  `onboarding_complete`, in `protectedFields` at `:40`.
+- `GET /onboarding` — `endpoints/system.js:132`, **unauthenticated**, returns
+  `{onboardingComplete}`. Correct: the frontend must ask before anyone can log in.
+- `POST /onboarding` — `:147`, `requirePermission("settings.write", orgResource)` (#52).
+- `useRedirectToHomeOnOnboardingComplete()` — `frontend/src/hooks/useOnboardingComplete.js`,
+  redirects to home when the flag is true, and **only** on `false` stays. Note it treats any
+  non-`false` value as complete, so a failed fetch redirects away from onboarding.
+- Steps registry — `frontend/src/pages/OnboardingFlow/Steps/index.jsx`: `home`,
+  `llm-preference`, `user-setup`, `data-handling`, `survey`.
+- `markOnboarded()` — `utils/boot/markOnboarded.js`, already early-returns on the flag, already
+  logs the one-shot legacy message.
+
+### 8.3 The one-line change, and why it is the whole of ruling (3)
+
+`isLegacyOnboarded()` (`markOnboarded.js:44`):
+
+```js
+  // Check if the AUTH_TOKEN/JWT_SECRET is set, so we can assume onboarding is complete …
+  if (!!process.env.AUTH_TOKEN || !!process.env.JWT_SECRET) return true;
+```
+
+Ruling (1) moves secret generation into the entrypoint, so by the time this line runs on a
+**fresh** install both variables are set. Every new instance takes the legacy path, gets the flag
+written, and never sees the wizard. The other three signals (`LLM_PROVIDER`, `VECTOR_DB`,
+multi-user mode) are genuine evidence of prior use and stay.
+
+Ordering is the part that cannot be got wrong, and it is a sequence, not a preference:
+
+1. Ship the release containing the backfill (`markOnboarded` as it stands today) and let it run
+   at least once on every deployment that is going to upgrade.
+2. Only then remove the `AUTH_TOKEN || JWT_SECRET` branch.
+
+Both steps land in the same release **in that order within a single boot** — `markOnboarded()`
+runs at boot before any frontend request can ask `/onboarding`, so a legacy instance upgrading
+straight to the O2 release still gets its flag written by the old logic on that first boot,
+provided the branch removal does not also apply to that first run. Concretely: the backfill and
+the removal cannot both be a naive edit of the same function. The safe shape is a migration that
+writes `onboarding_complete` for instances matching the *old* predicate, run as a migration (once,
+ordered, recorded) rather than as boot-time inference — after which `isLegacyOnboarded()` loses
+the branch and never needs to reason about it again.
+
+The population this protects is real and easy to under-weight: a single-user instance configured
+entirely through the UI, with no `LLM_PROVIDER` in its `.env` because it was set through settings,
+would otherwise be shown a setup wizard for a system that has been in production for a year.
+
+### 8.4 The three tests ruling (3) requires, with the shape that makes them fail correctly
+
+Per §7.9 each must be red for the right reason, which here means asserting the flag's *source*,
+not just its value:
+
+1. **fresh install** — no `onboarding_complete` row, no `LLM_PROVIDER`/`VECTOR_DB`, single-user,
+   `AUTH_TOKEN` set (as the entrypoint now guarantees) → `markOnboarded()` returns `false` and
+   writes nothing. This is the test that fails today, and it is the reason the branch is being
+   removed.
+2. **legacy install** — same, but the migration has already written the flag →
+   `isOnboardingComplete()` is true and `markOnboarded()` early-returns without a second write.
+   Assert the early return (no `_updateSettings` call), not merely the true flag, or the test
+   passes for a fresh install too.
+3. **flag already true** — `markOnboarded()` returns before touching `isLegacyOnboarded()`.
+
+A fourth is worth adding and is not in the ruling: **the migration's own predicate**. Seed a row
+that looks like the protected population (secrets present, nothing else) and assert the migration
+sets the flag; seed a genuinely fresh row and assert it does not. Without it, "the backfill ran
+first" is an ordering claim with nothing verifying what it backfilled.
+
+## 9. Two things found while reading, that the plan must not discover late
+
+**`writeEnvFileAtomic` returns `false`; it does not throw.** `utils/helpers/updateENV.js:2056`
+refuses two cases — the path is a symlink, and the file's uid is not the process uid — by logging
+and returning `false`. `ensure-secrets.js` must branch on the return value. A generation step that
+ignores it prints "secrets generated" and boots a server whose `API_KEY_PEPPER` exists only in
+that process's memory, so every API key minted in that run stops verifying on the next restart —
+exactly the failure ruling (1)'s "if wrong" clause describes, arriving through a different door.
+
+**The uid check and the bind mount are on a collision course.** Compose mounts
+`./.env:/app/server/.env` from the host and runs the container as `${UID:-1000}:${GID:-1000}`.
+When the host file is owned by a different uid than the container user — the ordinary case on
+macOS, and on Linux whenever `UID` is unset and the host user is not 1000 — `writeEnvFileAtomic`
+refuses, correctly, and generation cannot write. This must be a **doctor check with a named
+remedy** (`chown` the file, or set `UID`/`GID` in `docker/.env`), not something the operator meets
+as a refusal message during first boot. It is also the reason the doctor's secrets check reports
+"cannot write `.env`" separately from "secret missing": they have different fixes.
