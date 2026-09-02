@@ -28,3 +28,4 @@ server/__tests__/security/identity/applyDirectoryPlan.test.js
 server/__tests__/security/identity/larkDirectorySync.test.js
 server/__tests__/security/authorization/offboardUser.test.js
 server/__tests__/security/authorization/setupAdminInstallGrant.test.js
+frontend/scripts/check-node-version.mjs
