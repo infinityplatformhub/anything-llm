@@ -193,3 +193,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #30 slice 3 f77433728 full run: 2013/2161, 5 suites red under load 25–30 (identity concurrency, auditRedaction, C-1); diff touches none of those areas; isolated --runInBand rerun in flight.
 - #78 7ae7ba763 (test contract update) forks before #87 → Dev1 asked to rebase onto 08bbb989b before declaring.
 - #30 slice 3 f77433728: 5 red suites pass isolated 197/197 (fresh STORAGE_DIR, --runInBand) → load flake. Gate = check-local PASS + full suite green modulo load. Waiting: Dev4 contract on #30, QA-1/QA-2/QA-3/TL-1/TL-2 verdicts.
+
+## 2026-09-02 — #78 86d2fe96 + #80 22cd99c9 declared; #88 opened
+- #78 86d2fe96: raw git proof + function-run (unknown passthrough, union 403, 4 route mutations red each), 80/80, merge-base = 08bbb989b (#87 in base). Gate + QA-2 + TL-1 dispatched.
+- #80 22cd99c9: step 6 done — limiter mounted only when email present (flood 429@11), listing mask fixed-width (/v1 never unmasks), SETTING_KEYS explicit list, C5 comment, save/test route, 9 labels added to supportedFields, persistCredential exported. 122/122 requires --runInBand (parallel migrate deploy collides). Gate + QA-1/QA-3/TL-1/TL-2 dispatched. Contract update on issue pending.
+- #88 opened: 8 provider connect() guards raw compare (Dev5, keep+normalise).
+- #40 73585b9b2 still lacks freeze/router-walk in expected files; Dev2 asked where.
