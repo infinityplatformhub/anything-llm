@@ -231,3 +231,9 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 e1bf4adb8: QA-2 PASS (limiter lane 21/21) → verdicts 4/5, waiting QA-1 (SETTING_KEYS + mutations; mask length = domain-only). Then close/merge.
 - #78 follow-up 034243d1 (drift test asks runtime; 4 NIT/#72 items; 82/82): gate-78f2 running; TL-1 quick read requested → merge (no issue close; note on #78).
 - #88 36976c14c: waiting TL-2. #40 a2bbb0de8: gate-40c bootstrapping (yarn install); TL-1/QA-2/TL-2 reviewing. Post-merge #30 suite running.
+
+## 2026-09-02 — #88 merged (69/88)
+- #88 36976c14c: gate PASS (62/62 bound), QA-3 PASS (99/99), TL-2 PASS (5/5 mutation incl. forced cycle P4). Residual: telemetry labels raw.
+- Post-merge main after #30: 2385/2385 (runInBand, fresh STORAGE_DIR).
+- #78 follow-up 034243d1: gate PASS 88/88; waiting TL-1 quick read → merge.
+- #80 e1bf4adb8: 4/5 verdicts; waiting QA-1. #40 a2bbb0de8: gate bootstrapping; 3 reviewers on it.

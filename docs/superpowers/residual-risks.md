@@ -145,3 +145,6 @@ Until then: any change to `utils/doctor/index.js` touching required extensions o
 
 ## #30 slice 3 — scope-before-store is a stated rule, not an asserted one
 `scopedNamespaceCount` refuses before querying the store, but `cardinalityScope.test.js` only asserts return values; TL-2 mutant moving the scope check after `namespaceCount` stays 102/102 green (timing channel). Fix = spy `namespaceCount` + `not.toHaveBeenCalled()` on out-of-scope / match-none / unknown slug (docs follow-up with resolveActor arity throw).
+
+## #88 — telemetry labels read VECTOR_DB raw (8 sites in endpoints/)
+Data-quality only: `Chroma` vs `chroma` split aggregate counts. None selects a provider or gates anything. `endpoints/utils.js:25` is a metrics response (operator sees own spelling — arguably preferable). No test drives `connect()` to success (needs live engines in CI).
