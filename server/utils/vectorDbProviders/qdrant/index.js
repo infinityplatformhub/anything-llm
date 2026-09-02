@@ -25,7 +25,13 @@ class QDrant extends VectorDatabase {
   }
 
   async connect() {
-    if (process.env.VECTOR_DB !== "qdrant")
+    // #88: normalised, like every other comparison of a VECTOR_DB value.
+    // getVectorDbClass resolves "QDRANT" to this provider (#87), so a raw
+    // comparison here rejects a spelling the app already accepted — and
+    // "Invalid ENV settings" gives the operator no way to read that as
+    // capitalisation.
+    const { normalizeVectorDbKey } = require("../../helpers");
+    if (normalizeVectorDbKey(process.env.VECTOR_DB) !== "qdrant")
       throw new Error("QDrant::Invalid ENV settings");
 
     const client = new QdrantClient({
