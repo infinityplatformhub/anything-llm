@@ -108,3 +108,6 @@ error would change shape.
 
 Small — eight one-line edits — but the require-cycle detail and the eighth guard are why it is an
 issue rather than a drive-by.
+
+## Correction (Dev5, measured at 36976c14c)
+The require-cycle claim above is wrong: `utils/helpers/index.js` requires providers only inside `getVectorDbClass` switch arms, never at module scope, and 7/8 providers already require helpers at module scope today without issue. The `require` inside `connect()` is kept for readability; three tests now pin the true property (helpers requires providers lazily; modules load in any order) so a future top-level provider require in helpers turns red before anyone debugs `normalizeVectorDbKey is not a function` at runtime.
