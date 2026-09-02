@@ -748,3 +748,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #134 (38b4378ca): server 3284 passed / 1 failed = ldapRoutesHttp (18/18 alone, #106-class flake; add to flake list); frontend/caps pending in report. 
 - QA-1 #138 pre-read landed (qa1-138-preread.md): claim needs an injectable barrier seam; RF-1 assert reached===2 + loser + attempts===1; RF-2 alive-worker takeover with LeaseLostError + version count; RF-4 paired mutants.
 - O3 contract (Dev2, c42747f1a → .infi/recon/contract-o3.md): sequence-jump measured (row-level restore leaves seq at 1 → first write fails); 49 autoincrement models vs 48 sequences in DB → RF-9 must report tables checked; RF-10 refuse newer-schema bundle; RF-11 atomicity limits (pg yes, STORAGE_DIR/vector no); SIG_KEY OPEN for user (A out-of-band vs B in-bundle w/ argon2id); tier auth proposed → PMO confirms auth.
+- Post-merge #134 complete: server 3284/1 (ldapRoutesHttp flake, 18/18 alone), frontend 107 exit 0, caps 0 → main 38b4378ca+ fully green. Flake list updated in memory.
+- 23:47 pings: Dev1 (#137 recon, 37 min), Dev4 (#132 prep, 27 min), TL-2 (#132 rulings now unblocked).
