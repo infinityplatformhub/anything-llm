@@ -117,6 +117,35 @@ function systemEndpoints(app) {
     response.status(200).json({ online: true });
   });
 
+  // O5a (#90): Prometheus scrape target.
+  //
+  // Unauthenticated and mounted inside /api, like /ping, so it inherits
+  // `ipAllowlist` (index.js:102) — a scraper reaches it by being on the
+  // allowlist rather than by holding a key. A separate port would double what
+  // the operator has to firewall and would not compose with the allowlist they
+  // already configured.
+  //
+  // Read this before assuming it is protected: an EMPTY `IP_ALLOWLIST` means
+  // allow-everything (utils/middleware/requestControls.js:223), and empty is
+  // the default. On an internet-facing box this route is public. Metrics hold
+  // no secrets, but they are an inventory — user counts, workspace counts,
+  // error rates — and an inventory is reconnaissance. The doctor (#74) warns
+  // about exactly this combination.
+  //
+  // Labels never carry user-supplied text; see utils/metrics for why that is
+  // enforced rather than agreed.
+  app.get("/metrics", async (_, response) => {
+    try {
+      const { render } = require("../utils/metrics");
+      const { contentType, body } = await render();
+      response.setHeader("Content-Type", contentType);
+      response.status(200).send(body);
+    } catch (e) {
+      console.error(e.message, e);
+      response.sendStatus(500).end();
+    }
+  });
+
   app.get("/migrate", async (_, response) => {
     response.sendStatus(200);
   });
