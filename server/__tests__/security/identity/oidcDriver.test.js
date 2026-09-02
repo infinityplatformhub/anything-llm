@@ -83,14 +83,17 @@ function tokenWithout(claims) {
  * A fetch stub covering discovery, JWKS and the token endpoint. `tokenResponse`
  * is what the IdP returns from /token; `fail` forces a network-level error.
  */
-function fakeFetch({ token, fail = null, tokenStatus = 200 } = {}) {
+function fakeFetch({ token, fail = null, tokenStatus = 200, keys = null, counter = null } = {}) {
   return async (url) => {
     const href = String(url);
     if (fail) throw fail;
     if (href.endsWith("/.well-known/openid-configuration"))
       return { ok: true, status: 200, json: async () => discovery() };
-    if (href === `${ISSUER}/jwks`)
-      return { ok: true, status: 200, json: async () => ({ keys: [publicJwk] }) };
+    if (href === `${ISSUER}/jwks`) {
+      if (counter) counter.jwks += 1;
+      const published = typeof keys === "function" ? keys() : (keys ?? [publicJwk]);
+      return { ok: true, status: 200, json: async () => ({ keys: published }) };
+    }
     if (href === `${ISSUER}/token`)
       return {
         ok: tokenStatus === 200,
@@ -346,5 +349,185 @@ describe("completeLogin — every assertion the driver must refuse", () => {
       })
     ).rejects.toThrow(IdentityAuthenticationError);
     expect(called).toBe(false);
+  });
+});
+
+describe("JWKS handling (Techlead F1/F2)", () => {
+  /** A second signing key, as an IdP mid-rotation would publish. */
+  function secondKey() {
+    const pair = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    return {
+      privateKey: pair.privateKey,
+      jwk: { ...pair.publicKey.export({ format: "jwk" }), alg: "RS256", use: "sig" },
+    };
+  }
+
+  test("F2: two published keys with NO kid — a token signed by the SECOND is accepted", async () => {
+    // Normal state during key rotation: providers may publish several keys and
+    // omit kid entirely. Picking the first match and giving up would turn every
+    // rotation into an outage, and the failure would read as "bad signature".
+    const second = secondKey();
+    const bare = { ...publicJwk };
+    delete bare.kid;
+
+    const token = JWT.sign(
+      {
+        sub: "rotated",
+        email: "rotated@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      second.privateKey,
+      { algorithm: "RS256", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+
+    const provider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token, keys: [bare, second.jwk] }),
+    });
+
+    const principal = await provider.completeLogin({
+      redirectUri: REDIRECT_URI,
+      callbackParams: { code: "auth-code" },
+      codeVerifier: "verifier-abc",
+      expectedNonce: "the-expected-nonce",
+    });
+    expect(principal.subject).toBe("rotated");
+  });
+
+  test("F2b: a token signed by a key that is NOT published still fails", async () => {
+    // Trying every candidate must not become "accept anything": the candidates
+    // are only ever the issuer's own published keys.
+    const outsider = secondKey();
+    const bare = { ...publicJwk };
+    delete bare.kid;
+    const token = JWT.sign(
+      { sub: "x", email: "x@example.com", email_verified: true, nonce: "the-expected-nonce" },
+      outsider.privateKey,
+      { algorithm: "RS256", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+    const provider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token, keys: [bare] }),
+    });
+    await expect(
+      provider.completeLogin({
+        redirectUri: REDIRECT_URI,
+        callbackParams: { code: "auth-code" },
+        codeVerifier: "verifier-abc",
+        expectedNonce: "the-expected-nonce",
+      })
+    ).rejects.toThrow(IdentityAuthenticationError);
+  });
+
+  test("F1: two consecutive logins fetch the JWKS once", async () => {
+    // Without a cache every login — including ones driven by junk tokens — is a
+    // round trip to the IdP, which makes the login path only as available as
+    // the provider and turns garbage traffic into amplified load on it.
+    const counter = { jwks: 0 };
+    const provider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token: idToken(), counter }),
+    });
+    const input = {
+      redirectUri: REDIRECT_URI,
+      callbackParams: { code: "auth-code" },
+      codeVerifier: "verifier-abc",
+      expectedNonce: "the-expected-nonce",
+    };
+    await provider.completeLogin(input);
+    await provider.completeLogin(input);
+    expect(counter.jwks).toBe(1);
+  });
+
+  test("F1b: an unknown kid triggers exactly ONE refetch, and then verifies", async () => {
+    // The cache must not become a way to lock out a rotated key — but a token
+    // carrying a random kid must not buy an unbounded number of fetches either.
+    const counter = { jwks: 0 };
+    const rotated = secondKey();
+    rotated.jwk.kid = "rotated-key";
+    let published = [publicJwk];
+
+    const provider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({
+        token: idToken(),
+        counter,
+        keys: () => published,
+      }),
+    });
+
+    // Warm the cache with the original key.
+    await provider.completeLogin({
+      redirectUri: REDIRECT_URI,
+      callbackParams: { code: "auth-code" },
+      codeVerifier: "verifier-abc",
+      expectedNonce: "the-expected-nonce",
+    });
+    expect(counter.jwks).toBe(1);
+
+    // The IdP rotates; the next token carries a kid the cache has never seen.
+    published = [rotated.jwk];
+    const rotatedToken = JWT.sign(
+      {
+        sub: "after-rotation",
+        email: "after@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      rotated.privateKey,
+      { algorithm: "RS256", keyid: "rotated-key", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+    const rotatedProvider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token: rotatedToken, counter, keys: () => published }),
+    });
+    rotatedProvider._jwksCache = provider._jwksCache;
+    const before = counter.jwks;
+    const principal = await rotatedProvider.completeLogin({
+      redirectUri: REDIRECT_URI,
+      callbackParams: { code: "auth-code" },
+      codeVerifier: "verifier-abc",
+      expectedNonce: "the-expected-nonce",
+    });
+    expect(principal.subject).toBe("after-rotation");
+    expect(counter.jwks - before).toBe(1);
+  });
+
+  test("F1c: an unknown kid that is STILL unknown after refetch does not fetch again", async () => {
+    const counter = { jwks: 0 };
+    const outsider = secondKey();
+    const token = JWT.sign(
+      { sub: "x", email: "x@example.com", email_verified: true, nonce: "the-expected-nonce" },
+      outsider.privateKey,
+      { algorithm: "RS256", keyid: "never-published", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+    const provider = new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token, counter }),
+    });
+    await expect(
+      provider.completeLogin({
+        redirectUri: REDIRECT_URI,
+        callbackParams: { code: "auth-code" },
+        codeVerifier: "verifier-abc",
+        expectedNonce: "the-expected-nonce",
+      })
+    ).rejects.toThrow(IdentityAuthenticationError);
+    // One fetch to populate, at most one refetch for the unknown kid. A token
+    // with a random kid must not be a free DoS lever against the IdP.
+    expect(counter.jwks).toBeLessThanOrEqual(2);
   });
 });

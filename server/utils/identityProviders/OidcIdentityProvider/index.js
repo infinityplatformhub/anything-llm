@@ -27,6 +27,9 @@ const DISCOVERY_PATH = "/.well-known/openid-configuration";
 // list is a deliberate change, not a compatibility fix.
 const ALLOWED_ALGORITHMS = ["RS256", "ES256"];
 const DEFAULT_TIMEOUT_MS = 10_000;
+// Long enough that a login is not an IdP round trip, short enough that a
+// revoked key stops being accepted the same day it is withdrawn.
+const JWKS_TTL_MS = 10 * 60 * 1000;
 
 class OidcIdentityProvider {
   static providerId() {
@@ -57,6 +60,7 @@ class OidcIdentityProvider {
     this.fetchImpl = fetchImpl ?? globalThis.fetch;
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this._discovery = null;
+    this._jwksCache = { keys: [], fetchedAt: 0 };
   }
 
   static async validateConnection(config) {
@@ -188,22 +192,27 @@ class OidcIdentityProvider {
   }
 
   async _verifyIdToken(idToken, expectedNonce) {
-    const key = await this._signingKeyFor(idToken);
-    let claims;
-    try {
-      claims = JWT.verify(idToken, key, {
-        algorithms: ALLOWED_ALGORITHMS,
-        issuer: this.issuer,
-        audience: this.clientId,
-      });
-    } catch (cause) {
-      // Signature, issuer, audience and expiry all land here. The caller gets a
-      // generic failure (seam: "without provider details"); the reason stays in
-      // the cause for the operator's log.
-      throw new IdentityAuthenticationError("The identity assertion was rejected.", {
-        cause,
-      });
+    const header = JWT.decode(idToken, { complete: true })?.header;
+    if (!header) throw new IdentityAuthenticationError("Malformed identity assertion.");
+    // `alg: none` is an unsigned token. Rejected before any key lookup, because
+    // the lookup would otherwise be the only thing standing in the way.
+    if (!ALLOWED_ALGORITHMS.includes(header.alg))
+      throw new IdentityAuthenticationError(
+        `Unsupported or unsafe signing algorithm: ${header.alg}`
+      );
+
+    let candidates = await this._candidateKeys(header, { refresh: false });
+    let claims = this._tryVerify(idToken, candidates);
+
+    // Nothing matched. An IdP that just rotated publishes a key the cache has
+    // never seen, so refetch ONCE — but only once: a token carrying a random
+    // kid must not be a free lever for hammering the provider.
+    if (!claims) {
+      candidates = await this._candidateKeys(header, { refresh: true });
+      claims = this._tryVerify(idToken, candidates);
     }
+    if (!claims)
+      throw new IdentityAuthenticationError("The identity assertion was rejected.");
 
     // Compared explicitly rather than through an options bag: an ABSENT nonce
     // must fail, and `undefined === undefined` would otherwise pass.
@@ -214,34 +223,62 @@ class OidcIdentityProvider {
     return claims;
   }
 
-  async _signingKeyFor(idToken) {
-    const header = JWT.decode(idToken, { complete: true })?.header;
-    if (!header) throw new IdentityAuthenticationError("Malformed identity assertion.");
-    // `alg: none` is an unsigned token. Rejected before any key lookup, because
-    // the lookup itself would otherwise be the only thing standing in the way.
-    if (!ALLOWED_ALGORITHMS.includes(header.alg))
-      throw new IdentityAuthenticationError(
-        `Unsupported or unsafe signing algorithm: ${header.alg}`
-      );
+  /**
+   * Verify against each published key in turn.
+   *
+   * Trying several keys is not "accept anything": every candidate came from the
+   * issuer's own JWKS. Picking only the first match would break the ordinary
+   * case of a provider mid-rotation publishing two keys with no `kid`, and the
+   * failure would surface as a bad signature rather than a rotation.
+   */
+  _tryVerify(idToken, candidates) {
+    for (const key of candidates) {
+      try {
+        return JWT.verify(idToken, key, {
+          algorithms: ALLOWED_ALGORITHMS,
+          issuer: this.issuer,
+          audience: this.clientId,
+        });
+      } catch {
+        // Wrong key, or a claim this key's token could never satisfy. Either
+        // way the next candidate gets its turn; the caller decides when to stop.
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Public keys that could have signed a token with this header.
+   *
+   * Filtered by `kid` when both sides carry one — a published key that names a
+   * different kid did not sign this token — and by `alg` the same way.
+   */
+  async _candidateKeys(header, { refresh }) {
+    const jwks = await this._jwks({ refresh });
+    return jwks
+      .filter((jwk) => !header.kid || !jwk.kid || jwk.kid === header.kid)
+      .filter((jwk) => (jwk.alg ? jwk.alg === header.alg : true))
+      .map((jwk) => {
+        try {
+          return crypto.createPublicKey({ key: jwk, format: "jwk" });
+        } catch {
+          // A malformed entry must not take the whole set down with it.
+          return null;
+        }
+      })
+      .filter(Boolean);
+  }
+
+  /** @returns {Promise<Object[]>} the published JWKS, cached for JWKS_TTL_MS. */
+  async _jwks({ refresh = false } = {}) {
+    const fresh = Date.now() - this._jwksCache.fetchedAt < JWKS_TTL_MS;
+    if (!refresh && fresh && this._jwksCache.keys.length) return this._jwksCache.keys;
 
     const { jwks_uri } = await this.discover();
-    const jwks = await this._fetchJson(jwks_uri);
-    const candidates = (jwks?.keys ?? []).filter(
-      (jwk) => !header.kid || !jwk.kid || jwk.kid === header.kid
-    );
-    const match = candidates.find((jwk) => (jwk.alg ? jwk.alg === header.alg : true));
-    if (!match)
-      throw new IdentityAuthenticationError(
-        "No published signing key matches this assertion."
-      );
-
-    try {
-      return crypto.createPublicKey({ key: match, format: "jwk" });
-    } catch (cause) {
-      throw new IdentityAuthenticationError("Published signing key is unusable.", {
-        cause,
-      });
-    }
+    const document = await this._fetchJson(jwks_uri);
+    const keys = Array.isArray(document?.keys) ? document.keys : [];
+    this._jwksCache = { keys, fetchedAt: Date.now() };
+    return keys;
   }
 
   _normalize(claims) {
