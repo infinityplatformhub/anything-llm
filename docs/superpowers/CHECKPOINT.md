@@ -915,3 +915,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #136 CLOSED (slice 2 merged 282569f1d). wt-136s2 + g136s2 + wt-139 reaped. contract-135 scope clause (Dev2 d92111a95) landed. Post-merge agent for #136 s2 to run after postmerge-139 finishes (same HEAD lineage).
 - V8 RF-9 skeleton (QA-1): baseline 3/4 on main, positive control 7/7; fires when Dev4 ships the hook (V8 blocked on USER mockup approval). rf2b both witnesses folded.
 - TL-2 #138 early note: directory.sync has no handler registered at 2cdb884ef → tick's lease is still 30s in production; the 160s machinery is correct but not live until the handler lands (Dev3's final SHA). State plainly in the verdict.
+- #140 GREEN parked (Dev1): server 8/8 (folds applied), frontend 3/3, M1–M7 all red on revert, 148/148 neighbours. Dev1 → #138-perm RED on approof/138-directory-sync-permission (lane confirmed clean). §7.17.
