@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import AgentIcon from "@/media/animations/agent-static.png";
 import CommunityHubIcon from "@/media/illustrations/community-hub.png";
+import useCapabilities from "@/hooks/useCapabilities";
 import useUser from "@/hooks/useUser";
 import { isMobile } from "react-device-detect";
 import Footer from "../Footer";
@@ -30,6 +31,19 @@ export default function SettingsSidebar() {
   const { t } = useTranslation();
   const { logo } = useLogo();
   const { user } = useUser();
+  const { can, loading } = useCapabilities();
+
+  // #40 task 4: the privacy link opens /settings/privacy, which main.jsx:213
+  // guards with AdminRoute — and AdminRoute asks settings.write. The capability
+  // is read off the route the link actually opens, not inferred from the role
+  // string it replaces: that string is the thing being removed, so using it as
+  // the source would preserve the drift.
+  //
+  // Rendered twice (mobile and desktop). One value for both, because two
+  // spellings of one affordance that disagree is worse than either being wrong.
+  // `loading ||` is redundant against can() today and kept as an independent
+  // defence; hooks/useCapabilities.test.jsx holds can()'s side.
+  const hidePrivacyLink = !!user && (loading || !can("settings.write"));
   const sidebarRef = useRef(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showBgOverlay, setShowBgOverlay] = useState(false);
@@ -114,9 +128,7 @@ export default function SettingsSidebar() {
                     <div className="h-[1.5px] bg-[#3D4147] mx-3 mt-[14px]" />
                     <SupportEmail />
                     <Link
-                      hidden={
-                        user?.hasOwnProperty("role") && user.role !== "admin"
-                      }
+                      hidden={hidePrivacyLink}
                       to={paths.settings.privacy()}
                       className="text-theme-text-secondary hover:text-white text-xs leading-[18px] mx-3"
                     >
@@ -165,9 +177,7 @@ export default function SettingsSidebar() {
                   <div className="h-[1.5px] bg-[#3D4147] mx-3 mt-[14px]" />
                   <SupportEmail />
                   <Link
-                    hidden={
-                      user?.hasOwnProperty("role") && user.role !== "admin"
-                    }
+                    hidden={hidePrivacyLink}
                     to={paths.settings.privacy()}
                     className="text-theme-text-secondary hover:text-white hover:light:text-theme-text-primary text-xs leading-[18px] mx-3"
                   >
