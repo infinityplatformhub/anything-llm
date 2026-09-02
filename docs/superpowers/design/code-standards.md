@@ -910,3 +910,6 @@ A "pre-existing on main" claim is void if the baseline tree points at the same s
 
 ### §7.13 CREATE EXTENSION names its schema
 `CREATE EXTENSION IF NOT EXISTS x;` installs into the first schema on search_path and `IF NOT EXISTS` is schema-blind, so a test suite (or deployment) using `?schema=` leaves the operator class invisible from `public` and the migration fails mid-file. Always `CREATE EXTENSION IF NOT EXISTS x SCHEMA public;` and qualify operator classes (`public.gin_trgm_ops`). Found by Dev5 on #61.
+
+### §7.9d source-scan tests strip comments and string literals
+A test that greps source for `requirePermission(...)` passes when the gate is a comment. Strip `//`, `/* */` and string literals before matching, and keep a mutation where the real gate is commented out. (Dev2/reviewer on #40 task 1.)
