@@ -35,9 +35,34 @@ function makeHistoryRecord(n, { size = 40, sources = [] } = {}) {
   };
 }
 
+// T-5 (#30) slice 3: `fillSourceWindow` now re-authorizes rehydrated citations, so a
+// source needs the ACL fields the write path stamps or it is UNPROVABLE and excluded —
+// correctly, but these tests are about the source WINDOW, not about authorization. They
+// carry the fields so the behaviour under test is the one being asserted.
 function makeSource(id, extra = {}) {
-  return { id, score: 0.5, text: `text-${id}`, ...extra };
+  return {
+    id,
+    score: 0.5,
+    text: `text-${id}`,
+    orgId: "1",
+    workspaceId: "3",
+    docId: `doc-${id}`,
+    ...extra,
+  };
 }
+
+/** The permissive filter these window tests run under. Authorization has its own suite. */
+const ALLOW_ALL = {
+  orgId: 1,
+  principalType: "user",
+  actorId: "5",
+  workspaceIds: ["3"],
+  orgWide: false,
+  deniedDocumentIds: [],
+  attributes: {},
+  matchNone: false,
+  policyVersion: "1",
+};
 
 function chatWithSources(sources) {
   return { response: JSON.stringify({ sources }) };
@@ -61,19 +86,18 @@ describe("fillSourceWindow", () => {
       ];
       const before = history.map((chat) => chat.response);
 
-      fillSourceWindow({ nDocs: 4, searchResults: [], history });
+      fillSourceWindow({ nDocs: 4, searchResults: [], history, aclFilter: ALLOW_ALL });
 
       expect(history.map((chat) => chat.response)).toEqual(before);
     });
 
     it("returns a new sources array instead of the caller's searchResults", () => {
       const searchResults = [makeSource("a")];
-      const full = fillSourceWindow({ nDocs: 1, searchResults, history: [] });
+      const full = fillSourceWindow({ nDocs: 1, searchResults, history: [], aclFilter: ALLOW_ALL });
       const backfilled = fillSourceWindow({
         nDocs: 2,
         searchResults,
-        history: [chatWithSources([makeSource("b")])],
-      });
+        history: [chatWithSources([makeSource("b")])], aclFilter: ALLOW_ALL });
 
       expect(full.sources).not.toBe(searchResults);
       expect(backfilled.sources).not.toBe(searchResults);
@@ -90,8 +114,7 @@ describe("fillSourceWindow", () => {
           chatWithSources([makeSource("oldest")]),
           chatWithSources([makeSource("middle")]),
           chatWithSources([makeSource("newest")]),
-        ],
-      });
+        ], aclFilter: ALLOW_ALL });
 
       expect(sources.map((s) => s.id)).toEqual(["newest", "middle"]);
     });
@@ -101,8 +124,7 @@ describe("fillSourceWindow", () => {
       const { sources, contextTexts } = fillSourceWindow({
         nDocs: 2,
         searchResults,
-        history: [chatWithSources([makeSource("history-source")])],
-      });
+        history: [chatWithSources([makeSource("history-source")])], aclFilter: ALLOW_ALL });
 
       expect(sources).toEqual(searchResults);
       expect(contextTexts).toEqual(["text-a", "text-b"]);
@@ -112,16 +134,14 @@ describe("fillSourceWindow", () => {
       const { sources } = fillSourceWindow({
         nDocs: 4,
         searchResults: [makeSource("only")],
-        history: [],
-      });
+        history: [], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["only"]);
     });
 
     it("defaults to a window of 4 documents", () => {
       const { sources } = fillSourceWindow({
         searchResults: [],
-        history: [chatWithSources(["a", "b", "c", "d", "e"].map(makeSource))],
-      });
+        history: [chatWithSources(["a", "b", "c", "d", "e"].map(makeSource))], aclFilter: ALLOW_ALL });
       expect(sources).toHaveLength(4);
     });
 
@@ -136,8 +156,7 @@ describe("fillSourceWindow", () => {
             makeSource("new-b"),
             makeSource("new-c"),
           ]),
-        ],
-      });
+        ], aclFilter: ALLOW_ALL });
 
       expect(sources.map((s) => s.id)).toEqual(["hit", "new-a", "new-b"]);
       expect(contextTexts).toEqual(["text-hit", "text-new-a", "text-new-b"]);
@@ -147,8 +166,7 @@ describe("fillSourceWindow", () => {
       const { sources } = fillSourceWindow({
         nDocs: 4,
         searchResults: [],
-        history: [chatWithSources([makeSource("only")])],
-      });
+        history: [chatWithSources([makeSource("only")])], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["only"]);
     });
   });
@@ -158,8 +176,7 @@ describe("fillSourceWindow", () => {
       const { sources } = fillSourceWindow({
         nDocs: 2,
         searchResults: [makeSource("dupe")],
-        history: [chatWithSources([makeSource("dupe"), makeSource("fresh")])],
-      });
+        history: [chatWithSources([makeSource("dupe"), makeSource("fresh")])], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["dupe", "fresh"]);
     });
 
@@ -170,8 +187,7 @@ describe("fillSourceWindow", () => {
         history: [
           chatWithSources([makeSource("repeat"), makeSource("deep")]),
           chatWithSources([makeSource("repeat"), makeSource("recent")]),
-        ],
-      });
+        ], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["repeat", "recent", "deep"]);
     });
 
@@ -184,8 +200,7 @@ describe("fillSourceWindow", () => {
         nDocs: 2,
         searchResults: [],
         history: [chatWithSources([pinned, makeSource("free")])],
-        filterIdentifiers: ["title:pinned.txt-timestamp:2024-01-01"],
-      });
+        filterIdentifiers: ["title:pinned.txt-timestamp:2024-01-01"], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["free"]);
     });
 
@@ -195,8 +210,7 @@ describe("fillSourceWindow", () => {
       const { sources } = fillSourceWindow({
         nDocs: 3,
         searchResults: [],
-        history: [chatWithSources([noScore, noText, makeSource("valid")])],
-      });
+        history: [chatWithSources([noScore, noText, makeSource("valid")])], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["valid"]);
     });
 
@@ -204,8 +218,7 @@ describe("fillSourceWindow", () => {
       const { sources } = fillSourceWindow({
         nDocs: 1,
         searchResults: [],
-        history: [chatWithSources([makeSource("zero", { score: 0 })])],
-      });
+        history: [chatWithSources([makeSource("zero", { score: 0 })])], aclFilter: ALLOW_ALL });
       expect(sources.map((s) => s.id)).toEqual(["zero"]);
     });
   });
@@ -224,6 +237,7 @@ describe("fillSourceWindow", () => {
           { response: JSON.stringify({ sources: "not-an-array" }) },
           { response: JSON.stringify({ sources: [] }) },
         ],
+        aclFilter: ALLOW_ALL,
       });
       expect(sources.map((s) => s.id)).toEqual(["valid"]);
     });
@@ -347,7 +361,7 @@ describe("messageArrayCompressor", () => {
     // The stream.js sequence: backfill reads rawHistory, the SAME array then
     // feeds the compressor. Before the fix this kept the oldest turns, reversed.
     const rawHistory = build();
-    fillSourceWindow({ nDocs: 4, searchResults: [], history: rawHistory });
+    fillSourceWindow({ nDocs: 4, searchResults: [], history: rawHistory, aclFilter: ALLOW_ALL });
     const messages = buildMessages(rawHistory, user);
     const result = await messageArrayCompressor(
       llmFor(messages),

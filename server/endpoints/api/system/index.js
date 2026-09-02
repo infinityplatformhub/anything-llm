@@ -10,6 +10,9 @@ const {
 const { dumpENV, updateENV } = require("../../../utils/helpers/updateENV");
 const { reqBody } = require("../../../utils/http");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
+const {
+  resolveActor,
+} = require("../../../utils/authorization/actorResolver");
 
 function apiSystemEndpoints(app) {
   if (!app) return;
@@ -72,7 +75,7 @@ function apiSystemEndpoints(app) {
     }
   });
 
-  app.get("/v1/system/vector-count", [validApiKey(scopeFor("GET", "/v1/system/vector-count"))], async (_, response) => {
+  app.get("/v1/system/vector-count", [validApiKey(scopeFor("GET", "/v1/system/vector-count"))], async (request, response) => {
     /*
     #swagger.tags = ['System Settings']
     #swagger.description = 'Number of all vectors in connected vector database'
@@ -95,10 +98,50 @@ function apiSystemEndpoints(app) {
     }
     */
     try {
+      // T-5 (#30) slice 3 (S-25): this returned the INSTANCE total to any valid key,
+      // including one bound to a single workspace. A count is enough to answer "does this
+      // instance hold data beyond what I can see", which is the question the ACL refuses.
+      //
+      // #67 A+B restated for counts: a bound key counts within its own scope; an org-wide
+      // principal still gets the instance total. The response shape is unchanged —
+      // `{vectorCount}`, one key — because a differently shaped answer would itself say
+      // which kind of caller you are.
       const VectorDb = getVectorDbClass();
-      const vectorCount = await VectorDb.totalVectors();
+      const {
+        scopedTotalVectors,
+      } = require("../../../utils/authorization/cardinality");
+      const {
+        retrievalFilterFor,
+      } = require("../../../utils/authorization/retrievalFilter");
+      const { Workspace } = require("../../../models/workspace");
+
+      const aclFilter = await retrievalFilterFor({
+        actor: await resolveActor(request, response),
+        action: "document.read",
+      });
+      const { vectorCount } = await scopedTotalVectors({
+        VectorDb,
+        aclFilter,
+        countFor: async (workspaceId) => {
+          const workspace = await Workspace.get({ id: Number(workspaceId) });
+          if (!workspace) return 0;
+          return VectorDb.namespaceCount(workspace.slug);
+        },
+      });
       response.status(200).json({ vectorCount });
     } catch (e) {
+      // A scope too wide to count is a refusal an operator must SEE, not a truncated
+      // number that looks correct. Distinguished from a genuine fault so the message can
+      // say what happened.
+      const {
+        CardinalityScopeTooLargeError,
+      } = require("../../../utils/authorization/cardinality");
+      if (e instanceof CardinalityScopeTooLargeError) {
+        console.error("[cardinality]", e.message);
+        return response
+          .status(500)
+          .json({ error: "workspace scope too large to count" });
+      }
       console.error(e.message, e);
       response.sendStatus(500).end();
     }

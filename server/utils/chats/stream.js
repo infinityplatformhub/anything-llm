@@ -226,11 +226,18 @@ async function streamChatWithWorkspace(
   }
 
   const { fillSourceWindow } = require("../helpers/chat");
+  const {
+    rehydrationFilter,
+  } = require("../authorization/pinnedContext");
   const filledSources = fillSourceWindow({
     nDocs: workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
     history: rawHistory,
     filterIdentifiers: pinnedDocIdentifiers,
+    // T-5 (#30) slice 3 (S-22): citations come back out of stored history, so they are
+    // re-authorized against the ACL that applies NOW rather than the one that applied when
+    // the answer was written.
+    aclFilter: await rehydrationFilter({ user }),
   });
 
   // Why does contextTexts get all the info, but sources only get current search?

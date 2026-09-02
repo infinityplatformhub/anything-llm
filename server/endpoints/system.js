@@ -495,9 +495,63 @@ function systemEndpoints(app) {
       try {
         const query = queryParams(request);
         const VectorDb = getVectorDbClass();
-        const vectorCount = !!query.slug
-          ? await VectorDb.namespaceCount(query.slug)
-          : await VectorDb.totalVectors();
+        // T-5 (#30) slice 3 (S-25): this took `system.read` at ORG scope and then answered
+        // a WORKSPACE-scoped question with no check that the slug was in the actor's
+        // scope — the resource came from the request while the permission came from
+        // somewhere else. Structurally the same mistake slice 2 round 3 fixed in
+        // `pinnedDocs`, and with the same consequence: `?slug=` counted any workspace on
+        // the instance, and omitting it counted all of them.
+        //
+        // Out of scope answers 404, identical to a workspace that does not exist. A 403
+        // would confirm it exists, which is the oracle in a different costume.
+        const {
+          scopedNamespaceCount,
+          scopedTotalVectors,
+          CardinalityScopeTooLargeError,
+        } = require("../utils/authorization/cardinality");
+        const {
+          retrievalFilterFor,
+        } = require("../utils/authorization/retrievalFilter");
+        const { Workspace } = require("../models/workspace");
+
+        const aclFilter = await retrievalFilterFor({
+          actor: response.locals.actor,
+          action: "document.read",
+        });
+
+        let vectorCount;
+        try {
+          if (query.slug) {
+            const counted = await scopedNamespaceCount({
+              VectorDb,
+              slug: String(query.slug),
+              aclFilter,
+              resolveSlug: async (slug) => Workspace.get({ slug }),
+            });
+            if (counted === null) return response.sendStatus(404);
+            vectorCount = counted;
+          } else {
+            ({ vectorCount } = await scopedTotalVectors({
+              VectorDb,
+              aclFilter,
+              countFor: async (workspaceId) => {
+                const workspace = await Workspace.get({
+                  id: Number(workspaceId),
+                });
+                if (!workspace) return 0;
+                return VectorDb.namespaceCount(workspace.slug);
+              },
+            }));
+          }
+        } catch (error) {
+          if (error instanceof CardinalityScopeTooLargeError) {
+            console.error("[cardinality]", error.message);
+            return response
+              .status(500)
+              .json({ error: "workspace scope too large to count" });
+          }
+          throw error;
+        }
         response.status(200).json({ vectorCount });
       } catch (e) {
         console.error(e.message, e);

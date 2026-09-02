@@ -1,6 +1,13 @@
 const { sourceIdentifier } = require("../../chats");
 const { safeJsonParse } = require("../../http");
 const { TokenManager } = require("../tiktoken");
+// T-5 (#30) slice 3 (S-22): rehydrated citations are judged by the SAME predicate as vector
+// rows. A second definition of "readable" here would be free to drift more generous than
+// the one seam 02 enforces, which is how a leak that passes every test gets written.
+const { isRowAllowed } = require("../../authorization/vectorPredicate");
+const {
+  AuthorizationContractError,
+} = require("../../authorization/errors");
 const { convertToPromptHistory } = require("./responses");
 
 /*
@@ -374,6 +381,7 @@ function cannonball({
  * @param {object} config.searchResults = vector `similarityResponse` results for .sources
  * @param {object[]} config.history - rawHistory of chat containing sources
  * @param {string[]} config.filterIdentifiers - Pinned document identifiers to prevent duplicate context
+ * @param {Object} config.aclFilter - REQUIRED DocumentAclFilter (T-5 #30 slice 3, S-22)
  * @returns {{
  *   contextTexts: string[],
  *   sources: object[],
@@ -384,7 +392,26 @@ function fillSourceWindow({
   searchResults = [], // Sources from similarity search
   history = [], // Raw history
   filterIdentifiers = [], // pinned document sources
+  aclFilter, // T-5 (#30) slice 3: required, see below
 } = {}) {
+  // T-5 (#30) slice 3 (S-22/G1): citations are re-authorized on the way BACK OUT of
+  // history.
+  //
+  // The sources below come from `workspace_chats.response` — a JSON blob written when the
+  // answer was produced. So without this, the ACL governing a rehydrated citation is the
+  // one that was in force THEN, not now: cite a document, have the grant revoked, ask a
+  // follow-up in the same thread, and the revoked text returns. This function replays a
+  // past authorization decision rather than making a new one, and it is the only retrieval
+  // surface where the data source is our own prior output.
+  //
+  // Required, never optional, for the same reason as `pinnedDocs` and `queryAuthorized`: an
+  // optional security filter is a filter plus a way to skip it, and the skip fails in the
+  // direction that returns MORE data.
+  if (!aclFilter || typeof aclFilter !== "object") {
+    throw new AuthorizationContractError(
+      "fillSourceWindow requires a DocumentAclFilter (aclFilter) — rehydrated citations come from stored history and are otherwise governed by the ACL that applied when they were written, not the one that applies now"
+    );
+  }
   const sources = [...searchResults];
 
   if (sources.length >= nDocs || history.length === 0) {
@@ -421,6 +448,22 @@ function fillSourceWindow({
 
     const validSources = chatSources.filter((source) => {
       return (
+        // T-5 (#30) slice 3: FIRST, and inside this filter rather than at the return.
+        //
+        // Placement is load-bearing twice over. Filtering after the window is assembled
+        // would let denied citations occupy slots up to `nDocs` and then be removed,
+        // silently costing the actor their own readable citations — the S-17 failure in a
+        // new place. It would also make the shortfall a signal: the number of citations
+        // that came back would tell the caller how many denied ones existed.
+        //
+        // Same predicate the vector rows are judged by, deliberately: a stored citation
+        // carries the ACL fields the write path stamped (`curateSources` spreads metadata
+        // wholesale, so orgId/workspaceId/docId survive into history), and a second
+        // definition of "readable" here would be free to drift more generous than the one
+        // seam 02 enforces. A citation stored before slice 1a has no ACL fields and is
+        // unprovable — denied by default, admitted only under
+        // RETRIEVAL_FILTER_ALLOW_UNPROVABLE, exactly like an unlabelled vector row.
+        isRowAllowed(source, aclFilter) &&
         filterIdentifiers.includes(sourceIdentifier(source)) == false && // source cannot be in current pins
         source.hasOwnProperty("score") && // source cannot have come from a pinned document that was previously pinned
         source.hasOwnProperty("text") && // source has a valid text property we can use
