@@ -523,3 +523,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 grant-breadth ruling requested from TL-2 after #125 verdict. Board refreshed fdc8457fd (90/128, 3033 green).
 - Ledgers normalized: /tmp/ledger-123.norm.md (7), /tmp/ledger-125.norm.md (8). Result files written for #123/#125.
 - #123 be27ac7ed MERGED (QA-1 PASS + TL-1 PASS; contract 46/46, sweeps 63/63; closed gate-123-be27ac7ed). Content verified. Post-merge running → /tmp/postmerge-123.log. Dev1 #121 delegated-admin site 3 unblocked.
+- #125 c9a3219fe MERGED (TL-2 PASS + QA-2 PASS; 25/25, sweeps 63/63; closed gate-125-c9a3219fe). Content verified. Post-merge to run after #123's finishes.
+- #40 t4 new SHA 1ca353edc (Dev2: Dev4 sweep/mock merged + M3 source-assert, M4 SidebarMobileHeader site :166 (label "Home" not "settings"), M6 second-reader test). Regating /tmp/wt-40t4; TL-1 + QA-3 dispatched.
