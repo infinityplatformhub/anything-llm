@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">f12e8108</span> · 2026-09-02 12:30</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">3691c5aa</span> · 2026-09-02 12:40</div>
   <h1>ApproofWorkspace — งานถึงไหน (7 เดือน)</h1>
 </header>
 
@@ -136,9 +136,9 @@ td.mono{white-space:nowrap}
       <div class="chips"><span class="chip ok">gate 1310/1310</span><span class="chip ok">1a merged f12e8108</span><span class="chip wait">1b rebase</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 06965da4</span></div>
-      <p>DELETE /system/credential/:envKey. gate ผ่าน 1378/1378 แต่ QA-1 เจอช่องจริง: clear AUTH_TOKEN/JWT_SECRET ได้ → instance เปิดโล่ง ruling denylist + เทสต้องมีแถวก่อน รอ SHA รอบ 4</p>
-      <div class="chips"><span class="chip ok">gate 1378</span><span class="chip no">QA-1 FAIL blocker</span><span class="chip wait">Techlead ถอน PASS</span></div>
+      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 66cb5e7d</span></div>
+      <p>DELETE /system/credential/:envKey. รอบ 4: denylist AUTH_TOKEN/JWT_SECRET/SIG_KEY/SIG_SALT/API_KEY_PEPPER + เทสมีแถวก่อนแล้วปฏิเสธ + sweep เทียบ passthrough condition gate กำลังรัน</p>
+      <div class="chips"><span class="chip wait">gate รอบ 4</span><span class="chip wait">QA-1 E/J rerun</span><span class="chip wait">Techlead-1</span></div>
     </div>
     <div class="card">
       <div class="top"><span class="id">#43 S2 Entra SAML</span><span class="who">Dev3 · 79448c01</span></div>
@@ -159,7 +159,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="card">
       <div class="top"><span class="id">#50 S1-cleanup</span><span class="who">Dev2 · กำลังทำ</span></div>
-      <p>ruling ครบ: ลบ /request-token/sso/simple + issue-auth-token + sso.issue scope, swagger regen; predicate fail-open แยก issue Dev2 กำลัง commit</p>
+      <p>3 commit ถึง 9d000ec8: ลบ simple route + issue-auth-token + sso.issue (migration 090000), redirect → OIDC, predicate shape (b) gate ติดกฎเครื่องมือ 2 ข้อ (§7.3a, §5.1) Dev2 แก้แล้ว rebase</p>
     </div>
   </div>
 
