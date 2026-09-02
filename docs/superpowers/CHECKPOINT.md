@@ -216,3 +216,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #78 86d2fe96: TL-1 PASS (2 NIT → post-merge commit). Waiting QA-2.
 - #80 e1bf4adb8: TL-1 PASS (3 NIT → follow-up) + TL-2 PASS. Waiting QA-1 + QA-3.
 - #40 a2bbb0de8: exact snapshot 309 pinned, no R-2 walk-twice yet; Dev2 has not declared.
+
+## 2026-09-02 — #78 merged (67/88)
+- #78 86d2fe96: gate PASS (47/47 + #72 39/39), QA-2 PASS (20/20, mutation 10/10), TL-1 PASS (2 NIT). Post-merge commit queued (Dev1): drift union, _updateSettings comment, #72 NITs. Then #84.
+- #88 task.sh check bound at 36976c14c (see gate-88b).
