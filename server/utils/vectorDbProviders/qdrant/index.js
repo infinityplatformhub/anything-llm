@@ -6,6 +6,14 @@ const { v4: uuidv4 } = require("uuid");
 const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 
 class QDrant extends VectorDatabase {
   constructor() {
@@ -57,6 +65,62 @@ class QDrant extends VectorDatabase {
     const { client } = await this.connect();
     const namespace = await this.namespace(client, _namespace);
     return namespace?.vectorCount || 0;
+  }
+
+  /**
+   * T-5 (#30) slice 1b: the authorized read path. See base.js for the contract this owes.
+   *
+   * The filter is passed to `client.search` alongside the limit, so Qdrant applies it
+   * during the search rather than to its output — the actor's own documents compete for
+   * the topN slots instead of losing them to rows they may not read (S-17).
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const filter = constraintFor(aclFilter).toQdrantFilter();
+    // No scope, no query.
+    if (filter === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const responses = await client.search(namespace, {
+      vector: queryVector,
+      limit: topN,
+      with_payload: true,
+      filter,
+    });
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    responses.forEach((response) => {
+      // Second layer, deliberately redundant with the pushdown: a row that cannot be
+      // proven allowed is dropped here even though the query claimed to exclude it
+      // (S-26/G4).
+      if (!isRowAllowed(response?.payload, aclFilter)) return;
+      if (response.score < similarityThreshold) return;
+      if (filterIdentifiers.includes(sourceIdentifier(response?.payload))) {
+        this.logger(
+          "QDrant: A source was filtered from context as it's parent document is pinned."
+        );
+        return;
+      }
+
+      result.contextTexts.push(response?.payload?.text || "");
+      result.sourceDocuments.push({
+        ...(response?.payload || {}),
+        id: response.id,
+        score: response.score,
+      });
+      result.scores.push(response.score);
+    });
+    return result;
   }
 
   async similarityResponse({
@@ -163,6 +227,10 @@ class QDrant extends VectorDatabase {
       let vectorDimension = null;
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
+      // T-5 (#30): stamp every vector with the fields the ACL filter reads; without them
+      // a row cannot be proven readable and is excluded from retrieval.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
 
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
@@ -203,7 +271,8 @@ class QDrant extends VectorDatabase {
                 documentVectors.push({ docId, vectorId: id });
                 submission.ids.push(id);
                 submission.vectors.push(chunk.vector);
-                submission.payloads.push(payload);
+                // Spread last so document metadata cannot shadow the ACL fields.
+                submission.payloads.push({ ...payload, ...aclMetadata });
               } else {
                 console.error(
                   "The 'id' property is not defined in chunk.payload - it will be omitted from being inserted in QDrant collection."
@@ -269,7 +338,8 @@ class QDrant extends VectorDatabase {
 
           submission.ids.push(vectorRecord.id);
           submission.vectors.push(vectorRecord.vector);
-          submission.payloads.push(vectorRecord.payload);
+          // Spread last so document metadata cannot shadow the ACL fields.
+          submission.payloads.push({ ...vectorRecord.payload, ...aclMetadata });
 
           vectors.push(vectorRecord);
           documentVectors.push({ docId, vectorId: vectorRecord.id });

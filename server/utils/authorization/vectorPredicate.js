@@ -7,13 +7,25 @@
 //
 // The translation is TWO-STEP on purpose (Techlead ruling):
 //
-//   filter -> RetrievalConstraint (neutral) -> toSqlString() | toStructured()
+//   filter -> RetrievalConstraint (neutral) -> one renderer PER DIALECT
 //
-// The neutral middle is what stops the SQL dialect from becoming the interchange format.
-// Providers that take an expression string (lance, pgvector, milvus) call toSqlString();
-// providers with object filter DSLs (qdrant, pinecone, chroma, weaviate, astra) call
-// toStructured(). Neither parses the other's output — a provider parsing a SQL string to
-// rebuild an object filter is how a subtly wrong predicate gets written.
+// The neutral middle is what stops any one dialect from becoming the interchange format.
+// No renderer parses another's output — a provider parsing a SQL string to rebuild an
+// object filter is how a subtly wrong predicate gets written.
+//
+// ADDING A PROVIDER: write its own renderer here, plus (a) a render test asserting it
+// differs between the two RETRIEVAL_FILTER_ALLOW_UNPROVABLE states, and (b) a REAL-STORE
+// test that sends the rendered predicate to an actual instance. There is no shared
+// "structured" shape to reuse, and that is deliberate: an earlier `toStructured()` promised
+// one, but implementing all five dialects proved they disagree about far more than
+// spelling, so it was deleted rather than left as a trap for the sixth provider.
+//
+// (b) is not optional. Three renderers shipped with predicates that read correctly and
+// were rejected by the engine — LanceDB needed backticks (bare identifiers throw,
+// double quotes silently return zero rows), pgvector had a placeholder off-by-one that
+// made every shape unexecutable, and Milvus needed each `not exists` parenthesised or the
+// whole escape clause failed to parse. All three passed review. None would have been
+// caught without a real store.
 //
 // Two enforcement layers, deliberately overlapping:
 //
@@ -189,10 +201,27 @@ class RetrievalConstraint {
     const strict = clauses.join(" and ");
     if (!allowUnprovableRows()) return strict;
     // Same all-or-nothing escape as toSqlString; Milvus spells "JSON key absent" as
-    // `not exists`.
-    const unlabelled = ACL_FIELDS
-      .map((key) => `not exists ${member(key)}`)
-      .join(" and ");
+    // `exists`.
+    //
+    // Each `not exists` is PARENTHESISED individually, which is not cosmetic. Measured
+    // against Milvus 2.3.9:
+    //
+    //   not exists a and not exists b       -> cannot parse expression:
+    //                                          'and' can only be used between boolean
+    //                                          expressions
+    //   (not exists a) and (not exists b)   -> correct
+    //
+    // `not` binds tighter than the operand here, so the parser sees `not (exists a and
+    // not exists b)` and rejects the shape. Without the parentheses the flagged state
+    // errored on every Milvus query while the strict state worked — the flag would have
+    // turned retrieval OFF on this provider rather than widening it, and only a
+    // deployment that set it would ever have found out.
+    //
+    // Caught by running the rendered expression through a real Milvus 2.3.9 parser. No
+    // amount of reading finds this: the string looks correct and reads correctly.
+    const unlabelled = ACL_FIELDS.map(
+      (key) => `(not exists ${member(key)})`
+    ).join(" and ");
     return `((${unlabelled}) or (${strict}))`;
   }
 
@@ -262,25 +291,231 @@ class RetrievalConstraint {
     return { sql: `((${unlabelled}) OR (${strict}))`, params };
   }
 
-  /**
-   * For providers with an object filter DSL: qdrant, pinecone, chroma, weaviate, astra.
-   * Returns the conditions in a shape each driver maps to its own syntax — the mapping is
-   * the driver's job, the MEANING is decided here.
-   */
-  toStructured() {
+  // ---------------------------------------------------------------------------
+  // Slice 1b: the five object-DSL dialects.
+  //
+  // Each renders the same neutral constraint into one driver's syntax. They are separate
+  // methods rather than a generic mapper because the dialects disagree about more than
+  // spelling — Qdrant nests must/must_not, Pinecone uses Mongo-ish operators, Chroma
+  // requires an explicit $and above one clause, Weaviate wants a GraphQL operator tree,
+  // Astra is Mongo-like but flat. A "generic" mapper would either be a lowest common
+  // denominator (weaker than every dialect can express) or a pile of conditionals.
+  //
+  // All five share one rule the tests assert as a table: null means SKIP THE QUERY. A
+  // dialect returning an empty filter object instead would issue an unrestricted search,
+  // which is the single most dangerous mistake available in this file.
+  // ---------------------------------------------------------------------------
+
+  /** Qdrant: `{must: [...], must_not: [...]}` with `match: {value}` / `match: {any}`. */
+  toQdrantFilter() {
     if (this.matchNone) return null;
-    const must = [{ field: "orgId", op: "eq", value: String(this.orgId) }];
+    const must = [{ key: "orgId", match: { value: String(this.orgId) } }];
     if (this.workspaceIds.length > 0) {
-      must.push({ field: "workspaceId", op: "in", value: this.workspaceIds });
+      must.push({ key: "workspaceId", match: { any: this.workspaceIds } });
     }
     if (this.allowedDocIds !== null) {
-      must.push({ field: "docId", op: "in", value: this.allowedDocIds });
+      must.push({ key: "docId", match: { any: this.allowedDocIds } });
     }
-    const mustNot =
-      this.deniedDocIds.length > 0
-        ? [{ field: "docId", op: "in", value: this.deniedDocIds }]
-        : [];
-    return { must, mustNot };
+    const filter = { must };
+    if (this.deniedDocIds.length > 0) {
+      filter.must_not = [{ key: "docId", match: { any: this.deniedDocIds } }];
+    }
+    if (!allowUnprovableRows()) return filter;
+    // The same all-or-nothing escape as every other dialect, expressed with Qdrant's
+    // `should` (OR) at the top level: either the point carries no ACL payload at all, or
+    // it satisfies the strict filter.
+    //
+    // `is_empty`, NOT `is_null`. Qdrant distinguishes two states that this filter must
+    // treat alike, measured on qdrant 1.9.0:
+    //
+    //                    key absent   key present, value null
+    //   is_null               NO               YES
+    //   is_empty              YES              YES
+    //
+    // A vector written before T-5 has the keys ABSENT — the write path never set them —
+    // so `is_null` matched none of them and the flag served no legacy rows at all while
+    // the boot report said it did. `is_empty` covers both states, which is also what
+    // `isRowAllowed` does when it treats undefined and null as the same absence.
+    //
+    // Nested under `should` rather than added as another `must`, because a flag that only
+    // narrowed would be inert — which is exactly the bug slice 1a was failed for.
+    return {
+      should: [
+        {
+          must: ACL_FIELDS.map((key) => ({ is_empty: { key } })),
+        },
+        filter,
+      ],
+    };
+  }
+
+  /** Pinecone: a Mongo-ish metadata filter — `$eq`, `$in`, `$nin`. */
+  toPineconeFilter() {
+    if (this.matchNone) return null;
+    const filter = { orgId: { $eq: String(this.orgId) } };
+    if (this.workspaceIds.length > 0) {
+      filter.workspaceId = { $in: this.workspaceIds };
+    }
+    // Both docId clauses can apply at once, so they merge into one object rather than the
+    // second overwriting the first — an allow-list that silently dropped the deny-list
+    // would re-admit a revoked document.
+    const docId = {};
+    if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
+    if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
+    if (Object.keys(docId).length > 0) filter.docId = docId;
+    if (!allowUnprovableRows()) return filter;
+    // The all-or-nothing escape, as a top-level `$or`. Pinecone spells "this key is
+    // absent" as `$exists: false`, so the unlabelled branch is the conjunction of all
+    // three being absent — never a per-field relaxation that would admit half-labelled
+    // rows.
+    return {
+      $or: [
+        { $and: ACL_FIELDS.map((key) => ({ [key]: { $exists: false } })) },
+        filter,
+      ],
+    };
+  }
+
+  /**
+   * Chroma: `where` clauses, with `$and` required as soon as there is more than one.
+   *
+   * THE ONE DIALECT WITH NO ESCAPE CLAUSE. Chroma's operator set is closed —
+   * `$gt $gte $lt $lte $ne $eq $in $nin` — with no `$exists`, so "this key is absent"
+   * cannot be expressed at all. Chroma therefore renders the SAME predicate whether
+   * RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set or not, and pre-T-5 vectors stay excluded
+   * until the backfill (#56) gives them metadata.
+   *
+   * That is deliberate and it is ANNOUNCED, in `retrievalSupport.js`: a Chroma deployment
+   * that sets the flag gets a boot-time error saying the flag cannot take effect here.
+   * Making it silently inert is precisely the bug slice 1a was failed for twice — the
+   * operator sets their one documented lever, nothing changes, and nothing tells them why.
+   *
+   * The sentinel alternative (write `""` instead of leaving fields absent, then match on
+   * it) was rejected: every pre-T-5 row would have to be rewritten for the sentinel to
+   * exist, which IS the backfill. It would solve a problem it created rather than the one
+   * in front of us.
+   */
+  toChromaWhere() {
+    if (this.matchNone) return null;
+    const clauses = [{ orgId: { $eq: String(this.orgId) } }];
+    if (this.workspaceIds.length > 0) {
+      clauses.push({ workspaceId: { $in: this.workspaceIds } });
+    }
+    if (this.allowedDocIds !== null) {
+      clauses.push({ docId: { $in: this.allowedDocIds } });
+    }
+    if (this.deniedDocIds.length > 0) {
+      clauses.push({ docId: { $nin: this.deniedDocIds } });
+    }
+    return clauses.length === 1 ? clauses[0] : { $and: clauses };
+  }
+
+  /**
+   * Weaviate: a GraphQL `where` operator tree; `And` of `Equal` / `ContainsAny` paths.
+   *
+   * Weaviate's operator set is a CLOSED enum:
+   *
+   *   And Or Equal Like NotEqual GreaterThan GreaterThanEqual LessThan LessThanEqual
+   *   WithinGeoRange IsNull ContainsAny ContainsAll
+   *
+   * Two consequences drive the shape below, and both are the opposite of what I first
+   * assumed when writing this renderer:
+   *
+   *   1. There is NO `Not`. An earlier version of this emitted `operator: "Not"` around a
+   *      ContainsAny for the deny-list — not a valid operator, so the deny-list would have
+   *      failed or been dropped. A deny-list that is dropped re-admits revoked documents,
+   *      which is the worst direction for this particular bug to fail in. It is now an
+   *      `And` of one `NotEqual` per denied id, which the enum does support.
+   *   2. There IS `IsNull`, so unlike Chroma this dialect CAN express the escape clause.
+   */
+  toWeaviateWhere({ allowUnprovable = true } = {}) {
+    if (this.matchNone) return null;
+    const operands = [
+      {
+        path: ["orgId"],
+        operator: "Equal",
+        valueText: String(this.orgId),
+      },
+    ];
+    if (this.workspaceIds.length > 0) {
+      operands.push({
+        path: ["workspaceId"],
+        operator: "ContainsAny",
+        valueTextArray: this.workspaceIds,
+      });
+    }
+    if (this.allowedDocIds !== null) {
+      operands.push({
+        path: ["docId"],
+        operator: "ContainsAny",
+        valueTextArray: this.allowedDocIds,
+      });
+    }
+    if (this.deniedDocIds.length > 0) {
+      // No `Not` and no NOT-IN in the enum, so "none of these" is spelled as the
+      // conjunction of individual NotEqual clauses. Linear in the deny-list, which is
+      // acceptable: a deny-list is a revocation set, not a catalogue.
+      operands.push(
+        ...this.deniedDocIds.map((id) => ({
+          path: ["docId"],
+          operator: "NotEqual",
+          valueText: id,
+        }))
+      );
+    }
+    const strict =
+      operands.length === 1 ? operands[0] : { operator: "And", operands };
+    // `allowUnprovable: false` is how the provider says THIS CLASS cannot answer an
+    // IsNull filter — a class created before T-5 has neither the declared properties nor
+    // indexNullState, and neither can be added afterwards. Emitting the escape clause
+    // there does not widen the result, it fails the query outright.
+    //
+    // The flag still governs everything else; this narrows to the one case where the
+    // engine physically cannot express the question.
+    if (!allowUnprovable || !allowUnprovableRows()) return strict;
+    // All-or-nothing escape, using the one operator that can express absence here.
+    return {
+      operator: "Or",
+      operands: [
+        {
+          operator: "And",
+          operands: ACL_FIELDS.map((key) => ({
+            path: [key],
+            operator: "IsNull",
+            valueBoolean: true,
+          })),
+        },
+        strict,
+      ],
+    };
+  }
+
+  /** Astra: Mongo-like, addressing the stored metadata sub-document. */
+  toAstraFilter() {
+    if (this.matchNone) return null;
+    const filter = { "metadata.orgId": String(this.orgId) };
+    if (this.workspaceIds.length > 0) {
+      filter["metadata.workspaceId"] = { $in: this.workspaceIds };
+    }
+    // Merged for the same reason as Pinecone: both docId constraints can apply.
+    const docId = {};
+    if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
+    if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
+    if (Object.keys(docId).length > 0) filter["metadata.docId"] = docId;
+    if (!allowUnprovableRows()) return filter;
+    // All-or-nothing escape. Astra's Data API is Mongo-shaped, so absence is `$exists:
+    // false` on the dotted metadata path — the same path the strict clauses address, so a
+    // field renamed on one side cannot silently diverge from the other.
+    return {
+      $or: [
+        {
+          $and: ACL_FIELDS.map((key) => ({
+            [`metadata.${key}`]: { $exists: false },
+          })),
+        },
+        filter,
+      ],
+    };
   }
 }
 

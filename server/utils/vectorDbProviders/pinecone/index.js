@@ -6,6 +6,14 @@ const { v4: uuidv4 } = require("uuid");
 const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 
 class PineconeDB extends VectorDatabase {
   constructor() {
@@ -45,6 +53,60 @@ class PineconeDB extends VectorDatabase {
     const { pineconeIndex } = await this.connect();
     const namespace = await this.namespace(pineconeIndex, _namespace);
     return namespace?.recordCount || 0;
+  }
+
+  /**
+   * ACL-filtered search. See base.queryAuthorized for the contract.
+   *
+   * The predicate goes into Pinecone's `filter`, which is applied INSIDE the query — the
+   * actor's own documents compete for the topK slots rather than losing them to rows they
+   * may not read (S-17). Post-filtering `similarityResponse` would close the leak and
+   * silently truncate the result to whatever survived.
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const filter = constraintFor(aclFilter).toPineconeFilter();
+    // No scope, no query: skipping the round trip is cheaper than an unsatisfiable
+    // predicate and cannot be defeated by a dialect quirk.
+    if (filter === null) return empty;
+
+    const { pineconeIndex } = await this.connect();
+    if (!(await this.namespace(pineconeIndex, namespace))) return empty;
+
+    const pineconeNamespace = pineconeIndex.namespace(namespace);
+    const response = await pineconeNamespace.query({
+      vector: queryVector,
+      topK: topN,
+      includeMetadata: true,
+      filter,
+    });
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    for (const match of response.matches ?? []) {
+      // Second layer, deliberately redundant with the pushdown: a provider whose filter
+      // is subtly wrong fails closed here instead of leaking (S-26/G4).
+      if (!isRowAllowed(match?.metadata, aclFilter)) continue;
+      if (match.score < similarityThreshold) continue;
+      if (filterIdentifiers.includes(sourceIdentifier(match?.metadata))) {
+        this.logger(
+          "Pinecone: A source was filtered from context as it's parent document is pinned."
+        );
+        continue;
+      }
+
+      result.contextTexts.push(match.metadata?.text ?? "");
+      result.sourceDocuments.push({ ...(match.metadata ?? {}), score: match.score });
+      result.scores.push(match.score);
+    }
+    return result;
   }
 
   async similarityResponse({
@@ -123,6 +185,11 @@ class PineconeDB extends VectorDatabase {
       const { pageContent, docId, ...metadata } = documentData;
       if (!pageContent || pageContent.length == 0) return false;
 
+      // The ACL fields the filter reads. Resolved once here and spread into every vector
+      // below, including the cached path — a cache hit must not be a hole in the metadata.
+      const aclMetadata =
+        (await aclMetadataForNamespace({ namespace, docId })) ?? {};
+
       this.logger("Adding new vectorized document into namespace", namespace);
       if (!skipCache) {
         const cacheResult = await cachedVectorInformation(fullFilePath);
@@ -138,7 +205,11 @@ class PineconeDB extends VectorDatabase {
             const newChunks = chunk.map((chunk) => {
               const id = uuidv4();
               documentVectors.push({ docId, vectorId: id });
-              return { ...chunk, id };
+              return {
+                ...chunk,
+                id,
+                metadata: { ...(chunk.metadata ?? {}), ...aclMetadata },
+              };
             });
             await pineconeNamespace.upsert([...newChunks]);
           }
@@ -183,7 +254,7 @@ class PineconeDB extends VectorDatabase {
             // [DO NOT REMOVE]
             // LangChain will be unable to find your text if you embed manually and dont include the `text` key.
             // https://github.com/hwchase17/langchainjs/blob/2def486af734c0ca87285a48f1a04c057ab74bdf/langchain/src/vectorstores/pinecone.ts#L64
-            metadata: { ...metadata, text: textChunks[i] },
+            metadata: { ...metadata, text: textChunks[i], ...aclMetadata },
           };
 
           vectors.push(vectorRecord);

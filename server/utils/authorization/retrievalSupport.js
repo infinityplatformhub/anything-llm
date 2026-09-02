@@ -1,13 +1,17 @@
 // T-5 (#30): tell an operator at BOOT whether their deployment can actually enforce the
 // document ACL — and if not, exactly how much data is in the way.
 //
-// Two separate things can be wrong, and they need different answers:
+// Three separate things can be wrong, and they need different answers:
 //
-//   1. The vector provider has no ACL pushdown yet (only LanceDB, PGVector and Milvus do).
-//      Retrieval refuses rather than serving unfiltered results.
+//   1. The vector provider has no ACL pushdown. Retrieval refuses rather than serving
+//      unfiltered results.
 //   2. The provider supports it, but vectors written before T-5 carry no ACL metadata and
 //      cannot be proven readable. Those rows are denied unless
 //      RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set.
+//   3. The provider supports pushdown but its filter language cannot express "this field
+//      is absent" (Chroma), so that flag has no effect there. This is the case an
+//      operator cannot diagnose from the outside — they set the documented lever and
+//      nothing happens — so it is stated at boot, at error level.
 //
 // The second one is COUNTED, not guessed. A warning that says "some documents may be
 // affected" is noise an operator learns to skip; "4,812 of 5,001 vectors cannot be proven
@@ -22,7 +26,78 @@ const {
   allowUnprovableRows,
 } = require("./retrievalEnforcement");
 
-const SUPPORTED_PROVIDERS = Object.freeze(["lancedb", "pgvector", "milvus"]);
+const SUPPORTED_PROVIDERS = Object.freeze([
+  "lancedb",
+  "pgvector",
+  "milvus",
+  "qdrant",
+  "pinecone",
+  "chroma",
+  "weaviate",
+  "astra",
+]);
+
+/**
+ * Providers that can push the ACL filter down but CANNOT express the pre-backfill escape
+ * clause, so RETRIEVAL_FILTER_ALLOW_UNPROVABLE has no effect on them.
+ *
+ * Chroma's operator set is closed — `$gt $gte $lt $lte $ne $eq $in $nin` — with no
+ * `$exists`, so "this key is absent" is not expressible. Enforcement works; only the
+ * escape hatch is unavailable, and unlabelled vectors stay excluded until #56 backfills.
+ *
+ * This list exists so the condition is ANNOUNCED rather than discovered. An operator who
+ * sets the documented flag and sees nothing change has no way to tell a broken flag from
+ * a broken deployment; that silence is exactly the failure this slice was corrected for
+ * twice.
+ */
+const NO_ESCAPE_CLAUSE_PROVIDERS = Object.freeze(["chroma"]);
+
+/**
+ * Providers whose renderer exists and is unit-tested, but has NEVER been executed against
+ * the real engine.
+ *
+ * Pinecone and Astra are hosted-only: there is no local instance to test against, so their
+ * predicates are asserted as strings and nothing more. Three renderers have already
+ * shipped in exactly that state and were rejected at runtime — LanceDB's identifiers,
+ * pgvector's placeholder numbering, Milvus's unparenthesised `not exists`, plus Qdrant's
+ * is_null and Weaviate's tokenization. Every one of them read correctly.
+ *
+ * So the boot report does NOT call these "supported". The word would be a claim this
+ * codebase has repeatedly earned the right to distrust, and an operator reading it would
+ * reasonably conclude their ACL is enforced. It says "unverified" until someone runs a
+ * real-store test against a hosted instance.
+ */
+const UNVERIFIED_PROVIDERS = Object.freeze(["pinecone", "astra"]);
+
+/**
+ * Weaviate classes that cannot support the escape clause, named individually.
+ *
+ * Unlike Chroma — where the limitation is the whole provider — this is PER CLASS. A class
+ * created since T-5 declares the ACL properties and sets `indexNullState`, so the escape
+ * clause works on it; a class created before cannot have either added, because
+ * `PUT /v1/schema/<class>` refuses with 422 "IndexNullState cannot be changed when
+ * updating a schema".
+ *
+ * So the boot report names the classes rather than the provider. "Weaviate does not
+ * support this" would be false for half a deployment, and an operator cannot act on it;
+ * a list of class names tells them exactly which workspaces need re-embedding.
+ *
+ * Returns [] when the schema cannot be read — an empty list means "nothing to report",
+ * and a failure to read is reported by the count path instead.
+ */
+async function weaviateClassesWithoutAclSchema() {
+  try {
+    const { Weaviate, hasAclSchema } = require("../vectorDbProviders/weaviate");
+    const instance = new Weaviate();
+    const { client } = await instance.connect();
+    const { classes = [] } = await client.schema.getter().do();
+    return classes
+      .filter((weaviateClass) => !hasAclSchema(weaviateClass))
+      .map((weaviateClass) => weaviateClass.class);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Count vectors with no ACL metadata, per provider.
@@ -55,6 +130,14 @@ async function unprovableVectorCount(provider) {
           `SELECT COUNT(*)::int AS unlabelled, (SELECT COUNT(*)::int FROM "${PGVector.tableName()}") AS total FROM "${PGVector.tableName()}" WHERE metadata->>'orgId' IS NULL`
         );
         return { unlabelled: rows[0].unlabelled, total: rows[0].total };
+      } catch (error) {
+        // 42P01 = undefined_table. pgvector creates its table lazily, on the first
+        // embedding, so a deployment that has never ingested anything has no table yet.
+        // That is an empty store, not a fault: reporting it as an error would put a red
+        // line in the boot log of every fresh install and teach operators that this
+        // diagnostic cries wolf — which is exactly how a real error later goes unread.
+        if (error?.code === "42P01") return { unlabelled: 0, total: 0 };
+        throw error;
       } finally {
         await connection.end();
       }
@@ -116,7 +199,51 @@ async function reportRetrievalFilterSupport(
         `because returning unfiltered results would expose documents the requester may not read. ` +
         `Supported today: ${SUPPORTED_PROVIDERS.join(", ")}.`
     );
-    return { supported: false, provider: normalized, counts: null };
+    // false, not undefined: a provider with no pushdown at all has no escape clause to be
+    // missing. The distinction that matters here is `supported`, and leaving this field
+    // absent would invite a caller to treat "unknown" as "available".
+    return {
+      supported: false,
+      provider: normalized,
+      counts: null,
+      escapeClauseUnavailable: false,
+    };
+  }
+
+  // Said BEFORE anything about counts, and at error level rather than warn, because it is
+  // the one case where the operator's own action has no effect. Everything below assumes
+  // the flag means something; on Chroma it does not, and they need to know that first.
+  // Weaviate is per-CLASS rather than per-provider: classes created since T-5 support the
+  // escape clause, older ones cannot have it added (422 "IndexNullState cannot be changed
+  // when updating a schema"). Naming the classes is the whole point — "Weaviate does not
+  // support this" would be false for half a deployment and actionable for none of it.
+  const staleClasses =
+    normalized === "weaviate" ? await weaviateClassesWithoutAclSchema() : [];
+  if (staleClasses.length > 0 && allowUnprovableRows()) {
+    logger.error(
+      `\x1b[31m[authorization]\x1b[0m RETRIEVAL_FILTER_ALLOW_UNPROVABLE has NO EFFECT on ${staleClasses.length} Weaviate class(es): ${staleClasses.join(", ")}. ` +
+        `They were created before the ACL metadata existed, so they declare no orgId/workspaceId/docId properties and have indexNullState off. ` +
+        `Weaviate refuses to add either afterwards ("IndexNullState cannot be changed when updating a schema"), so these classes stay strictly filtered and their pre-T-5 vectors remain EXCLUDED. ` +
+        `Fixing this requires recreating the class and re-embedding its documents — see the vector metadata backfill.`
+    );
+  }
+
+  if (UNVERIFIED_PROVIDERS.includes(normalized)) {
+    logger.warn(
+      `\x1b[33m[authorization]\x1b[0m VECTOR_DB="${normalized}" has an ACL filter that has never been run against a real ${normalized} instance — it is hosted-only, so this deployment is the first to execute it. ` +
+        `Every other provider's predicate was rejected by its engine on first contact despite reading correctly (identifier quoting, placeholder numbering, operator precedence, tokenization). ` +
+        `Treat retrieval results here as UNVERIFIED: confirm that a document you cannot read is absent from chat context before relying on this.`
+    );
+  }
+
+  const escapeClauseUnavailable =
+    NO_ESCAPE_CLAUSE_PROVIDERS.includes(normalized);
+  if (escapeClauseUnavailable && allowUnprovableRows()) {
+    logger.error(
+      `\x1b[31m[authorization]\x1b[0m RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set but has NO EFFECT on VECTOR_DB="${normalized}". ` +
+        `Its filter language has no "field is absent" operator, so vectors written before the ACL metadata existed cannot be matched and stay EXCLUDED from retrieval. ` +
+        `The flag is not doing what its name says here. Run the vector metadata backfill — that is the only way to make those documents retrievable on this provider.`
+    );
   }
 
   const counts = await unprovableVectorCount(normalized);
@@ -139,24 +266,51 @@ async function reportRetrievalFilterSupport(
       `\x1b[33m[authorization]\x1b[0m cannot count vectors missing ACL metadata on "${normalized}" — this provider offers no cheap way to ask. ` +
         `If this deployment has documents embedded before the ACL metadata was introduced, they cannot be proven readable and will be excluded from retrieval.`
     );
-    return { supported: true, provider: normalized, counts };
+    // `escapeClauseUnavailable` travels on EVERY return, including this one. An
+    // uncountable provider is already the least informative case; dropping the one fact
+    // we do know about it would make the caller infer "the flag works here" from a
+    // missing field.
+    //
+    // `counts` is the three-outcome object from 1a, not null: it distinguishes
+    // {unsupported} from {error}, and flattening it here would put back the conflation
+    // that hid the bare-identifier bug.
+    return {
+      supported: true,
+      provider: normalized,
+      counts,
+      escapeClauseUnavailable,
+    };
   }
 
   if (counts.unlabelled > 0) {
-    const allowed = allowUnprovableRows();
+    // `allowed` is what the flag ACHIEVES, not merely what it is set to. On a provider
+    // with no escape clause the two differ, and reporting the variable rather than the
+    // effect is how the previous version told operators their rows were being served when
+    // they were not.
+    const allowed = allowUnprovableRows() && !escapeClauseUnavailable;
     logger.warn(
       `\x1b[33m[authorization]\x1b[0m ${counts.unlabelled} of ${counts.total} vectors have no ACL metadata and cannot be proven readable. ` +
         (allowed
           ? `RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, so they are included in search results — this is the pre-backfill escape hatch. It weakens the document ACL for exactly those rows, and because they compete for the same result slots, it can also crowd out documents that DO carry metadata. Run the backfill, then remove the variable.`
-          : `They are EXCLUDED from search results — searches will return fewer results than expected until they are backfilled. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to include them in the meantime (which weakens the document ACL for those rows).`)
+          : escapeClauseUnavailable
+            ? `They are EXCLUDED from search results, and on this provider RETRIEVAL_FILTER_ALLOW_UNPROVABLE cannot change that. Run the vector metadata backfill.`
+            : `They are EXCLUDED from search results — searches will return fewer results than expected until they are backfilled. Run the vector metadata backfill, or set RETRIEVAL_FILTER_ALLOW_UNPROVABLE to include them in the meantime (which weakens the document ACL for those rows).`)
     );
   }
 
-  return { supported: true, provider: normalized, counts };
+  return {
+    supported: true,
+    provider: normalized,
+    counts,
+    escapeClauseUnavailable,
+    ...(normalized === "weaviate" ? { staleClasses } : {}),
+  };
 }
 
 module.exports = {
   reportRetrievalFilterSupport,
   unprovableVectorCount,
   SUPPORTED_PROVIDERS,
+  NO_ESCAPE_CLAUSE_PROVIDERS,
+  UNVERIFIED_PROVIDERS,
 };
