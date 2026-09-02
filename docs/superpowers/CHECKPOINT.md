@@ -800,3 +800,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #137 Dev1: authz suite 771/1 (RF-D only); out-of-order deploy measured safe; rename to 140000 = hygiene. Model Router second commit prepped in scratch mr121 (uncommitted).
 - #136 Dev5: 24/24 with all rulings (F1 explicit set → cast returns null → User.update {success:false}; F2 via `bio`; F3 ledger corrected; F4 two tests parse→existence→404 before repo; F5/D6 reader + delete-tx stamp, dangling fixture, three states in one test; NITs ×4; 14 mutants). Full suite /tmp/s12-final.log; SHA ~10 min.
 - #136 fix SHA de7b19136 (lane +actorResolver.js; ledger 23 rulings). Gate-136b (fresh g136, neighbour sweep incl. authorization + api + middleware), TL-2 verdict, QA-2 rerun all dispatched.
+- #136 target f76172fec (de7b19136 + F1c tests, ledger). Gate-136b/TL-2/QA-2 retargeted. Dev5 running /tmp/s12-final2.log on fresh DB.
+- #137 Model Router prep (Dev1, scratch mr121 uncommitted): frontend RED 2/17 → GREEN 19; server GREEN 24, RED 3 when model-router.read removed (incl. #121's derive-from-sidebar test catching it unaided). 4 changes ready to commit on #121 merge. Note: mr121 needs prisma generate.
+- checkignore +3 test files (describe "#NNN" detector FP).
