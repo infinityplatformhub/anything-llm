@@ -866,3 +866,11 @@ enforces this; do not register a route as `app.get(path, handler)` with no array
 - A negative test for an AND rule must use a principal holding exactly one half; a principal seeded with both halves cannot prove the AND (T-7 D-2).
 - Mint/issue endpoints are part of the threat model: a credential that any caller can mint for any subject proves nothing (#32 stream-chat oracle, QA-1).
 (Source: T-7 #31 ledger, #32 review, 2026-09-02.)
+
+### 7.10 The prisma client is a process singleton bound at first require
+- `utils/prisma` binds `DATABASE_URL` on first require; under `jest --runInBand` every later suite shares it. A suite that creates its own database must `jest.resetModules()` before requiring anything that touches prisma, or its fixtures land in the shared DB (T-7 #31: leaked users turned `actorResolver` R5 red in unrelated branches).
+- `afterAll` cleanup is not the fix: it deletes the right rows from the wrong database.
+
+### 7.11 A requested review is a merge gate
+- When PMO has asked QA for a verdict on a SHA, the merge waits for that verdict even if the automated gate passes (T-7 #31 merged 20 minutes before QA-1's FAIL arrived; the hole went live on main → #52).
+- Engine blanket denies only protect routes that reach the engine; every mutating route must carry `requirePermission` or an explicit guard, and "a route that forgets to check is still safe" is never a true comment.
