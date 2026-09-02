@@ -52,4 +52,4 @@ Residual: `document.read` vs `document.search` now matters at every context-inje
 Any future path that injects document text must pick the action deliberately rather than
 inheriting a default.
 
-SHA: (below)
+SHA: 41458cbb (branch approof/t5-slice-2, base 1ed51510)
