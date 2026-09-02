@@ -201,13 +201,14 @@ if (process.env.NODE_ENV !== "development") {
   });
 }
 
-app.all("*", function (_, response) {
+const terminalNotFound = function (_, response) {
   response.sendStatus(404);
-});
+};
+app.all("*", terminalNotFound);
 
 // In non-https mode we need to boot at the end since the server has not yet
 // started and is `.listen`ing.
 if (require.main === module && !process.env.ENABLE_HTTPS)
   bootHTTP(app, process.env.SERVER_PORT || 3001).catch(refuseBoot);
 
-module.exports = { app, ENDPOINT_REGISTRATIONS };
+module.exports = { app, ENDPOINT_REGISTRATIONS, terminalNotFound };

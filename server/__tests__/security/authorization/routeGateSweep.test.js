@@ -226,13 +226,20 @@ module.exports = {
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
   const mountedRoutesAtTestLoad = mountedRouteLayers(app._router?.stack);
+  const { terminalNotFound } = require("../../../index");
+  const wildcardRoutes = mountedRoutesAtTestLoad.filter(
+    (layer) => layer.route.path === "*"
+  );
+  const terminalWildcard = wildcardRoutes.find((layer) =>
+    layer.route.stack.every(({ handle }) => handle === terminalNotFound)
+  );
 
   test("the sweep actually mounted the router (guards the guard)", () => {
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
     expect(registrations.length).toBeGreaterThanOrEqual(31);
-    expect(mountedRoutesAtTestLoad.length).toBeGreaterThan(100);
+    expect(mountedRoutesAtTestLoad).toHaveLength(309);
     const directRoutes = (app._router?.stack || []).filter(
       (layer) => layer.route
     );
@@ -393,15 +400,34 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     ).toBe(true);
   });
 
+  test("the only wildcard is the final terminal 404 handler", () => {
+    expect(wildcardRoutes).toHaveLength(1);
+    expect(terminalWildcard).toBe(mountedRoutesAtTestLoad.at(-1));
+    expect(terminalWildcard.route.stack.length).toBeGreaterThan(1);
+    expect(
+      terminalWildcard.route.stack.every(
+        ({ handle }) => handle === terminalNotFound
+      )
+    ).toBe(true);
+  });
+
+  test("mounted route snapshot stays stable through immediate timers", async () => {
+    const before = mountedRouteLayers(app._router?.stack);
+    await new Promise(setImmediate);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const after = mountedRouteLayers(app._router?.stack);
+    expect(after).toEqual(before);
+  });
+
   test("every mounted mutating route has identity-verified authorization", () => {
     // Snapshot at assertion execution. Routes mounted asynchronously after this
     // point are outside this synchronous startup contract and remain residual risk.
     const routesAtAssertion = mountedRouteLayers(app._router?.stack);
     const ungated = [];
     for (const layer of routesAtAssertion) {
-      // Express expands app.all("*") into every verb. This final 404 responder
-      // performs no application mutation and is not an endpoint authorization boundary.
-      if (layer.route.path === "*") continue;
+      // Exempt only the one terminal 404 by mounted layer identity. Earlier
+      // wildcards pass through normal authorization checks.
+      if (layer === terminalWildcard) continue;
       const methods = Object.keys(layer.route.methods).filter(
         (method) => method !== "get" && method !== "head"
       );
