@@ -22,7 +22,7 @@ const path = require("path");
 const fs = require("fs");
 const {
   diffDirectory,
-  completedEnumeration,
+  __testHelpers__: { completedEnumeration },
   failedEnumeration,
   DirectoryDiffError,
 } = require("../../../utils/identity/directoryDiff");
@@ -635,5 +635,20 @@ describe("#133 R6: this slice computes, and cannot write", () => {
     expect(code).not.toMatch(/require\(["'].*prisma/);
     expect(code).not.toMatch(/policyRepository/);
     expect(code).not.toMatch(/group_members/);
+
+    // #134 (TL-1 condition ข): also no CONCRETE DRIVER import. Slice 2 added
+    // `enumerateDirectory`, which calls `listPrincipals`/`listGroups` — so "this file
+    // does not write" now needs a second half to stay enforced. The driver must
+    // arrive as an ARGUMENT: a module that could construct its own provider could
+    // reach the network, its credentials, and eventually its store, and none of the
+    // three greps above would notice.
+    expect(code).not.toMatch(/require\(["'].*identityProviders/);
+    expect(code).not.toMatch(/IdentityProvider/);
+    expect(code).not.toMatch(/require\(["'].*(axios|node-fetch|https?)["']\)/);
+
+    // The require list itself, so a future import of anything at all is a decision
+    // someone has to make deliberately rather than a line nobody notices.
+    const requires = [...code.matchAll(/require\(["']([^"']+)["']\)/g)].map((m) => m[1]);
+    expect(requires).toEqual([]);
   });
 });
