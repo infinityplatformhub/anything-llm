@@ -106,3 +106,4 @@
 - **Weaviate classes created before T-5 cannot gain `indexNullState`** (schema update rejected) — escape clause unavailable; re-embed (class recreate) required. #56 must include a Weaviate class-recreate path. Dev4/Techlead-2 on #30 1b. `[→ #56]`
 - **pinecone/astra predicate renderers never executed against a real store** (hosted-only) — `$exists:false` escape clause and deny-list unverified. Boot report must not call them supported. Techlead-2 on #30 1b. `[→ #30 residual / O2 CI]`
 - **`policy_versions` rows carry no origin** — T-1 backfill and later migrations all write `(grant, org:1)`, so a migration-only test cannot assert its own bump. Dev5 on #61. `[→ backlog]`
+- **No repository path for writing document_acl** — raw prisma writes do not bump policy_versions; filter cache serves pre-deny filters until TTL. QA-1 on slice 2. `[→ #30 slice 2]`
