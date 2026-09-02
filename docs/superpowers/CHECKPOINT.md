@@ -336,3 +336,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 task 2 3e121b3b4: TL-1 PASS; waiting QA-1 only.
 - User Q: §7.11 relaxation risk explained (dev misclassification: #94/#102 looked non-auth but had leaks/oracles) — recommend relax verdict step only, PMO classifies, TL pre-read stays. Awaiting เอา/ไม่เอา.
 - PMO note: `cd /tmp/wt-N && …` chains committed CHECKPOINT into the gate worktree twice; push rejected (non-ff) saved main. Docs commits use absolute main path only.
+- #49: TL-2 PASS 2c9ae1f0f (110/110, T2/T4c/T-abs/T-rot/T7/T8 red, route +1 only). All verdicts in; close/merge on Dev4's cross-stamp test SHA (regate contract only).
