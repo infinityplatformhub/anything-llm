@@ -18,7 +18,20 @@ const {
 const {
   makeDirectory,
   DEFAULT_BASE_DN,
+  SERVICE_DN,
+  SERVICE_PASSWORD,
+  PERSON_CLASS,
 } = require("../../../__testHelpers__/ldap/directory");
+
+/** A directory with the service account bound — anonymous read is disabled. */
+async function readyDirectory() {
+  const directory = makeDirectory();
+  await directory.bind(SERVICE_DN, SERVICE_PASSWORD);
+  return directory;
+}
+
+/** The base filter a real driver writes: an `&` with the object class. */
+const baseFilter = (value) => `(&(objectClass=${PERSON_CLASS})(uid=${value}))`;
 
 describe("escapeFilterValue — RFC 4515 §3", () => {
   test("the five special characters become their hex escapes", () => {
@@ -77,32 +90,40 @@ describe("escapeDn — RFC 4514", () => {
     expect(escapeDn("#alice")).toBe("\\#alice");
   });
 
+  test("NUL becomes its hex escape, not a literal", () => {
+    // A raw NUL truncates the DN at whatever C library eventually parses it, so
+    // the bind targets a shorter — different — DN than the one intended, with
+    // nothing in the logs to say so.
+    expect(escapeDn("a\0b")).toBe("a\\00b");
+  });
+
   test("an ordinary DN component is unchanged", () => {
     expect(escapeDn("alice")).toBe("alice");
   });
 });
 
 describe("escaping actually stops the injection against the real fixture", () => {
-  // The point of the module, proved end to end rather than by inspection. The
-  // fixture directory is genuinely injectable, so these two searches differ.
+  // The point of the module, proved end to end rather than by inspection — and
+  // against the filter shape a driver ACTUALLY writes, an `&` carrying the
+  // object class. Techlead's FAIL on da87ec42 was that these ran against a lone
+  // `(uid=…)`, which is not what the code produces, so the injection that
+  // matters was never exercised.
 
-  test("a CONCATENATED filter matches more people than intended", async () => {
-    const directory = makeDirectory();
-    const attacker = "alice)(uid=*";
-    // What a driver written the obvious way produces.
-    const results = await directory.search(
-      DEFAULT_BASE_DN,
-      `(|(uid=${attacker}))`
-    );
+  test("a CONCATENATED base filter matches more than one person", async () => {
+    const directory = await readyDirectory();
+    const attacker = "*)(uid=*";
+    // What a driver written the obvious way produces: the payload closes the uid
+    // assertion and adds a third clause inside the existing `&`.
+    const results = await directory.search(DEFAULT_BASE_DN, baseFilter(attacker));
     expect(results.length).toBeGreaterThan(1);
   });
 
-  test("an ESCAPED filter matches nobody", async () => {
-    const directory = makeDirectory();
-    const attacker = "alice)(uid=*";
+  test("an ESCAPED value in the same filter matches nobody", async () => {
+    const directory = await readyDirectory();
+    const attacker = "*)(uid=*";
     const results = await directory.search(
       DEFAULT_BASE_DN,
-      `(uid=${escapeFilterValue(attacker)})`
+      baseFilter(escapeFilterValue(attacker))
     );
     // Nobody has that literal uid, so the correct answer is zero — not "alice",
     // and certainly not everyone.
@@ -111,12 +132,28 @@ describe("escaping actually stops the injection against the real fixture", () =>
 
   test("an escaped ORDINARY username still finds its person", async () => {
     // Escaping that broke normal logins would be removed within a week.
-    const directory = makeDirectory();
+    const directory = await readyDirectory();
     const results = await directory.search(
       DEFAULT_BASE_DN,
-      `(uid=${escapeFilterValue("alice")})`
+      baseFilter(escapeFilterValue("alice"))
     );
     expect(results).toHaveLength(1);
     expect(results[0].dn).toBe(`uid=alice,${DEFAULT_BASE_DN}`);
+  });
+
+  test("an escaped value containing REAL metacharacters still matches", async () => {
+    // `o(dd)*ball@example.com` is a legitimate address. Escaping must preserve
+    // it: a driver that could not find this person would look broken to an
+    // operator, who would then remove the escaping — which is how a security
+    // control dies of a false positive.
+    const directory = await readyDirectory();
+    const results = await directory.search(
+      DEFAULT_BASE_DN,
+      `(&(objectClass=${PERSON_CLASS})(mail=${escapeFilterValue(
+        "o(dd)*ball@example.com"
+      )}))`
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].uid).toBe("oddball");
   });
 });

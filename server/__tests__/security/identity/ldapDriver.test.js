@@ -243,6 +243,85 @@ describe("search results", () => {
   });
 });
 
+describe("the service bind is not optional", () => {
+  test("a driver that never bound the service account cannot search", async () => {
+    // Techlead ruling 3: anonymous read is disabled on the fixture, as on any
+    // hardened directory. This asserts the driver DOES bind — if it skipped that
+    // step it would get insufficientAccess and every login would fail, which is
+    // a failure mode worth pinning rather than discovering in production.
+    const { instance, directory } = driver();
+    await login(instance, "alice", "alice-correct-password");
+    expect(directory.calls.binds[0].dn).toBe(SERVICE_DN);
+    expect(directory.boundAuthenticated).toBe(false); // unbound in `finally`
+  });
+
+  test("a WRONG service password is UNAVAILABLE, not a user-facing refusal", async () => {
+    // A broken service account is our configuration problem. Reporting it as
+    // "invalid credentials" would tell every user their password is wrong and
+    // send the operator hunting in the wrong place.
+    const { instance } = driver({ bindPassword: "wrong-service-password" });
+    const error = await login(instance, "alice", "alice-correct-password").catch(
+      (e) => e
+    );
+    expect(error).toBeInstanceOf(IdentityUnavailableError);
+  });
+
+  test("an UNAUTHENTICATED service bind does not become an anonymous search", async () => {
+    // RFC 4513 §5.1.2 again, one layer up: binding the service DN with an empty
+    // password "succeeds" while authenticating nobody. A driver that read that
+    // as success would search anonymously believing it was authenticated.
+    const { instance } = driver({ bindPassword: "   " });
+    await expect(login(instance, "alice", "alice-correct-password")).rejects.toThrow();
+  });
+
+  test("a service bind that resolves ANONYMOUSLY without throwing is refused", async () => {
+    // §7.9c, second instance. The `serviceBind.authenticated !== true` check was
+    // a mutation SURVIVOR: every case that could reach it threw instead, and a
+    // thrown error is caught one layer up and reclassified — so the flag check
+    // was shadowed and never actually exercised.
+    //
+    // This is the input that reaches it: a directory resolving the service bind
+    // anonymously with a perfectly ordinary password and no exception at all.
+    // Nothing but the flag distinguishes it, and searching in that state means
+    // searching as nobody while believing we authenticated.
+    const { instance } = driver({}, { serviceBindAnonymous: true });
+    const error = await login(instance, "alice", "alice-correct-password").catch(
+      (e) => e
+    );
+    expect(error).toBeInstanceOf(IdentityUnavailableError);
+  });
+});
+
+describe("DN case", () => {
+  test("the DN from the search is bound verbatim, whatever its case", async () => {
+    // `Alice.Smith`'s entry stores its DN in a different case from the base.
+    // A driver assembling `uid=${input},${baseDn}` would build a DN that does
+    // not match, or would match the wrong person.
+    const { instance, directory } = driver({ baseDn: "dc=example,dc=com" });
+    const principal = await login(
+      instance,
+      "Alice.Smith",
+      "alice-smith-password"
+    );
+
+    expect(principal.subject).toBe("UID=Alice.Smith,OU=People,DC=Example,DC=com");
+    expect(principal.email).toBe("alice.smith@example.com");
+    const userBind = directory.calls.binds[1];
+    expect(userBind.dn).toBe("UID=Alice.Smith,OU=People,DC=Example,DC=com");
+  });
+
+  test("two differently-cased entries stay two different people", async () => {
+    // `alice` and `Alice.Smith` are separate accounts with separate mailboxes.
+    // Collapsing them — by lowercasing the DN, say — would let one log in as
+    // the other.
+    const { instance } = driver({ baseDn: "dc=example,dc=com" });
+    const first = await login(instance, "alice", "alice-correct-password");
+    const second = await login(instance, "Alice.Smith", "alice-smith-password");
+    expect(first.subject).not.toBe(second.subject);
+    expect(first.email).not.toBe(second.email);
+  });
+});
+
 describe("transport", () => {
   test("a referral is refused, never followed", async () => {
     // Following one means authentication is answered by a host nobody chose.

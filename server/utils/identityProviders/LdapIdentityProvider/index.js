@@ -24,7 +24,7 @@
 //   3. THE PASSWORD IS NEVER KEPT. Not in the principal, not in an error, not in
 //      a log. It exists for the duration of one bind call.
 
-const { Client, EqualityFilter, Filter } = require("ldapts");
+const { Client, EqualityFilter, AndFilter } = require("ldapts");
 
 const {
   IdentityConfigurationError,
@@ -37,6 +37,11 @@ const {
 // ambiguous match and injection attempt are indistinguishable to the caller:
 // anything else is an oracle telling an attacker which usernames are real.
 const REFUSED = "This login could not be verified.";
+
+// LDAP result codes this driver branches on. Named, because a bare 10 or 13 in
+// a condition says nothing about what it means.
+const CODE_REFERRAL = 10;
+const CODE_CONFIDENTIALITY = 13;
 
 // Errors that mean "the directory is not answering" rather than "these
 // credentials are wrong". Only these are retryable; classifying a bad password
@@ -87,6 +92,10 @@ class LdapIdentityProvider {
       usernameAttribute = "uid",
       emailAttribute = "mail",
       displayNameAttribute = "cn",
+      // The object class a person entry carries. Part of the base filter, and
+      // configurable because directories disagree (inetOrgPerson, user,
+      // posixAccount) — a hard-coded one would silently match nobody.
+      objectClass = "inetOrgPerson",
       tlsOptions,
       startTls = false,
       connect,
@@ -112,6 +121,7 @@ class LdapIdentityProvider {
     this.usernameAttribute = usernameAttribute;
     this.emailAttribute = emailAttribute;
     this.displayNameAttribute = displayNameAttribute;
+    this.objectClass = objectClass;
     this.tlsOptions = tlsOptions ?? { rejectUnauthorized: true };
     this.startTls = startTls;
     this._connect = connect ?? null;
@@ -163,9 +173,37 @@ class LdapIdentityProvider {
     const connection = await this._open();
     try {
       // (2) Bind the service account, then search. Never an anonymous search.
-      const serviceBind = await connection.bind(this.bindDn, this.bindPassword);
-      // Read the flag, do not infer from the lack of a throw.
-      if (serviceBind && serviceBind.authenticated === false)
+      //
+      // A failure HERE is ours, not the user's: a wrong service password, an
+      // expired account, a directory that moved. Reporting it as "invalid
+      // credentials" would tell every user their own password was wrong and send
+      // the operator looking in entirely the wrong place — so the whole bind is
+      // reclassified as unavailable, including the result code 49 that a wrong
+      // service password produces and that would otherwise read as a refusal.
+      let serviceBind;
+      try {
+        serviceBind = await connection.bind(this.bindDn, this.bindPassword);
+      } catch (error) {
+        // A referral or a TLS refusal keeps its own meaning wherever it happens
+        // — a server can refer on a BIND, not only on a search (QA-1 G2), and
+        // following one means authentication is answered by a host nobody chose.
+        //
+        // Everything else at this step is "the directory is not usable by us",
+        // INCLUDING result code 49. The same code means opposite things at the
+        // two binds in this method: here it is our service account being wrong,
+        // and only at the user's bind is it their password. Classifying by the
+        // code alone would report our misconfiguration as their bad password.
+        if (error?.code === CODE_REFERRAL || error?.code === CODE_CONFIDENTIALITY)
+          throw this._classify(error);
+        throw new IdentityUnavailableError(
+          "The directory service account could not authenticate.",
+          { cause: undefined }
+        );
+      }
+      // Read the flag, do not infer from the lack of a throw: an unauthenticated
+      // bind (§5.1.2) resolves without error and would otherwise leave us
+      // searching anonymously while believing we had authenticated.
+      if (!serviceBind || serviceBind.authenticated !== true)
         throw new IdentityUnavailableError(
           "The directory service account could not authenticate."
         );
@@ -173,9 +211,25 @@ class LdapIdentityProvider {
       // The filter is BUILT, never concatenated: `EqualityFilter` escapes its
       // value on the way out, so nothing the user types can close the assertion
       // and open a wider one.
-      const filter = new EqualityFilter({
-        attribute: this.usernameAttribute,
-        value: username,
+      //
+      // An `AndFilter` with the object class, because that is what a real base
+      // filter looks like — and it is the shape that MATTERS. A lone
+      // `(uid=${input})` is trivially broken by `)(uid=*`, but the interesting
+      // case is `(&(objectClass=…)(uid=${input}))`, where an injected
+      // `*)(uid=*` adds a THIRD clause inside the existing `&` and turns a
+      // one-person query into every person. Techlead's FAIL on da87ec42 was
+      // exactly that: the mock could not parse `&`, so this case went untested.
+      const filter = new AndFilter({
+        filters: [
+          new EqualityFilter({
+            attribute: "objectClass",
+            value: this.objectClass,
+          }),
+          new EqualityFilter({
+            attribute: this.usernameAttribute,
+            value: username,
+          }),
+        ],
       }).toString();
       const entries = await connection.search(this.baseDn, filter);
 
@@ -249,11 +303,12 @@ class LdapIdentityProvider {
     // LDAP result 10 is a REFERRAL: "ask that other server instead". Following
     // one would let authentication be answered by a host nobody configured, so
     // it is a refusal rather than a redirect.
-    if (error?.code === 10) return new IdentityAuthenticationError(REFUSED);
+    if (error?.code === CODE_REFERRAL)
+      return new IdentityAuthenticationError(REFUSED);
     // 13, confidentialityRequired: the server refused an unencrypted bind. That
     // is our configuration to fix, and it is not a credential problem — but it
     // also is not retryable, since retrying changes nothing.
-    if (error?.code === 13)
+    if (error?.code === CODE_CONFIDENTIALITY)
       return new IdentityConfigurationError(
         "The directory requires an encrypted connection. Configure ldaps:// or StartTLS."
       );

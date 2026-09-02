@@ -459,6 +459,24 @@ model identity_providers {
   // went live at the first save would accept logins against a half-written
   // certificate list.
   enabled     Boolean  @default(false)
+
+  // S3 (#60): LDAP. Nullable, because the SAML columns above are equally
+  // irrelevant to a directory — one table holds both shapes, and a provider
+  // fills in the half that applies to it.
+  //
+  // No bind password here, by design: unlike SAML's certificates (public
+  // material) it is a real secret, and this table is read on every login and
+  // sits in every backup. It goes to CredentialStore, AES-256-GCM, bound to its
+  // key name.
+  ldapUrl              String?
+  baseDn               String?
+  bindDn               String?
+  // The attribute map, defaulted to what a normal directory uses so an operator
+  // only overrides what is genuinely different in theirs.
+  usernameAttribute    String   @default("uid")
+  emailAttribute       String   @default("mail")
+  displayNameAttribute String   @default("cn")
+
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 }

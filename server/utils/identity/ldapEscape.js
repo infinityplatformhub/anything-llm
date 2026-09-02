@@ -49,7 +49,11 @@ function escapeDn(value) {
   if (value === null || value === undefined) return "";
   const text = String(value)
     .replace(/\\/g, "\\\\")
-    .replace(/([,+"<>;=])/g, "\\$1");
+    .replace(/([,+"<>;=])/g, "\\$1")
+    // NUL as its hex escape, not a literal: RFC 4514 §2.4 requires it, and a
+    // raw NUL truncates the DN at whatever C library eventually parses it —
+    // silently binding a shorter, different DN than the one intended.
+    .replace(/\0/g, "\\00");
   // A leading `#` or a space at either end is significant in a DN and must be
   // escaped even though the character is otherwise ordinary.
   return text

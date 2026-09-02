@@ -31,7 +31,17 @@ const { escapeFilterValue } = require("../../../utils/identity/ldapEscape");
 const {
   makeDirectory,
   DEFAULT_BASE_DN,
+  SERVICE_DN,
+  SERVICE_PASSWORD,
+  PERSON_CLASS,
 } = require("../../../__testHelpers__/ldap/directory");
+
+/** A directory with the service account bound — anonymous read is disabled. */
+async function readyDirectory() {
+  const directory = makeDirectory();
+  await directory.bind(SERVICE_DN, SERVICE_PASSWORD);
+  return directory;
+}
 
 describe("criterion 1 — the candidate escapes filter values correctly", () => {
   test("the injection payload is neutralized", () => {
@@ -86,7 +96,7 @@ describe("criterion 2 — a filter can be BUILT rather than concatenated", () =>
 
   test("a built filter matches EXACTLY the intended person in the fixture", async () => {
     // End to end against the injectable mock: the built form does not widen.
-    const directory = makeDirectory();
+    const directory = await readyDirectory();
     const honest = new EqualityFilter({ attribute: "uid", value: "alice" });
     const results = await directory.search(DEFAULT_BASE_DN, honest.toString());
     expect(results).toHaveLength(1);
@@ -94,7 +104,7 @@ describe("criterion 2 — a filter can be BUILT rather than concatenated", () =>
   });
 
   test("a built filter carrying the payload matches NOBODY", async () => {
-    const directory = makeDirectory();
+    const directory = await readyDirectory();
     const attack = new EqualityFilter({ attribute: "uid", value: "alice)(uid=*" });
     expect(await directory.search(DEFAULT_BASE_DN, attack.toString())).toHaveLength(0);
   });
@@ -102,10 +112,12 @@ describe("criterion 2 — a filter can be BUILT rather than concatenated", () =>
   test("and the concatenated form still widens — the fixture has not gone soft", async () => {
     // The control. If this ever returns 1, the mock stopped being injectable and
     // every test above became decoration.
-    const directory = makeDirectory();
+    const directory = await readyDirectory();
+    // The REALISTIC shape: an `&` base filter with the payload interpolated,
+    // which is what a naive driver actually produces.
     const results = await directory.search(
       DEFAULT_BASE_DN,
-      `(|(uid=alice)(uid=*))`
+      `(&(objectClass=${PERSON_CLASS})(uid=*)(uid=*))`
     );
     expect(results.length).toBeGreaterThan(1);
   });

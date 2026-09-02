@@ -104,3 +104,88 @@ a `yarn add` into it, briefly broke jest resolution for every other worktree).
 
 `POST /sso/ldap/login` + `inviteRateLimit` (ruling 4), the login-page input, and
 `identity_providers` configuration wiring.
+
+## Techlead FAIL on da87ec42 — the fixtures proved the wrong thing
+
+Techlead rejected the fixtures, and the rejection was correct. The filter matcher
+special-cased a leading `(|` and otherwise required every clause, so it never
+really parsed `&` — the operator every realistic base filter uses. The injection
+that actually matters was therefore never exercised, and a driver concatenating
+into `(&(objectClass=…)(uid=${input}))` looked safe. This is §7.9b again: a
+fixture must match the shape the code actually produces.
+
+Ruling: the mock now carries a REAL RFC 4515 parser — `&`, `|`, `!`, nesting,
+substrings and hex unescaping — and the parser is itself under test, because a
+parser that silently returned null would make the search tests fail for the wrong
+reason while looking strict.
+
+Ruling: the driver builds `(&(objectClass=…)(uid=…))` via `AndFilter`, because
+the single-clause filter it wrote before is not what a real deployment needs and
+not the shape the dangerous injection targets. `objectClass` is configurable —
+directories disagree (inetOrgPerson, user, posixAccount) and a hard-coded one
+matches nobody.
+
+Ruling: every PEOPLE entry carries `objectClass`; a DN-case-variant entry
+(`UID=Alice.Smith,OU=People,…`) exists so the "bind the DN the search returned"
+rule is testable; and an entry with `(` and `*` in its real values proves
+escaping PRESERVES a legitimate address — a control that produced false
+rejections would be removed by the first operator it inconvenienced.
+
+Ruling: DN comparison in the mock is case-insensitive, as on a real server.
+Without it the mock rejected a DN it had just returned from its own search.
+
+Ruling: anonymous READ is disabled. A search before a successful service bind is
+refused, so a driver that skipped or swallowed that bind cannot fall back to
+whatever the directory shows the world — usually a smaller set, so the failure
+would read as "user not found".
+
+Ruling (QA-1 G1): the transport requirement covers SEARCH as well as bind. A
+driver caught sending the password in the clear must not still be able to read
+the directory over the same plaintext connection.
+
+Ruling (QA-1 G2): a referral is refused on BIND as well as on search — a real
+server can refer on either, and bind is the one that authenticates.
+
+Ruling (Techlead 4): anonymous (§5.1.1, empty DN) and unauthenticated (§5.1.2,
+DN with empty password) are separate flags with separate tests. A driver can get
+one right and the other wrong, and the old single flag hid that.
+
+Ruling: a failure at the SERVICE bind is `IdentityUnavailableError`, including
+result code 49. The same code means opposite things at the two binds in
+`completeLogin` — our service account being wrong versus the user's password
+being wrong — so classifying by code alone reports our misconfiguration as their
+bad password and sends the operator hunting in the wrong place.
+
+Ruling (NIT): `escapeDn` escapes NUL as `\00`. A raw NUL truncates the DN at
+whatever C library parses it, silently binding a shorter, different DN.
+
+### Mutation proof, re-run against the corrected fixtures
+
+| mutant | expected kill | result |
+|---|---|---|
+| built filter becomes concatenated (realistic `&` shape) | the two injection tests | killed exactly those two — this is the one that previously proved nothing |
+| drop the empty-password guard | the two empty-password tests | killed exactly those two |
+| `length !== 1` becomes `length === 0` | the two multiple-match tests | killed exactly those two |
+| drop the user-bind `authenticated !== true` check | the alwaysAnonymous test | killed exactly that one |
+| drop the SERVICE-bind `authenticated !== true` check | — | **SURVIVED**, then fixed (below) |
+
+### A second §7.9c survivor
+
+The service-bind flag check survived for the same reason the user-bind one did in
+the first round: every case that could reach it THREW, and a thrown error is
+caught one layer up and reclassified — so the flag check was shadowed and never
+exercised.
+
+Fixed with a separate `serviceBindAnonymous` directory mode: a server that
+resolves the service bind anonymously, with an ordinary password and no
+exception. It is deliberately a SECOND flag rather than an extension of
+`alwaysAnonymous`, because one flag covering both binds stops the user-bind test
+at the service bind — proving only the earlier check and leaving the later one
+shadowed all over again.
+
+That is twice now in one issue. §7.9c is not a corner case: any two guards on the
+same path hide each other unless a fixture reaches past the first.
+
+## Evidence (after the rebuild)
+
+`__tests__/security` — Tests: 577 passed, 577 total, 54 suites.
