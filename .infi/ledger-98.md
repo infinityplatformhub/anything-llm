@@ -34,13 +34,18 @@ deployments that most believe it is on. (Dev 3 raised, PMO ruled.)
 
 Ruling: arm after the `if/else` at `index.js:208`, not at the end of the registration
 loop. The development branch mounts `apiRouter.post("/v/:command")` after that loop, so
-arming earlier throws on every dev boot. This point is also where the codebase already
-draws its line — the terminal 404 must be last, and `routeGateSweep` asserts it is.
+arming earlier throws on every dev boot. **AMENDED in round 2** — the seal now sits
+after the terminal 404 as well, so the 404 is inside it rather than after it. The
+requirement it satisfies is unchanged: the 404 must be the last layer in the stack, and
+`routeGateSweep` asserts that.
 
 Ruling: seal mutating methods only, on BOTH `app` and `apiRouter`. They are different
 objects and #40's escaping mutation used `app.post`. `get`/`head` are excluded because
 production legitimately mounts `app.get`/`app.use` after the seal point; a guard that
-fires on correct code gets deleted.
+fires on correct code gets deleted. **AMENDED in round 2** — "mutating methods" turned
+out to be a smaller set than the ones that mount mutating routes: `all` and `.route()`
+both do, without passing through any of the five. See the round-2 rulings below, which
+supersede this one on scope while keeping its reasoning about `get`/`head`.
 
 ## Evidence
 
