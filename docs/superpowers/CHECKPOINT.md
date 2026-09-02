@@ -106,3 +106,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - S11 (Dev3): recon + 3 mockups at `031be4f5` (worktree s3-ldap). Dev3 recommends B. **User must choose A/B.** Invite-code leak into event_logs confirmed (inviteCode in ALLOWED_KEYS) → Dev3 opens bug issue first; QA-3 re-verifies.
 - #70 (Dev1 SDD): implementer running.
 14:24 main c79c5d2b: post-merge suite 1897 passed / 1933 (36 skipped)
+
+- Opened: #71 invite-code leak (Dev3, spec = TL-2 5 holes), #72 unknown-key drop (Dev1, QA-3 5 amendments), #73 CI real-store services (Dev4). Slice 2 waits QA-2 only. #40 task1 waits FINDING-2 fix.
