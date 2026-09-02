@@ -81,7 +81,16 @@ Same SHA, not a follow-up, because the expansion is what makes it reachable. (QA
 2. **A creator holding `system.write` through a group can now mint an API key carrying
    it.** That is the intended consequence of the fix (the grant becomes real), but it
    is new authority on the day this merges, not a pre-existing state.
-3. **Deploy-time behaviour change.** Every existing group grant begins authorizing the
+3. **G6 (TL-1): the type guard in `groupIdsFor` is redundant today.** It returns `[]`
+   for a non-`user` principal AND separately refuses a non-integer id. Every service,
+   embed and system principal currently carries a non-numeric id, so the first check
+   already covers the second — the `Number.isInteger` line cannot fire on any principal
+   shape that exists. Kept deliberately: it is the guard that stops a NaN reaching
+   Prisma if a future principal type carries a numeric id, and a decision path that
+   must fail closed should not depend on that coincidence holding. Recorded so nobody
+   later reads it as dead code and deletes it without knowing what it is for.
+
+4. **Deploy-time behaviour change.** Every existing group grant begins authorizing the
    moment this merges. That is the point of the fix, and it is why it got TL-1 plus a
    QA probe rather than an ordinary review. Rollout size is measurable before merge:
    ```sql

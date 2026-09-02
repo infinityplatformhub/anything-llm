@@ -75,9 +75,12 @@ async function buildDocumentFilter({ actor, action, db = prisma, allowedDocument
     // were wrong in ways that only showed on the DENY side: an api-key actor
     // (`actor.id` = "api-key:7") matched no membership, so a deny row aimed at the
     // creator's group never reached a key acting for them; and a group in another
-    // org could contribute a deny here. Now the same helper the ALLOW half and the
-    // engine use — `grantPrincipal`, org-filtered — so a deny aimed at a creator's
-    // group lands on keys acting for them.
+    // org could contribute a deny here. Now the same helper, org-filtered.
+    //
+    // This is the DENY side of the invariant stated at `readableScope`: an api-key
+    // IS expanded through its creator here, precisely because widening a denial
+    // cannot grant anything. The allow side does not expand it — that would hand
+    // the key authority nobody reviewed.
     const denyPrincipal =
       "grantPrincipal" in actor ? actor.grantPrincipal : actor;
     const groupIds = await groupIdsFor(denyPrincipal, orgId, tx);
@@ -168,9 +171,12 @@ async function readableScope(tx, actor, action) {
   // an empty workspace rather than as a refusal. Same helper as the engine, so the
   // two cannot answer differently about who a user is.
   //
-  // An api-key actor is expanded here, unlike in the engine, ONLY because
-  // `grantPrincipal` is already the creator and this call passes it through
-  // unchanged — see the note at the pairs helper.
+  // THE INVARIANT, stated once and true of all three read paths: group expansion
+  // widens what a key is DENIED, and never widens what it is ALLOWED. So an
+  // api-key is not expanded here or in the engine — its authority stays what its
+  // creator holds directly, rather than growing whenever someone edits a group —
+  // while the deny half below DOES expand it, so a prohibition aimed at the
+  // creator's department cannot be sidestepped by acting through a key.
   const orgId = actor.orgId ?? 1;
   const principalPairs =
     "grantPrincipal" in actor
