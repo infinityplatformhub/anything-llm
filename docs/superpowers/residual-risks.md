@@ -73,7 +73,7 @@
 - [→ #49] #32 mint rule ("no embed_chats row" or valid token) leaves 4 holes (Techlead design check): (1) pre-first-message window is seconds (row written after LLM reply); (2) two concurrent first requests both mint (no unique on embed_chats.session_id, no tx); (3) history delete / embed cascade empties rows and re-opens minting; (4) mint-vs-verify response difference is a session-existence oracle. Flag EMBED_REQUIRE_SESSION_TOKEN stays OFF until #49 lands server-minted sessionId+token at POST /embed/:embedId/session and stream-chat requires a verified token unconditionally.
 - [→ #49] #32 NIT-3 embed_id scoping in mintIfEntitled has no test (drop it → cross-tenant mint DoS); NIT-4 embedHistoryRateLimit wiring on stream-chat has no test (QA-1)
 - [→ #36 follow-up] OIDC discovery cached for process lifetime (no TTL); IdP changing jwks_uri needs restart (Techlead S1 review)
-- [→ backlog] providerDocIdCallSites.test.js 5s hook timeout flakes under parallel load (C-1, #28); raise hook timeout or isolate (QA-2)
+- [→ #57] providerDocIdCallSites.test.js 5s hook timeout flakes under parallel load (C-1, #28); raise hook timeout or isolate (QA-2)
 - [→ #52] view-as-user mutation via engine-less routes (POST /system/user, /onboarding) — LIVE on main until hotfix merges; MAJOR-2 setup_admin cannot delegate (QA-1 T-7 baseline)
 - [→ #52] 24 engine-less mutating routes rely on handler-level isSingleUserMode/multiUserMode checks (scheduled-jobs, telegram, outlook, update-password, api-key): safe only in one mode; sweep test allowlist must assert the check (QA-2)
 - [→ backlog] BrowserExtensionApiKey.create bypasses scope ceiling; any role gaining browser-extension.write could mint document.write credentials without holding it (QA-1 #35 NIT-2)
