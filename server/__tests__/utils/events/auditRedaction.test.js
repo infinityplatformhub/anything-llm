@@ -302,6 +302,129 @@ describe("issue 71: invite codes never reach the audit log", () => {
       });
     });
 
+    describe("#120 — the separator class, isolated", () => {
+      // #118 widened the DIGITS to fullwidth and left the punctuation ASCII.
+      // Every fixture here holds the same sixteen digits and varies ONLY the
+      // character between the groups, because #118's own tests used ASCII
+      // separators throughout and would have passed either way — which is why
+      // this was found by review rather than by the suite.
+      const CARD = ["1234", "5678", "9012", "3456"];
+      const FULLWIDTH = ["１２３４", "５６７８", "９０１２", "３４５６"];
+      const joined = (groups, separator) => groups.join(separator);
+
+      describe("separators that MUST redact", () => {
+        test.each([
+          ["U+0020 space", " "],
+          ["U+002D hyphen-minus", "-"],
+          ["U+002C comma", ","],
+          ["U+00A0 no-break space", "\u00A0"],
+          ["U+2009 thin space", "\u2009"],
+          ["U+202F narrow no-break space", "\u202F"],
+          ["U+3000 ideographic space", "\u3000"],
+          ["U+2010 hyphen", "\u2010"],
+          ["U+2011 non-breaking hyphen", "\u2011"],
+          ["U+2012 figure dash", "\u2012"],
+          ["U+2013 en dash", "\u2013"],
+          ["U+2014 em dash", "\u2014"],
+          ["U+2015 horizontal bar", "\u2015"],
+          ["U+2212 minus sign", "\u2212"],
+          ["U+FF0C fullwidth comma", "\uFF0C"],
+          ["U+FF0D fullwidth hyphen-minus", "\uFF0D"],
+        ])("%s, with ASCII digits", async (_label, separator) => {
+          const row = await scrubbed(joined(CARD, separator));
+          expect(row).toContain("[redacted:credit_card]");
+        });
+
+        test.each([
+          ["U+3000 ideographic space", "\u3000"],
+          ["U+FF0D fullwidth hyphen-minus", "\uFF0D"],
+          ["U+FF0C fullwidth comma", "\uFF0C"],
+        ])("%s, with FULLWIDTH digits — the realistic IME case", async (_l, sep) => {
+          const row = await scrubbed(joined(FULLWIDTH, sep));
+          expect(row).toContain("[redacted:credit_card]");
+        });
+
+        test("separators MIXED within one number", async () => {
+          // The fixture a per-codepoint fix passes and a class fix does not:
+          // nothing makes a typist consistent, and an IME switched mid-number
+          // produces exactly this.
+          const row = await scrubbed("1234 5678\uFF0D9012\u30003456");
+          expect(row).toContain("[redacted:credit_card]");
+        });
+
+        test("ASCII comma matches, symmetrically with the fullwidth one", async () => {
+          // Stated as its own test because a class where `\uFF0C` matches and
+          // `,` does not is the same half-widened asymmetry that created this
+          // bug — #118 widened digits and left punctuation behind.
+          const row = await scrubbed(joined(CARD, ","));
+          expect(row).toContain("[redacted:credit_card]");
+        });
+      });
+
+      describe("separators that must NOT redact — the class has to mean something", () => {
+        test.each([
+          ["newline", "\n"],
+          ["tab", "\t"],
+          ["U+FF1A fullwidth colon", "\uFF1A"],
+          ["U+FF1D fullwidth equals", "\uFF1D"],
+          ["U+FF3F fullwidth low line", "\uFF3F"],
+          ["U+FF0E fullwidth full stop", "\uFF0E"],
+          ["ASCII full stop", "."],
+          ["solidus", "/"],
+        ])("%s does not join four digit groups into a card", async (_l, sep) => {
+          const row = await scrubbed(joined(CARD, sep));
+          expect(row).not.toContain("[redacted:credit_card]");
+        });
+
+        test("newline is EXCLUDED as a decision, not an oversight", async () => {
+          // Four numeric columns down a log are not one card number. A class
+          // matching any Unicode whitespace would let an ordinary tabular log
+          // redact itself, which destroys the log without protecting anyone.
+          const row = await scrubbed("1234\n5678\n9012\n3456");
+          expect(row).not.toContain("[redacted:credit_card]");
+          expect(row).toContain("1234");
+        });
+      });
+
+      describe("controls that must not move", () => {
+        test("sixteen CONTIGUOUS digits still redact", async () => {
+          const row = await scrubbed("4111111111111111");
+          expect(row).toContain("[redacted:credit_card]");
+        });
+
+        test("ordinary text carrying an IN separator is untouched", async () => {
+          // The over-redaction control PMO asked for. This class has NO Luhn
+          // check (see "no checksum validation, deliberately" below), so its
+          // false-positive profile is unchanged by #120 in kind — only the
+          // separators that reach it are wider. What must not happen is a
+          // sentence redacting because it contains a dash.
+          const row = await scrubbed("release 1.16.1\u2013stable, built 2026");
+          expect(row).not.toContain("[redacted:credit_card]");
+        });
+
+        test("the separator class is a SET, never a range", async () => {
+          // The failure mode this class invites: written with literal
+          // characters, `[ -\u3000]` is a RANGE from space to the ideographic
+          // space, covering `.`, `/`, `:` and every ASCII letter — the class
+          // silently becomes "any character" while still looking like a list.
+          // Measured while mutating: a literal-written variant redacted
+          // `1234.5678.9012.3456` as a card. Asserted on the compiled pattern
+          // so the shape is pinned, not merely the symptoms above.
+          const { PATTERNS } = require("../../../utils/events/redaction");
+          const source = PATTERNS.find((p) => p.name === "credit_card").re()
+            .source;
+          const classes = source.match(/\[(?:\\u[0-9A-Fa-f]{4})+\]\?/g) ?? [];
+          expect(classes.length).toBe(3);
+          expect(source).not.toMatch(/\[[^\]]*[^\\]-[^\]]*\]\?/);
+        });
+
+        test("a date-like group is not swallowed by the new separators", async () => {
+          const row = await scrubbed("2026\uFF0D09\uFF0D02");
+          expect(row).not.toContain("[redacted:credit_card]");
+        });
+      });
+    });
+
     describe("no checksum validation, deliberately", () => {
       // Thai mod-11 removes only ~9% of timestamp false positives (measured:
       // 18,184 of 200,000), and Luhn does not remove the migration-id one at
