@@ -107,3 +107,4 @@
 - **pinecone/astra predicate renderers never executed against a real store** (hosted-only) — `$exists:false` escape clause and deny-list unverified. Boot report must not call them supported. Techlead-2 on #30 1b. `[→ #30 residual / O2 CI]`
 - **`policy_versions` rows carry no origin** — T-1 backfill and later migrations all write `(grant, org:1)`, so a migration-only test cannot assert its own bump. Dev5 on #61. `[→ backlog]`
 - **Raw prisma writes to document_acl bypass the version bump** — `grantDocumentAcl`/`revokeDocumentAcl` (policyRepository) are the only correct paths; filter cache stays stale otherwise. Staleness test + model comment in slice 2. `[→ #30 slice 2]`
+- **`chat.read` is now a dead API scope** (no route declares it after #64) but migration 045000 backfilled legacy wildcard keys with it; harmless, confusing in audit. QA-1 on #64. `[→ backlog]`

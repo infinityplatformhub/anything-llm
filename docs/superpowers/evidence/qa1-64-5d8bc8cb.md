@@ -1,0 +1,3 @@
+# QA-1 evidence — #64 5d8bc8cb — PASS (2 findings, neither blocks)
+ROUTE_SCOPES 3 routes = chat.read_others. Editor key (chat.read only) → 403 ×3, no owner prompt in body; content_moderator + super_admin keys → 200 ×3 see owner chats. All 3 keys share identical scope list → refusal is grant-half. Audit auth.key_used allowed=false denyReason=grant / allowed=true; no prompt leak. Mutations: revert all → 7 fail; per-route 1/5/4 fail. Ceiling: setup_admin default mint trims chat.read_others; explicit request refused.
+F1 (medium, pre-existing → new issue): POST /v1/admin/workspace-chats ignores workspace binding. F2 (nit → residual): chat.read no longer in KNOWN_SCOPES; migration 045000 backfilled legacy keys with it.
