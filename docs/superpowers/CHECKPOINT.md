@@ -790,3 +790,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #137 Dev1: 16/17 (RF-D red = #121 dep); 3 survivors found by running (seed masks migration → migrate-only describe; G-f exact count; A-a confirmed). §7.17.
 - #136 QA-2 dry-run: candidate 1 (one lookup) kills D1; candidate 2 (three-state) passes all. R2's revokedAt half on the `_update` path: reader-only there → PMO retires that half (sweep stays in User.update only per TL-2).
 - #138 driver half → cd2c6cabe (6fe0fd376 + 2 tests from QA-1 baseline: driver-wins-over-idle-caller-signal, fresh-provider token bound). Gate/TL-1/QA-1 retargeted.
+- Gates 01:30: #137 check-local 0, contract 16/17 (RF-D = known #121 dep), neighbours running; #138 bootstrap 0, check-local 0, contract 24/24 on 6fe0fd376, retargeted cd2c6cabe. Dev2 branched contract-135.
