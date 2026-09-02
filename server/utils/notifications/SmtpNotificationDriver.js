@@ -55,7 +55,22 @@ class SmtpNotificationDriver {
     this.host = config.host;
     this.port = config.port;
     this.secure = config.secure === true;
-    this.allowInsecure = config.allowInsecure === true;
+    // TL-1 F1: TWO consents, because they are two different risks and an
+    // operator may hold one without the other.
+    //
+    //   allowInsecureTransport — "send over an unencrypted connection". About
+    //     confidentiality on the wire.
+    //   allowUntrustedCertificate — "do not verify who the far end is". About
+    //     authenticating the peer, and it matters MOST when the connection is
+    //     encrypted, since the certificate is then the only thing identifying it.
+    //
+    // They were one flag, so accepting plaintext on a trusted LAN silently also
+    // turned off certificate validation for every TLS connection this driver
+    // made. `allowInsecure` is still read for compatibility with the older
+    // spelling, but only for the transport half.
+    this.allowInsecureTransport =
+      config.allowInsecureTransport === true || config.allowInsecure === true;
+    this.allowUntrustedCertificate = config.allowUntrustedCertificate === true;
     this.username = config.username;
     // Held only to hand to the transport. Never read anywhere else in this file,
     // and never interpolated into a string.
@@ -65,11 +80,20 @@ class SmtpNotificationDriver {
     this.connectionTimeoutMs =
       config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     /**
-     * deliveryId → the relay's response line. In memory, so it survives exactly
-     * as long as the process: see `status()` for why that is honest rather than
-     * a limitation to fix.
+     * notificationId → { deliveryId, acceptedAt }.
+     *
+     * TL-1 F2: keyed by NOTIFICATION, not delivery, because that is what makes
+     * it an idempotency key. `event_deliveries` retries on its own schedule, so
+     * without this a transient failure that actually reached the relay becomes a
+     * second invitation email to a real person.
+     *
+     * TL-1 NIT-3: bounded. It is fed by a queue, so an unbounded map is a slow
+     * leak; entries also expire, because idempotency only needs to span a retry
+     * window, not the life of the process.
      */
     this._accepted = new Map();
+    this._idempotencyTtlMs = config.idempotencyTtlMs ?? 24 * 60 * 60 * 1000;
+    this._idempotencyMaxEntries = config.idempotencyMaxEntries ?? 10_000;
   }
 
   /**
@@ -136,23 +160,37 @@ class SmtpNotificationDriver {
     const to = this._recipientAddress(notification);
     this._assertTransportAllowed();
 
+    // TL-1 F2: idempotency, BEFORE anything is sent. The queue retries on its
+    // own schedule, and a retry of a send that actually reached the relay is a
+    // second invitation email to a real person.
+    const key = notification?.notificationId;
+    const previous = key ? this._rememberedDelivery(key) : null;
+    if (previous) return { ...previous };
+
     try {
       const info = await this._transport().sendMail({
-        from: this.fromName
-          ? `${this.fromName} <${this.fromAddress}>`
-          : this.fromAddress,
+        from: this._header(
+          this.fromName
+            ? `${this._header(this.fromName)} <${this.fromAddress}>`
+            : this.fromAddress
+        ),
         to,
-        subject: notification?.subject ?? "You have been invited",
-        text: notification?.data?.inviteUrl ?? notification?.text ?? "",
+        subject: this._header(
+          notification?.subject ?? "You have been invited"
+        ),
+        text: notification?.text ?? "",
         html: notification?.html,
       });
 
       // The relay's own id where it gave one. Used for idempotency and for
       // correlating a log line with a message — NOT for querying state later;
       // SMTP has no such query, which is what `status()` is honest about.
-      const deliveryId = info?.messageId || `smtp-${notification.notificationId}`;
+      const deliveryId = info?.messageId || `smtp-${key ?? "unkeyed"}`;
       const acceptedAt = new Date();
-      this._accepted.set(deliveryId, acceptedAt);
+      // Only a SUCCESSFUL send is remembered. Recording a failure here would
+      // turn one transient outage into permanent silence — the retry is the
+      // reason the queue exists.
+      if (key) this._rememberDelivery(key, { deliveryId, acceptedAt });
       return { deliveryId, acceptedAt };
     } catch (error) {
       throw this._classify(error);
@@ -170,9 +208,49 @@ class SmtpNotificationDriver {
    * than admitting the protocol does not know.
    */
   async status({ deliveryId } = {}) {
-    const acceptedAt = deliveryId ? this._accepted.get(deliveryId) : undefined;
-    if (!acceptedAt) return { status: "unknown", occurredAt: null };
-    return { status: "queued", occurredAt: acceptedAt };
+    if (!deliveryId) return { status: "unknown", occurredAt: null };
+    // The map is keyed by notificationId, because THAT is the idempotency key
+    // (TL-1 F2). A caller holds a deliveryId from a previous `send`, so this
+    // scans rather than re-keying the map and losing the deduplication it
+    // provides. The map is bounded, so the scan is bounded with it.
+    for (const entry of this._accepted.values())
+      if (entry.deliveryId === deliveryId)
+        return { status: "queued", occurredAt: entry.acceptedAt };
+    return { status: "unknown", occurredAt: null };
+  }
+
+  /**
+   * TL-1 NIT-2: strip CR and LF from anything that becomes a header.
+   *
+   * `fromName` is an admin-editable setting and `subject` comes from the
+   * template lane, so both are attacker-adjacent text reaching a header. A bare
+   * CRLF is how `Bcc:` gets appended to somebody else's message. Stripped rather
+   * than rejected: a stray newline in a display name is a typo, and failing an
+   * invitation over it helps nobody.
+   */
+  _header(value) {
+    return String(value ?? "").replace(/[\r\n]+/g, " ");
+  }
+
+  /** A remembered delivery, if it has not aged out. */
+  _rememberedDelivery(notificationId) {
+    const entry = this._accepted.get(notificationId);
+    if (!entry) return null;
+    if (Date.now() - entry.acceptedAt.getTime() > this._idempotencyTtlMs) {
+      this._accepted.delete(notificationId);
+      return null;
+    }
+    return entry;
+  }
+
+  _rememberDelivery(notificationId, entry) {
+    // TL-1 NIT-3: bounded. Insertion order is age order, so the oldest key is
+    // the first one — dropping it is dropping the least useful entry.
+    if (this._accepted.size >= this._idempotencyMaxEntries) {
+      const oldest = this._accepted.keys().next().value;
+      if (oldest !== undefined) this._accepted.delete(oldest);
+    }
+    this._accepted.set(notificationId, entry);
   }
 
   /** Resolve and validate the recipient, before anything is connected. */
@@ -204,7 +282,7 @@ class SmtpNotificationDriver {
    * crosses the wire either way.
    */
   _assertTransportAllowed() {
-    if (this.secure || this.allowInsecure) return;
+    if (this.secure || this.allowInsecureTransport) return;
     throw new NotificationConfigurationError(
       "Refusing to send over an unencrypted SMTP connection. Use TLS, or " +
         "explicitly allow insecure transport if the link is already inside a " +
@@ -212,10 +290,13 @@ class SmtpNotificationDriver {
     );
   }
 
-  _transport() {
-    if (this._cachedTransport) return this._cachedTransport;
-    const nodemailer = require("nodemailer");
-    this._cachedTransport = nodemailer.createTransport({
+  /**
+   * The options handed to the transport. Public so a test can assert the TLS
+   * decision WITHOUT needing a certificate authority to stage a real untrusted
+   * peer — the decision is the property under test, and it is made here.
+   */
+  transportOptions() {
+    return {
       host: this.host,
       port: this.port,
       secure: this.secure,
@@ -226,10 +307,18 @@ class SmtpNotificationDriver {
       connectionTimeout: this.connectionTimeoutMs,
       greetingTimeout: this.connectionTimeoutMs,
       socketTimeout: this.connectionTimeoutMs,
-      // The fixture and most internal relays present no usable certificate.
-      // Only reachable once insecure transport was explicitly accepted above.
-      tls: this.allowInsecure ? { rejectUnauthorized: false } : undefined,
-    });
+      // TL-1 F1: ONLY the certificate consent reaches this. Accepting plaintext
+      // says nothing about whether we should believe who answered.
+      tls: this.allowUntrustedCertificate
+        ? { rejectUnauthorized: false }
+        : undefined,
+    };
+  }
+
+  _transport() {
+    if (this._cachedTransport) return this._cachedTransport;
+    const nodemailer = require("nodemailer");
+    this._cachedTransport = nodemailer.createTransport(this.transportOptions());
     return this._cachedTransport;
   }
 

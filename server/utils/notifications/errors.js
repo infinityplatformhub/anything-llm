@@ -44,17 +44,18 @@ class NotificationConfigurationError extends NotificationError {}
 
 /**
  * Timeout, connection refused, a 4xx from the relay, or a rate limit. The ONLY
- * retryable case. Carries `retryAfterMs` when the server named one — honouring
- * it is the difference between backing off and being blocked.
+ * retryable case.
+ *
+ * TL-1 F3: this deliberately carries NO `retryAfterMs`. Seam 6 allows one, and
+ * an earlier draft declared the field — but SMTP has no standard way to say
+ * "come back in N seconds", so nothing could ever populate it honestly. A
+ * declared-but-never-set field is worse than an absent one: `CoreJobWorker`
+ * falls back to its own backoff silently, so the value looks respected while
+ * being undefined at every call site. A channel that CAN report a retry delay
+ * (an HTTP webhook reading `Retry-After`) should add it there, where something
+ * real fills it in.
  */
 class NotificationUnavailableError extends NotificationError {
-  /** @param {string} message @param {{cause?: unknown, retryAfterMs?: number}} [options] */
-  constructor(message, options = {}) {
-    super(message, options);
-    if (typeof options.retryAfterMs === "number")
-      this.retryAfterMs = options.retryAfterMs;
-  }
-
   get retryable() {
     return true;
   }

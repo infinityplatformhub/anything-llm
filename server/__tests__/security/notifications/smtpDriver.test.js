@@ -35,7 +35,11 @@ const SMTP_PASSWORD_ENCODED = Buffer.from(
   `\0mailer\0${SMTP_PASSWORD}`,
   "utf8"
 ).toString("base64");
-const INVITE_LINK = "https://workspace.example.com/accept-invite/apw-inv-FIXTURE";
+// Bare `example.com`, not a subdomain: the §7.4 gate treats only the apex RFC
+// 2606 names as reserved, so `workspace.example.com` reads to it as a real
+// endpoint. This file must never be added to checkignore — it is the file that
+// asserts the password does not leak.
+const INVITE_LINK = "https://example.com/accept-invite/apw-inv-FIXTURE";
 
 let fixture;
 let consoleSpy;
@@ -62,6 +66,10 @@ const notification = (overrides = {}) => ({
   recipient: { type: "address", id: "invitee@example.com" },
   locale: "en",
   data: { inviteUrl: INVITE_LINK },
+  // TL-1 NIT-1: the driver no longer renders anything out of `data` — the
+  // template lane hands it a finished body. `data` stays as that lane's input;
+  // `text` is what actually goes on the wire today.
+  text: `You have been invited: ${INVITE_LINK}`,
   severity: "info",
   ...overrides,
 });
@@ -387,5 +395,159 @@ describe("issue 80 (QA-1 NIT-2): the driver cannot be serialized into a leak", (
     const util = require("util");
     const error = new Error("failed", { cause: driverWithSecret() });
     expect(util.inspect(error, { depth: 5 })).not.toContain(SMTP_PASSWORD);
+  });
+});
+
+describe("issue 80 (TL-1 F1): plaintext and untrusted certs are separate consents", () => {
+  // One flag consenting to two unrelated things is the defect. An operator who
+  // accepts "this relay is on our own network so plaintext is fine" was, with a
+  // single boolean, also silently accepting "and do not check certificates" —
+  // which matters precisely when the connection IS encrypted, because that is
+  // the case where a certificate is the only thing identifying the far end.
+  test("TLS still validates the certificate when only plaintext was accepted", async () => {
+    const driver = new SmtpNotificationDriver({
+      host: "smtp",
+      port: 465,
+      secure: true,
+      // Accepted: an unencrypted hop. NOT accepted: an unverifiable peer.
+      allowInsecureTransport: true,
+      username: "mailer",
+      password: SMTP_PASSWORD,
+      fromAddress: "no-reply@example.com",
+    });
+
+    expect(driver.transportOptions().tls?.rejectUnauthorized).not.toBe(false);
+  });
+
+  test("an untrusted certificate is accepted only when that is asked for", async () => {
+    const driver = new SmtpNotificationDriver({
+      host: "smtp",
+      port: 465,
+      secure: true,
+      allowUntrustedCertificate: true,
+      username: "mailer",
+      password: SMTP_PASSWORD,
+      fromAddress: "no-reply@example.com",
+    });
+
+    expect(driver.transportOptions().tls?.rejectUnauthorized).toBe(false);
+  });
+
+  test("by default neither is accepted", async () => {
+    const driver = new SmtpNotificationDriver({
+      host: "smtp",
+      port: 465,
+      secure: true,
+      username: "mailer",
+      password: SMTP_PASSWORD,
+      fromAddress: "no-reply@example.com",
+    });
+
+    expect(driver.transportOptions().tls?.rejectUnauthorized).not.toBe(false);
+  });
+});
+
+describe("issue 80 (TL-1 F2): notificationId is the idempotency key", () => {
+  test("the same notificationId twice puts ONE message on the relay", async () => {
+    // The recon named this and the driver did not do it. It is not theoretical:
+    // `event_deliveries` retries on its own schedule, so the second attempt of a
+    // transient failure would be a second invitation email to a real person.
+    fixture = await startSmtpFixture();
+    const driver = driverFor(fixture);
+
+    const first = await driver.send(notification({ notificationId: "n-dup" }));
+    const second = await driver.send(notification({ notificationId: "n-dup" }));
+
+    expect(fixture.messages).toHaveLength(1);
+    // And the caller gets the SAME delivery back, not a new one — so a log
+    // correlating on deliveryId still lines up across the retry.
+    expect(second.deliveryId).toBe(first.deliveryId);
+    expect(second.acceptedAt.getTime()).toBe(first.acceptedAt.getTime());
+  });
+
+  test("different notificationIds still send separately", async () => {
+    // Guard the guard: deduplicating everything would pass the test above.
+    fixture = await startSmtpFixture();
+    const driver = driverFor(fixture);
+
+    await driver.send(notification({ notificationId: "n-a" }));
+    await driver.send(notification({ notificationId: "n-b" }));
+
+    expect(fixture.messages).toHaveLength(2);
+  });
+
+  test("one event to two recipients is two messages", async () => {
+    // Seam 6 derives notificationId from event AND recipient for this reason. If
+    // the id were the event alone, the second recipient would silently never be
+    // written to.
+    fixture = await startSmtpFixture();
+    const driver = driverFor(fixture);
+
+    await driver.send(
+      notification({
+        notificationId: "evt-1:alice",
+        recipient: { type: "address", id: "alice@example.com" },
+      })
+    );
+    await driver.send(
+      notification({
+        notificationId: "evt-1:bob",
+        recipient: { type: "address", id: "bob@example.com" },
+      })
+    );
+
+    expect(fixture.messages).toHaveLength(2);
+  });
+
+  test("a FAILED send is not remembered as delivered", async () => {
+    // Idempotency must not turn one transient failure into permanent silence:
+    // the retry the queue exists to make is the whole point.
+    fixture = await startSmtpFixture({ fail: "temporary" });
+    const failing = driverFor(fixture);
+    await failing.send(notification({ notificationId: "n-retry" })).catch(() => {});
+    await fixture.close();
+
+    fixture = await startSmtpFixture();
+    const working = driverFor(fixture);
+    await working.send(notification({ notificationId: "n-retry" }));
+
+    expect(fixture.messages).toHaveLength(1);
+  });
+});
+
+describe("issue 80 (TL-1 NIT-2): headers cannot be injected", () => {
+  test("a CRLF in fromName does not add headers or recipients", async () => {
+    // `fromName` becomes an admin-editable setting, so it is attacker-adjacent
+    // input reaching a header. A bare CRLF here is the classic way to append
+    // `Bcc:` to a message somebody else composed.
+    fixture = await startSmtpFixture();
+    const driver = driverFor(fixture, {
+      fromName: "Approof\r\nBcc: attacker@example.com",
+    });
+
+    await driver.send(notification()).catch(() => {});
+
+    // The address may survive as TEXT inside the quoted display name, and that
+    // is harmless — quoting is exactly what keeps it inert. What must not happen
+    // is a new header LINE or a second envelope recipient.
+    for (const message of fixture.messages) {
+      expect(message.to).toHaveLength(1);
+      expect(message.to[0]).not.toContain("attacker@example.com");
+      expect(message.data).not.toMatch(/^Bcc:/im);
+    }
+  });
+
+  test("a CRLF in the subject does not add headers", async () => {
+    fixture = await startSmtpFixture();
+    const driver = driverFor(fixture);
+
+    await driver
+      .send(notification({ subject: "Hello\r\nBcc: attacker@example.com" }))
+      .catch(() => {});
+
+    for (const message of fixture.messages) {
+      expect(message.to).toHaveLength(1);
+      expect(message.data).not.toMatch(/^Bcc:/im);
+    }
   });
 });
