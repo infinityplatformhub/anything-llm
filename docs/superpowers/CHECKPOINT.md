@@ -554,3 +554,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #40 t4: metrics + inviteMailRoutes red in full run, green alone 46/46 → #106 flake (logged). Only real red on main = assignableRolesSession helper suite (Dev1 hotfix pending). Frontend half running.
 - Waiting: Dev3 #113 fix SHA (~19:50) · TL-2 + QA-2 on #119 c44b059d3 · Dev1 hotfix + #121 · Dev2 #126 Home half · Dev4 #124.
 - #113 pre-push corrections sent to Dev3: bar = role.grant (document.share is held by member/owner → no bar); count document_acl allow+deny (QA-1 proved allow-only self-add escalates on 98b2627a1); RF-9 6 cases + mutant (d) + document.share-holder control. #129 updated.
+- #113 6e0c17d73 NOT gated: crossed with corrections (still document.share bar, deny-only count). Dev3 → next SHA with role.grant + allow+deny count + 6-case RF-9.
