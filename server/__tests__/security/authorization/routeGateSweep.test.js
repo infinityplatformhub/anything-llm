@@ -39,11 +39,17 @@ function collectImports(ast) {
   const imports = [];
   const visit = (node, parent, grandparent) => {
     if (!node || typeof node !== "object") return;
-    if (
+    const isRequireCall =
       node.type === "CallExpression" &&
-      node.callee?.type === "Identifier" &&
-      node.callee.name === "require"
-    ) {
+      ((node.callee?.type === "Identifier" && node.callee.name === "require") ||
+        (node.callee?.type === "MemberExpression" &&
+          node.callee.object?.type === "Identifier" &&
+          node.callee.object.name === "module" &&
+          ((node.callee.property?.type === "Identifier" &&
+            node.callee.property.name === "require") ||
+            (node.callee.property?.type === "Literal" &&
+              node.callee.property.value === "require"))));
+    if (isRequireCall) {
       const argument = node.arguments[0];
       if (argument?.type !== "Literal") {
         throw new Error(
@@ -53,6 +59,7 @@ function collectImports(ast) {
       if (argument.value.startsWith("./endpoints/")) {
         const declaration = parent;
         const topLevel =
+          node.callee.type === "Identifier" &&
           declaration?.type === "VariableDeclarator" &&
           declaration.init === node &&
           grandparent?.type === "VariableDeclaration" &&
@@ -219,6 +226,18 @@ describe("issue 52: every session-authenticated mutating route asks something", 
         'const harmless = 1, { probeEndpoints } = require("./endpoints/probe");',
       expected: [{ exported: "probeEndpoints", local: "probeEndpoints" }],
       reason: null,
+    },
+    {
+      name: "module.require",
+      source:
+        '\nconst { probeEndpoints } = module.require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "computed module require",
+      source:
+        '\nconst { probeEndpoints } = module["require"]("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
     },
     {
       name: "member access",
