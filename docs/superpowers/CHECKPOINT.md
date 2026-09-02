@@ -438,3 +438,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #118 queued (/tmp/postmerge-118.log).
 - #116 5d1cabfa4: gate PASS at wt-116 (g116) — check-local, updatePasswordRollback 12/12, sweeps 63/63, frontend 27/27 (carries #108 NITs), ledger normalized. Waiting TL-1 + QA-3 (auth).
 - #117 QA-2 baseline: scryptSync 26ms, 97 derivations 2518ms; 4 call sites (2 in SSO login path). Plan A–F + 5 mutations; fail-open risk if cache ignores material (SIG_KEY removed mid-run must still throw) → forwarded to Dev2.
+- #40 task 4 rulings: 16 plan sites + separate issue for 14 unmapped (TL-1 mapping review first); UserRow:18 + EditUserModal:105 untouched (delegated admin via canAssignLegacyRole; role.grant stays out of ORG_CAPABILITIES per #53). DOM test 4 states + 3 mutations. TL-1 pre-read requested.
