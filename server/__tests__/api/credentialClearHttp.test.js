@@ -142,7 +142,10 @@ describe("the gap: an empty value cannot clear these credentials", () => {
       .set("Authorization", auth(admin))
       .send({ OpenAiKey: "" });
 
-    expect(response.status).toBe(200);
+    // 500, not 200: the route used to answer 200 while reporting a failure in the body,
+    // so a client that checked the status alone read a rejected write as applied.
+    // What this test guards is the refusal and the surviving row, not the status code.
+    expect(response.status).toBe(500);
     expect(response.body.error).toMatch(/empty/i);
     // ...and the credential is still there, which is the actual harm.
     expect(await CredentialStore.get(ENV_KEY)).toBe(SECRET);
