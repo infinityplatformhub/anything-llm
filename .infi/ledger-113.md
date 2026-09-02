@@ -302,6 +302,80 @@ cache entry in that org carries, which is precisely the defect the RF-5 scope te
 exists to catch. So the helper now returns `{ orgId, extra }` and both callers publish
 under the org they read.
 
+## Slice 6 — RF-9 (#129): a group can carry authority with no role grant at all
+
+Closes #129, which PMO opened when TL-1 downgraded this to a residual. It lands here
+rather than separately because it is a three-line change to a guard this SHA
+introduces, and splitting it would ship the wrong answer first and correct it after.
+
+
+TL-1's pre-check on `98b2627a1` found that slice 5's early return was wrong for
+denials, and it is. `document_acl` deny rows are keyed
+`{principal_type:"group", principal_id}` and `documentFilter:91-99` reads them
+directly — they never pass through `principal_role_grants`. So a group whose entire
+purpose is "these people may not see these documents" holds ZERO role grants,
+`permissionIdsForGroup` returns an empty set, and my early return let any actor call
+`removeGroupMember` and hand the victim every document the group hid.
+
+The mistake underneath it: I treated "the group's permission set is empty" as "the
+group carries nothing". Containment on an empty set is not a safe default — the empty
+set is contained by everyone, so "carries nothing" and "carries only denials" reached
+the same answer while meaning opposite things.
+
+Ruling: `denyCount` from `document_acl` is counted alongside the role permissions, and
+the early return fires only when BOTH are zero.
+
+Ruling: the deny branch needs its OWN bar, and `document.share` is it. Set containment
+cannot supply one here — the permission set is empty, so the containment check passes
+for an actor holding nothing, and adding `denyCount` without a bar would leave the
+guard exactly as permissive as before. `document.share` governs who may change a
+document's reach, which is precisely what moving someone in or out of a deny group
+does. Org-wide `super_admin` was the stricter option and the wrong one: it would be
+stricter than writing the ACL row itself and would lock out the admin whose job this
+is. If wrong: the bar is either ornamental or it blocks ordinary document sharing.
+
+Ruling: a missing `document.share` permission row FAILS CLOSED. An unseeded permission
+must not read as "nothing to check" — that is the same shape as the hole this branch
+exists to close.
+
+### Both measurements are true, and they answer different questions
+
+TL-1 then measured that this is not reachable today: `grantDocumentAcl` has no caller
+outside tests, and the seeded `document_acl` rows are all `principal_type:'workspace'`.
+I verified that independently and it is correct — there is no exploit path right now,
+which is why TL-1 downgraded it to a residual and passed `98b2627a1`.
+
+What is fixed here is different: the guard returned the WRONG ANSWER for an input the
+schema already accepts. `document_acl.principal_type` takes `'group'` today, and the
+first deny row S4b or S4c writes opens the hole with nothing to announce it — in the
+very slice that made group membership an authorization path. Recorded both ways rather
+than only the half that favours the fix.
+
+### Evidence, slice 6
+
+RED first, and cleanly: only the two escalation tests failed. Three controls passed —
+the SAME `member` actor against a group with no deny rows (which is what separates "the
+deny row refuses" from "this guard refuses everyone", and would otherwise break
+directory sync), a `document.share` holder, and `coreJobs`. 17/17 green after.
+
+Two mutants, each killed by its named tests:
+
+- D1 restore the unconditional early return → both deny tests
+- D2 never enforce `document.share` → both deny tests
+
+The tests match `/document\.share/` rather than `/does not hold/`: the role-grant branch
+refuses with its own wording, and a loose pattern would be green for a refusal that came
+from the wrong half of the guard.
+
+### A fixture error I nearly read as RED
+
+The first run failed FOUR tests, not two — including the two controls that should have
+passed. The cause was mine and not the code: the fixture created `documents` with
+`docId`/`docpath`/`workspaceId`, and the real model has none of them (`dedupe_key` is
+the column). `PrismaClientValidationError` in a test that expects a throw is
+indistinguishable from a pass if the assertion is loose enough, and counting those four
+as RED would have "proved" a guard that had not run at all.
+
 ## Residual risks
 
 0. **#128 is a dependency in both directions**, recorded on both issues: this guard is

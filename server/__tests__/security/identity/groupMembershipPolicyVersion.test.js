@@ -409,6 +409,147 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
     ).resolves.toMatchObject({ version: expect.anything() });
   }, 120_000);
 
+  /**
+   * RF-9 / TL-1: a group can carry authority WITHOUT holding a single role grant.
+   *
+   * `document_acl` deny rows are keyed `{principal_type:"group", principal_id}` and
+   * `documentFilter:91-99` reads them directly — they never pass through
+   * `principal_role_grants`. So a group whose entire purpose is "these people may
+   * not see these documents" has ZERO role grants, `permissionIdsForGroup` returns
+   * an empty set, and the early return in `refuseGroupEscalation` let ANY actor call
+   * `removeGroupMember` and hand the victim every document the group hid.
+   *
+   * Containment on an empty set is not a safe default here: an empty set is
+   * contained by everyone, so "the group carries nothing" and "the group carries
+   * only denials" reached the same answer while meaning opposite things.
+   *
+   * Ruling: a group with deny rows is refused unless the actor is exempt or holds
+   * `document.share` — the permission that governs who may change document reach.
+   * Requiring org-wide `super_admin` instead would be stricter than the ACL write
+   * itself and would block the ordinary document-sharing admin.
+   */
+  async function denyGroupWorld(label, actorRoleName = null) {
+    const group = await prisma.groups.create({
+      data: {
+        orgId: 1, name: `rf9-${label}-${dbSuffix}`,
+        source: "lark", externalId: `od-rf9-${label}-${dbSuffix}`,
+      },
+    });
+    const victim = await prisma.users.create({
+      data: { username: `rf9-victim-${label}-${dbSuffix}`, password: "x", role: "default" },
+    });
+    const actorUser = await prisma.users.create({
+      data: { username: `rf9-actor-${label}-${dbSuffix}`, password: "x", role: "default" },
+    });
+    if (actorRoleName) {
+      const role = await prisma.roles.findFirstOrThrow({
+        where: { name: actorRoleName, scope: "org" },
+      });
+      await repository.grantRole({
+        actor: SYS, principalType: "user", principalId: String(actorUser.id),
+        roleId: role.id, db: prisma,
+      });
+    }
+    await repository.addGroupMember({
+      actor: SYS, groupId: group.id, userId: victim.id, db: prisma,
+    });
+    return { group, victim, actor: { type: "user", id: String(actorUser.id), orgId: 1 } };
+  }
+
+  /** A deny row hiding one document from the group. No role grant anywhere. */
+  async function denyOneDocument(group, label) {
+    const document = await prisma.documents.create({
+      data: {
+        filename: `rf9-${label}.txt`,
+        dedupe_key: `rf9/${label}-${dbSuffix}.txt`,
+        metadata: "{}",
+      },
+    });
+    await repository.grantDocumentAcl({
+      actor: SYS,
+      documentId: document.id,
+      principalType: "group",
+      principalId: String(group.id),
+      action: "document.read",
+      effect: "deny",
+      db: prisma,
+    });
+    return document;
+  }
+
+  test("RF-9: a group with only DENY rows is still guarded — removal is refused", async () => {
+    // The hole the early return opened. The group holds no role grant at all, so
+    // `permissionIdsForGroup` is empty; before the fix that returned immediately and
+    // a `member` actor could pull the victim out, restoring every hidden document.
+    const { group, victim, actor } = await denyGroupWorld("deny", "member");
+    await denyOneDocument(group, "deny");
+
+    // Matched on `document.share` specifically, not a generic "does not hold": the
+    // role-grant branch refuses with its own wording, and a loose pattern would be
+    // green for a refusal that came from the wrong half of the guard.
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).rejects.toThrow(/document\.share/);
+
+    const membership = await prisma.group_members.findFirst({
+      where: { group_id: group.id, user_id: victim.id },
+    });
+    expect(membership).not.toBeNull();
+  }, 120_000);
+
+  test("RF-9: addition to a deny-only group is refused too", async () => {
+    // Symmetric, and not redundant: adding someone to a deny group is a denial
+    // handed out, which is authority in the other direction.
+    const { group, victim, actor } = await denyGroupWorld("denyadd", "member");
+    await denyOneDocument(group, "denyadd");
+    const outsider = await prisma.users.create({
+      data: { username: `rf9-outsider-${dbSuffix}`, password: "x", role: "default" },
+    });
+
+    await expect(
+      repository.addGroupMember({ actor, groupId: group.id, userId: outsider.id, db: prisma })
+    ).rejects.toThrow(/document\.share/);
+    expect(victim).toBeTruthy();
+  }, 120_000);
+
+  test("RF-9 control: the SAME actor passes when the group has no deny rows either", async () => {
+    // This is what separates "the deny row is what refuses" from "this actor is
+    // refused everywhere". Same `member` actor, same shape of group — only the deny
+    // row is missing, and it passes. Without this, the two tests above are also
+    // green for a guard that refuses every non-exempt actor unconditionally, which
+    // would break ordinary directory sync.
+    const { group, victim, actor } = await denyGroupWorld("control", "member");
+
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("RF-9: an actor holding document.share may change a deny group's membership", async () => {
+    // The guard bounds rather than forbids. `document.share` is the permission that
+    // governs who may change a document's reach, and that is exactly what removing
+    // someone from a deny group does — so holding it is the honest bar. Without this
+    // test, "refuse whenever a deny row exists" passes and locks out the admin whose
+    // job this is.
+    const { group, victim, actor } = await denyGroupWorld("sharer", "super_admin");
+    await denyOneDocument(group, "sharer");
+
+    await expect(
+      repository.removeGroupMember({ actor, groupId: group.id, userId: victim.id, db: prisma })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
+  test("RF-9: coreJobs stays exempt for a deny-only group — S4b must still sync", async () => {
+    const { group, victim } = await denyGroupWorld("denyexempt");
+    await denyOneDocument(group, "denyexempt");
+
+    await expect(
+      repository.removeGroupMember({
+        actor: SERVICE_PRINCIPALS.coreJobs, groupId: group.id, userId: victim.id, db: prisma,
+      })
+    ).resolves.toMatchObject({ version: expect.anything() });
+  }, 120_000);
+
   test("a group holding nothing is addable by a `member` actor", async () => {
     // The guard is about what the GROUP carries, not about membership being
     // privileged in itself. A group with no grants confers nothing, so there is

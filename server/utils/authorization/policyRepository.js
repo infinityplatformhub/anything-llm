@@ -126,7 +126,22 @@ async function permissionIdsForGroup(tx, groupId) {
 async function refuseGroupEscalation(tx, actor, groupId, fn) {
   if (isExemptPrincipal(actor)) return;
   const groupPerms = await permissionIdsForGroup(tx, groupId);
-  if (groupPerms.size === 0) return; // A group that carries nothing confers nothing.
+
+  // RF-9 (TL-1): a group can carry authority WITHOUT holding a single role grant.
+  // `document_acl` deny rows are keyed `{principal_type:"group", principal_id}` and
+  // `documentFilter:91-99` reads them directly — they never pass through
+  // `principal_role_grants`. So a group whose whole purpose is "these people may not
+  // see these documents" has an EMPTY permission set here, and the early return let
+  // any actor pull the victim out and hand them every document the group hid.
+  //
+  // Containment on an empty set is not a safe default: the empty set is contained by
+  // everyone, so "carries nothing" and "carries only denials" reached the same answer
+  // while meaning opposite things. The count is what separates them.
+  const denyCount = await tx.document_acl.count({
+    where: { principal_type: "group", principal_id: String(groupId), effect: "deny" },
+  });
+  if (groupPerms.size === 0 && denyCount === 0) return; // Genuinely carries nothing.
+
   const held = await heldPermissionIds(tx, actor, null);
   const baselineIds = await baselinePermissionIds(tx);
   const missing = [...groupPerms].filter((p) => !held.has(p) && !baselineIds.has(p));
@@ -134,6 +149,30 @@ async function refuseGroupEscalation(tx, actor, groupId, fn) {
     throw new AuthorizationContractError(
       `${fn} refused: the group carries permissions the actor does not hold org-wide`
     );
+  }
+
+  // The deny half needs its own bar, because set containment cannot supply one: the
+  // permissions above are EMPTY for a deny-only group, and the empty set is contained
+  // by everyone, so the check just passed for an actor holding nothing.
+  //
+  // `document.share` is the bar — it is the permission governing who may change a
+  // document's reach, which is exactly what moving someone in or out of a deny group
+  // does. Requiring org-wide `super_admin` would be stricter than writing the ACL row
+  // itself and would lock out the admin whose job this is.
+  if (denyCount > 0) {
+    const sharePerm = await tx.permissions.findUnique({
+      where: { action: "document.share" },
+      select: { id: true },
+    });
+    // Fail closed if the permission is missing: an unseeded row must not read as
+    // "nothing to check", which is the shape of the hole this whole branch closes.
+    if (!sharePerm || !held.has(sharePerm.id)) {
+      throw new AuthorizationContractError(
+        `${fn} refused: the group carries document denials, and changing its ` +
+          `membership changes what those documents reach — the actor does not hold ` +
+          `document.share org-wide`
+      );
+    }
   }
 }
 
