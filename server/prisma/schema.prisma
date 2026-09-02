@@ -718,6 +718,9 @@ model permissions {
   action           String             @unique // seam-02 verbatim vocabulary (also P0-4 scope strings)
   description      String             @default("")
   category         String             @default("")
+  // #53: 'org' | 'workspace' | 'any' (CHECK in migration 102000). The engine
+  // refuses an action asked against a resource shape its scope forbids.
+  scope            String             @default("any")
   acl              document_acl[]
   role_permissions role_permissions[]
 

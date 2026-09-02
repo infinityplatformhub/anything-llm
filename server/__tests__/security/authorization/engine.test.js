@@ -86,6 +86,8 @@ async function principal({ type = "user", id, grants = [] }) {
 }
 
 const wsResource = () => ({ type: "workspace", id: null, orgId: 1, workspaceId: W1.id });
+// #53: the shape an org-scoped action must be asked about — names no workspace.
+const orgResource = () => ({ type: "org", id: "1", orgId: 1, workspaceId: null });
 const docResource = () => ({ type: "document", id: "7", orgId: 1, workspaceId: W1.id });
 
 describe("T-2 engine core", () => {
@@ -111,11 +113,22 @@ describe("T-2 engine core", () => {
     const member = await principal({ id: 902, grants: [{ roleId: roles.member.id }] });
     expect(await engine.authorize({ actor: member, action: "chat.send", resource: wsResource() })).toMatchObject({ allowed: true });
 
-    // super_admin holds every seeded action (generated over the full 50-word vocabulary)
+    // super_admin holds every seeded action (generated over the full vocabulary).
+    // #53: each action is asked at the scope it declares — an org-scoped action
+    // asked about a workspace now THROWS a contract error, which is the point of
+    // that column, so asking every action against a workspace would be asserting
+    // the engine ignores it.
     const superAdmin = await principal({ id: 903, grants: [{ roleId: roles.super_admin.id }] });
-    const allActions = (await prisma.permissions.findMany({ select: { action: true } })).map((p) => p.action);
+    const permissions = await prisma.permissions.findMany({ select: { action: true, scope: true } });
+    expect(permissions.some((p) => p.scope === "org")).toBe(true);
     const decisions = await Promise.all(
-      allActions.map((action) => engine.authorize({ actor: superAdmin, action, resource: wsResource() }))
+      permissions.map(({ action, scope }) =>
+        engine.authorize({
+          actor: superAdmin,
+          action,
+          resource: scope === "org" ? orgResource() : wsResource(),
+        })
+      )
     );
     expect(decisions.every((d) => d.allowed)).toBe(true);
   });

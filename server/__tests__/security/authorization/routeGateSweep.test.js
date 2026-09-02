@@ -150,6 +150,88 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     }
   });
 
+  test("issue 53: no org-scoped action is paired with a workspace resolver", async () => {
+    // Rule 1 of #53: `org.member` may only be asked against orgResource. Every
+    // user holds an org-wide `member` grant, and evaluate() reads a
+    // NULL-workspace grant as matching EVERY workspace — so an org-scoped action
+    // answering a workspace question is the migration-044000 hole again.
+    //
+    // The engine now refuses this at runtime (AuthorizationContractError), which
+    // is the enforcement. This is the second layer: it names the offending route
+    // at test time instead of leaving it to a 500 in production.
+    const {
+      ACTION_SCOPES,
+    } = require("../../../prisma/seeds/permissions");
+    const orgScoped = Object.entries(ACTION_SCOPES)
+      .filter(([, scope]) => scope === "org")
+      .map(([action]) => action);
+    expect(orgScoped).toContain("org.member");
+
+    const violations = [];
+    let checked = 0;
+    for (const layer of app._router.stack) {
+      if (!layer.route) continue;
+      for (const handler of layer.route.stack) {
+        const action = handler.handle?.action;
+        if (!action || !orgScoped.includes(action)) continue;
+        checked += 1;
+        // BEHAVIOURAL, not identity: another suite in this run calls
+        // jest.resetModules(), so `resourceResolvers` can be a second module
+        // instance and `!== orgResource` would flag correctly-wired routes. What
+        // matters is not which function it is but what it produces — a resource
+        // that names no workspace. Resolved with an empty request: orgResource
+        // ignores its arguments, and any resolver that reads the request throws
+        // or returns null, which is equally disqualifying here.
+        let resolved = null;
+        try {
+          resolved = await handler.handle.resolveResource({}, {});
+        } catch {
+          resolved = null;
+        }
+        if (!resolved || resolved.workspaceId != null) {
+          violations.push(
+            `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path} -> ${action}`
+          );
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+    // The sweep must actually have found the gates. Zero checked would pass the
+    // assertion above while proving nothing — the failure mode this file exists
+    // to avoid.
+    expect(checked).toBeGreaterThanOrEqual(4);
+  });
+
+  test("issue 53: chat.send is left on the three routes that mean it", () => {
+    // The other half of the same ruling. `chat.send` stays on the real chat
+    // mutations and on PUT /workspace/workspace-chats/:id (a mutation on a chat
+    // the caller owns, whose resolver names a workspace). Converting those would
+    // be the same category error in the other direction, and DoD 2 requires an
+    // impersonated session to keep getting 403 on them.
+    //
+    // Paths taken from the MOUNTED router, not from the recon: the recon said
+    // `POST /workspace/:slug/chat`, and no such route exists — both chat gates
+    // are stream-chat (workspace and thread), and workspaces.js mounts its chat
+    // route under a /workspace prefix. A grep-built expectation would have
+    // asserted routes that are not there.
+    const chatSendRoutes = [];
+    for (const layer of app._router.stack) {
+      if (!layer.route) continue;
+      for (const handler of layer.route.stack) {
+        if (handler.handle?.action !== "chat.send") continue;
+        chatSendRoutes.push(
+          `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}`
+        );
+      }
+    }
+    expect(chatSendRoutes.sort()).toEqual([
+      "POST /workspace/:slug/stream-chat",
+      "POST /workspace/:slug/thread/:threadSlug/stream-chat",
+      "PUT /workspace/workspace-chats/:id",
+    ]);
+  });
+
   test("single-user-only routes refuse in multi-user mode", () => {
     // The claim that earns their place on the list. Each either carries the
     // isSingleUserMode middleware or checks multiUserMode in its handler; a

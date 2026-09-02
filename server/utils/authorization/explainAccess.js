@@ -26,6 +26,11 @@ const {
  */
 async function explainDocumentAccess({
   documentId,
+  // #53: `document.read` is scope 'any' in the permissions table, so the engine's
+  // org/workspace scope check would not reject it — and cannot reach here in any
+  // case: this reads `document_acl` directly and never calls the engine (that is
+  // the point of the module, see the header). A caller passing an org-scoped
+  // action gets an empty ACL result, not a contract error.
   action = "document.read",
   db = prisma,
 }) {

@@ -145,7 +145,9 @@ async function heldPermissionIds(tx, actor, targetWorkspaceId) {
  * property of the permission — everyone already holds it — not of the scope it
  * is being granted in.
  */
-const BASELINE_GRANTABLE = new Set(["chat.send"]);
+// #53 adds `org.member`: granting something every principal already holds
+// confers nothing, which is the entire criterion for this set.
+const BASELINE_GRANTABLE = new Set(["chat.send", "org.member"]);
 
 async function grantRole({ actor, principalType, principalId, roleId, workspaceId = null, expiresAt = null, db = prisma }) {
   // A missing actor must never be a free pass: seeds and migrations pass an explicit

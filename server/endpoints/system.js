@@ -90,6 +90,14 @@ const { Memory } = require("../models/memory");
 
 // Org-level capabilities the UI gates on. Kept short and explicit — see the
 // endpoint comment for why this is not "every seeded action".
+//
+// #53: `org.member` is deliberately ABSENT. Every principal of the org holds it,
+// so there is nothing for a UI to show or hide on it — a capability everyone has
+// gates nothing. Adding it would also break this endpoint outright: it is scoped
+// 'org', and `authorizeMany` re-throws a contract error for the WHOLE batch
+// rather than per resource (one bad question invalidates the batch, it does not
+// merely fail one entry), so a single org-scoped action asked here against a
+// workspace-bearing resource would take every other capability down with it.
 const ORG_CAPABILITIES = [
   "chat.read_others",
   "document.bulk_export",
