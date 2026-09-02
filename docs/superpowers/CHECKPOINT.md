@@ -357,3 +357,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #40 t2 + #102: inviteMailRoutes red in full run, 28/28 ×3 alone, merges unrelated → logged #106. Waiting suite total.
 - #96 0fcf64da9 merged 334895e9b (authz files identical to branch), closed (infi-run:gate-96-0fcf64da9). 78/114. wt-96/g96 reaped. Dev3 → #98 (ROUTE_MOUNT_GUARD=off ruling) then S4a #113 after TL-1 RF + user Q4.
 - #112 plain half 259540acb gate running at /tmp/wt-112 (g112). #114 opened (GET /setup-complete raw env passthrough, auth).
+- Post-merge after #40 t2 + #102: 2845/2845 (inviteMailRoutes FAIL line was suite-level with 0 test failures; logged #106). Post-merge after #96 queued.
+- #112 plain half 259540acb: first gate run reported `0 total` = worktree not bootstrapped (§7.9l harness, not code); re-bootstrapped, contract + sweeps rerunning.
+- #112 auth half: TL-1 RF-1..5 forwarded to Dev5 (rule = User.count()===0 OR system.write per request; not isConfirmedSingleUser, not isOnboardingComplete).
+- USER DECISION PENDING: #113 Q4 — "Lark wins" over an account already federated to LDAP = re-point identity_links (takeover shape). TL-1: allow only for never-linked local accounts, via sync job not login path, own audit event, revoke sessions. Need เอา/ไม่เอา + which case.
