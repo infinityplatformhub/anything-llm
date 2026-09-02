@@ -59,7 +59,7 @@ td.mono{white-space:nowrap}
 <main>
 <header>
   <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">bbdb0fba</span> · 2026-09-02 11:45</div>
-  <h1>Phase 0 hardening — งานถึงไหน</h1>
+  <h1>ApproofWorkspace — งานถึงไหน (7 เดือน)</h1>
 </header>
 
 <section class="overall">
@@ -81,6 +81,25 @@ td.mono{white-space:nowrap}
   </div>
 </section>
 
+
+<section>
+  <h2 style="margin-bottom:10px">ภาพรวมทั้ง program (7 เดือน) — 59 issue ข้างล่างคือเดือน 1 + ของเดือน 2 ที่ดึงมาก่อน</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>เดือน</th><th>แผน</th><th>สถานะจริง (2 ก.ย.)</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1</td><td>Phase 0: P0-1 contracts · P0-2 Postgres · P0-3 tests/CI · P0-4 security · P0-5 authorization · P0-6 queue/bus · P0-7 de-brand</td><td><span class="chip ok">P0-1..P0-7 ปิดครบ</span> เหลือหางของ P0-5: T-5 retrieval filter (#30) + follow-up 10 ใบ (#40 #48 #49 #50 #51 #53–#57 #59) — gate เดือน 1 ยังไม่ปิดจน #30 จบ</td></tr>
+      <tr><td class="mono">2</td><td>S1 OIDC · S13 MFA เริ่ม · V1 ภาษาไทย · V9 chat search · V8 responsive · O2 installer · teardown</td><td><span class="chip wait">เริ่มก่อนกำหนด</span> S1 ปิด (#36) · V1-a splitter + V1-c eval ปิด (#37 #44) · S5/S6 บางส่วนผ่าน T-6 (#28) · S13 V9 V8 O2 ยังไม่เริ่ม</td></tr>
+      <tr><td class="mono">3</td><td>S2 SAML · S3 LDAP · S11 SMTP · S6 governance · V3 connectors · V2 Lark bot · V6 · O3 backup</td><td><span class="chip dim">S2 กำลังทำ (#43) ที่เหลือยังไม่เริ่ม</span></td></tr>
+      <tr><td class="mono">4</td><td>S4 Lark org sync · S12 offboarding · S7 LLM policy · V10 doc search · V11 RAG tuning · V4 templates · V12 · O4 O6</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+      <tr><td class="mono">5</td><td>S8 guardrails · S9 air-gap · S10 budget · S13 จบ · V5 V13 V7 V14 · O1 O5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+      <tr><td class="mono">6</td><td>ปิด feature + V15 sandbox · feature freeze สิ้นเดือน</td><td><span class="chip dim">—</span></td></tr>
+      <tr><td class="mono">7</td><td>Integration · security review · pen-test ภายนอก · POC playbook</td><td><span class="chip dim">—</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:8px">backlog เดือน 2–7 มี 34 รายการ (S1–S13, V1–V15, O1–O6): ปิดแล้ว 1 (S1), ทำบางส่วน 3 (V1, S5, S6), กำลังทำ 1 (S2), ยังไม่แตะ 29</p>
+</section>
+
+<h2 style="margin-bottom:-14px">Phase 0 + follow-up — 59 issue</h2>
 <section class="lanes">
   <div class="lane" style="--c:var(--gate)">
     <h2>รอ review / merge <span class="mono">3</span></h2>
