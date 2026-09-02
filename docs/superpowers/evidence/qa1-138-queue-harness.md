@@ -11,3 +11,8 @@ Not yet: RF-2 convergence (needs handler; delta N not 2N), RF-5 materialize dedu
 
 ## QA-2 sync-now HTTP oracle (08:30) — /tmp/qa2-138-rerun.sh <sha>
 Baseline main: route 404 → S1–S4 notImplemented (3 pass / 4 skip). Correct stub → 15/0. Mutants: M1 gate user.manage → S3 red; M3 per-request timestamp key → S2 ×2 red; M2 direct create (no upsert) SURVIVED count assertions — @@unique([type, idempotencyKey]) keeps the row at 1, but the SECOND CLICK RETURNS 500. Added "second click is ACCEPTED (202)"; M2 now red. Probe bug fixed: existence check was an authed POST that created the first job → now unauthenticated POST (404 vs 401) + guard that it enqueued nothing.
+
+## RF-2c + M3 (09:40) on 2cdb884ef
+RF-2c RED: worker 1 lands 2/6, stalls past lease; worker 2 finishes 6; worker 1 resumes → afterResume 7 (expected 6), lateWriteLanded TRUE, queue refuses w-1 (heartbeat + complete LeaseLostError) but applyDirectoryPlan never consults the lease. "Queue refuses it" and "its writes are refused" measured separately.
+M3 GREEN: heartbeat already carries `leaseUntil: {gt: now()}` — expiry with no takeover → LeaseLostError, lease not extended (positive control: valid heartbeat renews). TL-2's "today it renews" not reproduced. Fixture kept as a survivor-pin (expiry vs ownership).
+RF-P harness staged (/tmp/qa-sidebar/rfp.cjs): 602 files, 37 rows, 79 sites, 21 distinct actions; MISSING 15 = PREREQ 10 + NOT-YET(#121) 4 + DELIBERATE(#53) 1; anything else prints UNEXPECTED. Exit 0/1/2 (pass / unexpected / empty extraction = harness failure). Expectation from Dev4's audit table until `action=` call sites exist on main.
