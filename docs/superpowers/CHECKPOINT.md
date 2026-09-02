@@ -556,3 +556,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 pre-push corrections sent to Dev3: bar = role.grant (document.share is held by member/owner → no bar); count document_acl allow+deny (QA-1 proved allow-only self-add escalates on 98b2627a1); RF-9 6 cases + mutant (d) + document.share-holder control. #129 updated.
 - #113 6e0c17d73 NOT gated: crossed with corrections (still document.share bar, deny-only count). Dev3 → next SHA with role.grant + allow+deny count + 6-case RF-9.
 - #113: TL-1 confirms count allow+deny; retracts "unreachable" (QA-1 reached via exported gateway). Naming ruling: aclCount, no "deny" wording. Dev3 → next SHA. §7.17 logged.
+- Post-merge #40 t4 DONE: server 3023 (2 #106 flakes green alone + helper suite), frontend 92/92 exit 0, capabilities PASS. Jest hang-after-summary noted in memory.
+- #124 4646ed17b (Dev4, local on 510a4584a): frontend 96/96 exit 0 claimed; gate /tmp/wt-124 running; TL-1 pre-read + QA-3 light probe dispatched. §7.17 stability-in-one-state logged. Dev4 free after.
