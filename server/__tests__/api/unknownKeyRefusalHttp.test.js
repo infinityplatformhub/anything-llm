@@ -198,6 +198,28 @@ describe("unknown settings keys over HTTP", () => {
     }
   );
 
+  // `protected_keys` had never been exercised through a real route -- every test
+  // for it called the model directly, so the routes' 400 mapping for that code was
+  // asserted only by reading the source. This drives it over HTTP on both surfaces.
+  test.each(directRoutes)(
+    "%s rejects a protected key with protected_keys",
+    async (_name, path, authorization) => {
+      const before = await snapshotSettings();
+
+      const response = await update(path, authorization, {
+        multi_user_mode: "true",
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        success: false,
+        code: "protected_keys",
+        protectedKeys: ["multi_user_mode"],
+      });
+      expect(await snapshotSettings()).toBe(before);
+    }
+  );
+
   test.each(directRoutes)(
     "%s rejects an all-unknown body",
     async (_name, path, authorization) => {
@@ -241,7 +263,12 @@ describe("unknown settings keys over HTTP", () => {
     const overlap = SystemSettings.protectedFields.filter((key) =>
       SystemSettings.supportedFields.includes(key)
     );
+    // Both lines on purpose: the first says the test has something to check --
+    // if the overlap ever empties, `toEqual([])` would pass and the loop below
+    // would assert nothing. The second names what is in it, so a key added to
+    // both lists has to be considered rather than silently covered.
     expect(overlap.length).toBeGreaterThan(0);
+    expect(overlap).toEqual(["hub_api_key"]);
 
     for (const key of overlap) {
       await expect(

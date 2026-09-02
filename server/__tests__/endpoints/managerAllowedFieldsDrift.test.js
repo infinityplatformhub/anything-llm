@@ -3,6 +3,7 @@ const path = require("path");
 const { SystemSettings } = require("../../models/systemSettings");
 const {
   managerAllowedFields,
+  narrowManagerSystemPreferences,
 } = require("../../utils/managerSystemPreferences");
 
 const managerComponents = [
@@ -39,7 +40,7 @@ function writtenFields(source) {
 }
 
 describe("issue 78 manager allowed fields drift", () => {
-  it("matches fields written by manager-reachable settings components", () => {
+  it("matches fields written by manager-reachable settings components", async () => {
     const componentsDir = path.resolve(
       __dirname,
       "../../../frontend/src/pages/GeneralSettings/Settings/components"
@@ -50,15 +51,48 @@ describe("issue 78 manager allowed fields drift", () => {
       )
     );
 
-    const supported = new Set(SystemSettings.supportedFields);
+    // The union is what the runtime classifies against (issue 78 F3): a key can be
+    // protected without being supported -- `multi_user_mode` and `onboarding_complete`
+    // are exactly that -- and computing `forbidden` from `supportedFields` alone left
+    // those two outside the set this test guards, which is the case F3 existed to fix.
+    const recognized = new Set([
+      ...SystemSettings.protectedFields,
+      ...SystemSettings.supportedFields,
+    ]);
     const allowed = new Set(managerAllowedFields);
     const forbidden = new Set(
-      SystemSettings.supportedFields.filter((key) => !allowed.has(key))
+      [...recognized].filter((key) => !allowed.has(key))
     );
 
-    expect([...allowed].every((key) => supported.has(key))).toBe(true);
+    expect([...allowed].every((key) => recognized.has(key))).toBe(true);
     expect([...allowed].every((key) => !forbidden.has(key))).toBe(true);
-    expect(new Set([...allowed, ...forbidden])).toEqual(supported);
+    expect(new Set([...allowed, ...forbidden])).toEqual(recognized);
+
+    // The three lines above are true by construction -- `forbidden` is derived from
+    // `recognized`, so they can never fail. What they cannot tell us is whether the
+    // RUNTIME classifies the same way, which is the thing that was actually wrong
+    // (issue 78 F3: the helper used the union while this test used supportedFields
+    // alone, leaving multi_user_mode and onboarding_complete uncovered). So ask the
+    // real helper, with an actor the engine denies, and require its answer to match.
+    const engineModule = require("../../utils/authorization/engine");
+    const realAuthorize =
+      engineModule.DatabaseAuthorizationEngine.prototype.authorize;
+    engineModule.DatabaseAuthorizationEngine.prototype.authorize = async () => ({
+      allowed: false,
+    });
+    try {
+      const refused = new Set();
+      for (const key of recognized) {
+        const outcome = await narrowManagerSystemPreferences(
+          { type: "user", id: "1", orgId: 1 },
+          { [key]: "probe" }
+        );
+        if (outcome.refusal) refused.add(key);
+      }
+      expect(refused).toEqual(forbidden);
+    } finally {
+      engineModule.DatabaseAuthorizationEngine.prototype.authorize = realAuthorize;
+    }
     expect([...allowed].sort()).toEqual([...new Set(frontendFields)].sort());
   });
 
