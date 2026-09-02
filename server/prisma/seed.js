@@ -31,12 +31,21 @@ async function main() {
   const cat = (a) => a.split(".")[0].replace(/-(.)/g, (_, c) => c.toUpperCase());
   // #138: `scope` is written here, not left to the column default.
   //
-  // The seed used to set only `category`, so on a database built by `db push` +
-  // seed (no migrations) every action came out scope 'any' — including
-  // `org.member`, whose whole point is that the engine REFUSES it against a
-  // workspace resource. Migrated installs got the right value from migration
-  // 102000, so the two deployment shapes disagreed and only the migrated one was
-  // ever tested. Measured on both paths, not inferred.
+  // THIS FIXES A DEFECT #138 DID NOT INTRODUCE. The seed set only `category`, so
+  // on a database built by `db push` + seed (no migrations) every action came out
+  // scope 'any' — including `org.member` from #53, whose entire purpose is that
+  // the engine REFUSES it against a workspace resource. With scope 'any' that
+  // refusal never happens, and an org-wide grant reads as every workspace, which
+  // is the 044000 shape #53 exists to prevent. That has been true of every
+  // seed-only database since #53 shipped.
+  //
+  // Migrated installs got the right value from migration 102000, so the two
+  // deployment shapes disagreed and only the migrated one was ever asserted —
+  // which is why nothing caught it. Measured on both shapes with psql, not
+  // inferred; see .infi/ledger-138-perm.md.
+  //
+  // Fixed for ALL actions rather than for #138's own: a fix scoped to
+  // `directory.sync` would leave `org.member` broken on these same three lines.
   //
   // `update` carries scope too: a database seeded before this change already
   // holds the wrong value, and an upsert that only fixes new rows would leave it.

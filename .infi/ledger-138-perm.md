@@ -155,3 +155,67 @@ Switched to `/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/jest` from
 node@22's bin. The `execSync` calls INSIDE the test files still use `npx prisma`;
 they inherit the parent's environment and ran correctly here, but they are the
 same hazard and are worth converting repo-wide rather than file by file.
+
+---
+
+# Scope statement (TL-1 ruling, evidence 6996d7d55): #138 fixed a defect outside its own scope
+
+Stated plainly because it is not visible from the issue title, and a reader who
+only sees "add `directory.sync`" would not expect `prisma/seed.js` in the diff:
+
+**#138 fixed a pre-existing defect that belongs to #53, not to #138.**
+`prisma/seed.js` wrote `category` and never `scope`, so on any database built by
+`prisma db push` + `node prisma/seed.js` — the dev-reset shape, with no
+migrations — every permission row came out `scope = 'any'`. That includes
+**`org.member`**, the action #53 introduced, whose entire purpose is that the
+engine REFUSES it when asked against a workspace resource. At `scope = 'any'`
+that refusal never happens: the question is answered instead, and every user
+holds an org-wide `member` grant, which the engine reads as matching every
+workspace. That is the 044000 shape #53 exists to prevent.
+
+It has been true of every seed-only database since #53 shipped. Migrated installs
+took the correct value from migration `20260902102000`, so the two deployment
+shapes disagreed and only the migrated one was ever asserted — which is why
+nothing caught it.
+
+TL-1 ruled the fix STAYS in #138 rather than being split out. The reasoning I
+gave and TL-1 accepted: the fix is three lines in `seed.js`, and splitting it
+would ship a seed that writes `scope` for `directory.sync` and not for
+`org.member` on the identical code path — half-right on one line, with the
+follow-up issue touching the same line again.
+
+## The real check, run with psql against real databases
+
+Not the jest assertions — those are in the suite and could share a wrong
+assumption with the code. These are the two deployment shapes built from
+scratch and read back with `psql`:
+
+```
+seed-only    (db push + seed):        directory.sync|directory|org
+                                      org.member|org|org
+migrate+seed (migrate deploy + seed): directory.sync|directory|org
+                                      org.member|org|org
+
+rows in permissions: 63 on both
+category = '' :       0 on both
+tuple equality on (action, category, scope), sorted, diffed: IDENTICAL
+```
+
+Before the fix, the same command against the seed-only shape returned
+`directory.sync|directory|any` and `org.member|org|any` — i.e. the `scope<>'any'`
+query returned NOTHING at all, which is the finding.
+
+The 63 tuples are the count on this branch in isolation (62 on main +
+`directory.sync`). After the rebase onto #137 it becomes 64; see the merge-order
+residual above.
+
+QA-3 independently confirmed PASS on a4f2a5753 with the same seed-only check —
+`qa3-138-a4f2a5753.md`, cited here rather than restated.
+
+## Follow-up this leaves open
+
+Anything that already ran `seed.js` before this change still holds the wrong
+`scope` for `org.member`. The `update:` branch of the upsert now corrects it on
+the next seed run, so a dev box self-heals — but a long-lived database that never
+re-seeds does not, and nothing in this branch detects that state. Worth an issue
+against #53 rather than widening this one further.
