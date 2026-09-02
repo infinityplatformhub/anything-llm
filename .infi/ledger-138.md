@@ -91,9 +91,24 @@ sleeps `maxRetries + 1` times rather than `maxRetries`.
 **Lease floor, written in the queue half as an EXPRESSION derived from the constants,
 never a literal — a literal stops being true the moment either constant moves:**
 
+```js
+(timeoutMs + Math.max(BACKOFF_CEILING_MS, MAX_RETRY_AFTER_MS)) * (maxRetries + 1)
 ```
-(maxRetries + 1) x (timeoutMs + MAX_RETRY_AFTER_MS)  =  4 x 40s  =  160s
-```
+
+QA-1's refinement, adopted over my first version: the two backoff paths have very
+different ceilings and collapsing them overstates the common case. `Math.max` picks
+the worse of them, so the expression stays correct whichever path a run takes:
+
+- **429 on every page** — Lark's `Retry-After`, clamped at `MAX_RETRY_AFTER_MS`:
+  `(10s + 30s) x 4 = 160s` worst.
+- **Silent socket** — our own backoff, which caps at `BACKOFF_CEILING_MS = 2s`:
+  ~41.5s worst.
+
+`BACKOFF_CEILING_MS` did not exist as a named constant — it was an inline `2000` in
+`_backoff` — so the expression could not have been written from the constants at all.
+Named it and exported all four timing constants for this one purpose, with the reason
+at the export: anything that copies these into a literal has already broken the
+guarantee they exist to provide.
 
 `Ruling: take TL-1's optional change — skip the final _backoff before the throw —
 rather than only widening the formula: sleeping 30s before giving up serves nobody,
