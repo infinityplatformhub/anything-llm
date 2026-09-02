@@ -579,3 +579,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #126 s1 QA-3 FAIL: Home call site untested (N1/N4/N6 survive; RF-3 removed the guard = coverage regression vs parent). Ruling: restore comment-stripped call-site assertion (no 2nd copy, both returns via gate(), action string) → Dev2 new SHA. TL-1 PASS superseded.
 - #119: TL-2 reverses to FAIL (agrees with QA-2); one-liner seal of app._router breaks app.get/SPA (4 red). Ruling: sealRoutes mode keeping .route() usable on _router with mutating methods sealed; skip null targets; param residual+test. Dev5 reworking.
 - #124 064f082c9 (Dev4 test fix): regating. Dev4 resumes #127.
+- #113 89f396381 QA-1 PASS (6 cases + 2 controls all correct; mutants a-e red per set; NIT-1 exempt-set not pinned → Dev3 in #128 lane). Both verdicts in; closing/merging after sweeps line.
+- #124 064f082c9 regate: frontend 96/96 exit 0, ledger 3 rulings, result written. Awaiting QA-3 re-fire (b) → close/merge.
+- Post-merge hotfix: 3024/3061, 1 red boundKeyDocumentsHttp → green alone 35/35 (#106 class). Frontend 92/92 exit 0. Main healthy.

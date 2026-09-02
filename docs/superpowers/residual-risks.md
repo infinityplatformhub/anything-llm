@@ -255,3 +255,6 @@ Guard-below-cache equivalence depends on cache key being exactly the material; a
 
 ## #113 (TL-1 nit)
 `aclGroupWorld:452` ternary `role.scope === "workspace" ? null : null` — both arms null; org-wide grant is what makes control A non-vacuous (`heldPermissionIds` with `targetWorkspaceId: null` matches only `workspace_id IS NULL`). Replace with plain `null` + comment.
+
+## #113 (QA-1 NIT-1)
+Exempt set pinned only by type: mutant `actor?.type !== "user"` survives 43/43; a scoped api-key service actor could add users to an ACL-holding group. One test (non-exempt service actor → refused) closes it. Assigned to Dev3 in the #128 lane. Residual for #129-class: `grantDocumentAcl` accepts `principalType` unguarded; first caller passing "group" opens allow AND deny paths.
