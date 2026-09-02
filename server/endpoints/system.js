@@ -757,7 +757,7 @@ function systemEndpoints(app) {
 
   app.post(
     "/system/update-env",
-    [validatedRequest, requirePermission("settings.write", orgResource)],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         const body = reqBody(request);
