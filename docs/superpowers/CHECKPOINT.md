@@ -396,3 +396,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #108 ledger SHA 560e084b0 (ledger-only over 5992b34b9); wt-108 moved, result rebound. Waiting QA-1 + TL-2 → close/merge.
 - Frontend on main after #40 t3: vitest 8/8 + capabilities-cache-check 9/9 green. Main fully green (server 2898/2903 with 5 #106-class flakes green alone).
 - #104: QA-3 interim RF-1..3 all closed vs main baseline (RF-2 rollback verified by rows users=0/mode=false + control); mutations N1–N4 rerun after probe harness fix (python heredoc, asserts added). Verdict ~10 min.
+- #104: QA-3 PASS (N1–N4 both sides after probe harness fix) + TL-1 PASS (NIT-1 docblock) → waiting Dev1 comment-only amend → close/merge.
+- #98: TL-2 PASS-conditional — seal bypassed by app.all / apiRouter.all / router.route().post() / use(subRouter) without pre-seal refs (HTTP 200 measured); residual rewrite + 4 behaviour-recording tests + app.get-after-require fixture → Dev3 amend with A1–A3.
+- #108: TL-2 asked whether harness exists → answered (#111 merged 5041a0a55, gate ran 24/24).
