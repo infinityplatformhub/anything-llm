@@ -1,0 +1,7 @@
+{
+  "reservedApex": "example.com",
+  "idpOrigin": "https://idp.example.com",
+  "appOrigin": "https://app.example.com",
+  "hostileOrigin": "https://evil.example.com",
+  "callbackPath": "/sso/oidc/callback"
+}
