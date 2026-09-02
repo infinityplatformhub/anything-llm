@@ -613,3 +613,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 ledger-only SHA 610632d48 accepted (close target); residual → new issue (capability-direct route guard). Awaiting QA-3.
 - #127 QA-3 FAIL on 2ba5ca93a/610632d48: F1 slice unbounded (P-bleed passes with no guard), R2 toContain weak. Dev4 → new SHA (routeEnd>0 assert + count 2). TL-2 PASS superseded. §7.17 logged. Everything else (D1, P-ungated, G1, G2, F7 incl. 0-rows trap, R1, R3) dead.
 - #131 rulings issued to Dev5 (strip-then-match, Cf+list, keep-on-hit, no-flag, RF-2 value-gone); TL-2 pre-read queued after #119/#120. Code waits for #119+#120 merge.
+- #128 6087af79c MERGED (37c4a4465): TL-1 + QA-1 PASS (M1-M5 dead per set, M4 scope-in-OR 14 red; M6 null-guard survives → residual). Contract 31/31, dirs 1079, sweeps 63/63; closed gate-128-6087af79c. Post-merge running → /tmp/postmerge-128.log.
+- #131 (Dev5): diagnostics/index.js inherits fix via scrubText→scrubValue, not edited; RF-4 gets own bundle.test.js + mutation; 3 files. Waits #119+#120 merge.
