@@ -109,6 +109,49 @@ function collectEnv(env = process.env) {
   return out;
 }
 
+/**
+ * Every `scheme://user:pass@` run inside a piece of free text, removed.
+ *
+ * TL-1 FINDING-1 (#94): `scrubValue` alone was NOT removing these. It appeared
+ * to, because the EMAIL pattern happens to match `user:pass@db.internal` — and
+ * only because that host contains a dot. Measured on the hosts this project
+ * actually ships:
+ *
+ *   db.internal:5432   →  appuser:[redacted:email]:5432   (accident, not design)
+ *   postgres:5432      →  appuser:sup3rsecret@postgres:5432   LEAKED IN FULL
+ *   localhost:5432     →  appuser:sup3rsecret@localhost:5432  LEAKED IN FULL
+ *
+ * `postgres` is the host in docker-compose and `localhost` the host in CI, so
+ * the two configurations we ship were both leaking. And even where the email
+ * pattern did fire it removed only part: `Xq7!kR2#mN9$vL4` left `Xq7!kR2#mN9$`
+ * behind, because the pattern starts matching at the last `.`-free run before
+ * the `@`.
+ *
+ * `stripUrlCredentials` handles a string that IS a URL. This handles a URL
+ * EMBEDDED in a sentence, which is the live shape: `safeQuery` returns
+ * `error.message` verbatim, and the pg driver quotes the connection string in
+ * its failure text — at exactly the moment someone runs `--bundle`.
+ */
+const URL_CREDENTIALS = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*:[^\s/@]*@/gi;
+
+/**
+ * The one text path. Strip embedded credentials first, then run the pattern
+ * scan over what is left — the order from TL-1 F3b, for the same reason: a
+ * `user@host` left behind would match the EMAIL pattern and the output would
+ * read as redacted while still naming the account.
+ */
+function scrubText(value, hits = new Set()) {
+  // `hits` is threaded through rather than kept local: the bundle reports the
+  // redaction CLASSES that fired, and a scrub that swallows its own hits makes
+  // the bundle claim nothing was removed while removing things.
+  if (typeof value !== "string") return scrubValue(value, hits, 0);
+  const stripped = value.replace(URL_CREDENTIALS, (_m, scheme) => {
+    hits.add("url_credentials");
+    return scheme;
+  });
+  return scrubValue(stripped, hits, 0);
+}
+
 function collectVersions() {
   let appVersion = "unknown";
   try {
@@ -158,16 +201,22 @@ const COUNTED_TABLES = Object.freeze([
  * ONE row into an `error` string, not abandon the file. Reporting the failure is
  * itself diagnostic — "this table is not there" is often the answer.
  */
-async function safeQuery(client, sql, params = []) {
+async function safeQuery(client, sql, params = [], hits = new Set()) {
   try {
     const { rows } = await client.query(sql, params);
     return { rows };
   } catch (error) {
-    return { error: error.message };
+    // NOT `error.message` verbatim. The pg driver quotes the connection string
+    // in its failure text, and a connection failure is exactly the situation
+    // that makes someone run `--bundle`.
+    return { error: scrubText(String(error.message), hits) };
   }
 }
 
-async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL } = {}) {
+async function collectDatabase(
+  client,
+  { databaseUrl = process.env.DATABASE_URL, hits = new Set() } = {}
+) {
   // The connection line is BUILT HERE from `stripUrlCredentials`, not borrowed
   // from the doctor's own `maskUrl`. `maskUrl` replaces the password and keeps
   // the USERNAME, which is right for a checklist an operator reads on their own
@@ -178,7 +227,7 @@ async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL 
   // The cost is the username, which anyone reading the bundle can look up in
   // their own environment if they need it.
   const connection = databaseUrl
-    ? stripUrlCredentials(String(databaseUrl))
+    ? scrubText(stripUrlCredentials(String(databaseUrl)), hits)
     : "DATABASE_URL is not set";
 
   if (!client) return { connection, error: "database was not reachable" };
@@ -186,9 +235,11 @@ async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL 
   const migrations = await safeQuery(
     client,
     `SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
-       FROM _prisma_migrations ORDER BY started_at DESC LIMIT 50`
+       FROM _prisma_migrations ORDER BY started_at DESC LIMIT 50`,
+    [],
+    hits
   );
-  const version = await safeQuery(client, "SHOW server_version");
+  const version = await safeQuery(client, "SHOW server_version", [], hits);
 
   const counts = {};
   for (const table of COUNTED_TABLES) {
@@ -196,21 +247,33 @@ async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL 
     // interpolation cannot be reached by anything user-supplied. Identifiers
     // cannot be parameterised in PostgreSQL; a caller-supplied name here would
     // need quote_ident, and the right guard for that is not letting one in.
-    const result = await safeQuery(client, `SELECT COUNT(*)::int AS n FROM "${table}"`);
+    const result = await safeQuery(
+      client,
+      `SELECT COUNT(*)::int AS n FROM "${table}"`,
+      [],
+      hits
+    );
     counts[table] = result.error ? { error: result.error } : result.rows[0].n;
   }
 
   const eventCounts = await safeQuery(
     client,
-    `SELECT event, COUNT(*)::int AS n FROM event_logs GROUP BY event ORDER BY n DESC LIMIT 50`
+    `SELECT event, COUNT(*)::int AS n FROM event_logs GROUP BY event ORDER BY n DESC LIMIT 50`,
+    [],
+    hits
   );
 
   return {
     connection,
     serverVersion: version.error
       ? { error: version.error }
-      : version.rows[0].server_version,
-    migrations: migrations.error ? { error: migrations.error } : migrations.rows,
+      : scrubText(String(version.rows[0].server_version), hits),
+    migrations: migrations.error
+      ? { error: migrations.error }
+      : migrations.rows.map((row) => ({
+          ...row,
+          migration_name: scrubText(String(row.migration_name), hits),
+        })),
     counts,
     // The event NAME becomes a KEY here, and `scrubValue` walks values only —
     // it descends into an object's entries but never rewrites the entry names.
@@ -224,7 +287,7 @@ async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL 
       ? { error: eventCounts.error }
       : Object.fromEntries(
           eventCounts.rows.map((r) => [
-            scrubValue(String(r.event), new Set(), 0),
+            scrubText(String(r.event), hits),
             r.n,
           ])
         ),
@@ -244,6 +307,7 @@ async function collectDatabase(client, { databaseUrl = process.env.DATABASE_URL 
  * @returns {Promise<{bundle: object, redactions: string[]}>}
  */
 async function buildBundle({ env = process.env, client = null, checks = [] } = {}) {
+  const hits = new Set();
   const raw = {
     generatedAt: new Date().toISOString(),
     versions: collectVersions(),
@@ -251,13 +315,23 @@ async function buildBundle({ env = process.env, client = null, checks = [] } = {
     // `detail` strings quote what they FOUND — a connection string, a path, a
     // locale name — so "already redacted by construction" was wrong: they are
     // built from the same environment everything else here is redacted for.
-    checks,
+    checks: checks.map((check) => ({
+      ...check,
+      // A check's `detail` and `remedy` are the live path for FINDING-1: they
+      // quote the connection they just made.
+      detail:
+        typeof check.detail === "string" ? scrubText(check.detail, hits) : check.detail,
+      remedy:
+        typeof check.remedy === "string" ? scrubText(check.remedy, hits) : check.remedy,
+    })),
     environment: collectEnv(env),
-    database: await collectDatabase(client, { databaseUrl: env.DATABASE_URL }),
+    database: await collectDatabase(client, {
+      databaseUrl: env.DATABASE_URL,
+      hits,
+    }),
     resources: collectResources(),
   };
 
-  const hits = new Set();
   const bundle = scrubValue(raw, hits, 0);
   // Naming the classes that fired, never what they matched. An operator seeing
   // `["email"]` knows something was removed and can say so when they share the
@@ -277,6 +351,7 @@ module.exports = {
   collectResources,
   collectDatabase,
   buildBundle,
+  scrubText,
   // Exported so the allowlist guard test can assert every entry is declared
   // non-secret rather than re-deriving the table.
   KEY_MAPPING,

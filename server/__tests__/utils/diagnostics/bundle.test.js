@@ -17,6 +17,7 @@
  * fake below is closer to a broken install than a healthy dev box is anyway.
  */
 const {
+  scrubText,
   ENV_ALLOWLIST,
   DERIVED_ENV_KEYS,
   UNDECLARED_ENV_KEYS,
@@ -157,6 +158,26 @@ describe("O5b bundle — nothing seeded comes back out", () => {
       checks: checksWithMarkers(),
     });
     expect(redactions).toEqual(expect.arrayContaining(["email", "credential"]));
+  });
+
+  it("reports url_credentials when an embedded connection string was stripped", async () => {
+    // The strip is a redaction like any other and must be named. A scrub that
+    // removes things while reporting nothing lets an operator believe the file
+    // is untouched.
+    const { redactions } = await buildBundle({
+      env: seededEnv(),
+      client: seededClient(),
+      checks: [
+        {
+          id: "db.reachable",
+          ok: true,
+          level: "block",
+          detail: "Connected to postgresql://appuser:hunter2@postgres:5432/x.",
+          remedy: "",
+        },
+      ],
+    });
+    expect(redactions).toContain("url_credentials");
   });
 
   it("still reports the fields the operator needs, so the bundle is not just masked noise", async () => {
@@ -385,5 +406,111 @@ describe("O5b bundle — a secret reaching the bundle by PATH, not by mapping (T
     // Partial too: a redaction that kept the first eight characters would pass a
     // whole-value assertion and still hand over most of a short password.
     expect(serialised).not.toContain(password.slice(0, 8));
+  });
+});
+
+/**
+ * TL-1 FINDING-1 (#94). The earlier version of the seeded-secret test used
+ * `db.internal` as its host, and passed — but only by accident: `scrubValue`'s
+ * EMAIL pattern matches `user:pass@db.internal` because that host contains a
+ * DOT. The two hosts this project actually ships have none.
+ *
+ * Both are in the table below, deliberately. Changing the fixture back to a
+ * dotted host must not make these pass on their own.
+ */
+describe("O5b bundle — embedded connection credentials (TL-1 FINDING-1)", () => {
+  const PASSWORD = "sup3rsecret-db-password";
+  // Punctuation-heavy on purpose: even where the email pattern DID fire it
+  // removed only the tail, leaving `Xq7!kR2#mN9$` behind.
+  const AWKWARD = "Xq7!kR2#mN9$vL4";
+
+  const HOSTS = [
+    ["postgres:5432", "the host in docker/docker-compose.yml"],
+    ["localhost:5432", "the host in CI"],
+    ["db.internal:5432", "a dotted host — must not be the only one that passes"],
+  ];
+
+  describe.each(HOSTS)("host %s (%s)", (host) => {
+    it("removes the password from a driver error quoting the connection string", async () => {
+      // The LIVE path: safeQuery returns error.message, and pg quotes the
+      // connection string on a connection failure — which is the moment
+      // someone runs --bundle.
+      const client = {
+        query: async () => {
+          throw new Error(
+            `connection to postgresql://appuser:${PASSWORD}@${host}/anythingllm failed`
+          );
+        },
+      };
+      const db = await collectDatabase(client, {
+        databaseUrl: `postgresql://appuser:${PASSWORD}@${host}/anythingllm`,
+      });
+      const serialised = JSON.stringify(db);
+      expect(serialised).not.toContain(PASSWORD);
+      expect(serialised).not.toContain("appuser:");
+      // and the host survives, because it is the diagnostic part
+      expect(serialised).toContain(host.split(":")[0]);
+    });
+
+    it("removes a password carried in a check's detail string", async () => {
+      const { bundle } = await buildBundle({
+        env: seededEnv(),
+        client: seededClient(),
+        checks: [
+          {
+            id: "db.reachable",
+            ok: true,
+            level: "block",
+            detail: `Connected to postgresql://appuser:${PASSWORD}@${host}/anythingllm.`,
+            remedy: "",
+          },
+        ],
+      });
+      expect(JSON.stringify(bundle)).not.toContain(PASSWORD);
+    });
+
+    it("removes an awkward password whole, not just its tail", async () => {
+      const text = `error postgresql://appuser:${AWKWARD}@${host}/db refused`;
+      const scrubbed = scrubText(text);
+      expect(scrubbed).not.toContain(AWKWARD);
+      // The specific earlier failure: the email pattern started matching at the
+      // last dot-free run, so the leading characters survived.
+      expect(scrubbed).not.toContain("Xq7!kR2#mN9$");
+      expect(scrubbed).not.toContain("Xq7");
+    });
+  });
+
+  it("strips EVERY credential run in a string, not just the first", () => {
+    const scrubbed = scrubText(
+      `primary postgresql://a:${PASSWORD}@postgres:5432/x replica postgresql://b:${AWKWARD}@localhost:5432/y`
+    );
+    expect(scrubbed).not.toContain(PASSWORD);
+    expect(scrubbed).not.toContain(AWKWARD);
+    expect(scrubbed).toContain("postgres:5432");
+    expect(scrubbed).toContain("localhost:5432");
+  });
+
+  it("leaves text with no credentials alone", () => {
+    // A strip that fires on everything is not a strip.
+    expect(scrubText("relation \"users\" does not exist")).toBe(
+      'relation "users" does not exist'
+    );
+    expect(scrubText("postgresql://postgres:5432/anythingllm")).toBe(
+      "postgresql://postgres:5432/anythingllm"
+    );
+  });
+});
+
+describe("O5b bundle — no allowlisted key is a declared secret (TL-1 NIT-1)", () => {
+  it("keeps REQUIRED_SECRETS and every secret-declared envKey out of UNDECLARED_ENV_KEYS", () => {
+    const { REQUIRED_SECRETS } = require("../../../utils/doctor");
+    const declaredSecret = Object.values(KEY_MAPPING)
+      .filter((entry) => entry.secret === true || entry.secret === "url")
+      .map((entry) => entry.envKey);
+    const forbidden = new Set([...REQUIRED_SECRETS, ...declaredSecret]);
+    const offenders = Object.keys(UNDECLARED_ENV_KEYS).filter((key) =>
+      forbidden.has(key)
+    );
+    expect(offenders).toEqual([]);
   });
 });

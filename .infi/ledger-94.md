@@ -93,6 +93,48 @@ internal hostname match no pattern, so nothing downstream would catch them. Cost
 which a reader can look up in their own environment. — ถ้าผิด: DB username + internal host
 ไปอยู่ใน public issue
 
+## TL-1 FINDING-1 and NIT-1, applied
+
+Ruling (FINDING-1): one helper, `scrubText(s, hits)` = strip every embedded `scheme://user:pass@`
+run, THEN `scrubValue`. Applied to `safeQuery` error text, `checks[].detail` and `.remedy`,
+`migration_name`, `serverVersion`, event names, and the connection line.
+
+My earlier version relied on `scrubValue` alone and my test passed only by ACCIDENT: the EMAIL
+pattern matches `user:pass@db.internal` because that host contains a dot. Measured on the hosts this
+project actually ships —
+
+    db.internal:5432   →  appuser:[redacted:email]:5432        (accident)
+    postgres:5432      →  appuser:sup3rsecret@postgres:5432    LEAKED IN FULL
+    localhost:5432     →  appuser:sup3rsecret@localhost:5432   LEAKED IN FULL
+
+`postgres` is docker-compose's host and `localhost` is CI's, so both shipped configurations were
+leaking. Even where the pattern did fire it removed only the tail: `Xq7!kR2#mN9$vL4` left
+`Xq7!kR2#mN9$`. The live path is `safeQuery` returning `error.message` verbatim while the pg driver
+quotes the connection string on a connection failure — the exact moment someone runs `--bundle`. —
+ถ้าผิด: password ของ DB ไปอยู่ใน public issue พร้อมกับ host ที่ใช้จริง
+
+Ruling: the test table carries all THREE hosts including the dotted one, so changing the fixture
+back to `db.internal` cannot make these pass on their own. Under the mutation that removes the
+strip, the dotted host's detail test stays GREEN while the other two go red — the accident is now
+visible in the suite rather than hidden by it. — ถ้าผิด: กลับไปมี fixture ที่ปิดบั๊กแทนที่จะเปิด
+
+Ruling: `hits` is threaded through `scrubText` rather than kept local, and the strip adds
+`url_credentials` to the reported classes. Found by a test going red: the first version swallowed
+its hits in a local Set, so the bundle would have claimed nothing was redacted while redacting. A
+scrub that reports nothing lets an operator believe the file is untouched. — ถ้าผิด: bundle บอกว่า
+ไม่ได้ลบอะไรทั้งที่ลบ แล้วคนแชร์ต่อโดยไม่ตรวจ
+
+Ruling (NIT-1): a guard asserting `UNDECLARED_ENV_KEYS` intersects neither `REQUIRED_SECRETS` nor
+any envKey KEY_MAPPING declares `secret: true` or `"url"`. The UNDECLARED list is the one place a
+key can be added without the tree contradicting you. — ถ้าผิด: ใครสักคนเติม key ที่เป็นความลับ
+ลงลิสต์ที่ไม่มีอะไรค้าน
+
+### Mutations (§7.9f)
+
+Removing the strip from `scrubText`: **10 red**, and the dotted-host detail test stayed green —
+which is the finding itself, reproduced.
+Adding `API_KEY_PEPPER` to `UNDECLARED_ENV_KEYS`: **1 red**, the NIT-1 guard.
+
 ## Finding split out — #95
 
 The seeded-secret scan found a live PDPA leak in `utils/events/redaction.js`: the three numeric
@@ -109,9 +151,12 @@ reverted, and the test's comment now says that rather than "red until #95".
 Measured on `820ede6c4`, rebased onto main `c7a4711c4`:
 
     Test Suites: 4 passed, 4 total
-    Tests:       228 passed, 228 total
+    Tests:       241 passed, 241 total
 
-Per suite: `bundle.test.js` 25, `doctorBundleCli.test.js` 9, `doctor.test.js` 46,
+Per suite: `bundle.test.js` 38, `doctorBundleCli.test.js` 9, `doctor.test.js` 46,
 `auditRedaction.test.js` 148 (144 + the 4 that arrived with #95).
+
+25 → 38 in `bundle.test.js`: the FINDING-1 table (3 hosts × 3 assertions), the two strip-behaviour
+tests, the `url_credentials` reporting test, and the NIT-1 guard.
 `doctor.test.js` unchanged and green; header note added saying the suite needs PostgreSQL 16+, that
 pgvector is NOT required, and that missing it skips rather than fails (TL-2 lost ten minutes).
