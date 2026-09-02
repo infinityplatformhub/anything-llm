@@ -81,3 +81,4 @@
 - [→ #55] agent generated-files have no owner row; any principal with a valid uuid reads any tenant's file; #41 blocks bound keys only (Dev1)
 - [→ #53] view-as-user cannot GET /workspaces, search, or agent files (chat.send is a membership proxy denied by R5); #52 kept the 044000 wall instead of seeding workspace.read to member (Dev2 measured org-wide grant matches every workspace)
 - [→ backlog] grantRole/revokeGrant return policyVersion as BigInt; JSON.stringify throws for new callers (routes String() it) (QA-1 #52 NIT-2)
+- [→ #52] isSingleUserMode (deploymentMode.js) read raw setting, diverging from isConfirmedSingleUser; on multi_user_mode=false + user rows 3 config routes were writable by impersonated sessions (QA-2). Fixed in #52 addendum 7; pattern: every 'which mode am I in' question must go through isConfirmedSingleUser
