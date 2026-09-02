@@ -117,3 +117,20 @@ Note: `__tests__/utils/helpers/modelPricing/cacheIsolation.test.js` — "two ins
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
 `Test Suites: 1 failed, 112 passed, 113 total` · `Tests: 1 failed, 1167 passed, 1168 total`
 The single failure is the pre-existing main flake above. Every T-7 suite passes.
+
+## QA-1's leak: the cause was not missing cleanup
+
+Ruling: fixed with `jest.resetModules()` before `require("../../../utils/prisma")`, NOT with an `afterAll` that deletes rows. `utils/prisma` is a singleton binding `DATABASE_URL` at FIRST require, and `jest --runInBand` shares one process across suites — so when an earlier suite had already loaded it against the shared database, every write in `beforeAll` landed there instead of in this suite's own database, and dropping the suite's database at the end removed nothing. An `afterAll` deleting the users would have cleaned up the symptom on the wrong database and left the mechanism intact for the next suite that adds a fixture.
+
+Note: the suite still PASSED throughout, because it only ever reads back what it wrote — the writes were consistent, just in the wrong place. The damage was entirely to other branches: `isConfirmedSingleUser` counts real `users` rows, so leaked fixtures turn `actorResolver` R5 red in a branch that never touched authorization. A test that passes while corrupting shared state for everyone else is the worst shape a green test can have.
+
+Note: verified by measurement, not reading — `users` count in the shared database before and after a solo run of `myCapabilities.test.js` on a freshly created database: 2 before the fix, 0 after. Applied to the other four suites resolving the shared client (`chatReadOthers`, `explainAccess`, `grantManagement`, `routeWiring`). Full run leaves the shared database at 0 users and no leftover `t7_*` databases.
+
+Note: my first diagnosis was wrong and worth recording. I read the two rows in the shared database and concluded the client was binding to the wrong URL; a probe showed it binds correctly when it is required fresh. The rows were leftovers from an earlier run of the same defect. The real variable was WHEN the require happens relative to other suites, which only shows up with `require.cache` instrumentation.
+
+## Evidence (post-fix)
+
+Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
+`Test Suites: 1 failed, 112 passed, 113 total` · `Tests: 1 failed, 1167 passed, 1168 total`
+Shared database `users` count after the full run: **0**. Leftover `t7_*` databases: **0**.
+The single failure remains `modelPricing/cacheIsolation` (#51, pre-existing on main).

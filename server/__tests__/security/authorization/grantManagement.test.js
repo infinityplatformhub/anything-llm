@@ -70,6 +70,12 @@ beforeAll(async () => {
   // its own PrismaClient writes to one database and reads another, and every
   // capability comes back denied — which is indistinguishable from a correct
   // refusal (recorded in ledger-31).
+  // utils/prisma binds DATABASE_URL at first require and jest --runInBand shares
+  // one process, so another suite may already have it loaded against the shared
+  // database — in which case every write below silently lands there. The tests
+  // still pass (they read back what they wrote); the damage is to OTHER suites,
+  // since isConfirmedSingleUser counts real user rows.
+  jest.resetModules();
   prisma = require("../../../utils/prisma");
 
   const repository = require("../../../utils/authorization/policyRepository");

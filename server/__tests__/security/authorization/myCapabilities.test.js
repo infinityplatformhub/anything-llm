@@ -72,6 +72,14 @@ beforeAll(async () => {
   // utils/prisma, so a separate PrismaClient would have the test writing to one
   // database while the route read another — and every capability would come
   // back false, which looks exactly like a correct deny.
+  // utils/prisma is a SINGLETON that binds DATABASE_URL at first require. Another
+  // suite in this process (jest --runInBand shares one) may already have loaded it
+  // against the shared database, in which case every write below would land there
+  // instead of in this suite's own — and the tests still pass, because they only
+  // ever read back what they wrote. The leaked users then break OTHER suites:
+  // `isConfirmedSingleUser` counts real rows, so actorResolver R5 goes red in a
+  // branch that never touched it. Reset first so the require below is OURS.
+  jest.resetModules();
   prisma = require("../../../utils/prisma");
   repository = require("../../../utils/authorization/policyRepository");
   const {
