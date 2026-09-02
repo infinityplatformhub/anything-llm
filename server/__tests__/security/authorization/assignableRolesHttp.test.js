@@ -54,7 +54,7 @@ jest.mock("../../../utils/middleware/validatedRequest", () => ({
   validatedRequest: (_request, response, next) => {
     response.locals.multiUserMode = true;
     // eslint-disable-next-line global-require
-    const current = require("./assignableRolesSession").current();
+    const current = require("../../../__testHelpers__/authorization/assignableRolesSession").current();
     if (current.apiKey) {
       // The resolver reads `apiKeyContext`, not `apiKey`: a key is a bearer credential
       // for its creator, and the context is what carries the creator lookup and scopes.
@@ -81,7 +81,7 @@ const capabilities = async () => {
 
 const as = (patch) => {
   session = { id: null, impersonatedBy: null, apiKey: null, ...patch };
-  require("./assignableRolesSession").set(session);
+  require("../../../__testHelpers__/authorization/assignableRolesSession").set(session);
 };
 
 beforeAll(async () => {
