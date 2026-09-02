@@ -610,3 +610,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #127 2ba5ca93a TL-2 PASS (5689c8464); residual setup_admin gap → Dev4 ledger-only SHA. Awaiting QA-3 → close/merge. TL-2 → #119 then #120.
 - #128 6087af79c gate: check-local pass, authz+identity 1079/1115 (0 failed), sweeps 63/63, ledger 4 rulings; contract line rerunning alone. Awaiting TL-1 + QA-1.
 - #128 6087af79c TL-1 PASS (2011afd16): scope as AND sibling verified on real where; null guard before pairs; api-key never touches group_members; orgId not hardcoded. Contract 31/31. Awaiting QA-1 → close/merge (run-id gate-128-6087af79c).
+- #127 ledger-only SHA 610632d48 accepted (close target); residual → new issue (capability-direct route guard). Awaiting QA-3.
