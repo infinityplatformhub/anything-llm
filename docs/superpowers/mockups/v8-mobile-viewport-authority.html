@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>V8 — one viewport authority</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .frame { transition: width 220ms ease; }
+  .band { transition: background-color 220ms ease, border-color 220ms ease; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-semibold">V8 — one viewport authority for mobile layout</h1>
+    <p class="text-sm text-slate-600 mt-1 max-w-3xl">
+      Throwaway mockup for step 1.5. The defect is not a missing breakpoint — it is that
+      <b>width</b> and <b>user agent</b> are two independent axes, and today two different parts
+      of the layout each pick a different one. They are separate controls here because they are
+      separate in reality. Nothing here becomes production code.
+    </p>
+  </header>
+
+  <!-- controls -->
+  <section class="bg-white rounded-xl p-4 shadow-sm space-y-4">
+    <div class="flex flex-wrap gap-8 items-end">
+      <div class="grow min-w-[280px]">
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">
+          Viewport width — <span id="wlabel" class="font-mono text-slate-900">1200px</span>
+        </div>
+        <input id="width" type="range" min="320" max="1440" value="1200" step="4"
+               class="w-full accent-slate-800" aria-label="Viewport width in pixels" />
+        <div class="relative h-4 mt-1 text-[10px] text-slate-400 font-mono">
+          <span class="absolute left-0">320</span>
+          <span class="absolute" style="left:38%">768 = md</span>
+          <span class="absolute right-0">1440</span>
+        </div>
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Device (user agent)</div>
+        <div id="devices" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Build</div>
+        <div id="builds" class="flex gap-2"></div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2 pt-1">
+      <span class="text-xs uppercase tracking-wide text-slate-500 self-center mr-1">Jump to:</span>
+      <button data-preset="agree-wide"  class="px-3 py-1 rounded-lg text-xs bg-slate-100 hover:bg-slate-200">Desktop, wide</button>
+      <button data-preset="narrow-desk" class="px-3 py-1 rounded-lg text-xs bg-amber-100 hover:bg-amber-200">Desktop narrowed to 500px</button>
+      <button data-preset="tablet-land" class="px-3 py-1 rounded-lg text-xs bg-amber-100 hover:bg-amber-200">Tablet landscape, 900px</button>
+      <button data-preset="phone"       class="px-3 py-1 rounded-lg text-xs bg-slate-100 hover:bg-slate-200">Phone, 390px</button>
+    </div>
+  </section>
+
+  <!-- the two authorities -->
+  <section class="grid md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-xl p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-slate-500">CSS authority — Tailwind <code>md:</code></div>
+      <div class="mt-1 text-sm text-slate-600">asks the <b>viewport width</b>, breakpoint 768px
+        (<code>tailwind.config.js</code> has no <code>screens</code> override)</div>
+      <div id="cssVerdict" class="mt-3 text-lg font-semibold"></div>
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-slate-500">JS authority — <code>isMobile</code></div>
+      <div class="mt-1 text-sm text-slate-600">asks the <b>user agent</b>, from
+        <code>react-device-detect</code>. Width is not an input.</div>
+      <div id="jsVerdict" class="mt-3 text-lg font-semibold"></div>
+    </div>
+  </section>
+
+  <div id="band" class="band rounded-xl p-4 text-sm border"></div>
+
+  <!-- surface 1 -->
+  <section class="bg-white rounded-xl p-4 shadow-sm space-y-3">
+    <div class="flex items-baseline justify-between flex-wrap gap-2">
+      <h2 class="font-semibold">Surface 1 — chat container</h2>
+      <div class="text-xs text-slate-500 font-mono">ChatContainer/index.jsx:489,550 · the 53&times; height idiom</div>
+    </div>
+    <div class="overflow-x-auto">
+      <div id="frame1" class="mx-auto border-2 border-slate-300 rounded-lg bg-slate-50 p-2 frame">
+        <div id="chatShell"></div>
+      </div>
+    </div>
+    <div id="chatNotes" class="text-xs space-y-1"></div>
+  </section>
+
+  <!-- surface 2 -->
+  <section class="bg-white rounded-xl p-4 shadow-sm space-y-3">
+    <div class="flex items-baseline justify-between flex-wrap gap-2">
+      <h2 class="font-semibold">Surface 2 — settings sidebar: two whole trees, chosen by one <code>if</code></h2>
+      <div class="text-xs text-slate-500 font-mono">SettingsSidebar/index.jsx:64</div>
+    </div>
+    <p class="text-sm text-slate-600">
+      Not a responsive layout — <code>if (isMobile) return &lt;a different tree&gt;</code> in a
+      548-line file. Both shown, with the live verdict marking which one actually renders.
+    </p>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div id="treeDesktop" class="rounded-lg border-2 p-3"></div>
+      <div id="treeMobile" class="rounded-lg border-2 p-3"></div>
+    </div>
+    <div id="a11y" class="text-xs rounded-lg border p-3"></div>
+  </section>
+
+  <!-- slices -->
+  <section class="bg-white rounded-xl p-4 shadow-sm text-sm space-y-2">
+    <h2 class="font-semibold">What V8 changes</h2>
+    <div class="grid md:grid-cols-3 gap-3">
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="font-medium">(ก) three surfaces</div>
+        <div class="text-slate-600 mt-1"><code>useIsMobileViewport()</code>, subscribing —
+          <code>matchMedia</code> + <code>addEventListener</code> + cleanup, copying
+          <code>useTheme.js:34-47</code>. Not <code>usePrefersDarkMode</code>, which has no
+          state or effect and cannot respond to a change at all.</div>
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="font-medium">(ข) 53 lines / 41 files</div>
+        <div class="text-slate-600 mt-1">the copied height idiom becomes
+          <code>h-full md:h-[calc(100%-32px)]</code>. Inline style and JS dependency go together.</div>
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="font-medium">(ค) 24 lines / 15 files</div>
+        <div class="text-slate-600 mt-1">residual, accepted with an <b>enumerated</b> allowlist —
+          a count cannot tell a reviewer whether a site was added or merely moved.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-xs text-slate-500 pb-8">
+    Mockup only. The width above is simulated rather than a real media query, so this page behaves
+    the same in any browser window — what is being shown is the two axes, not this page's own layout.
+  </footer>
+</div>
+
+<script>
+const DEVICES = [
+  { id: "desktop", label: "Desktop browser", isMobile: false },
+  { id: "tablet",  label: "Tablet",          isMobile: true  },
+  { id: "phone",   label: "Phone",           isMobile: true  },
+];
+const BUILDS = [
+  { id: "today", label: "Today" },
+  { id: "v8",    label: "After V8" },
+];
+const PRESETS = {
+  "agree-wide":  { width: 1200, device: "desktop" },
+  "narrow-desk": { width: 500,  device: "desktop" },
+  "tablet-land": { width: 900,  device: "tablet"  },
+  "phone":       { width: 390,  device: "phone"   },
+};
+const MD = 768;
+const state = { width: 1200, device: "desktop", build: "today" };
+
+// Note colours are written out rather than interpolated: Tailwind's CDN build scans the
+// document for literal class names, so a template-built `bg-${c}-50` produces no CSS.
+const NOTE = {
+  bad:  "rounded p-2 bg-rose-50 border border-rose-200 text-rose-900",
+  good: "rounded p-2 bg-emerald-50 border border-emerald-200 text-emerald-900",
+  flat: "rounded p-2 bg-slate-50 border border-slate-200 text-slate-700",
+};
+
+function chip(active) {
+  return "px-3 py-1 rounded-lg text-xs border " +
+    (active ? "bg-slate-800 text-white border-slate-800"
+            : "bg-white hover:bg-slate-100 border-slate-300");
+}
+
+function device() { return DEVICES.find((d) => d.id === state.device); }
+
+function renderToggles() {
+  document.getElementById("devices").innerHTML = DEVICES.map((d) =>
+    '<button data-device="' + d.id + '" class="' + chip(state.device === d.id) + '">' + d.label + "</button>"
+  ).join("");
+  document.getElementById("builds").innerHTML = BUILDS.map((b) =>
+    '<button data-build="' + b.id + '" class="' + chip(state.build === b.id) + '">' + b.label + "</button>"
+  ).join("");
+}
+
+function render() {
+  const wide = state.width >= MD;       // what CSS md: sees
+  const uaMobile = device().isMobile;   // what isMobile sees
+  const v8 = state.build === "v8";
+  // After V8 both halves ask width. Before it, the JS half asks the user agent.
+  const jsMobile = v8 ? !wide : uaMobile;
+  // Disagreement is md:-on with a mobile UA, or md:-off with a desktop UA.
+  const disagree = !v8 && wide === uaMobile;
+
+  document.getElementById("wlabel").textContent = state.width + "px";
+  document.getElementById("width").value = state.width;
+  renderToggles();
+
+  document.getElementById("cssVerdict").innerHTML = wide
+    ? '<span class="text-sky-700">desktop layout</span> <span class="text-xs font-normal text-slate-500">— md: is on</span>'
+    : '<span class="text-violet-700">mobile layout</span> <span class="text-xs font-normal text-slate-500">— md: is off</span>';
+
+  const why = v8 ? "asks the width now" : "isMobile is " + uaMobile;
+  document.getElementById("jsVerdict").innerHTML =
+    (jsMobile ? '<span class="text-violet-700">mobile layout</span>'
+              : '<span class="text-sky-700">desktop layout</span>') +
+    ' <span class="text-xs font-normal text-slate-500">— ' + why + "</span>";
+
+  const band = document.getElementById("band");
+  if (v8) {
+    band.className = "band rounded-xl p-4 text-sm border bg-emerald-50 border-emerald-200 text-emerald-900";
+    band.innerHTML = "<b>One authority.</b> Both halves ask the viewport, so no combination of " +
+      "width and device can make them disagree. Drag the width, change the device — this band " +
+      "cannot turn red.";
+  } else if (disagree) {
+    band.className = "band rounded-xl p-4 text-sm border bg-rose-50 border-rose-300 text-rose-900";
+    band.innerHTML = "<b>The two authorities disagree.</b> CSS is laying out for " +
+      (wide ? "desktop" : "mobile") + " while the JS renders the " +
+      (uaMobile ? "mobile" : "desktop") + " branch. Both amber presets above are ordinary " +
+      "configurations, not contrived ones.";
+  } else {
+    band.className = "band rounded-xl p-4 text-sm border bg-slate-50 border-slate-200 text-slate-700";
+    band.innerHTML = "The two authorities agree here. They agree on a wide desktop and on a " +
+      "phone — which is why this ships, and why the defect only appears in between.";
+  }
+
+  // surface 1
+  document.getElementById("frame1").style.width = Math.min(state.width, 1100) + "px";
+  const header = jsMobile
+    ? '<div class="bg-violet-200 text-violet-900 text-xs px-3 py-2 rounded">SidebarMobileHeader</div>' : "";
+  const sidebar = wide
+    ? '<div class="bg-sky-100 text-sky-900 text-xs px-3 py-2 rounded w-40 shrink-0">Sidebar (md: only)</div>' : "";
+  const h = jsMobile ? "100%" : "calc(100% - 32px)";
+  document.getElementById("chatShell").innerHTML =
+    '<div class="flex gap-2">' + sidebar +
+      '<div class="grow space-y-2">' + header +
+        '<div class="bg-white border border-slate-300 rounded p-3 text-xs text-slate-500" ' +
+             'style="height:' + (jsMobile ? "120px" : "96px") + '">' +
+          "chat — height: <span class=\"font-mono\">" + h + "</span>" +
+        "</div>" +
+      "</div>" +
+    "</div>";
+
+  const notes = [];
+  if (!v8 && jsMobile && wide)
+    notes.push([NOTE.bad, "A mobile header is stacked on a layout that is <b>not</b> in its mobile " +
+      "arrangement — the header sits over a desktop-width chat."]);
+  if (!v8 && !jsMobile && !wide)
+    notes.push([NOTE.bad, "No mobile header at all below 768px: CSS has already collapsed to the " +
+      "mobile arrangement, and the control that opens the sidebar is simply absent."]);
+  if (v8)
+    notes.push([NOTE.good, "Header presence and height follow the same width the classes use. The " +
+      "<code>style</code> prop is gone — <code>h-full md:h-[calc(100%-32px)]</code> carries both halves."]);
+  else
+    notes.push([NOTE.flat, "The 32px is an inline <code>style</code> chosen by user agent, sitting " +
+      "beside classes chosen by width. That is one line, copied 53 times across 41 files."]);
+  document.getElementById("chatNotes").innerHTML =
+    notes.map(function (n) { return '<div class="' + n[0] + '">' + n[1] + "</div>"; }).join("");
+
+  // surface 2
+  const live = "rounded-lg border-2 p-3 border-slate-800 bg-white";
+  const dead = "rounded-lg border-2 p-3 border-slate-200 bg-slate-50 opacity-50";
+  const tag = function (on) {
+    return on
+      ? '<span class="text-[10px] uppercase tracking-wide bg-slate-800 text-white px-2 py-0.5 rounded">renders</span>'
+      : '<span class="text-[10px] uppercase tracking-wide bg-slate-200 text-slate-500 px-2 py-0.5 rounded">not rendered</span>';
+  };
+
+  const d = document.getElementById("treeDesktop");
+  d.className = jsMobile ? dead : live;
+  d.innerHTML = '<div class="flex items-center justify-between mb-2">' +
+    '<div class="font-medium text-sm">Desktop tree</div>' + tag(!jsMobile) + "</div>" +
+    '<div class="space-y-1 text-xs text-slate-600">' +
+      '<div class="bg-sky-100 rounded px-2 py-1">persistent sidebar, always visible</div>' +
+      '<div class="bg-slate-100 rounded px-2 py-1">nav items inline</div></div>';
+
+  const m = document.getElementById("treeMobile");
+  m.className = jsMobile ? live : dead;
+  m.innerHTML = '<div class="flex items-center justify-between mb-2">' +
+    '<div class="font-medium text-sm">Mobile tree</div>' + tag(jsMobile) + "</div>" +
+    '<div class="space-y-1 text-xs text-slate-600">' +
+      '<div class="bg-violet-100 rounded px-2 py-1">fixed top bar, icon-only button</div>' +
+      '<div class="bg-slate-100 rounded px-2 py-1">drawer, translateX off-screen</div>' +
+      '<div class="bg-slate-100 rounded px-2 py-1">full-screen overlay</div></div>';
+
+  const a11y = document.getElementById("a11y");
+  if (v8) {
+    a11y.className = "text-xs rounded-lg border p-3 bg-emerald-50 border-emerald-200 text-emerald-900";
+    a11y.innerHTML = "<b>a11y DoD, asserted as red tests.</b> The drawer button gets a real " +
+      "<code>aria-label</code> and an <code>aria-expanded</code> that tracks the drawer. Tests read " +
+      "<code>getAttribute(\"aria-label\")</code> directly, never <code>getByRole(name)</code> — the " +
+      "accessible name falls back to text content, which kept #124 green with the label deleted " +
+      "entirely.";
+  } else {
+    a11y.className = "text-xs rounded-lg border p-3 bg-rose-50 border-rose-200 text-rose-900";
+    a11y.innerHTML = "<b>Today, in 548 lines: zero <code>aria-label</code>, zero " +
+      "<code>aria-expanded</code>.</b> The drawer button is icon-only, so a screen-reader user hears " +
+      "\"button\" on the first control a mobile user must press, and the drawer's open state is " +
+      "invisible to assistive tech.";
+  }
+}
+
+document.getElementById("width").addEventListener("input", function (e) {
+  state.width = Number(e.target.value);
+  render();
+});
+document.body.addEventListener("click", function (e) {
+  const dv = e.target.closest("[data-device]");
+  if (dv) { state.device = dv.dataset.device; return render(); }
+  const bd = e.target.closest("[data-build]");
+  if (bd) { state.build = bd.dataset.build; return render(); }
+  const ps = e.target.closest("[data-preset]");
+  if (ps) { Object.assign(state, PRESETS[ps.dataset.preset]); return render(); }
+});
+render();
+</script>
+</body>
+</html>
