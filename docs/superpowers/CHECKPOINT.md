@@ -510,3 +510,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 t4 correction: reds are NOT Memories lane — drift +2 = sweep substring match on Dev4's comment; unhandled error = SlashCommands mock in workspaceCapabilityGate.test.jsx. Ruling (ก): fix sweep (strip comments, skip *.test.jsx). Dev2 fixes both + QA-3's 3 survivors (M3 workspace:null, M4 Sidebar:166 unrendered, M6 promise rejection) in one SHA. Dev4 stood down.
 - #123 be27ac7ed (Dev1): isExemptPrincipal export + RF-4b with real api-key grant; M-F 2 failed, M-G 1 failed. Regate running at /tmp/wt-123 (g123). TL-1 queue: #113 → #123 → #40 t4.
 - #121 TL-1 pre-read 05b292cac relayed to Dev1: R1 per-tab/OR (never one permission), F1 keep hidden={user?.role}, F2 keep !!user&&, F3 render only when loading===false, RF-1..6. Dev1 opens ManagerRoute→AdminRoute issue now.
+- #113 ebab66da9 TL-1 REJECT (03976fe12): FINDING-3 addGroupMember/removeGroupMember no permission check → ruling: grantRole-shaped check on group's permissions ∖ actor held; RF-8 non-exempt member refused; NIT-3 orgId from group row. Dev3 → new SHA. Lark side accepted.
+- #123 be27ac7ed regate: check-local pass, sweeps 63/63; contract rerun alone (first run lost the line). TL-1 + QA-1 queued.
+- #125 44a761a1f (Dev5, approof/memoize-key): gate started /tmp/wt-125 (g125); TL-2 + QA-2 dispatched.
+- #40 t4: Dev4 already fixed sweep (strip comments, ProbeCaller proof) + mock; committing on 2d73d5510; Dev2 merges + adds M3/M4/M6 tests only.
