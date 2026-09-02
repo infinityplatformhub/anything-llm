@@ -164,6 +164,21 @@ describe("issue 58: shape (b) does not disable identity checks", () => {
     expect(response.locals.multiUserMode).toBe(true);
   });
 
+  test("A: validApiKey sets locals.multiUserMode TRUE in shape (b)", async () => {
+    // QA-1 M5: ruling A changed validApiKey.js, but every assertion above runs
+    // against validBrowserExtensionApiKey — a different file with a different
+    // copy of the same line. Reverting validApiKey alone left this suite green.
+    // The bogus bearer is deliberate: the local is set BEFORE the key is
+    // resolved, so this asserts the mode answer without needing a real key.
+    const { validApiKey } = require("../../../utils/middleware/validApiKey");
+    const { response } = await runMiddleware(
+      validApiKey("system.read"),
+      { header: () => "Bearer nope" }
+    );
+    expect(response.statusCode).toBe(403);
+    expect(response.locals.multiUserMode).toBe(true);
+  });
+
   test("mobile: a registration token for a suspended user is refused", async () => {
     // NOT in the brief's site list. Identical shape: the if (multiUserMode)
     // block is the ONLY place the token's user is loaded and checked, so in

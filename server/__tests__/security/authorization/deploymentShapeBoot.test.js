@@ -153,6 +153,40 @@ describe("issue 58: the deployment-shape repair", () => {
     expect(logged.join("\n")).not.toMatch(/DEPLOYMENT SHAPE REPAIRED/);
   });
 
+  test("a failed write is reported as failed, not as REPAIRED", async () => {
+    // _updateSettings catches its own errors and returns { success: false } —
+    // it does NOT throw. Awaiting it therefore proves nothing landed, and the
+    // first version of this repair printed REPAIRED on a write that failed.
+    await setMode(false);
+    await prisma.users.create({
+      data: { username: `boot-writefail-${dbSuffix}`, password: "x" },
+    });
+    delete process.env.MODE_REPAIR_ACKNOWLEDGED;
+    const realUpdate = SystemSettings._updateSettings;
+    SystemSettings._updateSettings = async () => ({
+      success: false,
+      error: "read-only transaction",
+    });
+    const logged = [];
+    const realError = console.error;
+    console.error = (...args) => logged.push(args.join(" "));
+
+    const result = await repairDeploymentShape();
+
+    console.error = realError;
+    SystemSettings._updateSettings = realUpdate;
+
+    expect(result).toEqual({ repaired: false, reason: "write-failed" });
+    // The setting really is still wrong — the failure was not cosmetic.
+    expect(await SystemSettings.isMultiUserMode()).toBe(false);
+
+    const message = logged.join("\n");
+    expect(message).toMatch(/repair FAILED/);
+    expect(message).toMatch(/read-only transaction/);
+    // Claiming a repair that did not happen is the whole bug.
+    expect(message).not.toMatch(/DEPLOYMENT SHAPE REPAIRED/);
+  });
+
   test("an unreadable database is not repaired and not relabelled", async () => {
     // An outage is a different failure. This check may not write to a database
     // it could not read, nor tell the operator their deployment is misconfigured.
