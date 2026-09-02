@@ -13,7 +13,18 @@
 # own rows. Every entry needs a reason — an entry without one is a bug, not a
 # waiver.
 ALLOWLIST=(
-  # (empty — the five db-push suites were converted in T-4b #29)
+  # #138: the ONLY suite whose subject is the seed-only shape itself. Describe D
+  # builds a database with `db push` and NO migrations on purpose, then runs
+  # `node prisma/seed.js` — so the rows this gate protects are seeded, by the
+  # seed, which is the thing under test. It caught a real defect that way:
+  # seed.js wrote `category` and not `scope`, leaving `org.member` unscoped on
+  # every seed-only database since #53.
+  #
+  # Safe because the same FILE also asserts the migrate-only and migrate+seed
+  # shapes and diffs the three for equality. A `db push` suite that asserted
+  # nothing about migrations would be the §7.1a bug; this one exists to compare
+  # them.
+  "server/__tests__/security/authorization/directorySyncPermission.test.js"
 )
 
 set -uo pipefail

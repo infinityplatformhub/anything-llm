@@ -219,3 +219,43 @@ Anything that already ran `seed.js` before this change still holds the wrong
 the next seed run, so a dev box self-heals — but a long-lived database that never
 re-seeds does not, and nothing in this branch detects that state. Worth an issue
 against #53 rather than widening this one further.
+
+---
+
+# `check-db-push` allowlist entry
+
+`task.sh check` failed at `scripts/check-db-push.sh`: describe D builds its
+database with `db push` and no migrations, which is exactly what §7.1a forbids —
+and exactly the case the script's own ALLOWLIST comment describes ("a test whose
+subject is the schema shape itself and which seeds its own rows"). The allowlist
+was empty until now; this is its first entry, with the reason the script demands.
+
+Why it is safe here rather than a waiver of the rule: the danger §7.1a names is a
+suite running against an empty `permissions` table, where the engine answers
+`unknown_action` for everything and the tests pass with the engine deleted. This
+file cannot be in that state — describe D seeds via `prisma/seed.js`, and the
+same file asserts the migrate-only and migrate+seed shapes beside it and diffs
+all three for equality. The `db push` database exists to be COMPARED against a
+migrated one, which is the opposite of the failure the gate protects against.
+
+## Negative controls, because an allowlist that waives too much is invisible
+
+Run before accepting the entry:
+
+- entry removed → gate FAILS on this file, exit 1. So the entry is what is
+  silencing it, not something else.
+- a second file added using `db push` → gate FAILS on that file, exit 1, while
+  the allowlisted one stays quiet. So the waiver is file-scoped and did not turn
+  the gate off for the directory.
+
+`bash scripts/check-local.sh` → `check-local: all checks passed`, exit 0.
+
+## Gate weakness noticed, not fixed here
+
+The script matches two lines in this file: 445 (the real `execSync` call) and
+**422, which is prose inside a comment**. Its own comment says it matches "the
+CALL, not the words" and cites T-4a's conversion comments tripping the loose
+form — the same false positive, still present. It does not affect this branch's
+outcome (the file is allowlisted either way, and the count prints 2 instead of
+1), so fixing the regex is not in #138's lane. Worth an issue: a gate that flags
+comments teaches people to allowlist files that do not need it.
