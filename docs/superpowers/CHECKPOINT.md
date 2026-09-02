@@ -414,3 +414,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #114 ruling (TL-2): shape (b) — unauth → 6 tier-1 keys; pre-user (isConfirmedSingleUser) → all keys, endpoint fields = "" (frozen list incl. StorageDir, drift test); authed → full. RF R1/R2(+pre-user body)/R5(+count ≥92)/R8 endpoint not blanked→red/R9 user exists→window closed (real DB)/R10 onboarding renders without controlled/uncontrolled warning. → Dev1 contract.
 - #108 560e084b0 merged 8772af032, closed (infi-run:gate-108-560e084b0); content verified. 81/119. wt-108/g108 reaped. S11 = S11a+S11b done, S11c #107 queued.
 - #98 regate 12f8732b8: check-local, contract 60/60; sweep providerDocIdCallSites 2 red (#57 class) — rerun alone. Waiting TL-2 verdict.
+- #108 merged 2e6ee3294 (81/119). pg hit max_connections=100: 49 idle >5min backends on `approofworkspace` (leaked jest/prisma pools from post-merge runs) terminated → 14 total. This is the #106 root; Dev5 recon continues with fix proposal ($disconnect in afterAll / connection_limit).
+- #118: TL-1 PASS; Dev5 comment-only amend (residual names U+3000/U+FF0D separators; order clause). Waiting QA-2.
+- #98 db9649c24 (ledger-only over 12f8732b8): result rebound; waiting TL-2 verdict → merge.
+- #113: Dev3 starts non-record-shape parts; TL-1 RF list requested. Q4 still user's.
