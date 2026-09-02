@@ -103,3 +103,4 @@
 - **Milvus predicate rendered but never executed in tests** — same bug class as LanceDB backtick / pgvector placeholder. Real-store test or "unverified" label required in 1b. `[→ #30 1b]`
 - **Milvus real-store test skips without `MILVUS_TEST_ADDRESS`** — CI must set it or the parser regression (§7.12) is unguarded there. Dev4 #30 1b. `[→ O2/CI backlog]`
 - **`chat.read` not granted to any workspace role or org member on main** — regular users 404 on own chat history (4 routes). Found by Dev5 on #61. Hotfix #63 (slot 101000). `[→ #63]`
+- **Weaviate classes created before T-5 cannot gain `indexNullState`** (schema update rejected) — escape clause unavailable; re-embed (class recreate) required. #56 must include a Weaviate class-recreate path. Dev4/Techlead-2 on #30 1b. `[→ #56]`

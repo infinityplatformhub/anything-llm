@@ -117,3 +117,4 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Q2: document_acl keys on canonical `document_id`; pinned rows with NULL documentId are unprovable — same flag semantics as unlabelled vectors, never "no match = allow".
 - Q3: `getContextFiles` requires `user` (throw); callers without a user pass an explicit system actor that yields [].
 - Q4: agent paths (agents/index.js, ephemeral.js) are in slice 2 scope.
+- Ruling (1b round 2): qdrant escape clause uses `is_empty` (absent + null); RED fixture must omit the key. Weaviate = option A like chroma: new classes declare ACL properties + `invertedIndexConfig.indexNullState:true`; existing classes cannot be updated (schema PUT 422) → stay strict with an error-level boot report naming the class; never drop the where clause (that disables ACL for the whole class, not just unlabelled rows).
