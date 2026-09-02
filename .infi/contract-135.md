@@ -28,6 +28,26 @@ authority for a principal that no longer exists, and the filter's deny-only read
 is a current implementation detail, not a guarantee. What changes is how RF-1
 proves it — see below.
 
+**Scope of that correction: USER principals only. Do not generalise it to
+groups.** For a **group** principal, an allow-ACL row is live authority today —
+`policyRepository.js:157` counts `document_acl` rows for
+`principal_type: "group"` with **no effect filter**, deliberately: its own
+comment records QA-1 measuring a `member` actor adding themselves to a group that
+held an allow row for `document.read` and succeeding, and notes that counting one
+effect "would guard freeing a victim and miss helping yourself". #134's RF-9
+records that escalation as real.
+
+The two cases differ only because that count filters on `principal_type`, which
+makes a user-principal orphan invisible to it. That is a property of one query,
+not a property of ACL rows — which is exactly why the user-side cleanup is worth
+doing even though nothing reads those rows today.
+
+**`group_members` cleanup is defence in depth on the same footing.** A deleted
+user's membership row is not itself a grant, but it is the edge that carries
+group authority to a principal id — and group ACLs, per the paragraph above, are
+live. Removing the membership is what keeps a recycled id from arriving inside a
+group that does hold authority.
+
 ---
 
 ## 1. Shape — three call sites, one function, no second implementation

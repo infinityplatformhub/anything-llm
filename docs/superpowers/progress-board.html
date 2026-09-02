@@ -58,12 +58,12 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">c89b9ba1f</span> · 2026-09-03 07:45</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">282569f1d</span> · 2026-09-03 08:00</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
 <section class="overall">
-  <div class="big">104<small>/ 141 issues ปิด</small></div>
+  <div class="big">105<small>/ 141 issues ปิด</small></div>
   <div>
     <div class="bar" aria-label="99 closed, 3 in review, 3 in dev, 5 queued of 133">
       <span style="width:74.4%;background:var(--done)"></span>
@@ -72,7 +72,7 @@ td.mono{white-space:nowrap}
       <span style="width:3.8%;background:var(--queue)"></span>
     </div>
     <div class="legend">
-      <span><i style="background:var(--done)"></i>ปิดแล้ว 104</span>
+      <span><i style="background:var(--done)"></i>ปิดแล้ว 105</span>
       <span><i style="background:var(--gate)"></i>รอ review 4</span>
       <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
       <span><i style="background:var(--queue)"></i>คิว 5</span>
@@ -137,6 +137,7 @@ td.mono{white-space:nowrap}
   <div class="tbl"><table>
     <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุ</th></tr></thead>
     <tbody>
+      <tr><td class="mono">#136 slice 2</td><td>offboardUser ใน policyRepository: enumerate ก่อน, ผ่าน removeGroupMember / revokeGrant / revokeDocumentAcl, rollback ทั้งก้อน, F9/F12 คู่ guard</td><td>3 mutant รอดรอบแรกทุกตัวกลายเป็น fixture · TL-2 พบ guard ที่สองซ่อนอยู่หลังตัวแรก (F12)</td></tr>
       <tr><td class="mono">#139</td><td>yarn test ปฏิเสธ node ≠ 22 ทุกเส้นทาง (pretest + vitest setupFiles) · .nvmrc ตรง engines ทั้ง 4 แพ็กเกจ</td><td>QA-2 จับว่า npx vitest หลุด pretest · drift check ที่ไม่เคยถูกเขียนลงไฟล์ผ่านด้วย EXIT=0</td></tr>
       <tr><td class="mono">#136 slice 1</td><td>S12 offboarding: API-key suspension บังคับที่ reader (null / dangling / present), sweep level-triggered, cast "0"/"false" ถูก, delete path stamp revokedAt</td><td>QA-2 + TL-2 พบ 5 finding บน SHA แรก ทุกตัวปิดใน SHA เดียว · 14 mutants + 5 fix-mutants</td></tr>
       <tr><td class="mono">#138 driver</td><td>S4b slice 3 ครึ่งแรก: ทุก Lark request มี timeout 10s, Retry-After clamp 30s, token call bound, caller signal ไม่ถูกทับ</td><td>3 หลุมที่คอมเมนต์อ้างกลไกที่ไม่ได้วัด (heartbeat) แก้ก่อน merge · lease สูตรจากค่าคงที่ ไม่ใช่ตัวเลข</td></tr>
@@ -172,7 +173,7 @@ td.mono{white-space:nowrap}
 <tr><td class="mono">S9</td><td>Air-gap switch</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">S10</td><td>Analytics + token budget</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">S11</td><td>SMTP/mailer</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> S11a + S11b merged · S11c log รอ #107</td></tr>
-<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> slice 1 (#136) กำลังแก้ blocker</td></tr>
+<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> #136 ปิด (suspend + offboardUser) · #135 call sites กำลัง RED</td></tr>
 <tr><td class="mono">S13</td><td>MFA + session</td><td class="mono">2–5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">V1</td><td>ภาษาไทยครบวงจร</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> splitter + eval set · UI th / OCR ยังไม่เริ่ม</td></tr>
 <tr><td class="mono">V2</td><td>Lark bot</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>

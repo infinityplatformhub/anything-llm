@@ -912,3 +912,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #126 s2 GREEN in scratch (Dev2): 9/9 target, full 133/133 exit 0; P1–P9 fired (P8 smaller than oracle: 1 assertion); third file capabilityGate.test.jsx updated (approved); neighbours :302/:440 measured. Holds for #121.
 
 - #136 SLICE 2 MERGED (02778b133; gate PASS, TL-1 conditions, TL-2 PASS ×2, QA-2 PASS ×2). #136 CLOSED. #135 unblocked.
+- #136 CLOSED (slice 2 merged 282569f1d). wt-136s2 + g136s2 + wt-139 reaped. contract-135 scope clause (Dev2 d92111a95) landed. Post-merge agent for #136 s2 to run after postmerge-139 finishes (same HEAD lineage).
