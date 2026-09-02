@@ -296,3 +296,125 @@ S12 attaches to S4b's tombstone path.
   probe script removed after the run; nothing left in the tree.
 - Everything else is a citation to merged code, quoted with `file:line`.
 - No code was written for S4. This branch is docs-only.
+
+---
+
+## 7. Answers — user decisions (#105) and TL-2's Lark API findings
+
+Sections 0–6 were written before these. Where they speculate, this section governs.
+Sections 5 and 6 above are superseded except where re-stated here.
+
+### 7.1 Answered by the user (#105, 2026-09-02)
+
+**Q2 — department→role.** Map by Lark department directly. An **unmapped department
+produces NO grant** — deny by default, not `default` role. The mapping table is
+admin-editable (S4c). Note this is the *stricter* of the two options §6 offered: a
+synced user in an unmapped department can authenticate and then do nothing, which is
+the correct failure direction but will look like a broken login to them. S4c's UI has
+to make an unmapped department visible rather than let it sit silently.
+
+**Q3 — `emailVerified`.** Ignore it for Lark-synced principals; the directory record is
+trusted. See §7.3, which is what this decision actually commits to.
+
+**Q6 — LDAP and Lark both on.** **Lark wins.** Lark's identity and department are
+authoritative for grants. §7.4 covers what that costs, because the current code does the
+opposite.
+
+**Q1** was answered by shipping: #96 merged, so a group grant now authorizes its members.
+Everything below assumes that.
+
+### 7.2 Answered by TL-2 against the live Lark documentation
+
+**Q7 — there is NO delta API.** `page_token` is pagination *within one enumeration*
+(max 50 per page, 50 requests/second), not a change cursor. Event v3 offers six events
+(user/department created/updated/deleted) but they are webhook-only, filtered by the
+app's scope, carry `old_object` containing only changed fields, and **cannot be
+replayed**.
+
+The consequence is the single most important line in this document:
+
+> **A full enumeration is the source of truth. Events are an optimisation, never a
+> substitute.** "We received no event" does not mean "nothing changed" — it also means
+> the webhook failed, the scope filtered it, or the app was down.
+
+This settles §3's completeness rule rather than leaving it to the reconciler's author:
+S4b may only act on absence after a **completed full snapshot**, because there is no
+other mechanism that can distinguish "gone" from "not mentioned". `deltaSync` is
+therefore **false**, and the capability flag must say so — claiming it would be the
+kind of dishonest flag the seam's boundary section forbids.
+
+**Q4 — the subject is `user_id`.** We are single-tenant with a custom app, and `user_id`
+is stable within the tenant without depending on which app or developer org opened it
+(scope `contact:user.employee_id:readonly`). `open_id` is **forbidden permanently**: it
+is per-application, so it welds every `identity_links` row to one app registration.
+
+Recorded for whoever hits it later: if this ever becomes multi-tenant, the key is
+`union_id` scoped as `(tenant_key, union_id)` — not `user_id`, which is only unique
+within a tenant. That migration would have to rewrite every `identity_links` row, so the
+single-tenant assumption belongs in a comment beside the driver's `providerId()`.
+
+### 7.3 What "ignore emailVerified" actually means
+
+TL-2's finding sharpens the user's answer into something that must be written down
+rather than assumed: **neither `email` nor `enterprise_email` carries verified semantics
+in Lark.** There is no field that means "this address was proven".
+
+So Q3's answer is not "skip a redundant check". It is a **declared trust boundary**:
+*we trust the tenant administrator's directory to state who owns which address.* That
+is reasonable for a corporate directory and unreasonable for a public IdP, and the
+distinction is the whole reason `linkPrincipal` refuses unverified email everywhere
+else. The exemption must therefore be keyed on the sync path, not made a general
+loosening of core policy.
+
+**Decided in advance so it is not improvised at implementation time:**
+`enterprise_email` is preferred where present — it is domain-verified at the tenant
+level and therefore the stronger claim — falling back to `email` when it is empty, which
+it often is. A principal with neither is **quarantined, not created**: the seam's
+failure semantics already require invalid directory records to be quarantined without
+widening membership, and a user with no address cannot be matched to anything.
+
+### 7.4 Q6 "Lark wins" contradicts the code, and the shape matters — STILL OPEN
+
+Today `linkPrincipal` refuses a second identity for an already-federated email (rule R1).
+So with LDAP configured first, **Lark is refused** — the opposite of the ruling.
+
+Making Lark win requires one of:
+
+1. **Re-point** the existing `identity_links` row to Lark, or
+2. **Allow two links** for one user and rank providers at decision time.
+
+(1) is a smaller change and matches "Lark is authoritative", but re-pointing a link is
+*structurally identical to the account takeover R1 exists to prevent* — the difference
+is only that we trust the source. (2) keeps history but means every consumer of
+`identity_links` must know the precedence order, and forgetting it somewhere is a silent
+authorization difference.
+
+The open half is **scope**, and the recon is written to support either answer:
+
+- **(a) never-linked only** — Lark wins for users it has never seen linked elsewhere;
+  existing LDAP links are left alone and surfaced to an admin. Safe, no takeover shape,
+  but it means a migrating organisation keeps two regimes indefinitely and "Lark is
+  authoritative" is only true for new people.
+- **(b) all** — Lark re-points every conflicting link. Delivers what the ruling says,
+  and is the one that carries the takeover shape: anyone who can create a Lark account
+  with a given address inherits the local account bound to it.
+
+If (b), the mitigation is not optional: re-pointing must be **audited as an identity
+change** (seam 01 emits through core), must never fire from a *partial* enumeration
+(§7.2 — a half-read directory must not re-point anybody), and should be
+admin-reviewable rather than silent. That is a meaningful amount of S4b, and it is why
+this needs the user's answer before S4a's driver freezes its record shape.
+
+### 7.5 Consequences for S4a's contract (#113)
+
+- `capabilities()` → `{directorySync: true, groupSync: true, deltaSync: false}`. The
+  false flag is a finding, not an omission.
+- `DirectoryPrincipal.subject` = `user_id`; `open_id` must appear nowhere.
+- Pagination is `page_token`; the rate limit to respect is 50 requests/second, and the
+  page size is capped at 50 — so a 5,000-person org is 100 sequential pages, which makes
+  the "a failed enumeration must surface as a failure" rule in the contract load-bearing
+  rather than theoretical.
+- Address selection: `enterprise_email` → `email` → quarantine.
+- Webhook handling is **not** S4a and arguably not S4b either: since events cannot be
+  replayed and are not authoritative, they buy latency and nothing else. Worth its own
+  issue after the reconciler exists, if at all.
