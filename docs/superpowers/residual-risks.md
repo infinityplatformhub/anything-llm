@@ -108,3 +108,4 @@
 - **`policy_versions` rows carry no origin** — T-1 backfill and later migrations all write `(grant, org:1)`, so a migration-only test cannot assert its own bump. Dev5 on #61. `[→ backlog]`
 - **Raw prisma writes to document_acl bypass the version bump** — `grantDocumentAcl`/`revokeDocumentAcl` (policyRepository) are the only correct paths; filter cache stays stale otherwise. Staleness test + model comment in slice 2. `[→ #30 slice 2]`
 - **`chat.read` is now a dead API scope** (no route declares it after #64) but migration 045000 backfilled legacy wildcard keys with it; harmless, confusing in audit. QA-1 on #64. `[→ backlog]`
+- **pg_trgm produces zero trigrams for Thai under `lc_ctype=C`** (initdb default) — chat search full-scans silently for the product's primary language. #61 adds detection (migration warning + boot error); O2 installer must create the DB with a UTF-8 locale. QA-3 on #61. `[→ #61 detect / O2 enforce]`
