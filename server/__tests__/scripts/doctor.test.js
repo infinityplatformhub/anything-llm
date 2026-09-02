@@ -13,6 +13,21 @@
  * The database-backed checks run against the real DATABASE_URL. The refusal
  * paths (unwritable .env, wrong uid, missing extension) are driven through
  * injected inputs, because they cannot be produced on a healthy dev box.
+ *
+ * WHAT THIS SUITE NEEDS OF ITS DATABASE
+ *
+ * A PostgreSQL 16 or later at DATABASE_URL. Without one, every `withDb` block
+ * below is SKIPPED rather than failed — the suite still runs and still means
+ * something, it just checks less.
+ *
+ * `pg_trgm` must be installable; a stock `postgres:16` image has it.
+ *
+ * `pgvector` is NOT required and its absence is not a failure. The extension
+ * checks demand `vector` only when `VECTOR_DB=pgvector`, because the default is
+ * lancedb and stock `postgres:16` does not ship pgvector — including this
+ * project's own CI. A reviewer running these against a database WITH pgvector
+ * and a developer running them against one without should both see green.
+ * Written down because ten minutes went into rediscovering it (#94).
  */
 const fs = require("fs");
 const os = require("os");

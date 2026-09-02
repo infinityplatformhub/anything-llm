@@ -55,7 +55,7 @@ The test of each item is: *would its absence mean a second round-trip with the o
 | section | source | notes |
 |---|---|---|
 | versions | `package.json`, `process.version`, `process.platform/arch` | |
-| doctor checklist | `utils/doctor` `runChecks()` | already redacted by construction — no user text in it |
+| doctor checklist | `utils/doctor` `runChecks()` | scrubbed like every other section — see the `updated` note below |
 | migration state | `_prisma_migrations` — name, `applied_steps_count`, `finished_at`, `rolled_back_at` | the failed-migration state §7.13 exists for is invisible without this |
 | configuration shape | env allowlist, below | which provider, never which key |
 | counts | `event_logs` grouped by `event`, user/workspace/document totals | **counts, never rows** |
@@ -71,6 +71,15 @@ Two things pulled deliberately **out**:
   can carry a query string with a token, a filename with a customer's name, or a prompt fragment.
   If a later ruling wants them, they go through `scrubValue` like everything else — but the honest
   default is out.
+
+> **updated (TL-1 finding F4):** "already redacted by construction" was wrong, and is corrected in
+> the table above. A check's `detail` string quotes what it FOUND — a connection string, a
+> filesystem path, a locale name — so it is built from exactly the environment every other section
+> is redacted for. `runChecks()` output goes through `scrubValue` like everything else. Relatedly,
+> `collectDatabase` builds its own connection line from `stripUrlCredentials` rather than reusing
+> the doctor's `maskUrl`, which keeps the username: right for a checklist on the operator's own
+> terminal, wrong for a file headed to a public issue, where a database username and an internal
+> hostname match no pattern and nothing downstream would catch them.
 
 ## 3. Environment: an allowlist, and why `maskSecretValues` alone is not enough
 
@@ -93,6 +102,14 @@ reason `redaction.js` runs both: an allowlisted key still carries free text.
 
 ## 4. The permission, and the migration
 
+> **updated (PMO ruling 1, after this recon merged): this issue is CLI only and carries no
+> migration.** `diagnostics.export` and the slot-100000 timestamp move to O5b-ui, where a request
+> with an actor actually exists to check them. Reason: a permission that nothing in the same issue
+> checks is an inert guard — the #80 family, where a row exists in the vocabulary and every code
+> path reaches the feature without consulting it, so the guard reads as protection in review while
+> protecting nothing. No slot is reserved now. The paragraphs below are kept as the reasoning
+> O5b-ui inherits, not as this issue's scope.
+
 `diagnostics.export`, granted to super_admin alone — the same reasoning and the same shape as
 `audit.read` (migration `20260902050000`).
 
@@ -100,15 +117,13 @@ reason `redaction.js` runs both: an allowlisted key still carries free text.
 must not thereby read provider credentials, which is precisely the line a bundle crosses.
 
 **Migration slot 100000 is Dev5's** (already used by `20260902100000` and `20260902101000`); the
-next free timestamp in that slot takes the vocabulary row and the super_admin grant. To be
-announced on the issue before it is written.
+next free timestamp in that slot takes the vocabulary row and the super_admin grant — in O5b-ui,
+not here, and not reserved until then.
 
 **The CLI has no session.** `docker compose run --rm anything-llm doctor --bundle` runs as the
-container, with no HTTP request and no actor. So the permission gates the **HTTP/UI** path (O5b-ui,
-later) — for the CLI the control is that you already have shell access to the container, which is
-strictly more than the bundle grants. This should be stated in the issue rather than discovered in
-review: it is not a hole, but it does mean the migration lands in this issue while the check it
-enables is exercised in the next.
+container, with no HTTP request and no actor. That is what forces the split above: for the CLI the
+control is that you already have shell access to the container, which is strictly more than the
+bundle grants.
 
 ## 5. Delivery
 
@@ -122,6 +137,10 @@ would leave the bundle on the container filesystem afterwards.
 **One caveat that must be in the issue:** the doctor's own human-readable output goes to stdout
 today. `--bundle` must emit JSON *only*, or the redirect above produces something that is not JSON.
 Diagnostics about the bundling itself go to stderr.
+
+> **updated (PMO ruling 2): confirmed as stated.** `--bundle` puts JSON on stdout and nothing else;
+> the checklist goes to stderr. The test asserts it by parsing the *entire* stdout as JSON rather
+> than searching it for a `{`, so a stray log line fails rather than being tolerated.
 
 ## 6. Tests
 
@@ -148,9 +167,9 @@ suite needs and that a stock `postgres:16` skips those blocks rather than failin
 
 ## Scope
 
-**In:** `utils/diagnostics/` (assembly + allowlist), the `--bundle` dispatch, the migration for
-`diagnostics.export` + super_admin grant, the seed sync, the tests above, and the `doctor.test.js`
-header note.
+**In:** `utils/diagnostics/` (assembly + allowlist), the `--bundle` dispatch, the tests above, and
+the `doctor.test.js` header note.
 
-**Out:** the UI download (O5b-ui, needs a mockup); shipping the bundle anywhere; log ingestion;
-`event_logs` row content; counter wiring (O5a-wire).
+**Out:** the `diagnostics.export` permission, its migration and seed sync, and the slot reservation
+— all O5b-ui (ruling 1, §4); the UI download (O5b-ui, needs a mockup); shipping the bundle
+anywhere; log ingestion; `event_logs` row content; counter wiring (O5a-wire).

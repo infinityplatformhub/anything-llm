@@ -198,6 +198,12 @@ function redactEventData(data) {
 
 module.exports = {
   redactEventData,
+  // O5b (#94): the diagnostic bundle needs the PATTERN SCAN without the
+  // top-level allowlist. `redactEventData` would drop every one of the bundle's
+  // own section names, which are not audit-event data keys. The bundle applies
+  // its own allowlist to the environment (utils/diagnostics ENV_ALLOWLIST) and
+  // uses this for the free text that survives it.
+  scrubValue,
   ALLOWED_KEYS,
   PATTERNS,
   PII_CHANGE_FIELDS,
