@@ -182,6 +182,11 @@ export default function MultiUserAuth() {
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [showResetPasswordForm, setShowResetPasswordForm] = useState(false);
   const [customAppName, setCustomAppName] = useState(null);
+  // S3 (#60): whether this deployment authenticates against a directory.
+  // Defaults to false so the local form is what renders while the answer is in
+  // flight, and if the check fails — a form that posts locally is always safe,
+  // whereas one that posts a password to a disabled LDAP route is not.
+  const [ldapEnabled, setLdapEnabled] = useState(false);
 
   const {
     isOpen: isRecoveryCodeModalOpen,
@@ -196,8 +201,13 @@ export default function MultiUserAuth() {
     const data = {};
     const form = new FormData(e.target);
     for (var [key, value] of form.entries()) data[key] = value;
-    const { valid, user, token, message, recoveryCodes } =
-      await System.requestToken(data);
+    // The password goes to the directory or to the local record, never to
+    // whichever endpoint happens to answer. These compare it against different
+    // things, so the choice is made here, from configuration, rather than by a
+    // handler that already holds the credential.
+    const { valid, user, token, message, recoveryCodes } = ldapEnabled
+      ? await System.requestLdapToken(data)
+      : await System.requestToken(data);
     if (valid && !!token && !!user) {
       setUser(user);
       setToken(token);
@@ -273,6 +283,13 @@ export default function MultiUserAuth() {
     fetchCustomAppName();
   }, []);
 
+  useEffect(() => {
+    // Asked once, before anyone types. `System.ldapEnabled` already fails closed
+    // on any error, so a directory that is down means the local form rather than
+    // a form that posts a password nowhere useful.
+    System.ldapEnabled().then(setLdapEnabled);
+  }, []);
+
   if (showRecoveryForm) {
     return (
       <RecoveryForm
@@ -341,16 +358,29 @@ export default function MultiUserAuth() {
               ? t("login.multi-user.validating")
               : t("login.multi-user.login")}
           </button>
-          <button
-            type="button"
-            className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm flex gap-x-1"
-            onClick={handleResetPassword}
-          >
-            {t("login.multi-user.forgot-pass")}?
-            <b className="font-semibold text-sky-300 light:text-sky-600">
-              {t("login.multi-user.reset")}
-            </b>
-          </button>
+          {/*
+            Recovery resets a LOCAL password. Under LDAP the password lives in
+            the directory and this application cannot change it — offering the
+            link would send someone through a flow that ends in a reset which
+            changes nothing they can log in with.
+          */}
+          {!ldapEnabled && (
+            <button
+              type="button"
+              className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm flex gap-x-1"
+              onClick={handleResetPassword}
+            >
+              {t("login.multi-user.forgot-pass")}?
+              <b className="font-semibold text-sky-300 light:text-sky-600">
+                {t("login.multi-user.reset")}
+              </b>
+            </button>
+          )}
+          {ldapEnabled && (
+            <p className="text-zinc-400 light:text-zinc-600 text-xs text-center">
+              {t("login.multi-user.directory-credentials")}
+            </p>
+          )}
         </div>
       </form>
 

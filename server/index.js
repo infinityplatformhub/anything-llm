@@ -53,6 +53,7 @@ const { memoryEndpoints } = require("./endpoints/memory");
 const { auditEndpoints } = require("./endpoints/audit");
 const { identityEndpoints } = require("./endpoints/identity");
 const { samlIdentityEndpoints } = require("./endpoints/identity/saml");
+const { ldapIdentityEndpoints } = require("./endpoints/identity/ldap");
 const { httpLogger } = require("./middleware/httpLogger");
 const {
   apiIpRateLimit,
@@ -136,6 +137,9 @@ auditEndpoints(apiRouter);
 // to a config builder that only knows how to produce OIDC settings. The failure
 // is a 500 on every SAML login, which is why samlRoutesHttp.test.js pins it.
 samlIdentityEndpoints(apiRouter);
+// S3 (#60): same reason — a concrete route under /sso/ must precede S1's
+// wildcard, which would otherwise swallow it (the cd4fda5e defect).
+ldapIdentityEndpoints(apiRouter);
 identityEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);

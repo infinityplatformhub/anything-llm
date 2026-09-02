@@ -6,6 +6,7 @@
 
 const { OidcIdentityProvider } = require("./OidcIdentityProvider");
 const { SamlIdentityProvider } = require("./SamlIdentityProvider");
+const { LdapIdentityProvider } = require("./LdapIdentityProvider");
 const { IdentityConfigurationError } = require("./errors");
 
 // Null-prototype: `provider` arrives from the URL, and a plain object would
@@ -13,6 +14,7 @@ const { IdentityConfigurationError } = require("./errors");
 const identityProviders = Object.assign(Object.create(null), {
   [OidcIdentityProvider.providerId()]: OidcIdentityProvider,
   [SamlIdentityProvider.providerId()]: SamlIdentityProvider,
+  [LdapIdentityProvider.providerId()]: LdapIdentityProvider,
 });
 
 /** @param {string} providerId @returns {boolean} */
@@ -38,4 +40,30 @@ function getIdentityProvider(providerId, config = {}) {
   return new Driver(config);
 }
 
-module.exports = { identityProviders, getIdentityProvider, isKnownProvider };
+/**
+ * What a provider can do, without constructing one.
+ *
+ * A route needs this BEFORE it has configuration — `/sso/:provider/login` is the
+ * redirect flow, and a password-only provider like LDAP reaching it would build
+ * a driver from the wrong shape of config and fail with a 500 rather than a 404.
+ * Constructing a driver just to ask would require the very configuration the
+ * caller is about to look up.
+ *
+ * An unknown provider answers `{}` rather than throwing: callers use this to
+ * DECIDE whether to proceed, and one that has already checked `isKnownProvider`
+ * should not need a second try/catch.
+ *
+ * @param {string} providerId
+ * @returns {Object} the driver's capabilities, or {} when unknown
+ */
+function providerCapabilities(providerId) {
+  if (!isKnownProvider(providerId)) return {};
+  return identityProviders[providerId].capabilities();
+}
+
+module.exports = {
+  identityProviders,
+  getIdentityProvider,
+  isKnownProvider,
+  providerCapabilities,
+};
