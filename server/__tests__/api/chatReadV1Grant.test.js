@@ -77,11 +77,16 @@ const SYS = SERVICE_PRINCIPALS.singleUser;
 // from the grant half.
 const MEMBER_SECRET = "apw-key-g63-member-AAAAAAAAAAAAAAAAAAAA";
 const OUTSIDER_SECRET = "apw-key-g63-outsdr-AAAAAAAAAAAAAAAAAAAA";
+// #64: a creator who DOES hold chat.read_others. Without this the suite would assert
+// only refusals, and a route that refused everyone would pass it.
+const READER_SECRET = "apw-key-g63-reader-AAAAAAAAAAAAAAAAAAAA";
 
 const withMemberKey = (req) =>
   req.set("Authorization", `Bearer ${MEMBER_SECRET}`);
 const withOutsiderKey = (req) =>
   req.set("Authorization", `Bearer ${OUTSIDER_SECRET}`);
+const withReaderKey = (req) =>
+  req.set("Authorization", `Bearer ${READER_SECRET}`);
 
 let workspace;
 let thread;
@@ -164,7 +169,31 @@ beforeAll(async () => {
     },
   });
 
-  const scopes = JSON.stringify(["chat.read"]);
+  // #64: these routes declare chat.read_others, so every key here carries both — the
+  // scope half must not be what separates them, or the grant half is never reached.
+  const scopes = JSON.stringify(["chat.read", "chat.read_others"]);
+
+  // A creator holding chat.read_others org-wide, and a member of this workspace.
+  const readerUser = await prisma.users.create({
+    data: {
+      username: "g63-reader",
+      password: bcrypt.hashSync("Pw123456!", 10),
+      role: "default",
+    },
+  });
+  const moderatorRole = await prisma.roles.findFirstOrThrow({
+    where: { name: "content_moderator", scope: "org" },
+  });
+  await repository.grantRole({
+    actor: SYS,
+    principalType: "user",
+    principalId: String(readerUser.id),
+    roleId: moderatorRole.id,
+    db: prisma,
+  });
+  await prisma.workspace_users.create({
+    data: { user_id: readerUser.id, workspace_id: workspace.id },
+  });
   await prisma.api_keys.createMany({
     data: [
       {
@@ -180,6 +209,13 @@ beforeAll(async () => {
         keyPrefix: keyPrefix(OUTSIDER_SECRET),
         scopes,
         createdBy: outsiderUser.id,
+      },
+      {
+        name: "g63-reader-key",
+        secretDigest: digestSecret(READER_SECRET),
+        keyPrefix: keyPrefix(READER_SECRET),
+        scopes,
+        createdBy: readerUser.id,
       },
     ],
   });
@@ -197,14 +233,19 @@ afterAll(async () => {
 });
 
 describe("issue 63: GET /v1/workspace/:slug/chats", () => {
-  it("a key whose creator is a workspace member is allowed", async () => {
+  // #64 changed what this route asks for. It returns EVERY user's chats — there is no
+  // per-user filter, and an API key has no "self" to filter by — so it declares
+  // `chat.read_others`, not `chat.read`. A member creator holds `chat.read` and not
+  // `chat.read_others`, so the answer this pair asserts is now 403.
+  //
+  // The test is kept rather than deleted: #63's question was whether the GRANT half is
+  // consulted on this route at all, and it still is. Only the grant it requires moved.
+  it("a key whose creator is only a workspace member is refused (#64)", async () => {
     const response = await withMemberKey(
       request(app).get(`/api/v1/workspace/${workspace.slug}/chats`)
     );
-    expect(response.status).toBe(200);
-    // Guard the premise: a 200 with nothing in it would pass whether or not the
-    // grant landed.
-    expect(response.body.history.length).toBeGreaterThan(0);
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Insufficient scope." });
   });
 
   it("a key whose creator holds no chat.read in the workspace is refused", async () => {
@@ -212,18 +253,30 @@ describe("issue 63: GET /v1/workspace/:slug/chats", () => {
       request(app).get(`/api/v1/workspace/${workspace.slug}/chats`)
     );
     expect(response.status).toBe(403);
+  });
+
+  it("a key whose creator holds chat.read_others is allowed (positive control)", async () => {
+    // Every key in this suite carries the same scope list, so this 200 against the two
+    // 403s above is the grant half being consulted — which is what #63 asserted, and
+    // what would otherwise have been lost when both cases became refusals.
+    const response = await withReaderKey(
+      request(app).get(`/api/v1/workspace/${workspace.slug}/chats`)
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.history.length).toBeGreaterThan(0);
   });
 });
 
 describe("issue 63: GET /v1/workspace/:slug/thread/:threadSlug/chats", () => {
-  it("a key whose creator is a workspace member is allowed", async () => {
+  // Same reason as the workspace listing above: #64 made this route `chat.read_others`.
+  it("a key whose creator is only a workspace member is refused (#64)", async () => {
     const response = await withMemberKey(
       request(app).get(
         `/api/v1/workspace/${workspace.slug}/thread/${thread.slug}/chats`
       )
     );
-    expect(response.status).toBe(200);
-    expect(response.body.history.length).toBeGreaterThan(0);
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Insufficient scope." });
   });
 
   it("a key whose creator holds no chat.read in the workspace is refused", async () => {
@@ -233,5 +286,15 @@ describe("issue 63: GET /v1/workspace/:slug/thread/:threadSlug/chats", () => {
       )
     );
     expect(response.status).toBe(403);
+  });
+
+  it("a key whose creator holds chat.read_others is allowed (positive control)", async () => {
+    const response = await withReaderKey(
+      request(app).get(
+        `/api/v1/workspace/${workspace.slug}/thread/${thread.slug}/chats`
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.history.length).toBeGreaterThan(0);
   });
 });

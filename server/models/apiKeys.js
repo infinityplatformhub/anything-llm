@@ -15,11 +15,26 @@ const {
  * @returns {string[]} the same list, validated
  * @throws when absent, empty, or naming a scope no route asks for
  */
+/**
+ * Scopes that existed and no longer do, mapped to what replaced them.
+ *
+ * `Unknown scope(s): chat.read` is true but unhelpful — it reads as a typo, and the
+ * caller's next move is to check their spelling rather than to grant the right thing.
+ * A name that WAS valid deserves to say so, and to say what took its place.
+ */
+const RETIRED_SCOPES = Object.freeze({
+  "chat.read":
+    "chat.read was retired in #64 (/v1 chat listings return every user's chats); use chat.read_others",
+});
+
 function validateScopes(scopes) {
   if (!Array.isArray(scopes) || scopes.length === 0)
     throw new Error("An API key must be created with an explicit, non-empty scope list.");
   if (scopes.includes("*"))
     throw new Error("The wildcard scope no longer exists; name the scopes the key needs.");
+  const retired = scopes.filter((scope) => scope in RETIRED_SCOPES);
+  if (retired.length)
+    throw new Error(retired.map((scope) => RETIRED_SCOPES[scope]).join("; "));
   const unknown = scopes.filter((scope) => !KNOWN_SCOPES.includes(scope));
   if (unknown.length)
     throw new Error(`Unknown scope(s): ${unknown.join(", ")}`);
@@ -99,4 +114,4 @@ const ApiKey = {
   },
 };
 
-module.exports = { ApiKey };
+module.exports = { ApiKey, RETIRED_SCOPES };

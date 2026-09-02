@@ -13,7 +13,12 @@ const ROUTE_SCOPES = Object.freeze({
   "GET /v1/admin/workspaces/:workspaceId/users": "workspace.read",
   "POST /v1/admin/workspaces/:workspaceId/update-users": "workspace.members.manage",
   "POST /v1/admin/workspaces/:workspaceSlug/manage-users": "workspace.members.manage",
-  "POST /v1/admin/workspace-chats": "chat.read",
+  // #64: reading EVERY user's chats is `chat.read_others` by definition, not `chat.read`.
+  // These three routes have no per-user filter — the session routes narrow to the caller
+  // via `forWorkspaceByUser`, and there is no equivalent "self" for an API key, which is
+  // a bearer credential for its creator rather than an identity. Naming the wider action
+  // is what makes the ingress check refuse a key whose creator holds only `chat.read`.
+  "POST /v1/admin/workspace-chats": "chat.read_others",
   "POST /v1/admin/preferences": "system.write",
   "GET /v1/users": "user.read",
   "GET /v1/auth": "system.read",
@@ -25,7 +30,7 @@ const ROUTE_SCOPES = Object.freeze({
   "GET /v1/workspace/:slug": "workspace.read",
   "DELETE /v1/workspace/:slug": "workspace.delete",
   "POST /v1/workspace/:slug/update": "workspace.write",
-  "GET /v1/workspace/:slug/chats": "chat.read",
+  "GET /v1/workspace/:slug/chats": "chat.read_others",
   "POST /v1/workspace/:slug/update-embeddings": "workspace.embeddings.manage",
   "POST /v1/workspace/:slug/update-pin": "document.pin",
   "POST /v1/workspace/:slug/chat": "chat.write",
@@ -36,7 +41,7 @@ const ROUTE_SCOPES = Object.freeze({
   "POST /v1/workspace/:slug/thread/new": "thread.create",
   "POST /v1/workspace/:slug/thread/:threadSlug/update": "thread.write",
   "DELETE /v1/workspace/:slug/thread/:threadSlug": "thread.delete",
-  "GET /v1/workspace/:slug/thread/:threadSlug/chats": "chat.read",
+  "GET /v1/workspace/:slug/thread/:threadSlug/chats": "chat.read_others",
   "POST /v1/workspace/:slug/thread/:threadSlug/chat": "chat.write",
   "POST /v1/workspace/:slug/thread/:threadSlug/stream-chat": "chat.write",
 

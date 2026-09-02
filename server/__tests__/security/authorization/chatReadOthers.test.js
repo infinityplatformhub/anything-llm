@@ -144,6 +144,11 @@ beforeAll(async () => {
   const { digestSecret, keyPrefix } = require("../../../utils/apiKeySecurity");
   const keyScopes = [
     "chat.read",
+    // #64: the /v1 chat listings declare `chat.read_others` — they return every user's
+    // chats and there is no per-user filter to narrow them. The key must carry it or the
+    // scope half refuses before the grant half is ever consulted, which would make the
+    // pair below prove nothing: both keys would be refused, for the same reason.
+    "chat.read_others",
     "document.bulk_export",
     "workspace.read",
     "system.read",
