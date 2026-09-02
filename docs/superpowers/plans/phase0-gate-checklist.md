@@ -17,7 +17,7 @@ not in the room.
 
 | # | Track | What closing it proves | State at `cd6faf84` |
 |---|---|---|---|
-| #15 | E2E | 12 scenarios green headed against a real stack | 14 `test()` blocks on `7e6ed3bb`; see §4 |
+| #15 | E2E | ~~12 scenarios green headed against a real stack~~ | **PASS** — 12/12 × 3 at `e77d0b78`, 1 headed + 2 headless, each preceded by `up.sh up`. Independent witness (QA-1, not Dev3): `docs/superpowers/evidence/qa1-e2e-witness.md`. See §4 for what this does *not* prove |
 | #26 | PR-4b | ~~Every route carries a named scope~~ | **closed** — counter 0 at `b66ebc5d` |
 | #27 | PR-4c | No key can be minted with `*` | started; three sites, see §2.1 |
 | #25 | T-4a | ~~Role literals gone from internal routes~~ | **closed** at `70283c1b` — §2.2 passes |
@@ -218,6 +218,7 @@ The vector-leak test itself (P0-5 DoD item 8): two users, documents with disjoin
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 export DATABASE_URL="postgresql://…"   # real Postgres, per code-standards §7.0
 export API_KEY_PEPPER="…"              # ≥32 bytes
+export STORAGE_DIR="…"                 # see §6 — four requirements, not two
 cd server && yarn test
 ```
 
@@ -241,7 +242,7 @@ Two flakes are recorded as fixed; both were re-checked here rather than taken on
 - **DROP DATABASE race — fixed.** `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` each close `afterAll` with `}, 60_000);`.
 - **`modelPricing` etag** (`[→ #38]`) — did not recur across the three runs. The register's original cause note was wrong: Dev1 traced it to a lazy getter plus a background refresh plus singleton-on-require, not a shared cacheDir. **Three clean runs do not close it** — an intermittent failure that did not happen is not a fixed one, which is exactly why it has an issue rather than a strike-through.
 
-Without both env vars, six suites fail at import time and are counted as *failed*, not skipped — the `Tests:` line silently shrinks. A reviewer who forgets them reads a smaller green number as success.
+Without the pepper, six suites fail at import time and are counted as *failed*, not skipped — the `Tests:` line silently shrinks. A reviewer who forgets it reads a smaller green number as success. The pepper is one of **four** environment requirements; all four are in §6, and a red local run says nothing about the code until every one of them is set.
 
 ### 2.6 Repo standards
 
@@ -397,7 +398,7 @@ The 12 scenarios cover onboarding → embedder → login → workspace → uploa
 
 It is **not** the authorization gate. Scenario 10 ("member cannot see admin UI or hit admin routes") is one negative case; the P0-5 matrix is every role × every action, and the vector-leak test is separate from both. Do not let a green E2E run stand in for §2.4.
 
-At `7e6ed3bb` the spec file also fails `gate_urls` on two `http://mock-llm:8080/v1` literals (code-standards §7.4). Fix by hoisting the URL into a constant in `e2e/config.js`, not by adding the file to `.infi/checkignore` — the checkignore was emptied deliberately.
+~~At `7e6ed3bb` the spec file also fails `gate_urls` on two `http://mock-llm:8080/v1` literals~~ — **fixed at `e77d0b78`** the recommended way: the URL is now built in `e2e/config.js` from `MOCK_LLM_HOST`, and the spec file has no `http://` literal left. Not by adding the file to `.infi/checkignore` — the checkignore was emptied deliberately.
 
 ---
 
@@ -406,7 +407,41 @@ At `7e6ed3bb` the spec file also fails `gate_urls` on two `http://mock-llm:8080/
 1. Confirm every issue in §1 is closed and merged into `approof/main`.
 2. Run §2.1–§2.7 on that exact SHA. Record the numbers, not "passed".
 3. Confirm §3.1 is still empty — re-verify each item in the tree rather than trusting this file, which records a state, not a guarantee.
-4. Run the full suite three times (§2.5). Three green runs with the same count, or the gate does not open.
+4. Run the full suite three times (§2.5), with the §6 environment set first. Three green runs with the same count, or the gate does not open.
 5. Boot production against real Postgres and query the DB for the state each merged track claims (code-standards §7.2). A green suite is not a booted system; that distinction is why `pg_advisory_xact_lock` shipped broken through three passing checks.
 
 Anything that cannot be re-run by someone who was not in the room does not belong in this checklist. If a criterion here turns out to need judgment, it is written wrong — fix the criterion.
+
+---
+
+## 6. Local server test env — four things, or the numbers are meaningless
+
+Every command in §2 that ends in `yarn test` needs all four of these. Missing any
+one produces failing suites that read as regressions and are not: a local run at
+`e77d0b78` showed **22 failed suites**; with all four set the same tree was
+**98/98 suites, 1052/1052 tests**, identical to CI. Source: Dev3 ledger-15 addendum.
+
+| # | Requirement | What breaks without it |
+|---|---|---|
+| 1 | **Node 22** — `export PATH="/opt/homebrew/opt/node@22/bin:$PATH"` | `engines: ">=22 <23"` rejects the machine default (node 26); `yarn` refuses to run at all |
+| 2 | **`API_KEY_PEPPER` ≥ 32 bytes** | `assertApiKeyPepper()` runs at module load, so ~6 suites die at `require` time, before a test executes (code-standards §7.0) |
+| 3 | **`STORAGE_DIR`** | `server/utils/files/index.js:10` resolves it outside development; undefined throws `paths[0] must be of type string` and takes out `routeWiring` |
+| 4 | **A fresh, migrated, *dedicated* database** | Since T-4b, `isConfirmedSingleUser` counts real `users` rows on top of the mocked `isMultiUserMode`, so a leftover user row from an earlier probe fails a correct test — and the error names the test, not the row (**code-standards §7.8**) |
+
+```bash
+export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
+export API_KEY_PEPPER="local-dev-api-key-pepper-32-bytes-min"
+export STORAGE_DIR="$PWD/server/storage"
+export DATABASE_URL="postgresql://approof:approof@localhost:5432/gate_$$"
+psql "postgresql://approof:approof@localhost:5432/postgres" -c "CREATE DATABASE gate_$$;"
+cd server && ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+yarn test
+```
+
+Item 4 is the one that catches people twice: the database must be **fresh** (§7.8)
+*and* built by `migrate deploy`, never `db push` (code-standards §7.1a) — `db push`
+creates the tables but runs none of the 31 seed INSERTs, so the authorization suites
+pass against an empty `permissions` table.
+
+A red local run is not evidence about the code until all four are set. Do not report
+one as a regression before checking this table.
