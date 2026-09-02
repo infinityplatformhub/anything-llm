@@ -120,3 +120,24 @@ operator ชนะ provider default) ลบ = ทำลาย ruling (1) เอ�
 ## GREEN รอบ 2
 `Tests: 1351 passed, 1351 total` / `Test Suites: 133 passed, 133 total` fresh DB
 migration 090000 + full migrate deploy
+
+## Ruling รอบ 3 (PMO ack)
+
+Ruling: `SIMPLE_SSO_NO_LOGIN_REDIRECT` เก็บ (PMO ยืนยันตามที่ผมเสนอ) — มันคือ
+operator override ของ ruling (1) แก้ comment ใน .env.example พอ
+
+Ruling: assertion ใน `t1-authz-migration.test.js` ถูกต้องแล้ว (artifact ของ replay)
+comment อธิบายเหตุผลอยู่ที่ assertion แล้วตั้งแต่รอบ 2
+
+Ruling: เพิ่มเทสยืนยันว่า `SSOProviders` payload ไม่มี issuer/clientId/secret —
+`GET /setup-complete` เป็น unauthenticated endpoint ที่หน้า login อ่านก่อนใครจะ sign in
+ดังนั้น field นี้ส่งได้แค่ provider id. เทสยืนยันการ**ไม่มี**อยู่ เพราะการแก้ในอนาคตแบบ
+"ใส่ issuer ไปด้วย มันก็ public อยู่แล้ว" คือทางที่ข้อมูลนี้รั่วจริง ๆ
++ เทสว่ารายการ truthy spelling ตรงกับ `providerConfig()` ใน endpoints/identity.js
+(ถ้าไม่ตรง หน้า login จะเสนอ provider ที่ route ปฏิเสธ หรือซ่อนตัวที่ใช้ได้)
+ถ้าผิด: internal issuer URL และ client id หลุดให้คนที่ยังไม่ได้ login เห็น
+
+RED: เปลี่ยน `ssoEnabledProviders()` ให้คืน `{id, issuer}` → 3 failed / 1 passed
+ตัวที่แดงรวม "carries no issuer" ตัวที่เขียวคือ provider ที่ปิดอยู่ (ยังไม่ควรโผล่)
+
+GREEN: `Tests: 1355 passed, 1355 total` / `Test Suites: 134 passed, 134 total`
