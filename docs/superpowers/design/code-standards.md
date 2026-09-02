@@ -983,3 +983,6 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 #### 7.14c partial gate ต้องรัน sweep suites เสมอ
 #80 gate รันเฉพาะ contract suites (§7.14 partial) → merge แล้ว `updateSettingsReturns` sweep (#65) แดงบน main (`endpoints/mailer.js:110/171` ทิ้ง return) · กฎ: partial gate ต้องเพิ่ม sweep ที่เดินทั้ง tree เสมอ — `updateSettingsReturns`, `routeGateSweep`, `apiRouteAuthSweep`, `managerAllowedFieldsDrift`, `providerDocIdCallSites` (ลิสต์ใน `.infi/sweeps.txt` ต่อไป)
+
+#### 7.9f evidence — #84 f309f1247: source-scan comparison with unbounded search
+gate-equality test did `source.slice(at).match(/requirePermission/)` — deleting the DELETE route's middleware line made both routes resolve to the same `requirePermission` at line 764 (update-env's), so "equal" was trivially true. QA-3 proved it by running the extractor: `DELETE foundAtLine=764, POST foundAtLine=764`. Fixed by bounding the slice to the route's own registration block (c22939503). Rule: any source-scan that compares two sites must bound each search to its own block and assert a match exists inside that block.
