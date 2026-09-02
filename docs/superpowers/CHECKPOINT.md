@@ -526,3 +526,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #125 c9a3219fe MERGED (TL-2 PASS + QA-2 PASS; 25/25, sweeps 63/63; closed gate-125-c9a3219fe). Content verified. Post-merge to run after #123's finishes.
 - #40 t4 new SHA 1ca353edc (Dev2: Dev4 sweep/mock merged + M3 source-assert, M4 SidebarMobileHeader site :166 (label "Home" not "settings"), M6 second-reader test). Regating /tmp/wt-40t4; TL-1 + QA-3 dispatched.
 - #119 (Dev5): reclassified auth tier (route-mount seal is a security guard). Lane utils/boot/sealRoutes.js + routeMountGuard.test.js + index.js, no overlap. RED started; TL-2 pre-read requested after #127 ruling. #120 queued after.
+- #40 t4 1ca353edc gate GREEN: check-local pass, frontend 82/82 exit 0, capabilities 9 checks PASS, drift+uiBypass 13/13, sweeps 63/63. Result file written (run-id gate-40-task4-1ca353edc). Awaiting TL-1 pre-read + QA-3 mutants.
+- Post-merge after #123 (before #125 merge): 3014 passed, 1 failed, 2 suites failed — names not captured; rerunning --onlyFailures. 37 jest processes on the box, most >1h old from other sessions.
