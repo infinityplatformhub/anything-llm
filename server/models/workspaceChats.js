@@ -1,6 +1,68 @@
 const prisma = require("../utils/prisma");
 const { safeJSONStringify } = require("../utils/helpers/chat/responses");
 
+// V9 (#61): search bounds.
+//
+// The floor is not a usability preference: a one-character needle has no
+// trigram to look up, so the GIN index cannot serve it and the query degrades
+// to a full scan of every chat the user owns. The ceiling bounds the pattern a
+// caller can push into the planner.
+const MIN_SEARCH_LENGTH = 2;
+const MAX_SEARCH_LENGTH = 200;
+
+// LIKE metacharacters are literal text to someone searching their own chat
+// history — a user looking for "100%" means the string, not "everything".
+// Backslash first, or it would re-escape the escapes added after it.
+// Postgres's default LIKE escape character is the backslash, so no ESCAPE
+// clause is needed (and Prisma's `contains` has nowhere to put one).
+const escapeLike = (value) =>
+  String(value).replace(/[\\%_]/g, (character) => `\\${character}`);
+
+/**
+ * V9 (#61): the searchable text of a response object.
+ *
+ * `response_text` is a projection of `response`, and EVERY write path that sets
+ * one must set the other -- a row whose projection is stale stays findable by
+ * text the user removed, and the search route (which returns response_text)
+ * hands back the old wording. There are four such paths: new, _update, upsert
+ * and bulkCreate.
+ *
+ * Non-string text stores NULL rather than a coerced "[object Object]": the read
+ * path already skips those rows (convertToChatHistory), so a row that cannot be
+ * rendered does not need to be findable either.
+ */
+function responseTextOf(response) {
+  return typeof response?.text === "string" ? response.text : null;
+}
+
+/**
+ * The same rule for a payload whose `response` has ALREADY been stringified --
+ * _update takes prisma data, not a response object.
+ *
+ * `response` is stored as a JSON string, so the searchable text has to be
+ * parsed back out. A payload that does not touch `response` is passed through
+ * untouched -- callers that only flip `include` or `feedbackScore` must not
+ * have their row's searchable text rewritten as a side effect.
+ *
+ * A `response` that will not parse, or whose `text` is not a string, stores
+ * NULL: the read path already skips such rows (convertToChatHistory), so a row
+ * that cannot be rendered does not need to be findable either. Failing the
+ * whole update instead would turn a malformed legacy row into an un-editable
+ * one.
+ */
+function withResponseTextFrom(data = {}) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, "response"))
+    return data;
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(data.response);
+  } catch {
+    parsed = null;
+  }
+  return { ...data, response_text: responseTextOf(parsed) };
+}
+
 const WorkspaceChats = {
   new: async function ({
     workspaceId,
@@ -17,6 +79,13 @@ const WorkspaceChats = {
           workspaceId,
           prompt,
           response: safeJSONStringify(response),
+          // V9 (#61): the searchable projection of the answer. Taken from the
+          // object before it is stringified, so a `response` that safeJSONStringify
+          // has to degrade cannot leave a mismatched projection behind. Non-string
+          // text stores NULL rather than a coerced "[object Object]" — the read
+          // path already skips such records (convertToChatHistory), so they are not
+          // findable either.
+          response_text: responseTextOf(response),
           user_id: user?.id || null,
           thread_id: threadId,
           api_session_id: apiSessionId,
@@ -50,6 +119,56 @@ const WorkspaceChats = {
         ...(orderBy !== null ? { orderBy } : { orderBy: { id: "asc" } }),
       });
       return chats;
+    } catch (error) {
+      console.error(error.message);
+      return [];
+    }
+  },
+
+  // V9 (#61): substring search over ONE user's own chats in ONE workspace.
+  //
+  // `userId` is required, and an absent one returns [] rather than falling back to
+  // an unfiltered read. That is the specific failure this function is shaped to
+  // avoid: forWorkspaceByUser and forWorkspace differ only by that predicate, and
+  // the route picks between them on a boolean — so an unfiltered read is always one
+  // wrong branch away. Here there is no unfiltered branch to reach.
+  //
+  // `chat.read_others` deliberately does not widen this (V9 scope is the caller's
+  // own history); cross-user and cross-workspace search are V10, which owns the
+  // leak tests for them.
+  searchForUser: async function ({
+    workspaceId = null,
+    userId = null,
+    query = "",
+    limit = 50,
+    beforeId = null,
+  }) {
+    if (!workspaceId || !userId) return [];
+    const needle = String(query ?? "").trim();
+    if (needle.length < MIN_SEARCH_LENGTH || needle.length > MAX_SEARCH_LENGTH)
+      return [];
+
+    try {
+      return await prisma.workspace_chats.findMany({
+        where: {
+          user_id: userId,
+          workspaceId,
+          api_session_id: null, // dev-API chats never surface in the frontend
+          include: true,
+          ...(beforeId !== null ? { id: { lt: beforeId } } : {}),
+          OR: [
+            { prompt: { contains: escapeLike(needle), mode: "insensitive" } },
+            {
+              response_text: {
+                contains: escapeLike(needle),
+                mode: "insensitive",
+              },
+            },
+          ],
+        },
+        orderBy: { id: "desc" },
+        take: limit,
+      });
     } catch (error) {
       console.error(error.message);
       return [];
@@ -292,7 +411,17 @@ const WorkspaceChats = {
     try {
       await prisma.workspace_chats.update({
         where: { id },
-        data,
+        // V9 (#61): response_text is a projection of `response`, so a write to
+        // one that skips the other leaves the row lying about itself -- an
+        // edited chat would stay findable by the text the user just removed,
+        // and the search route would hand back the old wording.
+        //
+        // Derived HERE rather than at each call site: this is the only write
+        // path to `response` other than `new`, and a rule that lives in the
+        // callers is a rule the next caller does not know about. Editing a
+        // chat goes through the two update-chat routes today; nothing stops a
+        // third from being added.
+        data: withResponseTextFrom(data),
       });
       return true;
     } catch (error) {
@@ -334,7 +463,9 @@ const WorkspaceChats = {
       const createdChats = [];
       for (const chatData of chatsData) {
         const chat = await prisma.workspace_chats.create({
-          data: chatData,
+          // Callers hand this an already-stringified `response` (import), so
+          // the payload form of the rule applies rather than the object form.
+          data: withResponseTextFrom(chatData),
         });
         createdChats.push(chat);
       }
@@ -360,6 +491,10 @@ const WorkspaceChats = {
       const payload = {
         workspaceId: data.workspaceId,
         response: safeJSONStringify(data.response),
+        // Agent chat history overwrites an existing row's response here
+        // (utils/agents/aibitat/plugins/chat-history.js), so without this the
+        // projection keeps the superseded text.
+        response_text: responseTextOf(data.response),
         user_id: data.user?.id || null,
         thread_id: data.threadId,
         api_session_id: data.apiSessionId,
@@ -385,4 +520,4 @@ const WorkspaceChats = {
   },
 };
 
-module.exports = { WorkspaceChats };
+module.exports = { WorkspaceChats, MIN_SEARCH_LENGTH, MAX_SEARCH_LENGTH };
