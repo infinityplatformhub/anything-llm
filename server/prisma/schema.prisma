@@ -94,6 +94,7 @@ model users {
   desktop_mobile_devices       desktop_mobile_devices[]
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
+  identity_links               identity_links[]
 }
 
 model recovery_codes {
@@ -377,6 +378,42 @@ model temporary_auth_tokens {
 
   @@index([token])
   @@index([userId])
+}
+
+// S1 (#36): an external identity bound to a local user.
+//
+// `provider + subject` is the identity, NEVER email. Email changes, and an IdP
+// that lets someone claim an address would otherwise hand them the account.
+model identity_links {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  provider    String
+  subject     String
+  email       String
+  lastLoginAt DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  user        users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Account linking is a database constraint, not application logic: two users
+  // claiming the same IdP identity must fail at the write.
+  @@unique([provider, subject])
+  @@index([userId])
+}
+
+// S1 (#36): one in-flight login. Rows are consumed, not deleted — a consumed row
+// is how a replay is told apart from an expiry. The T-6 retention purge clears
+// them at TTL; nothing else writes here.
+model identity_login_state {
+  state        String    @id
+  nonce        String
+  provider     String
+  redirectUri  String
+  codeVerifier String
+  expiresAt    DateTime  @db.Timestamptz(3)
+  consumedAt   DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([expiresAt])
 }
 
 model system_prompt_variables {
