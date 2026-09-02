@@ -63,6 +63,7 @@ const { ApiKey } = require("../../models/apiKeys");
 const { makeJWT } = require("../../utils/http");
 const { KEY_MAPPING } = require("../../utils/helpers/updateENV");
 const { Telemetry } = require("../../models/telemetry");
+const { CredentialStore } = require("../../models/credentialStore");
 
 let admin;
 let manager;
@@ -140,13 +141,23 @@ describe("update environment unknown keys over HTTP", () => {
   });
 
   test.each(routes)("%s rejects mixed keys without writing valid values", async (_name, route, authorization) => {
+    // OpenAiKey is `secret: true`, so a write persists a row in the credential store.
+    // Reading that row back is what proves nothing was written: process.env alone is
+    // in-memory and a refusal placed after the write loop would still leave the row.
+    const stored = "sk-stored-before-the-refusal";
+    await CredentialStore.set("OPEN_AI_KEY", stored);
+
     const response = await post(route, authorization(), {
       [unknownKey("mixed")]: "x",
       LLMProvider: "openai",
+      OpenAiKey: "sk-must-never-be-persisted",
     });
 
     expect(response.status).toBe(400);
+    expect(await CredentialStore.get("OPEN_AI_KEY")).toBe(stored);
     expect(process.env.LLM_PROVIDER).toBeUndefined();
+
+    await CredentialStore.delete("OPEN_AI_KEY");
   });
 
   test.each(routes)("%s accepts and writes an all-valid body", async (_name, route, authorization) => {
