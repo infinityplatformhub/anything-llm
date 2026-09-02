@@ -465,3 +465,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 t4: QA-3 held verdict (e7a30ae61 is WIP — Sidebar RED by design); RF-4 confirmed on main (only AuthContext/SettingsButton/hook consume useCapabilities). Probe list ready (single-user disjunct, loading, visible vs can, cross-site swap, resetCapabilities behaviour, rejection retry). Waits for Dev2 "ready" SHA.
 - #114 fdb32d825 merged 701b22ce0, closed (infi-run:gate-114-fdb32d825); TL-2 PASS M1–M5; recon-114.md conflict resolved (theirs). 89/123. wt-114/g114 reaped.
 - #123 (Dev1): default legacy role = manager set via ORG_ROLE_FOR_LEGACY; PMO leans option 1 (compute only when user.manage held) → TL-1 confirm pending.
+- #114 merge verified by content on main: publicSettings.js present, system.js references ×4, setupCompleteExposureHttp 14/14 on main (earlier grep used the wrong symbol — lives in helper). Post-merge suite launched (/tmp/postmerge-114.log).
