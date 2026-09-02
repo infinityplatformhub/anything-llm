@@ -19,6 +19,7 @@ const { loadStoredCredentials } = require("../helpers/updateENV");
 const {
   reportLegacyWildcardGrants,
 } = require("../apiKeySecurity/legacyWildcardReport");
+const { repairDeploymentShape } = require("./assertDeploymentShape");
 
 // Testing SSL? You can make a self signed certificate and point the ENVs to that location
 // make a directory in server called 'sslcert' - cd into it
@@ -29,7 +30,10 @@ const {
 // Update .env keys with the correct values and boot. These are temporary and not real SSL certs - only use for local.
 // Test with https://localhost:3001/api/ping
 // build and copy frontend to server/public with correct API_BASE and start server in prod model and all should be ok
-function bootSSL(app, port = 3001) {
+async function bootSSL(app, port = 3001) {
+  // issue 58: before listen(). The callbacks below run AFTER the socket is
+  // open, and the repair must land before the first request is authorized.
+  await repairDeploymentShape();
   try {
     console.log(
       `\x1b[33m[SSL BOOT ENABLED]\x1b[0m Loading the certificate and key for HTTPS mode...`
@@ -79,12 +83,13 @@ function bootSSL(app, port = 3001) {
         stacktrace: e.stack,
       }
     );
-    return bootHTTP(app, port);
+    return await bootHTTP(app, port);
   }
 }
 
-function bootHTTP(app, port = 3001) {
+async function bootHTTP(app, port = 3001) {
   if (!app) throw new Error('No "app" defined - crashing!');
+  await repairDeploymentShape();
 
   app
     .listen(port, async () => {

@@ -17,7 +17,13 @@ const {
 
 /** Refuses unless the instance is in multi-user mode. */
 async function isMultiUserSetup(_request, response, next) {
-  const multiUserMode = await SystemSettings.isMultiUserMode();
+  // issue 58: the mirror of isSingleUserMode below, on the same helper. Reading
+  // the raw setting here failed CLOSED in shape (b) — refusing an instance that
+  // is effectively multi-user, locking an admin out rather than letting anyone
+  // in — so it was never a hole. It is fixed anyway: leaving one half of this
+  // file on the confirmed helper and the other on the raw setting reads as a
+  // deliberate distinction to whoever edits it next.
+  const multiUserMode = !(await isConfirmedSingleUser());
   if (!multiUserMode) {
     response.status(403).json({ error: "Invalid request" });
     return;

@@ -343,6 +343,28 @@ function systemEndpoints(app) {
           });
           return;
         } else {
+          // issue 58 (ruling C): the boot repair cannot cover shape (b) that
+          // ARISES while the server is running — a restore into a live
+          // instance, or a settings row edited by hand. This branch
+          // authenticates against AUTH_TOKEN rather than any user account, so
+          // taking it on an instance that HAS accounts hands out a session
+          // nobody's credentials were checked for. User rows present means the
+          // instance is multi-user, whatever the setting currently says.
+          if ((await User.count()) > 0) {
+            await emitAuditEvent("failed_login_invalid_password", {
+              ip: request.ip || "Unknown IP",
+              multiUserMode: false,
+            });
+            // The ordinary invalid-password answer: which branch refused is not
+            // something an unauthenticated caller gets to learn.
+            response.status(401).json({
+              valid: false,
+              token: null,
+              message: "[003] Invalid password provided",
+            });
+            return;
+          }
+
           const { password } = reqBody(request);
           if (
             !bcrypt.compareSync(
