@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { useMemoriesSidebar } from "../ChatSidebar";
 import useUser from "@/hooks/useUser";
+import useCapabilities from "@/hooks/useCapabilities";
 import System from "@/models/system";
 import Memory from "@/models/memory";
 
@@ -22,7 +23,19 @@ export function useMemoriesContext() {
 export function MemoriesProvider({ workspace, children }) {
   const { sidebarOpen, closeSidebar } = useMemoriesSidebar();
   const { user } = useUser();
-  const canToggle = !user || user?.role === "admin";
+  // #40 task 4: the engine decides, not the role string.
+  //
+  // `settings.write` — the ORG capability — and NOT `workspace.write`, which is what the other
+  // sites in this lane use. The distinction is not stylistic: `PersonalizationToggle` calls
+  // `Admin.updateSystemPreferences({memory_enabled})`, which the server gates with
+  // `requirePermission("settings.write", orgResource)` (`endpoints/admin.js:546,672`). Memory
+  // is an INSTANCE preference reached from inside a workspace, so a workspace capability would
+  // show the toggle to someone whose write is then refused with a 403.
+  //
+  // `can()` answers false while loading, which is the same value as denied, so `loading` is
+  // read too — otherwise the toggle disappears on every first paint.
+  const { can, loading: capabilitiesLoading } = useCapabilities();
+  const canToggle = !user || (!capabilitiesLoading && can("settings.write"));
 
   const [memories, setMemories] = useState({ global: [], workspace: [] });
   const [activeTab, setActiveTab] = useState("workspace");
