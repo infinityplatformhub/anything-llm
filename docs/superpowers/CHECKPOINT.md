@@ -519,3 +519,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #125 44a761a1f: gate green (check-local, credentialStore 25/25, sweeps 63/63); result file written; awaiting TL-2 + QA-2.
 - #40 t4: Dev4 1a97438ab (sweep strip-comments + mock) → Dev2 merges f2b5d01d7→2d73d5510→1a97438ab + M3/M4/M6 → new SHA.
 - #122 QA-1 PASS + NIT-1 logged in residual-risks.
+- #128 TL-1 pre-read 93c4103fb (TL-1 committed directly on main checkout — reminded: main is PMO-only): #128 must merge AFTER #113 guard (self-add-to-group escalation chain); use grantPrincipalPairs not a new query; keep targetWorkspaceId scope on group pairs; RF-1..4. Relayed to Dev3.
+- #127 grant-breadth ruling requested from TL-2 after #125 verdict. Board refreshed fdc8457fd (90/128, 3033 green).
+- Ledgers normalized: /tmp/ledger-123.norm.md (7), /tmp/ledger-125.norm.md (8). Result files written for #123/#125.
