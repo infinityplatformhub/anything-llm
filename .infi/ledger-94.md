@@ -100,13 +100,18 @@ patterns are anchored with `\b`, and `_` is a word character, so `note_123456789
 value in the audit log. Split into hotfix #95 (`59cb80068`) on PMO ruling: outside this issue's
 file lane, leaking on main today, and not something this reviewer should have to adjudicate.
 
-**One test in this issue is RED until #95 merges**: the Thai ID seeded into an event name. It is
-left seeded exactly as written rather than weakened to pass now, so it goes green on the rebase.
-Everything else in the suite is green.
+**Resolved:** #95 merged (main `c7a4711c4`); this branch was rebased onto it and the assertion went
+green without being touched. The seeding is kept as written so it goes red again if the fix is ever
+reverted, and the test's comment now says that rather than "red until #95".
 
 ## Evidence
 
-`bundle.test.js` 24 passed / 1 failed (the #95-dependent assertion above).
-`doctorBundleCli.test.js` 9 passed.
+Measured on `820ede6c4`, rebased onto main `c7a4711c4`:
+
+    Test Suites: 4 passed, 4 total
+    Tests:       228 passed, 228 total
+
+Per suite: `bundle.test.js` 25, `doctorBundleCli.test.js` 9, `doctor.test.js` 46,
+`auditRedaction.test.js` 148 (144 + the 4 that arrived with #95).
 `doctor.test.js` unchanged and green; header note added saying the suite needs PostgreSQL 16+, that
 pgvector is NOT required, and that missing it skips rather than fails (TL-2 lost ten minutes).

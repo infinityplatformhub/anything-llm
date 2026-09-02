@@ -130,12 +130,13 @@ describe("O5b bundle — the helpers it reuses are actually exported (TL-1 F1)",
 });
 
 describe("O5b bundle — nothing seeded comes back out", () => {
-  // NOTE: the Thai national ID seeded into an EVENT NAME (`note_<13 digits>`)
-  // is red until the #95 hotfix lands: `redaction.js` anchors its numeric
-  // patterns with `\b`, and `_` is a word character. That leak is a defect in
-  // the shared audit redaction, not in the bundle, so it is fixed on its own
-  // branch; this assertion is left seeded exactly as it is so it goes green on
-  // the rebase rather than being weakened to pass now.
+  // The Thai national ID here is seeded into an EVENT NAME (`note_<13 digits>`)
+  // rather than a plain field, and that is deliberate. It was red when this test
+  // was written: `redaction.js` anchored its numeric patterns with `\b`, and `_`
+  // is a word character, so the ID survived while every other seeded marker was
+  // removed. That was a live PDPA leak in the shared audit redaction, fixed as
+  // #95. Left seeded exactly as written so this goes red again if that fix is
+  // ever reverted.
   it("no seeded secret, credential or PII appears anywhere in the serialised bundle", async () => {
     const { bundle } = await buildBundle({
       env: seededEnv(),
