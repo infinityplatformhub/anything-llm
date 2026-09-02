@@ -1683,8 +1683,27 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
     // where the value *persists* — a credential goes to the encrypted store, and
     // dumpENV no longer writes it to the file.
     process.env[envKey] = nextValue;
-    if (KEY_MAPPING[key]?.secret === true)
-      await persistCredential(envKey, nextValue);
+    if (KEY_MAPPING[key]?.secret === true) {
+      // #104: a credential that could not be stored is live for this process and
+      // nowhere durable — `dumpENV` skips `secret: true` keys, so the next boot comes
+      // up without it while the caller was told the write succeeded.
+      //
+      // Accumulated rather than `break`-ing: unlike a failed check or preUpdate this
+      // happens AFTER the value was written, so the remaining keys have not been
+      // rejected and stopping would leave them silently unapplied.
+      //
+      // The key is dropped from `newValues` because that is what the UI renders as
+      // "changed". Leaving it there would require the operator to read `error` to
+      // find out which of the listed keys is lying. The live `process.env` value is
+      // deliberately left in place: this process was already using it before the
+      // store was asked, and unsetting it would break the running instance on top of
+      // losing the credential at the next restart.
+      const { error: persistError } = await persistCredential(envKey, nextValue);
+      if (persistError) {
+        delete newValues[key];
+        error += `${envKey} was not persisted and will be lost on restart: ${persistError}\n`;
+      }
+    }
 
     for (const postUpdateFunc of postUpdate)
       await postUpdateFunc(key, prevValue, nextValue);
@@ -1789,14 +1808,16 @@ async function logChangesToEventLog(newValues = {}, userId = null) {
 /**
  * Persists one credential to the encrypted store instead of the .env file.
  *
- * A failure here is logged, not thrown: the value is already live in process.env and
- * the setting has been accepted, so throwing would 500 a request whose work is done.
- * The cost of the failure is that the credential does not survive a restart, which the
- * log says explicitly rather than leaving an operator to discover it later.
+ * A failure here is returned and logged, not thrown. #104: `updateENV` accumulates the
+ * returned error and every caller surfaces it — `/system/update-env` and its `/v1` twin
+ * as a 500, `/system/update-password` as `success: false`, and `/system/enable-multi-user`
+ * by throwing into its rollback. It is not thrown from here because the value is already
+ * live in process.env: the running instance keeps working, and what the failure costs is
+ * that the credential does not survive a restart.
  *
  * @param {string} envKey
  * @param {string} value
- * @returns {Promise<void>}
+ * @returns {Promise<{error: string|null}>}
  */
 async function persistCredential(envKey, value) {
   const { CredentialStore } = require("../../models/credentialStore");
@@ -1810,10 +1831,15 @@ async function persistCredential(envKey, value) {
     console.error(
       `[credential-store] ${envKey} is live for this process but was not persisted; it will be lost on restart: ${error}`
     );
-  // S11a (#80), TL-1: the outcome is RETURNED as well as logged. Existing callers
-  // ignore it and keep their behaviour exactly — the value stays live for this
-  // process and the log is the warning, which is deliberate (see the note at the
-  // `process.env` assignment above).
+  // S11a (#80), TL-1: the outcome is RETURNED as well as logged.
+  //
+  // #104 revised this. When #80 added the return value, the existing callers kept
+  // ignoring it deliberately: the value stays live for this process and the log was
+  // the warning. That was wrong for `secret: true` keys, because `dumpENV` does not
+  // write them to the .env file either — so a credential that fails to persist exists
+  // in exactly one place, this process's memory, and the next boot comes up without
+  // it while the caller was told the write succeeded. `updateENV` now accumulates
+  // this error, and every caller surfaces it.
   //
   // The mailer save path is the caller that must not ignore it. It writes a
   // "these settings were verified" hash, and that hash is only true while the

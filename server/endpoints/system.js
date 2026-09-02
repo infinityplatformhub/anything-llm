@@ -995,12 +995,23 @@ function systemEndpoints(app) {
         await MobileDevice.migrateDevicesToMultiUser(user.id);
         await SlashCommandPresets.migrateToMultiUser(user.id);
         await AgentSkillWhitelist.clearSingleUserWhitelist();
-        await updateENV(
+        // #104: a JWT rotation that could not be persisted must not be reported as
+        // done. JWT_SECRET is `secret: true`, so it is not written to the .env file
+        // either — a failed store means the value lives only in this process, and the
+        // next boot mints a different one, invalidating every session issued between
+        // now and then. Throwing puts us in the catch below, whose rollback removes
+        // the user rows and resets `multi_user_mode`; a half-enabled instance the
+        // operator believes is working is the worse of the two outcomes.
+        const rotation = await updateENV(
           {
             JWTSecret: process.env.JWT_SECRET || v4(),
           },
           true
         );
+        if (rotation.error)
+          throw new Error(
+            `Failed to rotate the JWT secret: ${rotation.error}`
+          );
         await Telemetry.sendTelemetry("enabled_multi_user_mode", {
           multiUserMode: true,
         });
