@@ -84,6 +84,10 @@ const {
   publicSettingsFor,
   callerHasSession,
 } = require("../utils/helpers/publicSettings");
+// issue 123: which legacy roles the caller may assign, for the admin UI.
+const {
+  assignableRolesFor,
+} = require("../utils/helpers/assignableRoles");
 const {
   isConfirmedSingleUser,
 } = require("../utils/authorization/actorResolver");
@@ -1855,6 +1859,24 @@ function systemEndpoints(app) {
         );
 
         const answer = { capabilities: Object.fromEntries(decisions) };
+
+        // issue 123: which legacy roles this caller may hand out.
+        //
+        // The admin UI decides this in the browser by comparing role strings — the
+        // fixed hierarchy `utils/helpers/admin` says it removed from the server,
+        // because a hierarchy cannot express a delegated admin who may create members
+        // but not other admins. The server answers it with a permission-set comparison,
+        // and this is that answer, computed per role in the same request.
+        //
+        // Deliberately NOT an entry in ORG_CAPABILITIES (#53 stands): that list is
+        // actions, answered with booleans, and this is a list whose length is the
+        // point.
+        answer.assignableRoles = await assignableRolesFor({
+          actor,
+          // Read out of the batch above rather than asking the engine again. Two
+          // decisions in one response that disagree would be worse than either alone.
+          canManageUsers: answer.capabilities["user.manage"] === true,
+        });
 
         // #40 task 2: the two halves are separated by ORDER plus a private
         // catch — the org batch is fully resolved and stored in `answer` before
