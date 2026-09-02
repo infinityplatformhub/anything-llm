@@ -373,3 +373,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #96: log not created (background job likely still waiting on prior run); recheck.
 - #111 8c115917b merged d50257fea, closed (infi-run:gate-111-8c115917b). Frontend harness live; residual: existing components untested. wt-111/g111 reaped. 79/115.
 - Post-merge job after #96 never started (its wait loop matched stale finished shells). Killed stale runners; one fresh post-merge suite on main (covers #96 + #111) → /tmp/postmerge-111.log.
+- #108 S11b (Dev4, branch approof/108-mailer-ui from 5041a0a55): rulings — test route field is `body.to`; second consent checkbox `smtp_allow_untrusted_cert` in scope (mockup showed one; omitting kills a shipped field); test that the two consents are independent in payload. SHA within the hour.
+- #115: TL-2 pre-read + Dev2 recon (no code) requested; Dev2 takes it after #40 t3 merge.
