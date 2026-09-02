@@ -251,3 +251,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Opened: updateENV unknown-key silent drop (QA-2 pre-read #84; Dev1 after #84) and validApiKey→locals.actor (TL-1 NIT-2 deferred; Dev4 after #49).
 - #30 follow-up 8e9e47ef9 gating (gate-30f); TL-1 quick read requested. Post-merge #80 suite running.
 - #40: a2bbb0de8 superseded by QA-3 blocker; waiting Dev2 SHA (add /api + content-type assert). TL-2 told to hold M-1..M-9 for new SHA.
+- #30 follow-up 8e9e47ef9 merged (gate 270/270, TL-1 PASS). Post-merge main after #80: see postmerge-80.log. #91 (updateENV unknown keys) + #92 (validApiKey locals.actor) opened.
+- #40 a2bbb0de8: TL-1/TL-2/QA-2 PASS, QA-3 FAIL (SPA fallback). Waiting Dev2 SHA; TL-2 will re-check 309 pin + R6 + no route loss. §7.9l added.
