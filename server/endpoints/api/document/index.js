@@ -18,6 +18,14 @@ const path = require("path");
 const { Document } = require("../../../models/documents");
 const { purgeFolder } = require("../../../utils/files/purgeDocument");
 const createFilesLib = require("../../../utils/agents/aibitat/plugins/create-files/lib");
+const {
+  isBoundKeyRequest,
+  boundDocpaths,
+  narrowLocalFiles,
+  narrowFolderDocuments,
+  docpathIsBound,
+  attachTargets,
+} = require("../../../utils/apiKeySecurity/boundKeyDocuments");
 const prisma = require("../../../utils/prisma");
 const documentsPath =
   process.env.NODE_ENV === "development"
@@ -191,9 +199,20 @@ function apiDocumentEndpoints(app) {
           documentName: originalname,
         });
 
-        if (!!addToWorkspaces)
+        // #41: a bound key that names no workspace attaches to the one it was issued
+        // for. Without this the document is unattached, and the strict join would then
+        // hide it from the key that just uploaded it.
+        const { slugs: attachTo, error: attachError } = await attachTargets(
+          response,
+          addToWorkspaces
+        );
+        if (attachError)
+          return response
+            .status(500)
+            .json({ success: false, error: attachError, documents });
+        if (!!attachTo)
           await Document.api.uploadToWorkspace(
-            addToWorkspaces,
+            attachTo,
             documents?.[0].location
           );
         response.status(200).json({ success: true, error: null, documents });
@@ -340,9 +359,20 @@ function apiDocumentEndpoints(app) {
           folder,
         });
 
-        if (!!addToWorkspaces)
+        // #41: a bound key that names no workspace attaches to the one it was issued
+        // for. Without this the document is unattached, and the strict join would then
+        // hide it from the key that just uploaded it.
+        const { slugs: attachTo, error: attachError } = await attachTargets(
+          response,
+          addToWorkspaces
+        );
+        if (attachError)
+          return response
+            .status(500)
+            .json({ success: false, error: attachError, documents });
+        if (!!attachTo)
           await Document.api.uploadToWorkspace(
-            addToWorkspaces,
+            attachTo,
             documents?.[0].location
           );
         response.status(200).json({ success: true, error: null, documents });
@@ -464,9 +494,20 @@ function apiDocumentEndpoints(app) {
           link,
         });
 
-        if (!!addToWorkspaces)
+        // #41: a bound key that names no workspace attaches to the one it was issued
+        // for. Without this the document is unattached, and the strict join would then
+        // hide it from the key that just uploaded it.
+        const { slugs: attachTo, error: attachError } = await attachTargets(
+          response,
+          addToWorkspaces
+        );
+        if (attachError)
+          return response
+            .status(500)
+            .json({ success: false, error: attachError, documents });
+        if (!!attachTo)
           await Document.api.uploadToWorkspace(
-            addToWorkspaces,
+            attachTo,
             documents?.[0].location
           );
         response.status(200).json({ success: true, error: null, documents });
@@ -608,9 +649,20 @@ function apiDocumentEndpoints(app) {
         await Telemetry.sendTelemetry("raw_document_uploaded");
         await emitAuditEvent("api_raw_document_uploaded");
 
-        if (!!addToWorkspaces)
+        // #41: a bound key that names no workspace attaches to the one it was issued
+        // for. Without this the document is unattached, and the strict join would then
+        // hide it from the key that just uploaded it.
+        const { slugs: attachTo, error: attachError } = await attachTargets(
+          response,
+          addToWorkspaces
+        );
+        if (attachError)
+          return response
+            .status(500)
+            .json({ success: false, error: attachError, documents });
+        if (!!attachTo)
           await Document.api.uploadToWorkspace(
-            addToWorkspaces,
+            attachTo,
             documents?.[0].location
           );
         response.status(200).json({ success: true, error: null, documents });
@@ -658,18 +710,27 @@ function apiDocumentEndpoints(app) {
     */
     try {
       const { folder, offset, limit } = queryParams(request);
+      // #41: strict join for a workspace-bound key. Null for an unbound key or a
+      // session, which leaves every listing below untouched.
+      const allowed = await boundDocpaths(response);
       if (folder) {
         // Additive opt-in. Pagination is passed through as-is:
         // getDocumentsByFolder clamps the window and understands `limit=all`.
         const result = await getDocumentsByFolder(folder, { offset, limit });
-        response.status(result.code).json(result);
+        // Narrowing after pagination deliberately: the page a bound key sees is a
+        // subset of the page an unbound key sees, so `totalCount`/`hasMore` keep
+        // describing the folder rather than becoming a second thing to keep in sync.
+        response.status(result.code).json({
+          ...result,
+          documents: narrowFolderDocuments(folder, result.documents, allowed),
+        });
       } else {
         // Deliberately the full tree, unchanged from before folder support
         // existed. This parses every document on disk and is slow on large
         // instances, but silently returning empty `items` arrays to existing
         // integrations would be worse. New callers should use ?folder=.
         const localFiles = await viewLocalFiles();
-        response.status(200).json({ localFiles });
+        response.status(200).json({ localFiles: narrowLocalFiles(localFiles, allowed) });
       }
     } catch (e) {
       console.error(e.message, e);
@@ -748,9 +809,11 @@ function apiDocumentEndpoints(app) {
           offset,
           limit,
         });
+        // #41: same strict join as GET /v1/documents.
+        const allowed = await boundDocpaths(response);
         response.status(result.code).json({
           folder: result.folder,
-          documents: result.documents,
+          documents: narrowFolderDocuments(folderName, result.documents, allowed),
           totalCount: result.totalCount,
           hasMore: result.hasMore,
           error: result.error,
@@ -915,11 +978,17 @@ function apiDocumentEndpoints(app) {
     try {
       const { docName } = request.params;
       const document = await findDocumentInDocuments(docName);
-      if (!document) {
+      // #41 (PMO amendment, §3.4): a document name is a user-chosen slug, so telling a
+      // bound key apart "no such document" from "not yours" tells it what exists in the
+      // rest of the deployment. Resolve FIRST, then compare — never short-circuit on the
+      // binding — so the two paths take the same work and return the same body.
+      const allowed = await boundDocpaths(response);
+      const { docpath, ...visible } = document ?? {};
+      if (!document || !docpathIsBound(docpath, allowed)) {
         response.sendStatus(404).end();
         return;
       }
-      response.status(200).json({ document });
+      response.status(200).json({ document: visible });
     } catch (e) {
       console.error(e.message, e);
       response.sendStatus(500).end();
@@ -967,6 +1036,12 @@ function apiDocumentEndpoints(app) {
       }
       */
       try {
+      // #41: folders and generated files are one global namespace with no owner in the
+      // database, so there is nothing for a binding to be compared against. A key issued
+      // for one workspace has no standing here at all — the same answer /v1/workspace/new
+      // gives (endpoints/api/workspace/index.js:82).
+      if (isBoundKeyRequest(response))
+        return response.status(403).json({ error: "Insufficient scope." });
         const { name } = reqBody(request);
         const storagePath = path.join(documentsPath, normalizePath(name));
         if (!isWithin(path.resolve(documentsPath), path.resolve(storagePath)))
@@ -1036,6 +1111,12 @@ function apiDocumentEndpoints(app) {
       }
       */
       try {
+      // #41: folders and generated files are one global namespace with no owner in the
+      // database, so there is nothing for a binding to be compared against. A key issued
+      // for one workspace has no standing here at all — the same answer /v1/workspace/new
+      // gives (endpoints/api/workspace/index.js:82).
+      if (isBoundKeyRequest(response))
+        return response.status(403).json({ error: "Insufficient scope." });
         const { name } = reqBody(request);
         await purgeFolder(name);
         response
@@ -1097,6 +1178,12 @@ function apiDocumentEndpoints(app) {
       }
       */
       try {
+      // #41: folders and generated files are one global namespace with no owner in the
+      // database, so there is nothing for a binding to be compared against. A key issued
+      // for one workspace has no standing here at all — the same answer /v1/workspace/new
+      // gives (endpoints/api/workspace/index.js:82).
+      if (isBoundKeyRequest(response))
+        return response.status(403).json({ error: "Insufficient scope." });
         const { files } = reqBody(request);
         const docpaths = files.map(({ from }) => from);
         const documents = await Document.where({ docpath: { in: docpaths } });
@@ -1209,6 +1296,12 @@ function apiDocumentEndpoints(app) {
       }
       */
       try {
+      // #41: folders and generated files are one global namespace with no owner in the
+      // database, so there is nothing for a binding to be compared against. A key issued
+      // for one workspace has no standing here at all — the same answer /v1/workspace/new
+      // gives (endpoints/api/workspace/index.js:82).
+      if (isBoundKeyRequest(response))
+        return response.status(403).json({ error: "Insufficient scope." });
         const { filename } = request.params;
         if (!filename)
           return response.status(400).json({ error: "Filename is required" });

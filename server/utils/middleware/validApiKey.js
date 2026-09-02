@@ -40,10 +40,18 @@ async function grantAllows(action, request, response, engine, addressed) {
     // document routes) is asking an org-level question: may this principal do this action
     // at all. The engine's binding gate denies any resource it cannot attribute to the
     // key's workspace, which is right for a workspace-bearing resource but would lock a
-    // bound key out of these routes entirely — and they do their own narrowing (a bound
-    // key's `/v1/workspaces` returns only its workspace; `boundKeyWorkspaceScope` covers
-    // it). So the binding is not applied to this org-level question; every route that
-    // names a workspace still carries it through, where QA-1's blocker lives.
+    // bound key out of these routes entirely. So the binding is not applied to this
+    // org-level question, and each such route narrows for itself.
+    //
+    // #41 corrected what used to stand here. `boundKeyWorkspaceScope` is a TEST file
+    // (__tests__/endpoints/boundKeyWorkspaceScope.test.js), not a helper that narrows
+    // anything: the narrowing is inline, at endpoints/api/workspace/index.js:154 for
+    // `/v1/workspaces` and :82 for `/v1/workspace/new`. Citing it here read as "a shared
+    // guard covers these routes" — and the document routes it was cited to cover had no
+    // guard at all, so a bound key read and moved other workspaces' documents through
+    // seven of them. They now narrow in utils/apiKeySecurity/boundKeyDocuments.js.
+    // Anything added to this org-level carve-out brings its own narrowing; a test named
+    // after the property is not the same as a check that enforces it.
     const ingressActor =
       addressed === undefined && actor.keyWorkspaceBinding?.length
         ? { ...actor, keyWorkspaceBinding: [] }

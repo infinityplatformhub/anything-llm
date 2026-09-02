@@ -324,6 +324,31 @@ async function purgeVectorCache(filename = null) {
   return;
 }
 
+/**
+ * The name a file is actually stored under in `directory`, given the name a request
+ * asked for. Returns `requested` unchanged when it names a nested path, when no entry
+ * matches, or when the directory cannot be read — the caller then behaves exactly as it
+ * did before this existed.
+ *
+ * Unicode is the reason this is not just `requested`: macOS stores NFD while requests
+ * commonly carry NFC. `fs.existsSync` resolves either, so the file is found, but the two
+ * strings are not `===` — and a docpath built from the request would then fail to match
+ * the `workspace_documents` row written at ingest.
+ */
+function storedNameFor(directory, requested) {
+  if (requested.includes(path.sep) || requested.includes("/")) return requested;
+  try {
+    const wanted = requested.normalize("NFC");
+    return (
+      fs
+        .readdirSync(directory)
+        .find((entry) => entry.normalize("NFC") === wanted) ?? requested
+    );
+  } catch {
+    return requested;
+  }
+}
+
 // Search for a specific document by its unique name in the entire `documents`
 // folder via iteration of all folders and checking if the expected file exists.
 async function findDocumentInDocuments(documentName = null) {
@@ -343,13 +368,30 @@ async function findDocumentInDocuments(documentName = null) {
     )
       continue;
 
+    // #41: the docpath must be the name AS STORED, not the name as asked for. Two things
+    // make those differ. `normalizePath` rewrites the request (`./x.json` -> `x.json`,
+    // `dir/../y.json` -> `y.json`), while `workspace_documents.docpath` is written at
+    // ingest without it. And on macOS the filesystem keeps NFD while a request commonly
+    // carries NFC: `existsSync` matches either, but the strings are not equal, so a
+    // docpath built from the request would miss the row for a document the key owns and
+    // answer 404 on its own file. Reading the directory entry back is the only spelling
+    // guaranteed to be the one on disk.
+    const storedFilename = storedNameFor(
+      path.join(documentsPath, folder),
+      targetFilename
+    );
+
     const fileData = fs.readFileSync(targetFileLocation, "utf8");
-    const cachefilename = `${folder}/${targetFilename}`;
+    const cachefilename = `${folder}/${storedFilename}`;
     const { pageContent: _pageContent, ...metadata } = JSON.parse(fileData);
     return {
-      name: targetFilename,
+      name: storedFilename,
       type: "file",
       ...metadata,
+      // #41: the docpath the document was found at. `workspace_documents.docpath` stores
+      // this exact string, so a bound key can be asked whether the document it just
+      // resolved is attached to its workspace. The caller strips it before responding.
+      docpath: cachefilename,
       cached: await cachedVectorInformation(cachefilename, true),
     };
   }
