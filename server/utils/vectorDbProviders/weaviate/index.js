@@ -7,6 +7,14 @@ const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { camelCase } = require("../../helpers/camelcase");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 
 class Weaviate extends VectorDatabase {
   constructor() {

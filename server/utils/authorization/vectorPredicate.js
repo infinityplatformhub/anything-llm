@@ -312,7 +312,21 @@ class RetrievalConstraint {
     if (this.deniedDocIds.length > 0) {
       filter.must_not = [{ key: "docId", match: { any: this.deniedDocIds } }];
     }
-    return filter;
+    if (!allowUnprovableRows()) return filter;
+    // The same all-or-nothing escape as every other dialect, expressed with Qdrant's
+    // `should` (OR) at the top level: either the point carries no ACL payload at all, or
+    // it satisfies the strict filter. `is_null` is Qdrant's own condition for it.
+    //
+    // Nested under `should` rather than added as another `must`, because a flag that only
+    // narrowed would be inert — which is exactly the bug slice 1a was failed for.
+    return {
+      should: [
+        {
+          must: ACL_FIELDS.map((key) => ({ is_null: { key } })),
+        },
+        filter,
+      ],
+    };
   }
 
   /** Pinecone: a Mongo-ish metadata filter — `$eq`, `$in`, `$nin`. */
@@ -329,10 +343,38 @@ class RetrievalConstraint {
     if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
     if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
     if (Object.keys(docId).length > 0) filter.docId = docId;
-    return filter;
+    if (!allowUnprovableRows()) return filter;
+    // The all-or-nothing escape, as a top-level `$or`. Pinecone spells "this key is
+    // absent" as `$exists: false`, so the unlabelled branch is the conjunction of all
+    // three being absent — never a per-field relaxation that would admit half-labelled
+    // rows.
+    return {
+      $or: [
+        { $and: ACL_FIELDS.map((key) => ({ [key]: { $exists: false } })) },
+        filter,
+      ],
+    };
   }
 
-  /** Chroma: `where` clauses, with `$and` required as soon as there is more than one. */
+  /**
+   * Chroma: `where` clauses, with `$and` required as soon as there is more than one.
+   *
+   * THE ONE DIALECT WITH NO ESCAPE CLAUSE. Chroma's operator set is closed —
+   * `$gt $gte $lt $lte $ne $eq $in $nin` — with no `$exists`, so "this key is absent"
+   * cannot be expressed at all. Chroma therefore renders the SAME predicate whether
+   * RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set or not, and pre-T-5 vectors stay excluded
+   * until the backfill (#56) gives them metadata.
+   *
+   * That is deliberate and it is ANNOUNCED, in `retrievalSupport.js`: a Chroma deployment
+   * that sets the flag gets a boot-time error saying the flag cannot take effect here.
+   * Making it silently inert is precisely the bug slice 1a was failed for twice — the
+   * operator sets their one documented lever, nothing changes, and nothing tells them why.
+   *
+   * The sentinel alternative (write `""` instead of leaving fields absent, then match on
+   * it) was rejected: every pre-T-5 row would have to be rewritten for the sentinel to
+   * exist, which IS the backfill. It would solve a problem it created rather than the one
+   * in front of us.
+   */
   toChromaWhere() {
     if (this.matchNone) return null;
     const clauses = [{ orgId: { $eq: String(this.orgId) } }];
@@ -348,7 +390,24 @@ class RetrievalConstraint {
     return clauses.length === 1 ? clauses[0] : { $and: clauses };
   }
 
-  /** Weaviate: a GraphQL `where` operator tree; `And` of `Equal` / `ContainsAny` paths. */
+  /**
+   * Weaviate: a GraphQL `where` operator tree; `And` of `Equal` / `ContainsAny` paths.
+   *
+   * Weaviate's operator set is a CLOSED enum:
+   *
+   *   And Or Equal Like NotEqual GreaterThan GreaterThanEqual LessThan LessThanEqual
+   *   WithinGeoRange IsNull ContainsAny ContainsAll
+   *
+   * Two consequences drive the shape below, and both are the opposite of what I first
+   * assumed when writing this renderer:
+   *
+   *   1. There is NO `Not`. An earlier version of this emitted `operator: "Not"` around a
+   *      ContainsAny for the deny-list — not a valid operator, so the deny-list would have
+   *      failed or been dropped. A deny-list that is dropped re-admits revoked documents,
+   *      which is the worst direction for this particular bug to fail in. It is now an
+   *      `And` of one `NotEqual` per denied id, which the enum does support.
+   *   2. There IS `IsNull`, so unlike Chroma this dialect CAN express the escape clause.
+   */
   toWeaviateWhere() {
     if (this.matchNone) return null;
     const operands = [
@@ -373,21 +432,35 @@ class RetrievalConstraint {
       });
     }
     if (this.deniedDocIds.length > 0) {
-      // Weaviate has no NOT-IN, so a denied set is a Not() around ContainsAny.
-      operands.push({
-        operator: "Not",
-        operands: [
-          {
-            path: ["docId"],
-            operator: "ContainsAny",
-            valueTextArray: this.deniedDocIds,
-          },
-        ],
-      });
+      // No `Not` and no NOT-IN in the enum, so "none of these" is spelled as the
+      // conjunction of individual NotEqual clauses. Linear in the deny-list, which is
+      // acceptable: a deny-list is a revocation set, not a catalogue.
+      operands.push(
+        ...this.deniedDocIds.map((id) => ({
+          path: ["docId"],
+          operator: "NotEqual",
+          valueText: id,
+        }))
+      );
     }
-    return operands.length === 1
-      ? operands[0]
-      : { operator: "And", operands };
+    const strict =
+      operands.length === 1 ? operands[0] : { operator: "And", operands };
+    if (!allowUnprovableRows()) return strict;
+    // All-or-nothing escape, using the one operator that can express absence here.
+    return {
+      operator: "Or",
+      operands: [
+        {
+          operator: "And",
+          operands: ACL_FIELDS.map((key) => ({
+            path: [key],
+            operator: "IsNull",
+            valueBoolean: true,
+          })),
+        },
+        strict,
+      ],
+    };
   }
 
   /** Astra: Mongo-like, addressing the stored metadata sub-document. */
@@ -402,7 +475,20 @@ class RetrievalConstraint {
     if (this.allowedDocIds !== null) docId.$in = this.allowedDocIds;
     if (this.deniedDocIds.length > 0) docId.$nin = this.deniedDocIds;
     if (Object.keys(docId).length > 0) filter["metadata.docId"] = docId;
-    return filter;
+    if (!allowUnprovableRows()) return filter;
+    // All-or-nothing escape. Astra's Data API is Mongo-shaped, so absence is `$exists:
+    // false` on the dotted metadata path — the same path the strict clauses address, so a
+    // field renamed on one side cannot silently diverge from the other.
+    return {
+      $or: [
+        {
+          $and: ACL_FIELDS.map((key) => ({
+            [`metadata.${key}`]: { $exists: false },
+          })),
+        },
+        filter,
+      ],
+    };
   }
 }
 

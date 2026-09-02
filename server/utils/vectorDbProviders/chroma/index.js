@@ -7,6 +7,14 @@ const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { parseAuthHeader } = require("../../http");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const {
+  assertFilter,
+  constraintFor,
+  isRowAllowed,
+} = require("../../authorization/vectorPredicate");
+const {
+  aclMetadataForNamespace,
+} = require("../../authorization/vectorAclMetadata");
 const COLLECTION_REGEX = new RegExp(
   /^(?!\d+\.\d+\.\d+\.\d+$)(?!.*\.\.)(?=^[a-zA-Z0-9][a-zA-Z0-9_-]{1,61}[a-zA-Z0-9]$).{3,63}$/
 );
@@ -127,6 +135,66 @@ class Chroma extends VectorDatabase {
     const { client } = await this.connect();
     const namespace = await this.namespace(client, this.normalize(_namespace));
     return namespace?.vectorCount || 0;
+  }
+
+  /**
+   * ACL-filtered search. See base.queryAuthorized for the contract.
+   *
+   * The predicate goes into Chroma's `where`, applied inside the query so the actor's own
+   * documents compete for the nResults slots (S-17).
+   *
+   * Chroma is the one supported provider whose filter language cannot express the
+   * pre-backfill escape clause: its operator set is closed ($gt $gte $lt $lte $ne $eq $in
+   * $nin) with no $exists, so `RETRIEVAL_FILTER_ALLOW_UNPROVABLE` has no effect here and
+   * vectors written before the ACL metadata stay excluded until the backfill (#56). That
+   * is announced at boot by retrievalSupport rather than left for an operator to discover
+   * by setting the flag and watching nothing happen.
+   */
+  async queryAuthorized({
+    namespace = null,
+    queryVector = null,
+    aclFilter = null,
+    similarityThreshold = 0.25,
+    topN = 4,
+    filterIdentifiers = [],
+  }) {
+    assertFilter(aclFilter);
+    const empty = { contextTexts: [], sourceDocuments: [], scores: [] };
+    const where = constraintFor(aclFilter).toChromaWhere();
+    if (where === null) return empty;
+
+    const { client } = await this.connect();
+    if (!(await this.namespaceExists(client, namespace))) return empty;
+
+    const collection = await client.getCollection({
+      name: this.normalize(namespace),
+    });
+    const response = await collection.query({
+      queryEmbeddings: queryVector,
+      nResults: topN,
+      where,
+    });
+
+    const result = { contextTexts: [], sourceDocuments: [], scores: [] };
+    (response.ids?.[0] ?? []).forEach((_, i) => {
+      const metadata = response.metadatas?.[0]?.[i];
+      // Second layer, deliberately redundant with the pushdown (S-26/G4). It also does the
+      // work the `where` cannot on this provider: unlabelled rows are refused here.
+      if (!isRowAllowed(metadata, aclFilter)) return;
+      const similarity = this.distanceToSimilarity(response.distances[0][i]);
+      if (similarity < similarityThreshold) return;
+      if (filterIdentifiers.includes(sourceIdentifier(metadata))) {
+        this.logger(
+          "A source was filtered from context as it's parent document is pinned."
+        );
+        return;
+      }
+
+      result.contextTexts.push(response.documents[0][i]);
+      result.sourceDocuments.push(metadata);
+      result.scores.push(similarity);
+    });
+    return result;
   }
 
   async similarityResponse({
