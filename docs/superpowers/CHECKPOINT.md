@@ -791,3 +791,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #136 QA-2 dry-run: candidate 1 (one lookup) kills D1; candidate 2 (three-state) passes all. R2's revokedAt half on the `_update` path: reader-only there → PMO retires that half (sweep stays in User.update only per TL-2).
 - #138 driver half → cd2c6cabe (6fe0fd376 + 2 tests from QA-1 baseline: driver-wins-over-idle-caller-signal, fresh-provider token bound). Gate/TL-1/QA-1 retargeted.
 - Gates 01:30: #137 check-local 0, contract 16/17 (RF-D = known #121 dep), neighbours running; #138 bootstrap 0, check-local 0, contract 24/24 on 6fe0fd376, retargeted cd2c6cabe. Dev2 branched contract-135.
+- #137 migration dir `20260902120000_setup_admin_install_grant` shares prefix with existing `20260902120000_groups_external_id_unique`; sorts before merged 130000. Gate applied all three. Rename question → TL-1 (recommend 20260902140000).
+- #136 QA-2 probes aligned: B 6 (R2 revokedAt half retired w/ reason), D6 split into 403 + stamp (stamp half red under reader-only = witness for delete-tx sweep). Baseline 13 reds. Expected green on fix: R1, R2, D4, D6×2, F1, F1b×2, F4×4.
