@@ -925,3 +925,6 @@ One command: node 22 check, no symlinked node_modules, fresh DB + migrate deploy
 
 ### §7.9f mutation-first hand-off
 Dev/Techlead ส่ง SHA ให้ PMO gate ได้ก็ต่อเมื่อรัน mutation ที่ปิด finding นั้นเองแล้วเห็นแดง — รายงาน "แก้แล้ว" ของ implementer ไม่ใช่หลักฐาน (#40 bypass คลาสเดียวกันรอด 4 รอบ ทุกรอบเจอด้วย mutation ไม่เคยเจอด้วยการอ่าน)
+
+### §7.15 /v1 test paths
+`/v1/*` mount ใต้ `/api` — เทสต้องยิง `/api/v1/...` ยิง `/v1/...` ตรงจะแขวนจน timeout ไม่ใช่ 404 (Dev3 #71, QA-2 slice 2 เจอทั้งคู่)
