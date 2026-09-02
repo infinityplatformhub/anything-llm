@@ -158,3 +158,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 ## #91 residuals
 - credentialClearHttp premise guard now pins #91 status mapping (500); a revert of #91 shows as a #48 test failure.
 - enable-multi-user drops updateENV return → #104.
+
+## #94 residuals (O5b bundle)
+- PG_USER_PHRASE redacts the quoted token after user/role/for user in any prose (e.g. `the user "guide"`); no live doctor string affected today.
+- Unquoted usernames rewritten by proxies/poolers are not covered; pg always quotes.
+- 14-digit ids (migration names) redacted as credit_card → #101.
+- collectDatabase strip vs URL_CREDENTIALS overlap; strip only load-bearing for non-parsable full-mask.
