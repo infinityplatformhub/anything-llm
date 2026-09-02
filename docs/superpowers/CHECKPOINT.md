@@ -559,3 +559,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge #40 t4 DONE: server 3023 (2 #106 flakes green alone + helper suite), frontend 92/92 exit 0, capabilities PASS. Jest hang-after-summary noted in memory.
 - #124 4646ed17b (Dev4, local on 510a4584a): frontend 96/96 exit 0 claimed; gate /tmp/wt-124 running; TL-1 pre-read + QA-3 light probe dispatched. §7.17 stability-in-one-state logged. Dev4 free after.
 - #124 4646ed17b gate GREEN: delta = WorkspaceModelPicker/index.jsx only; check-local pass; frontend 96/96 exit 0; capabilities PASS. Result file written (run-id gate-124-4646ed17b). Awaiting TL-1 pre-read + QA-3 light probe → close/merge.
+- #126 slice 1 2286a997e (Dev2, Home only, lane clean): gate /tmp/wt-126 running; TL-1 pre-read + QA-3 queued after #124. Slice 2 (SettingsSidebar PrivacyLinkGate) waits for #121.
