@@ -1,0 +1,155 @@
+<title>Approof Phase 0 Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F7F8F6;--ink:#1B2430;--muted:#64707D;--line:#D9DDD8;--panel:#FFFFFF;
+  --accent:#0F766E;--done:#2F855A;--done-bg:#E6F2EA;--gate:#B7791F;--gate-bg:#FBF1DD;
+  --dev:#2B6CB0;--dev-bg:#E4EEF9;--block:#B83232;--block-bg:#F9E3E3;--queue:#8A94A0;--queue-bg:#EEF0F2;
+  --display:"IBM Plex Sans Condensed",system-ui,sans-serif;--body:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#161A1F;--ink:#E6E9EC;--muted:#98A2AD;--line:#2C333B;--panel:#1F252C;
+  --accent:#3FBDB0;--done:#6BC48F;--done-bg:#1E3328;--gate:#E2B25B;--gate-bg:#3A2E16;
+  --dev:#7FB2EE;--dev-bg:#1C2B3F;--block:#EE7B7B;--block-bg:#3F1F1F;--queue:#8A94A0;--queue-bg:#262C33;
+}}
+:root[data-theme="dark"]{
+  --paper:#161A1F;--ink:#E6E9EC;--muted:#98A2AD;--line:#2C333B;--panel:#1F252C;
+  --accent:#3FBDB0;--done:#6BC48F;--done-bg:#1E3328;--gate:#E2B25B;--gate-bg:#3A2E16;
+  --dev:#7FB2EE;--dev-bg:#1C2B3F;--block:#EE7B7B;--block-bg:#3F1F1F;--queue:#8A94A0;--queue-bg:#262C33;
+}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--body);margin:0}
+main{max-width:1080px;margin:0 auto;padding:32px 24px 64px;display:grid;gap:28px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:30px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:19px;font-weight:600}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:grid;gap:6px}
+.overall{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:18px 22px}
+.big{font:500 44px/1 var(--mono);font-variant-numeric:tabular-nums}
+.big small{font:400 15px var(--body);color:var(--muted);margin-left:8px}
+.bar{height:14px;background:var(--queue-bg);display:flex;overflow:hidden}
+.bar span{height:100%}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:middle}
+.lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.lane{display:grid;gap:10px;align-content:start}
+.lane h2{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:6px;border-bottom:2px solid var(--line)}
+.lane h2 .mono{color:var(--muted);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c);padding:10px 12px;display:grid;gap:4px}
+.card .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.card .id{font:500 14px var(--mono)}
+.card .who{font-size:12px;color:var(--muted)}
+.card p{margin:0;font-size:13.5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.chip{font:500 11px/1 var(--mono);padding:4px 6px;border:1px solid transparent}
+.ok{color:var(--done);background:var(--done-bg)}
+.wait{color:var(--gate);background:var(--gate-bg)}
+.no{color:var(--block);background:var(--block-bg)}
+.dim{color:var(--muted);background:var(--queue-bg)}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td.mono{white-space:nowrap}
+.note{font-size:13px;color:var(--muted);max-width:68ch}
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">bbdb0fba</span> · 2026-09-02 11:45</div>
+  <h1>Phase 0 hardening — งานถึงไหน</h1>
+</header>
+
+<section class="overall">
+  <div class="big">47<small>/ 59 issues ปิด</small></div>
+  <div>
+    <div class="bar" aria-label="47 closed, 3 in review, 3 in dev, 6 queued of 59">
+      <span style="width:79.7%;background:var(--done)"></span>
+      <span style="width:5.1%;background:var(--gate)"></span>
+      <span style="width:5.1%;background:var(--dev)"></span>
+      <span style="width:10.1%;background:var(--queue)"></span>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--done)"></i>ปิดแล้ว 47</span>
+      <span><i style="background:var(--gate)"></i>รอ review/merge 3</span>
+      <span><i style="background:var(--dev)"></i>กำลังทำ 3</span>
+      <span><i style="background:var(--queue)"></i>คิว 6</span>
+      <span>· merge วันนี้ 15 · เทสบน main <span class="mono">1310/1310</span></span>
+    </div>
+  </div>
+</section>
+
+<section class="lanes">
+  <div class="lane" style="--c:var(--gate)">
+    <h2>รอ review / merge <span class="mono">3</span></h2>
+    <div class="card">
+      <div class="top"><span class="id">#30 T-5 slice 1a</span><span class="who">Dev4 · 05e18e79</span></div>
+      <p>ACL filter ทุก retrieval path. รอบก่อน QA-2 จับ LanceDB throw (identifier ไม่ backtick) แก้แล้ว + เทสบน table จริง</p>
+      <div class="chips"><span class="chip ok">gate 1310/1310</span><span class="chip wait">QA-2 6 ข้อ</span><span class="chip wait">Techlead</span></div>
+    </div>
+    <div class="card">
+      <div class="top"><span class="id">#48 credential clear</span><span class="who">Dev1 · 950544d6</span></div>
+      <p>DELETE /system/credential/:envKey — ลบ row ก่อน unset env, secret-key guard, audit. gate ติด §7.3a (describe title ขึ้นต้น #) + ไม่มี task-48.env รอ SHA ใหม่</p>
+      <div class="chips"><span class="chip no">gate tool-fail</span><span class="chip wait">QA-1</span><span class="chip wait">Techlead</span></div>
+    </div>
+    <div class="card">
+      <div class="top"><span class="id">#43 S2 Entra SAML</span><span class="who">Dev3 · 79448c01</span></div>
+      <p>XSW fixtures + xml-crypto + deriveUsername (101/101). Techlead PASS แต่มี FINDING-1: NameID อ่านจาก doc root ไม่ใช่ assertion ที่ verify → 6 ruling ส่งแล้ว รอ commit แก้ก่อนทำ driver</p>
+      <div class="chips"><span class="chip ok">Techlead PASS+finding</span><span class="chip wait">fix FINDING-1</span><span class="chip dim">slot 082000 ต่อ</span></div>
+    </div>
+  </div>
+
+  <div class="lane" style="--c:var(--dev)">
+    <h2>กำลังทำ <span class="mono">3</span></h2>
+    <div class="card">
+      <div class="top"><span class="id">#30 slice 1b</span><span class="who">Dev4</span></div>
+      <p>OR-unlabelled ครบ 5 dialect. ruling วันนี้: chroma ไม่มี $exists → flag inert + log ดังตอน boot; weaviate ห้าม emit <span class="mono">Not</span> ใช้ And[NotEqual]</p>
+    </div>
+    <div class="card">
+      <div class="top"><span class="id">#58 follow-up</span><span class="who">Dev2</span></div>
+      <p>repair ต้องเช็ค <span class="mono">_updateSettings.success</span> + เทส ruling A ที่ mutation รอด แล้วต่อ #50 recon</p>
+    </div>
+    <div class="card">
+      <div class="top"><span class="id">#50 S1-cleanup</span><span class="who">Dev2 · recon</span></div>
+      <p>ลบ simple-SSO path หลัง S1 OIDC merge รอรายงาน file/route ที่ยัง reference + คำถาม ruling</p>
+    </div>
+  </div>
+
+  <div class="lane" style="--c:var(--queue)">
+    <h2>คิว <span class="mono">6</span></h2>
+    <div class="card"><div class="top"><span class="id">#53 org.member</span><span class="who">Dev2 หลัง #50</span></div><p>แทน chat.send ที่ใช้เป็น membership proxy บน 7 route + permissions.scope</p></div>
+    <div class="card"><div class="top"><span class="id">#40 frontend authz</span><span class="who">หลัง #53</span></div><p>capabilities endpoint + can(action)</p></div>
+    <div class="card"><div class="top"><span class="id">#49 #54 #56</span><span class="who">Dev4 หลัง #30</span></div><p>embed server-minted session · upload asymmetry · vector metadata backfill</p></div>
+    <div class="card"><div class="top"><span class="id">#51 #55 #57 #59</span><span class="who">Dev1 หลัง #48</span></div><p>2 flake · generated-files owner · enable-multi-user rollback (เปิดวันนี้จาก QA-1 finding)</p></div>
+  </div>
+</section>
+
+<section>
+  <h2 style="margin-bottom:10px">merge วันนี้ 15 รายการ</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Issue</th><th>เรื่อง</th><th>หมายเหตุจาก review</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">#58</td><td>Mode source of truth: shape (b) repair ตอน boot + /request-token runtime guard</td><td>gate 1250, QA-1 · QA-2 12/12 · Techlead PASS; นำไปสู่ #59</td></tr>
+      <tr><td class="mono">#41</td><td>Bound API key หลุดข้าม tenant ผ่าน 7 /v1/document route</td><td>NFC/NFD path เป็นเคสจริง (Dev1 RED-proved)</td></tr>
+      <tr><td class="mono">#36</td><td>S1 SSO OIDC (Google/Entra) identity_links</td><td>slots 080000/081000</td></tr>
+      <tr><td class="mono">#52</td><td>hotfix T-7: view-as-user mutate ได้โดยไม่ผ่าน requirePermission</td><td>เกิดจาก #31 merge ก่อน QA verdict → ตั้งกฎ §7.11</td></tr>
+      <tr><td class="mono">#35</td><td>PR-4d: API-key scope ceiling = creator grants ผ่าน engine</td><td></td></tr>
+      <tr><td class="mono">#31</td><td>T-7: delegated admin + view-as-user</td><td></td></tr>
+      <tr><td class="mono">#32</td><td>Embed session token HMAC-signed</td><td>widget → #49</td></tr>
+      <tr><td class="mono">#45</td><td>apiKeyContext.keyKind required, fail closed</td><td></td></tr>
+      <tr><td class="mono">#27</td><td>PR-4c: drop api_keys.scopes default ["*"]</td><td></td></tr>
+      <tr><td class="mono">#15</td><td>E2E Playwright suite</td><td>12/12</td></tr>
+      <tr><td class="mono">#39</td><td>hotfix circular require → SERVICE_PRINCIPALS undefined</td><td></td></tr>
+      <tr><td class="mono">#28</td><td>T-6 audit export + retention purge + PDPA redaction</td><td>slots 050000/051000</td></tr>
+      <tr><td class="mono">#47 #44 #46</td><td>cacheIsolation flake · Thai retrieval eval set · validatedRequest fail-open hotfix</td><td></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2 style="margin-bottom:8px">กฎที่ตั้งเพิ่มวันนี้ (code-standards §7)</h2>
+  <p class="note">§7.3a describe title ห้ามขึ้นต้น <span class="mono">#</span> · §7.9 RED ต้องแดงด้วยเหตุผลที่ถูก · §7.10 prisma singleton → resetModules · §7.11 ขอ review แล้วต้องรอ verdict ก่อน merge แม้ gate ผ่าน · main checkout เป็นของ PMO เท่านั้น</p>
+</section>
+</main>
