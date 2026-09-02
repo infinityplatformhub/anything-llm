@@ -47,6 +47,10 @@ const {
   assertChannelReady,
   sendInvite,
 } = require("../utils/notifications/inviteMailer");
+const {
+  inviteMailRateLimit,
+  whenMailing,
+} = require("../utils/middleware/requestControls");
 
 const authorizationEngine = new DatabaseAuthorizationEngine();
 
@@ -233,7 +237,11 @@ function adminEndpoints(app) {
         // could drop would let them upgrade a read-only session to a real one.
         // Short-lived by design — this is a support tool, not a login.
         const token = makeJWT(
-          { id: target.id, username: target.username, impersonatedBy: admin.id },
+          {
+            id: target.id,
+            username: target.username,
+            impersonatedBy: admin.id,
+          },
           "30m"
         );
 
@@ -261,7 +269,18 @@ function adminEndpoints(app) {
     [validatedRequest, requirePermission("invite.read", orgResource)],
     async (_request, response) => {
       try {
-        const invites = await Invite.whereWithUsers();
+        // TL-1: full addresses only for a caller who may manage users. Holding
+        // `invite.read` means "may see the invites", not "may see who we
+        // contacted" — and this listing is the one place that distinction is
+        // visible.
+        const maySeeAddresses = await authorizationEngine.authorize({
+          actor: response.locals.actor,
+          action: "user.manage",
+          resource: await orgResource(),
+        });
+        const invites = await Invite.whereWithUsers({}, undefined, {
+          unmaskEmail: maySeeAddresses.allowed,
+        });
         response.status(200).json({ invites });
       } catch (e) {
         console.error(e);
@@ -276,6 +295,10 @@ function adminEndpoints(app) {
       validatedRequest,
       requirePermission("invite.create", orgResource),
       simpleSSOLoginDisabledMiddleware,
+      // S11a (#80): metered only when it will actually send. A copy-link invite
+      // costs a row; a mailed one costs a relay round trip and a slice of this
+      // deployment's sending reputation, and the budget is for the second.
+      whenMailing(inviteMailRateLimit),
     ],
     async (request, response) => {
       try {
@@ -343,21 +366,29 @@ function adminEndpoints(app) {
             // never the error object: a transport error can carry the
             // credential.
             console.error("[invite-mail] send failed:", mailError.message);
+            // TL-1 NIT-2: `mailed` is a FIELD, so the UI branches on a boolean
+            // rather than string-matching an error message that will be
+            // translated and reworded. The invite exists and its code is in the
+            // response, so the admin is not stranded — but they must be told the
+            // mail did not go, or they wait for someone never contacted.
             return response.status(200).json({
               invite,
+              mailed: false,
               error:
                 "The invite was created but the email could not be sent. Share the link directly.",
             });
           }
         }
 
-        response.status(200).json({ invite, error });
+        response.status(200).json({ invite, mailed: Boolean(address), error });
       } catch (e) {
         // A refusal the caller can act on — bad address, channel off, not
         // verified — carries its own status. Anything else is ours, and stays a
         // 500 with nothing echoed back.
         if (e instanceof InviteMailError)
-          return response.status(e.status).json({ invite: null, error: e.message });
+          return response
+            .status(e.status)
+            .json({ invite: null, error: e.message });
         console.error(e);
         response.sendStatus(500).end();
       }

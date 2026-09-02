@@ -33,6 +33,7 @@ let mailerSettings;
 
 const PASSWORD = "Sup3rSecret!Mail#2026";
 const CONFIG = {
+  smtp_allow_untrusted_cert: "false",
   // Dotless on purpose (QA-3): the audit redaction's email pattern needs a `.`
   // in the host, so a leak through an FQDN would be scrubbed by coincidence and
   // hide the very thing under test.
@@ -88,6 +89,36 @@ describe("issue 80: the verified hash describes one exact configuration", () => 
     const first = mailerSettings.configHash(CONFIG, PASSWORD);
     const second = mailerSettings.configHash(CONFIG, PASSWORD);
     expect(first).toBe(second);
+  });
+
+  test("TL-2 GAP-1: every field that determines a connection is in the hash", async () => {
+    // Named EXPLICITLY, not read from SETTING_KEYS. Iterating the list is what
+    // the test below does, and it has a hole: delete a key from the list and its
+    // own case disappears with it, so the suite stays green while a
+    // connection-determining field silently stops invalidating the proof.
+    // Measured — dropping `smtp_allow_untrusted_cert` left 12/12 passing.
+    const REQUIRED_IN_HASH = [
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_allow_insecure",
+      "smtp_allow_untrusted_cert",
+      "smtp_username",
+      "smtp_from_address",
+      "smtp_from_name",
+    ];
+    expect([...mailerSettings.SETTING_KEYS].sort()).toEqual(
+      [...REQUIRED_IN_HASH].sort()
+    );
+
+    const base = mailerSettings.configHash(CONFIG, PASSWORD);
+    for (const key of REQUIRED_IN_HASH) {
+      const altered = mailerSettings.configHash(
+        { ...CONFIG, [key]: `${CONFIG[key]}-changed` },
+        PASSWORD
+      );
+      expect(`${key}:${altered}`).not.toBe(`${key}:${base}`);
+    }
   });
 
   test("changing ANY connection field changes the hash", async () => {

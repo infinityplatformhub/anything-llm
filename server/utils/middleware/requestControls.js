@@ -253,6 +253,26 @@ const mailerTestRateLimit = limiter({
   limit: 6,
   keyGenerator: actorKey,
 });
+/**
+ * S11a (#80), QA-2: apply the mail limiter ONLY to requests that will send mail.
+ *
+ * `/admin/invite/new` serves two shapes through one route. A copy-link invite
+ * costs a database row and nothing else, so metering it at ten a minute would
+ * throttle ordinary admin work to protect a resource it never touches. A mailed
+ * invite spends a relay round trip and a slice of the deployment's sending
+ * reputation, and that is what the budget is for.
+ *
+ * A middleware that skips is the only way to say that on a shared route: an
+ * unconditional mount would rate-limit the wrong thing, and mounting nothing —
+ * which is what shipped in 719b7eee — rate-limits nothing at all.
+ */
+const whenMailing = (middleware) => (request, response, next) => {
+  const email = request.body?.email;
+  const sending = email !== undefined && email !== null && email !== "";
+  if (!sending) return next();
+  return middleware(request, response, next);
+};
+
 const embedHistoryRateLimit = limiter({
   windowEnv: "EMBED_RATE_LIMIT_WINDOW_MS",
   limitEnv: "EMBED_RATE_LIMIT_MAX",
@@ -320,4 +340,5 @@ module.exports = {
   loginIpRateLimit,
   mailerTestRateLimit,
   resetRequestControls,
+  whenMailing,
 };

@@ -209,7 +209,9 @@ describe("issue 80: the secret and the link reach nothing else (negative)", () =
 describe("issue 80: failures are classified by what the caller must do", () => {
   test("bad credentials are CONFIGURATION — not retryable", async () => {
     fixture = await startSmtpFixture({ fail: "auth" });
-    const error = await driverFor(fixture).send(notification()).catch((e) => e);
+    const error = await driverFor(fixture)
+      .send(notification())
+      .catch((e) => e);
 
     expect(error).toBeInstanceOf(NotificationConfigurationError);
     // Retrying a rejected password is how a relay account gets locked out.
@@ -218,7 +220,9 @@ describe("issue 80: failures are classified by what the caller must do", () => {
 
   test("a 4xx is UNAVAILABLE — retryable", async () => {
     fixture = await startSmtpFixture({ fail: "temporary" });
-    const error = await driverFor(fixture).send(notification()).catch((e) => e);
+    const error = await driverFor(fixture)
+      .send(notification())
+      .catch((e) => e);
 
     expect(error).toBeInstanceOf(NotificationUnavailableError);
     expect(error.retryable).toBe(true);
@@ -226,7 +230,9 @@ describe("issue 80: failures are classified by what the caller must do", () => {
 
   test("a 5xx is REJECTED — not retryable", async () => {
     fixture = await startSmtpFixture({ fail: "permanent" });
-    const error = await driverFor(fixture).send(notification()).catch((e) => e);
+    const error = await driverFor(fixture)
+      .send(notification())
+      .catch((e) => e);
 
     expect(error).toBeInstanceOf(NotificationRejectedError);
     expect(error.retryable).toBe(false);
@@ -234,7 +240,9 @@ describe("issue 80: failures are classified by what the caller must do", () => {
 
   test("a dropped connection is UNAVAILABLE — retryable", async () => {
     fixture = await startSmtpFixture({ fail: "drop" });
-    const error = await driverFor(fixture).send(notification()).catch((e) => e);
+    const error = await driverFor(fixture)
+      .send(notification())
+      .catch((e) => e);
 
     expect(error).toBeInstanceOf(NotificationUnavailableError);
     expect(error.retryable).toBe(true);
@@ -522,7 +530,9 @@ describe("issue 80 (TL-1 F2): notificationId is the idempotency key", () => {
     // the retry the queue exists to make is the whole point.
     fixture = await startSmtpFixture({ fail: "temporary" });
     const failing = driverFor(fixture);
-    await failing.send(notification({ notificationId: "n-retry" })).catch(() => {});
+    await failing
+      .send(notification({ notificationId: "n-retry" }))
+      .catch(() => {});
     await fixture.close();
 
     fixture = await startSmtpFixture();

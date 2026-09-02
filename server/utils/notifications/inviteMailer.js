@@ -6,9 +6,7 @@
 // Seam 6 draws that line deliberately — a driver that resolved recipients or
 // read app models would have to be trusted with policy it cannot see.
 
-const {
-  SmtpNotificationDriver,
-} = require("./SmtpNotificationDriver");
+const { SmtpNotificationDriver } = require("./SmtpNotificationDriver");
 const mailerSettings = require("./mailerSettings");
 
 /**

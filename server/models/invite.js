@@ -4,6 +4,16 @@ const prisma = require("../utils/prisma");
 const Invite = {
   // 256-bit from crypto.randomBytes (R6/R7); uuid-apikey was 122 bits and an
   // invite code redeems a real account.
+  /** `person@example.com` -> `p***@example.com`. Enough to tell rows apart. */
+  maskEmail: (address = "") => {
+    const value = String(address);
+    const at = value.indexOf("@");
+    if (at <= 0) return "***";
+    // One leading character only: a longer prefix on a short local part leaves
+    // little to guess, which defeats the point of masking at all.
+    return `${value[0]}***${value.slice(at)}`;
+  },
+
   makeCode: () => {
     const crypto = require("crypto");
     return `apw-inv-${crypto.randomBytes(32).toString("base64url")}`;
@@ -209,10 +219,30 @@ const Invite = {
     }
   },
 
-  whereWithUsers: async function (clause = {}, limit) {
+  /**
+   * S11a (#80), TL-1: the recipient address is MASKED unless the caller may
+   * manage users.
+   *
+   * Until this release `invites.email` was always null, so the listings could
+   * return whole rows harmlessly. Populating that column is what turned
+   * `GET /admin/invites` into a roster of every address invited — readable by
+   * anyone holding `invite.read`, which is a far wider grant than "may see who
+   * we contacted". This change created the exposure, so it closes it.
+   *
+   * Masked rather than removed: an admin needs to recognise WHICH invite is
+   * which, and `j***@example.com` does that without publishing the address.
+   *
+   * @param {{unmaskEmail?: boolean}} [options] full addresses, for a caller the
+   *   route has already checked holds `user.manage`. Never true for an API key:
+   *   the scope vocabulary cannot express that permission.
+   */
+  whereWithUsers: async function (clause = {}, limit, options = {}) {
     const { User } = require("./user");
     try {
       const invites = await this.where(clause, limit);
+      for (const invite of invites)
+        if (invite.email && options.unmaskEmail !== true)
+          invite.email = this.maskEmail(invite.email);
       for (const invite of invites) {
         if (invite.claimedBy) {
           const acceptedUser = await User.get({ id: invite.claimedBy });

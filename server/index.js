@@ -12,6 +12,7 @@ const cors = require("cors");
 const path = require("path");
 const { reqBody } = require("./utils/http");
 const { systemEndpoints } = require("./endpoints/system");
+const { mailerEndpoints } = require("./endpoints/mailer");
 const { workspaceEndpoints } = require("./endpoints/workspaces");
 const { chatEndpoints } = require("./endpoints/chat");
 const { embeddedEndpoints } = require("./endpoints/embed");
@@ -102,6 +103,7 @@ if (!!process.env.ENABLE_HTTPS) {
 app.use("/api", ipAllowlist, apiRouter);
 apiRouter.use("/v1", apiIpRateLimit, apiKeyRateLimit);
 systemEndpoints(apiRouter);
+mailerEndpoints(apiRouter);
 extensionEndpoints(apiRouter);
 workspaceEndpoints(apiRouter);
 workspaceThreadEndpoints(apiRouter);

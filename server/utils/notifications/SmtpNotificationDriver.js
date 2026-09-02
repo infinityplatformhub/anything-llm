@@ -175,9 +175,7 @@ class SmtpNotificationDriver {
             : this.fromAddress
         ),
         to,
-        subject: this._header(
-          notification?.subject ?? "You have been invited"
-        ),
+        subject: this._header(notification?.subject ?? "You have been invited"),
         text: notification?.text ?? "",
         html: notification?.html,
       });
