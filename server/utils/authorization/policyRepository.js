@@ -380,6 +380,114 @@ async function canAssignLegacyRole({ actor, targetRole, db = prisma }) {
   }
 }
 
+/**
+ * The workspaces a user is a member of — the extra scope keys a membership change
+ * has to invalidate.
+ *
+ * A cache entry is keyed on the actor's workspaceIds and scoped to `org:<id>` plus
+ * one `workspace:<id>` per workspace (cache.js `scopesFor`). Bumping only the org
+ * key would still invalidate those entries, but a workspace-scoped consumer that
+ * listens narrowly would miss it, so both are published — the same shape `grantRole`
+ * uses for a workspace-scoped grant.
+ */
+async function workspaceScopeKeysFor(tx, userId, groupId) {
+  const keys = new Set();
+
+  // Workspaces the user is a direct member of.
+  const memberships = await tx.workspace_users.findMany({
+    where: { user_id: Number(userId) },
+    select: { workspace_id: true },
+  });
+  for (const row of memberships) keys.add(`workspace:${row.workspace_id}`);
+
+  // And the workspaces the GROUP's own grants name. This half is the point: a user
+  // whose only path to a workspace is through the group has no `workspace_users`
+  // row at all, so a membership-only lookup published `org:1` and nothing else.
+  // Found by the RF-5 scope test, which asserted the emitted keys rather than
+  // trusting that invalidation happened for some reason.
+  //
+  // Org-wide grants (workspace_id NULL) need no key of their own — `org:1` is
+  // already published and every cache entry carries it.
+  const grants = await tx.principal_role_grants.findMany({
+    where: {
+      orgId: 1,
+      principal_type: "group",
+      principal_id: String(groupId),
+      workspace_id: { not: null },
+    },
+    select: { workspace_id: true },
+  });
+  for (const row of grants) keys.add(`workspace:${row.workspace_id}`);
+
+  return [...keys];
+}
+
+/**
+ * Add a user to a group, and bump the policy version in the SAME transaction.
+ *
+ * S4a (#113), the residual #96 left behind. Group membership decides authorization
+ * — since #96 the engine expands it, and documentFilter reads it on both halves —
+ * but nothing about writing `group_members` advanced `policy_versions`. So a
+ * membership change was invisible to every cached filter until its TTL expired.
+ *
+ * The direction that matters is REMOVAL: a user taken out of a group kept the
+ * group's access for up to the cache TTL. That is the shape T-5's own comment calls
+ * "not a caching artifact but the authorization failure the seam exists to
+ * prevent", and offboarding (S12) will depend on it being immediate.
+ *
+ * Membership writes therefore live HERE rather than in a caller, for the same reason
+ * grants do: a caller that forgets the bump produces a silent staleness bug, and
+ * nothing about `prisma.group_members.create()` looks wrong.
+ */
+async function addGroupMember({ actor, groupId, userId, db = prisma }) {
+  requireActor(actor, "addGroupMember");
+  return inTransaction(db, async (tx) => {
+    const extra = await workspaceScopeKeysFor(tx, userId, groupId);
+    const version = await bumpVersion(
+      tx,
+      "group_membership",
+      SCOPE_KEY(1),
+      actorIdOf(actor),
+      extra
+    );
+    await tx.group_members.upsert({
+      where: { group_id_user_id: { group_id: Number(groupId), user_id: Number(userId) } },
+      create: { group_id: Number(groupId), user_id: Number(userId) },
+      update: {},
+    });
+    return { version };
+  });
+}
+
+/**
+ * Remove a user from a group, bumping the policy version in the same transaction.
+ *
+ * The scope keys are collected BEFORE the delete: `workspace_users` is not what is
+ * being deleted here, so ordering does not strictly matter today — but reading them
+ * first keeps this symmetric with any future membership model where the removal
+ * itself changes what needs invalidating.
+ */
+async function removeGroupMember({ actor, groupId, userId, db = prisma }) {
+  requireActor(actor, "removeGroupMember");
+  return inTransaction(db, async (tx) => {
+    const extra = await workspaceScopeKeysFor(tx, userId, groupId);
+    const version = await bumpVersion(
+      tx,
+      "group_membership",
+      SCOPE_KEY(1),
+      actorIdOf(actor),
+      extra
+    );
+    // deleteMany, not delete: removing someone who is not a member is a no-op, not
+    // an error. The version still bumps — a caller that asked for the removal is
+    // entitled to know the cache reflects reality afterwards.
+    await tx.group_members.deleteMany({
+      where: { group_id: Number(groupId), user_id: Number(userId) },
+    });
+    return { version };
+  });
+}
+
 module.exports = {
   grantRole,
   canAssignLegacyRole,
@@ -388,4 +496,6 @@ module.exports = {
   revokeDocumentAcl,
   setDocumentVisibility,
   currentPolicyVersion,
+  addGroupMember,
+  removeGroupMember,
 };

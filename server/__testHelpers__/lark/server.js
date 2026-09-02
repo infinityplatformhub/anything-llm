@@ -39,6 +39,12 @@ async function startLarkFixture(options = {}) {
     failMode = "500",
     failTimes = Infinity,
     tenantToken = "t-fixture-token",
+    // RF-6: serve a `page_token` on EVERY page, including the last one where
+    // `has_more` is false. Real APIs do this, and a driver that loops on "is there a
+    // token" rather than on `has_more` never terminates — or worse, re-reads the
+    // final page forever. The default fixture omits the trailing token, so that
+    // guard had no test until this switch existed.
+    alwaysToken = false,
   } = options;
 
   // Every request, in order. Assertions about retries and skipped pages are made
@@ -124,7 +130,9 @@ async function startLarkFixture(options = {}) {
         data: {
           items,
           has_more: hasMore,
-          page_token: hasMore ? String(page + 1) : undefined,
+          // With `alwaysToken`, the final page still carries a token — `has_more`
+          // is the only thing saying the enumeration is over.
+          page_token: hasMore || alwaysToken ? String(page + 1) : undefined,
         },
       })
     );

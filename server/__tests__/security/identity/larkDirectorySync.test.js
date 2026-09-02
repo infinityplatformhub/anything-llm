@@ -282,3 +282,61 @@ describe("S4a (#113): the app secret does not escape", () => {
     expect(rendered).not.toContain(secret);
   }, 60_000);
 });
+
+describe("S4a (#113) RF-6/RF-7: a snapshot is complete, or it is an error", () => {
+  test("RF-7: a cursor is REFUSED — a resumed enumeration is a prefix wearing a full label", async () => {
+    // Measured before the fix, on this exact fixture shape:
+    //   listPrincipals({ cursor: "4" }) → 235 of 250, hasMore false, nextCursor null
+    // Every field said the enumeration finished cleanly, and a reconciler acting on
+    // it would deactivate the 15 people that were skipped. Silently ignoring the
+    // argument is worse than refusing: the caller believes it resumed AND got
+    // everything.
+    fixture = await startLarkFixture({ users: 250, pageSize: 5 });
+    const driver = driverFor(fixture, { pageSize: 5 });
+
+    await expect(driver.listPrincipals({ cursor: "4" })).rejects.toBeInstanceOf(
+      IdentityCapabilityError
+    );
+    await expect(driver.listGroups({ cursor: "4" })).rejects.toBeInstanceOf(
+      IdentityCapabilityError
+    );
+
+    // And the honest call still works, so the refusal is about the cursor rather
+    // than about the driver being broken.
+    await expect(driver.listPrincipals()).resolves.toMatchObject({ hasMore: false });
+  }, 60_000);
+
+  test("RF-6: a page_token on the LAST page does not cause a second read", async () => {
+    // Real APIs return a token on every page. A driver that loops on "is there a
+    // token" rather than on `has_more` re-reads the final page forever. The default
+    // fixture omits the trailing token, so this guard had no test at all.
+    fixture = await startLarkFixture({ users: 120, pageSize: 50, alwaysToken: true });
+    const driver = driverFor(fixture, { pageSize: 50 });
+
+    const { principals } = await driver.listPrincipals();
+
+    expect(principals).toHaveLength(120);
+    // Three pages, each exactly once — not a fourth read of page 3, and not a loop.
+    expect(fixture.userPages).toEqual([1, 2, 3]);
+    expect(new Set(principals.map((p) => p.subject)).size).toBe(120);
+  }, 60_000);
+
+  test("NIT-2: a record with no user_id is refused, not skipped", async () => {
+    // Skipping is the quieter option and the wrong one. `identity_links` is unique
+    // on (provider, subject), so two records normalizing to "" collide on the field
+    // that IS the identity — and a skipped principal is ABSENT from the snapshot,
+    // which is precisely how the reconciler decides someone has left.
+    expect(() =>
+      LarkIdentityProvider.toDirectoryPrincipal({
+        user_id: "",
+        name: "No Id",
+        email: "noid@example.com",
+      })
+    ).toThrow(IdentityUnavailableError);
+
+    // Whitespace is not an id either.
+    expect(() =>
+      LarkIdentityProvider.toDirectoryPrincipal({ user_id: "   ", name: "Blank" })
+    ).toThrow(IdentityUnavailableError);
+  });
+});

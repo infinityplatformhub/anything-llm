@@ -128,6 +128,98 @@ error to inspect. Repointed at a dead port (`127.0.0.1:1`) so the failure is rea
 the assertion now renders `cause` too, since that is where a fetch failure carries the
 request it was making.
 
+## Slice 3 — membership writes bump the policy version (RF-5)
+
+The residual #96 left behind. Since #96 the engine expands group membership and
+documentFilter reads it on both halves, so membership decides authorization — but
+nothing about writing `group_members` advanced `policy_versions`. A user removed from
+a group kept its access until the cache TTL expired.
+
+Ruling: membership writes live in `policyRepository` (`addGroupMember` /
+`removeGroupMember`), not in a caller, for the same reason grants do — a caller that
+forgets the bump produces silent staleness, and nothing about
+`prisma.group_members.create()` looks wrong. Both bump inside the same transaction as
+the write. If wrong: a crash between the two leaves every cache stale with no event
+to correct it, which is the reasoning `bumpVersion` already gives for publishing
+inside the transaction.
+
+Ruling: `removeGroupMember` uses `deleteMany`, so removing a non-member is a no-op
+rather than an error — and it still bumps. A caller that asked for a removal is
+entitled to know the cache reflects reality afterwards, whether or not a row existed.
+
+### The gap the scope test found
+
+The first version of `workspaceScopeKeysFor` read `workspace_users` only. That is
+wrong for exactly the case S4a creates: a user whose ONLY path to a workspace is a
+group grant has no `workspace_users` row, so the bump published `org:1` and nothing
+else.
+
+Five of the six tests passed anyway, because `FilterCache.get` re-reads the version
+head on every call and would have caught it regardless. The scope test is what
+failed — it asserts the emitted `scopeKeys` rather than trusting that invalidation
+happened for some reason. TL-1 asked for that specific shape; without it the defect
+ships, and only shows up in a consumer that listens narrowly.
+
+Fixed by also collecting the workspaces named by the GROUP's own grants. Org-wide
+grants (`workspace_id` NULL) need no key: `org:1` is already published and every
+cache entry carries it.
+
+### Evidence, slice 3
+
+6/6. Three mutants, each killed by its named test:
+
+- P1 publish under `group:<id>` — a key `scopesFor` never produces → the scope test
+  alone. The revocation test still PASSED, because the version-head check saves it.
+  That is precisely why the scope is pinned separately: without this test, a bump
+  nobody can match looks healthy.
+- P2 drop the group-grant workspaces (the regression above) → the scope test.
+- P3 remove the bump entirely → **four** tests, including the live-cache revocation,
+  which is the actual security property.
+
+Two corrections to my own test along the way: it asserted `attributes.groupIds` on a
+filter that had degraded to match-none (where `attributes` is `{}` by construction),
+and it read `event_outbox.payload` ordered by `id` — the column is `data`, a JSON
+string, and `id` is a String, so ordering by it sorts lexically rather than
+chronologically. `occurredAt` is the indexed column for that.
+
+## Slice 4 — TL-1's slice-2 findings (RF-6, RF-7, NIT-1, NIT-2)
+
+Ruling (FINDING-2 / RF-7): a non-null `cursor` is REFUSED with
+`IdentityCapabilityError`, exactly as `delta` is. Confirmed before fixing, on a
+250-user fixture at 5 per page:
+
+```
+listPrincipals({ cursor: "4" }) → 235 principals, hasMore: false, nextCursor: null
+```
+
+A prefix wearing the label of a complete snapshot. Every field says the enumeration
+finished cleanly, and a reconciler acting on it deactivates the 15 people it skipped.
+Silently ignoring the argument would be worse than refusing — the caller believes it
+resumed AND received everything. This driver's only honest output is a completed full
+snapshot, because that is the only thing absence may be judged against.
+
+Ruling (NIT-2): a record with no `user_id` is REFUSED, not skipped. Skipping is the
+quieter option and the wrong one: `identity_links` is unique on `(provider, subject)`,
+so two records normalizing to `""` collide on the field that IS the identity — and a
+skipped principal is ABSENT from the snapshot, which is how the reconciler decides
+someone has left. A directory returning unkeyable records is a broken enumeration, not
+a smaller organisation.
+
+### Evidence, slice 4
+
+18/18. Three mutants, each killed by its named test:
+
+- M7 remove the cursor refusal → RF-7
+- M8 loop on `page_token` instead of `has_more` → RF-6. That guard had **no test at
+  all** before this slice: the default fixture omits the trailing token, so the
+  `alwaysToken` switch is what made it reachable.
+- M9 remove the empty-subject refusal → NIT-2
+
+NIT-1: the staging directory is now removed in a `finally`. It lives under
+`os.tmpdir()` rather than the repository, so leaking one is untidy rather than
+dangerous — but a failed `migrate deploy` would otherwise leave one behind on every
+run.
+
 ## Residual risks
 
 1. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers

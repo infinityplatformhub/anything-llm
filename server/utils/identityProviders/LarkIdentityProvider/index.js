@@ -214,14 +214,36 @@ class LarkIdentityProvider {
   /**
    * Every page, or an exception. Never a prefix.
    *
-   * The seam's `cursor`/`delta` inputs are accepted and deliberately ignored for
-   * `delta`: there is nothing to resume from, and pretending otherwise would let a
-   * caller believe it had asked for a change set.
+   * BOTH `delta` and `cursor` are refused, and for one reason: this driver's only
+   * honest output is a COMPLETED FULL SNAPSHOT, because that is the only thing S4b
+   * may act on absence from.
+   *
+   * `cursor` looks harmless — the seam offers it, and resuming mid-enumeration is a
+   * reasonable thing for a paginated API. It is not harmless here. Measured on a
+   * 250-user fixture at 5 per page:
+   *
+   *   listPrincipals({ cursor: "4" })
+   *     → 235 principals, hasMore: false, nextCursor: null
+   *
+   * That is a PREFIX WEARING THE LABEL OF A COMPLETE SNAPSHOT. A reconciler reading
+   * it deactivates the 15 people it skipped, and every field in the response says
+   * the enumeration finished cleanly. Silently ignoring the argument would be worse
+   * still: the caller believes it resumed and got a full answer instead.
+   *
+   * So a caller that wants to resume is told it cannot, in the same way it is told
+   * there is no delta API.
    */
   async _enumerate(pathname, { cursor = null, delta = false, signal } = {}) {
     if (delta) {
       throw new IdentityCapabilityError(
         "Lark has no delta API (deltaSync: false). Enumerate in full."
+      );
+    }
+    if (cursor != null) {
+      throw new IdentityCapabilityError(
+        "Lark enumeration cannot be resumed from a cursor: the result would be a " +
+          "partial snapshot reported as a complete one, and absence from it is how " +
+          "the reconciler decides who has left. Enumerate in full."
       );
     }
     const collected = [];
@@ -278,9 +300,29 @@ class LarkIdentityProvider {
   static toDirectoryPrincipal(row = {}) {
     const enterprise = String(row.enterprise_email ?? "").trim();
     const personal = String(row.email ?? "").trim();
+    const subject = String(row.user_id ?? "").trim();
+
+    // NIT-2. A row with no `user_id` would normalize to `subject: ""`, and TWO such
+    // rows collide on the field that IS the identity — `identity_links` is unique on
+    // `(provider, subject)`, so the second person would be refused as a duplicate of
+    // the first, or worse, matched to their account.
+    //
+    // Refused rather than skipped, deliberately. Skipping is the quieter option and
+    // the wrong one: a skipped principal is ABSENT from the snapshot, and absence is
+    // exactly how the reconciler decides someone has left. A directory that returns
+    // records this driver cannot key is a broken enumeration, not a smaller org, and
+    // the seam already says invalid records are quarantined without widening
+    // membership — this refuses the whole page rather than quietly narrowing it.
+    if (!subject) {
+      throw new IdentityUnavailableError(
+        "Lark returned a directory record with no user_id. It cannot be keyed, and " +
+          "dropping it would look to the reconciler like that person had left."
+      );
+    }
+
     return {
       provider: "lark",
-      subject: String(row.user_id ?? ""),
+      subject,
       email: enterprise || personal || null,
       // Reported, never asserted: Lark has no verified-email semantics, so claiming
       // `true` here would launder a directory record into a proven address. Core's

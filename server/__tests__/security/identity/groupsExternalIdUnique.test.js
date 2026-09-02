@@ -73,19 +73,25 @@ beforeAll(async () => {
   const stagedSchema = path.join(stageDir, "schema.prisma");
   fs.copyFileSync(SCHEMA, stagedSchema);
 
-  execSync(`npx prisma migrate deploy --schema ${stagedSchema}`, {
-    env: { ...process.env, DATABASE_URL: testUrl },
-    cwd: SERVER_DIR,
-    stdio: "pipe",
-  });
-  const seeder = new PrismaClient({ datasources: { db: { url: testUrl } } });
-  await seeder.$executeRawUnsafe(
-    `INSERT INTO "groups" ("orgId", "name", "source", "externalId")
-       VALUES (1, 'pre-existing-local-a', 'local', NULL),
-              (1, 'pre-existing-local-b', 'local', NULL)`
-  );
-  await seeder.$disconnect();
-  fs.rmSync(stageDir, { recursive: true, force: true });
+  // NIT-1: the staging directory is cleaned in a `finally`. It lives in os.tmpdir()
+  // rather than the repository, so leaking one is untidy rather than dangerous — but
+  // a failed `migrate deploy` here would otherwise leave it behind on every run.
+  try {
+    execSync(`npx prisma migrate deploy --schema ${stagedSchema}`, {
+      env: { ...process.env, DATABASE_URL: testUrl },
+      cwd: SERVER_DIR,
+      stdio: "pipe",
+    });
+    const seeder = new PrismaClient({ datasources: { db: { url: testUrl } } });
+    await seeder.$executeRawUnsafe(
+      `INSERT INTO "groups" ("orgId", "name", "source", "externalId")
+         VALUES (1, 'pre-existing-local-a', 'local', NULL),
+                (1, 'pre-existing-local-b', 'local', NULL)`
+    );
+    await seeder.$disconnect();
+  } finally {
+    fs.rmSync(stageDir, { recursive: true, force: true });
+  }
 
   // Now the index is created over a table that already holds two NULL rows. Under
   // NULLS NOT DISTINCT this step fails outright, which is the mutation.
