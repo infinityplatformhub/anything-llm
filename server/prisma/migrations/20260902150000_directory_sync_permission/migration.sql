@@ -22,12 +22,28 @@
 -- to nobody, and four routes answered 404 to every user asking for their own
 -- chat history.
 
-INSERT INTO "permissions" ("action", "description")
+-- `category` and `scope` are set explicitly, like every other permission
+-- migration (102000 is the pattern). Omitting them takes the column defaults —
+-- category '' and scope 'any' — while `prisma/seed.js:34` derives category from
+-- the action prefix, so a MIGRATED install and a FRESH one would disagree about
+-- the same row. The set-equality test in the suite compares both columns for
+-- exactly this reason (TL-1).
+--
+-- scope 'org' is the load-bearing half. The engine refuses an org-scoped action
+-- asked against a workspace resource, raising a contract error that surfaces as
+-- a 500 rather than a decision. That is the failure we want: a directory sync is
+-- an organisation-wide operation, and a route that asked "may this caller sync
+-- THIS workspace" would be a question with no correct answer. Left at the
+-- default 'any', that miswiring would instead be answered — with a NULL-workspace
+-- grant matching every workspace, which is the shape of the 044000 vulnerability.
+INSERT INTO "permissions" ("action", "description", "category", "scope")
 VALUES (
   'directory.sync',
-  'Trigger a directory synchronisation run (creates, updates and deactivates users in bulk)'
+  'Trigger a directory synchronisation run (creates, updates and deactivates users in bulk)',
+  'directory',
+  'org'
 )
-ON CONFLICT ("action") DO NOTHING;
+ON CONFLICT ("action") DO UPDATE SET "category" = 'directory', "scope" = 'org';
 
 INSERT INTO "role_permissions" ("role_id", "permission_id")
 SELECT r."id", p."id"

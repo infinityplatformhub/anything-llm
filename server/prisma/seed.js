@@ -2,6 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const {
   ALL_ACTIONS,
+  ACTION_SCOPES,
   SYSTEM_ROLES,
   SINGLE_USER_PRINCIPAL,
 } = require("./seeds/permissions");
@@ -28,11 +29,23 @@ async function main() {
   // T-1 vocabulary/roles/grants — idempotent upserts mirroring migration
   // step 7a/5 (production gets them from the migration; this covers dev resets).
   const cat = (a) => a.split(".")[0].replace(/-(.)/g, (_, c) => c.toUpperCase());
+  // #138: `scope` is written here, not left to the column default.
+  //
+  // The seed used to set only `category`, so on a database built by `db push` +
+  // seed (no migrations) every action came out scope 'any' — including
+  // `org.member`, whose whole point is that the engine REFUSES it against a
+  // workspace resource. Migrated installs got the right value from migration
+  // 102000, so the two deployment shapes disagreed and only the migrated one was
+  // ever tested. Measured on both paths, not inferred.
+  //
+  // `update` carries scope too: a database seeded before this change already
+  // holds the wrong value, and an upsert that only fixes new rows would leave it.
   for (const action of ALL_ACTIONS) {
+    const scope = ACTION_SCOPES[action] ?? "any";
     await prisma.permissions.upsert({
       where: { action },
-      create: { action, description: action, category: cat(action) },
-      update: {},
+      create: { action, description: action, category: cat(action), scope },
+      update: { category: cat(action), scope },
     });
   }
 

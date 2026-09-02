@@ -261,13 +261,28 @@ describe("issue 53: the seeded vocabulary", () => {
   });
 
   test("every other action still defaults to 'any'", async () => {
-    // The column must be inert for everything that did not opt in, or this
+    // The column must be inert for everything that did not opt in, or a
     // migration silently changes how unrelated actions answer.
+    //
+    // The list is derived from ACTION_SCOPES rather than written out, so adding
+    // a scoped action is ONE edit (the map) instead of two that can disagree.
+    // #138 added `directory.sync` here; before that the literal was a single
+    // entry and this test is what caught the addition, which is the intent.
+    const {
+      ACTION_SCOPES,
+    } = require("../../../prisma/seeds/permissions");
     const scoped = await prisma.permissions.findMany({
       where: { scope: { not: "any" } },
       select: { action: true, scope: true },
+      orderBy: { action: "asc" },
     });
-    expect(scoped).toEqual([{ action: "org.member", scope: "org" }]);
+    const expected = Object.entries(ACTION_SCOPES)
+      .map(([action, scope]) => ({ action, scope }))
+      .sort((a, b) => a.action.localeCompare(b.action));
+    expect(scoped).toEqual(expected);
+    // Non-vacuous: an empty ACTION_SCOPES would make the equality above trivially
+    // true while every scoped action had silently reverted to 'any'.
+    expect(expected.length).toBeGreaterThan(0);
   });
 
   test("NIT: the JS scope map and the database agree", async () => {

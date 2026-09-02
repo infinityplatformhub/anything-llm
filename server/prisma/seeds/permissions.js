@@ -239,7 +239,15 @@ const SINGLE_USER_PRINCIPAL = {
 // #53: the scope an action may be asked at. Anything absent is 'any' — the
 // existing behaviour, and the default the column carries. Only actions that
 // would be UNSAFE at another scope belong here.
-const ACTION_SCOPES = Object.freeze({ "org.member": "org" });
+// #138: `directory.sync` is org-scoped for the same reason — a sync run is an
+// organisation-wide operation, and "may this caller sync THIS workspace" is a
+// question with no correct answer. The engine throwing on it is the loud failure;
+// left at 'any' the question would be ANSWERED, and an org-wide grant reads as
+// every workspace (the 044000 shape).
+const ACTION_SCOPES = Object.freeze({
+  "org.member": "org",
+  "directory.sync": "org",
+});
 
 module.exports = {
   DOCUMENT_ACTIONS,

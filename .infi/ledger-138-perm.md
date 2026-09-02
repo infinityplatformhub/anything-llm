@@ -84,3 +84,74 @@ migration defect and was a defect in how the test replayed it. Comments are now
 stripped before splitting, and the statement count is asserted (`toHaveLength(3)`)
 so a future edit that changes the statement count cannot silently replay the
 wrong thing.
+
+---
+
+# Commit 2 — TL-1's column fix, and the defect it uncovered
+
+## What TL-1 asked for
+
+The migration's `INSERT INTO permissions` named only `("action","description")`;
+every prior permission migration sets `category`, and 102000 also sets `scope`.
+Fixed: `category = 'directory'`, `scope = 'org'`, with
+`ON CONFLICT ... DO UPDATE` so a row created by an earlier partial run is
+corrected rather than left.
+
+`scope = 'org'` needed a second edit TL-1 did not name: `ACTION_SCOPES` in the
+seed is the JS half of that column, and `orgMemberAction.test.js` asserts the two
+agree. Setting the column without the map entry turns that test red. Both done.
+
+## The wider defect — different from the one reported
+
+QA-3 reported category = '' for `directory.sync` on a migrate+seed database.
+That did not reproduce: measured on a real database, category was already
+'directory' on both the migrate+seed and migrate-only paths, and
+`count(*) WHERE category=''` was 0.
+
+The real gap is the **seed-only** path (`prisma db push` + `node prisma/seed.js`,
+the dev-reset shape), and the column is **`scope`**, not `category`:
+
+```
+before: directory.sync | directory | any
+        org.member     | org       | any     <-- pre-existing, not mine
+after:  directory.sync | directory | org
+        org.member     | org       | org
+```
+
+`seed.js:34` wrote `category` and never `scope`, so on a seed-only database every
+action came out 'any' — including `org.member`, whose entire purpose is that the
+engine REFUSES it against a workspace resource. Migrated installs got the right
+value from migration 102000, so the two deployment shapes disagreed and only the
+migrated one was ever asserted.
+
+Ruling: fixed in `seed.js` for ALL actions via `ACTION_SCOPES`, not just for
+`directory.sync`. Scoping the fix to my own action would have left `org.member`
+broken on the same path, which is the bug that was actually there. `update:` now
+carries the columns too — an upsert that only fixes new rows leaves an
+already-seeded database wrong.
+
+## Tests added (16 total, was 10)
+
+- C-a: a `db push` + seed database, asserted SEPARATELY from the migrate-only
+  one. Neither existing describe covered it.
+- C-b: cross mutants. Seed reverted with migration intact → 3 red (all in
+  describe D); migration reverted with seed intact → 4 red (describe C + the
+  cross-check). Each path is covered independently.
+- C-c: `category === ''` swept across the whole table, on both paths.
+- Set equality on `(action, category, scope)` tuples between the two paths.
+- `orgMemberAction.test.js`'s scoped-action list now DERIVES from `ACTION_SCOPES`
+  instead of pinning one literal entry, so adding a scoped action is one edit.
+
+Negative controls for the column assertions, before accepting them: bare
+`(action,description)` → 2 red; wrong category → 2 red; scope left 'any' → 2 red.
+
+Counts: 16/16 on the branch; 12 suites / 144 tests green across every
+`ALL_ACTIONS` and `ACTION_SCOPES` consumer.
+
+## Note on tooling
+
+Switched to `/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/jest` from
+`npx` (Dev3's #142 lesson) — `npx` re-resolves to node 26 even when invoked from
+node@22's bin. The `execSync` calls INSIDE the test files still use `npx prisma`;
+they inherit the parent's environment and ran correctly here, but they are the
+same hazard and are worth converting repo-wide rather than file by file.

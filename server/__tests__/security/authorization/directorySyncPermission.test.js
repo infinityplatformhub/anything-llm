@@ -202,42 +202,48 @@ describe("B: the seed carries the action", () => {
   });
 });
 
+// The migrate-only database lives at MODULE scope, not inside describe C.
+// Describe D compares the seed-only path against it, and a client created and
+// disconnected inside C would already be closed by then — the comparison would
+// throw rather than fail, which reads as a broken test instead of a real answer.
+const migOnlyDb = `t138_mig_${dbSuffix}`;
+let migClient;
+
+beforeAll(async () => {
+  const migUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${migOnlyDb}$1`);
+  const admin = new PrismaClient({
+    datasources: { db: { url: baseDatabaseUrl } },
+  });
+  await admin.$executeRawUnsafe(`CREATE DATABASE "${migOnlyDb}"`);
+  await admin.$disconnect();
+  execSync(`npx prisma migrate deploy --schema ${SCHEMA}`, {
+    env: { ...process.env, DATABASE_URL: migUrl },
+    cwd: SERVER_DIR,
+    stdio: "pipe",
+  });
+  migClient = new PrismaClient({ datasources: { db: { url: migUrl } } });
+}, 300_000);
+
+afterAll(async () => {
+  if (migClient) await migClient.$disconnect();
+  const admin = new PrismaClient({
+    datasources: { db: { url: baseDatabaseUrl } },
+  });
+  await admin.$executeRawUnsafe(
+    `DROP DATABASE IF EXISTS "${migOnlyDb}" WITH (FORCE)`
+  );
+  await admin.$disconnect();
+}, 120_000);
+
+const migratedPermissionRows = (select) =>
+  migClient.permissions.findMany({ select });
+
 describe("C: the migration stands on its own", () => {
   // Everything above runs on a database built by `migrate deploy` AND `seed.js`.
   // The seed writes the same grant, so it MASKS the migration completely —
   // measured in #137, where two mutants that emptied the migration left the
-  // suite green. This block builds a database with migrations ONLY, which is
-  // also the upgrade path a real deployment takes: existing installs run
-  // migrations, they do not re-run the seed.
-  const migOnlyDb = `t138_mig_${dbSuffix}`;
-  let migUrl;
-  let migClient;
-
-  beforeAll(async () => {
-    migUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${migOnlyDb}$1`);
-    const admin = new PrismaClient({
-      datasources: { db: { url: baseDatabaseUrl } },
-    });
-    await admin.$executeRawUnsafe(`CREATE DATABASE "${migOnlyDb}"`);
-    await admin.$disconnect();
-    execSync(`npx prisma migrate deploy --schema ${SCHEMA}`, {
-      env: { ...process.env, DATABASE_URL: migUrl },
-      cwd: SERVER_DIR,
-      stdio: "pipe",
-    });
-    migClient = new PrismaClient({ datasources: { db: { url: migUrl } } });
-  }, 300_000);
-
-  afterAll(async () => {
-    if (migClient) await migClient.$disconnect();
-    const admin = new PrismaClient({
-      datasources: { db: { url: baseDatabaseUrl } },
-    });
-    await admin.$executeRawUnsafe(
-      `DROP DATABASE IF EXISTS "${migOnlyDb}" WITH (FORCE)`
-    );
-    await admin.$disconnect();
-  }, 120_000);
+  // suite green. The migrate-ONLY database above is also the upgrade path a real
+  // deployment takes: existing installs run migrations, they do not re-run seed.
 
   async function actionsOf(roleName) {
     const role = await migClient.roles.findFirstOrThrow({
@@ -247,13 +253,22 @@ describe("C: the migration stands on its own", () => {
     return role.role_permissions.map((rp) => rp.permissions.action);
   }
 
-  test("the permission row exists", async () => {
+  test("the permission row exists, with category and scope set", async () => {
     // The engine answers false both for an action that does not exist and for
     // one that exists and is ungranted; describe A cannot tell those apart.
     const row = await migClient.permissions.findUnique({
       where: { action: "directory.sync" },
     });
     expect(row).not.toBeNull();
+    // TL-1: the columns a bare ("action","description") INSERT would leave at
+    // their defaults. `category` drifting is cosmetic-looking and is not: the
+    // seed derives it from the action prefix, so a migrated install and a fresh
+    // one would hold different rows for the same action. `scope` is the
+    // load-bearing one — at the default 'any' the engine ANSWERS "may this
+    // caller sync THIS workspace" instead of refusing it, and an org-wide grant
+    // reads as every workspace.
+    expect(row.category).toBe("directory");
+    expect(row.scope).toBe("org");
   });
 
   test("migrations ALONE grant it to super_admin and withhold it from setup_admin", async () => {
@@ -345,5 +360,148 @@ describe("C: the migration stands on its own", () => {
 
     expect([...migrated].filter((a) => !seeded.has(a)).sort()).toEqual([]);
     expect([...seeded].filter((a) => !migrated.has(a)).sort()).toEqual([]);
+  });
+
+  test("C-c: no permission row is left with an empty category", async () => {
+    // A column-wide sweep, not an assertion about this action. `category` has a
+    // '' default, so any migration that inserts without it leaves a row the seed
+    // would have filled — and nothing else in the suite looks at the column
+    // across the whole table.
+    const rows = await migClient.permissions.findMany({
+      select: { action: true, category: true },
+    });
+    expect(rows.filter((r) => r.category === "")).toEqual([]);
+    expect(rows.length).toBeGreaterThan(50);
+  });
+
+  test("the migrated CATEGORY and SCOPE match what the seed would write", async () => {
+    // TL-1: the action-name comparison above is blind to a whole class of
+    // column defect — a migration that creates the right action with the wrong
+    // category or scope passes it. Both columns are compared for EVERY action,
+    // not just this one, because the defect is per-migration and any of them can
+    // carry it.
+    const {
+      ALL_ACTIONS,
+      ACTION_SCOPES,
+    } = require("../../../prisma/seeds/permissions");
+    // seed.js:30-34 — category is derived from the action prefix, scope from
+    // ACTION_SCOPES with 'any' as the column default.
+    const cat = (a) => a.split(".")[0].replace(/-(.)/g, (_, c) => c.toUpperCase());
+    const RETIRED_BY_LATER_MIGRATIONS = new Set(["sso.issue"]);
+
+    const rows = await migClient.permissions.findMany({
+      select: { action: true, category: true, scope: true },
+    });
+    const mismatches = rows
+      .filter((r) => !RETIRED_BY_LATER_MIGRATIONS.has(r.action))
+      .filter((r) => ALL_ACTIONS.includes(r.action))
+      .filter(
+        (r) =>
+          r.category !== cat(r.action) ||
+          r.scope !== (ACTION_SCOPES[r.action] ?? "any")
+      )
+      .map((r) => ({
+        action: r.action,
+        migrated: { category: r.category, scope: r.scope },
+        seedWouldWrite: {
+          category: cat(r.action),
+          scope: ACTION_SCOPES[r.action] ?? "any",
+        },
+      }));
+    // Named in the failure output rather than counted: a bare count tells you
+    // something drifted and not which column on which action.
+    expect(mismatches).toEqual([]);
+    // Non-vacuous: an empty table would satisfy the equality above.
+    expect(rows.length).toBeGreaterThan(50);
+  });
+});
+
+describe("D: the SEED path writes the same columns as the migration", () => {
+  // C-a (QA-3). Describe C builds its database with migrations only; the suite's
+  // main database uses migrate + seed. NEITHER exercises the seed ALONE, which is
+  // what `prisma db push` + `node prisma/seed.js` produces — the dev-reset path.
+  //
+  // That gap hid a real defect, and not one this issue introduced: `seed.js`
+  // wrote `category` and NOT `scope`, so on a seed-only database every action
+  // came out scope 'any', INCLUDING `org.member`, whose entire purpose is that
+  // the engine refuses it against a workspace resource. Migrated installs got the
+  // right value from migration 102000, so the two deployment shapes disagreed and
+  // only the migrated one was ever asserted. Measured on both paths before and
+  // after the fix.
+  const seedOnlyDb = `t138_seed_${dbSuffix}`;
+  let seedUrl;
+  let seedClient;
+
+  beforeAll(async () => {
+    seedUrl = baseDatabaseUrl.replace(/\/[^/?]+(\?|$)/, `/${seedOnlyDb}$1`);
+    const admin = new PrismaClient({
+      datasources: { db: { url: baseDatabaseUrl } },
+    });
+    await admin.$executeRawUnsafe(`CREATE DATABASE "${seedOnlyDb}"`);
+    await admin.$disconnect();
+    // `db push` builds the schema WITHOUT running any migration, which is the
+    // whole point: nothing but seed.js may write these rows here.
+    execSync(
+      `npx prisma db push --schema ${SCHEMA} --skip-generate --accept-data-loss`,
+      { env: { ...process.env, DATABASE_URL: seedUrl }, cwd: SERVER_DIR, stdio: "pipe" }
+    );
+    execSync(`node prisma/seed.js`, {
+      env: { ...process.env, DATABASE_URL: seedUrl },
+      cwd: SERVER_DIR,
+      stdio: "pipe",
+    });
+    seedClient = new PrismaClient({ datasources: { db: { url: seedUrl } } });
+  }, 300_000);
+
+  afterAll(async () => {
+    if (seedClient) await seedClient.$disconnect();
+    const admin = new PrismaClient({
+      datasources: { db: { url: baseDatabaseUrl } },
+    });
+    await admin.$executeRawUnsafe(
+      `DROP DATABASE IF EXISTS "${seedOnlyDb}" WITH (FORCE)`
+    );
+    await admin.$disconnect();
+  }, 120_000);
+
+  test("the seed ALONE writes directory.sync with category and scope", async () => {
+    const row = await seedClient.permissions.findUnique({
+      where: { action: "directory.sync" },
+    });
+    expect(row).not.toBeNull();
+    expect(row.category).toBe("directory");
+    expect(row.scope).toBe("org");
+  });
+
+  test("the seed ALONE gets org.member's scope right too", async () => {
+    // The pre-existing half of the defect. Asserted here so that fixing seed.js
+    // for #138's action cannot regress the one action that already depended on
+    // it.
+    const row = await seedClient.permissions.findUnique({
+      where: { action: "org.member" },
+    });
+    expect(row.scope).toBe("org");
+  });
+
+  test("seed and migration produce the same (action, category, scope) tuples", async () => {
+    // The cross-check the two describes cannot do alone: each proves its own
+    // path is self-consistent, and only comparing them catches a fix applied to
+    // one and not the other (C-b).
+    const shape = (rows) =>
+      rows
+        .map((r) => `${r.action}|${r.category}|${r.scope}`)
+        .sort();
+    const select = { action: true, category: true, scope: true };
+    const seeded = await seedClient.permissions.findMany({ select });
+    const migrated = await migratedPermissionRows(select);
+    expect(shape(seeded)).toEqual(shape(migrated));
+    expect(seeded.length).toBeGreaterThan(50);
+  });
+
+  test("C-c: the seed leaves no empty category either", async () => {
+    const rows = await seedClient.permissions.findMany({
+      select: { action: true, category: true },
+    });
+    expect(rows.filter((r) => r.category === "")).toEqual([]);
   });
 });
