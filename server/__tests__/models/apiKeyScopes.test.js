@@ -9,6 +9,15 @@ process.env.API_KEY_PEPPER = process.env.API_KEY_PEPPER || "pr4c-scopes-test-pep
 jest.mock("../../utils/prisma", () => ({
   api_keys: { create: jest.fn() },
 }));
+// PR-4d (#35): ApiKey.create now asks the engine whether the creator may grant each
+// scope. This suite's subject is the SHAPE validation that runs before that — the
+// wildcard, the empty list, the typo — so the ceiling is stubbed to allow. Stubbing it
+// here rather than mocking the whole policy store keeps the two concerns separable:
+// keyScopeCeiling.test.js drives the real engine against real seeded grants.
+jest.mock("../../utils/apiKeySecurity/scopeCeiling", () => ({
+  ...jest.requireActual("../../utils/apiKeySecurity/scopeCeiling"),
+  applyScopeCeiling: jest.fn(async ({ scopes }) => [...scopes]),
+}));
 
 const prisma = require("../../utils/prisma");
 const { ApiKey } = require("../../models/apiKeys");

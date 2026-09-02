@@ -629,8 +629,14 @@ function adminEndpoints(app) {
         // PR-4c: a key is minted with an enumerated scope list, never a wildcard. A
         // caller may name its scopes; omitting them takes the admin preset rather than
         // everything, so an unmodified client keeps working without minting a god key.
+        // PR-4d (#35): the preset is only a starting point. When the caller named no
+        // scopes it is narrowed to what this creator actually holds (`trimToCeiling`);
+        // when they named them, an over-reach is refused rather than quietly trimmed,
+        // because someone who asked for a scope deserves an answer about it.
+        const named = Array.isArray(scopes) && scopes.length;
         const { apiKey, error } = await ApiKey.create(user.id, name, {
-          scopes: Array.isArray(scopes) && scopes.length ? scopes : [...ADMIN_DEFAULT_SCOPES],
+          scopes: named ? scopes : [...ADMIN_DEFAULT_SCOPES],
+          trimToCeiling: !named,
         });
         if (error) return response.status(400).json({ apiKey: null, error });
         await emitAuditEvent(

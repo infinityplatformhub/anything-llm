@@ -1096,9 +1096,13 @@ function systemEndpoints(app) {
         const { name = null, scopes = null } = reqBody(request);
         // Single-user mode: the operator minting this key already administers the
         // deployment, so the preset is their own grant. Still enumerated, never "*".
+        // PR-4d (#35): the ceiling reads that operator's grants through the same
+        // `keyGrantPrincipal` the request path uses, so the preset narrows if the
+        // single-user principal ever holds less than it does today.
+        const named = Array.isArray(scopes) && scopes.length;
         const { apiKey, error } = await ApiKey.create(null, name, {
-          scopes:
-            Array.isArray(scopes) && scopes.length ? scopes : [...SINGLE_USER_KEY_SCOPES],
+          scopes: named ? scopes : [...SINGLE_USER_KEY_SCOPES],
+          trimToCeiling: !named,
         });
         if (error)
           return response.status(400).json({ apiKey: null, error });

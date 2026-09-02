@@ -112,10 +112,9 @@ const extensionScopeFor = (method, path) => EXTENSION_ROUTE_SCOPES[`${method} ${
 // route asks for, minus system.env.read -- reading the provider credentials is not part
 // of "an admin key", and a deployment that wants it must say so.
 //
-// ponytail: a preset, not a picker. The ceiling that should apply is the creator's own
-// grants evaluated through the T-4a/T-4b engine, which is not merged yet; until it is,
-// an admin minting a key cannot exceed what an admin already has, so the preset is not
-// an escalation. Replace with the engine check when T-4b lands (see ledger-27, PR-4d).
+// PR-4d (#35): this is a DEFAULT, not a ceiling. What a key may actually hold is bounded
+// by the creator's own grants, read through the engine in scopeCeiling.js — a caller who
+// names no scopes gets this list narrowed to what they hold.
 const ADMIN_DEFAULT_SCOPES = Object.freeze(
   [...new Set(Object.values(ROUTE_SCOPES))]
     .filter((action) => action !== "system.env.read")

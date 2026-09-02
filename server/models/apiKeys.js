@@ -6,6 +6,9 @@ const {
   parseScopes,
 } = require("../utils/apiKeySecurity");
 const { KNOWN_SCOPES } = require("../utils/apiKeySecurity/scopes");
+const {
+  applyScopeCeiling,
+} = require("../utils/apiKeySecurity/scopeCeiling");
 
 /**
  * @param {string[]} scopes the caller's requested scope list
@@ -35,9 +38,19 @@ const ApiKey = {
   // PR-4c: scopes are required. The old fallback minted a wildcard key that
   // satisfied every route no matter how precisely the routes were scoped, and the model
   // always writes the column, so it won even after the schema default changed.
+  // PR-4d (#35): the shape check above says the list is well-formed; the ceiling says
+  // the creator is allowed to grant it. `trimToCeiling` marks a list the caller never
+  // named (an endpoint default) — those narrow, an explicit request refuses.
   create: async function (createdByUserId = null, name = null, options = {}) {
     try {
-      const scopes = validateScopes(options.scopes);
+      const requested = validateScopes(options.scopes);
+      const scopes = await applyScopeCeiling({
+        creatorId: createdByUserId,
+        scopes: requested,
+        workspaceId: options.workspaceId || null,
+        trimToCeiling: options.trimToCeiling === true,
+        db: prisma,
+      });
       const secret = this.makeSecret();
       const record = await prisma.api_keys.create({
         data: {
