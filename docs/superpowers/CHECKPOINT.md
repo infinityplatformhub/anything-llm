@@ -127,3 +127,11 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #81 opened (batch namespaceCount, Dev4 after #30). 62/81.
 - post-merge suite on main c82cb8b4 (after #73, real-store env): 2127/2127, 0 skip, reporter active.
 - #74 3165b913a gating (/tmp/wt-74; QA-3+TL-2 asked). #72 b4e1de7d gating (/tmp/wt-72; QA-1/QA-2/TL-1 asked). #40 91fbf57 probed by QA-2: bypass 7+8 closed, defineProperty pending in Dev2 tree. Post-#73 suite 2127/2127.
+
+## 2026-09-02 — #72 merged 1e1ff638b (63/85)
+- #72 b4e1de7d: gate 33/33, QA-1 PASS (NIT dead 400 branch), QA-2 32/32 mutation 13/14, TL-1 PASS (NIT-3 → #78 ruling: community-hub/settings + default-system-prompt bypass manager narrowing). `hub_api_key` protected∩supported stays writable by design.
+- Opened: #84 update-env no manager narrowing (Dev1 after #78), #85 invite email masking (Dev3 after #80). #83 dup closed.
+- #74 ffb39ccf regate running (vector ext only when VECTOR_DB=pgvector); TL-2/QA-3 reviewing. Residual: doctor branches unreachable on dev box.
+- #80 35c91ab0 step 4 driver gating (contract 3 suites 36/36); rulings A/B/D in scope, C→#85, E→#78. Step 2+3 red suites = env-order (pass isolated).
+- #40 Dev2 5a60695: org spoof loop red OK; bypass #10 `mountProbeRoutes` open → key completeness guard by require path + apiRouter call. §7.9h added.
+- Cleanup done: Dev1, QA-1, QA-2, QA-3, TL-2, Dev5. Pending: Dev4, TL-1 reply.
