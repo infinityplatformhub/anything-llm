@@ -168,6 +168,25 @@ function pageCalls(pageFile, depth = 0, seen = new Set(), acc = null) {
   return state;
 }
 
+// The read/write split CANNOT be derived from the HTTP method. `/system/custom-models` is a
+// POST gated `system.read` — a read that takes a body, so a verb-based classifier files it as
+// a write and the page's read column measures empty (settings.embedder, TL-1 ee5005403).
+//
+// The ACTION NAME is the authority; the method is a hint. Actions are `<noun>.<verb>`, so the
+// verb suffix answers it directly, and a suffix this does not recognise is returned as
+// "unknown" rather than guessed — an unclassifiable action must be visible, not silently
+// filed as a read.
+const READ_SUFFIXES = new Set(["read", "read_others", "diagnose", "member"]);
+const WRITE_SUFFIXES = new Set([
+  "write", "create", "delete", "update", "manage", "bulk_export", "send", "members",
+]);
+function actionKind(action) {
+  const suffix = action.split(".").pop();
+  if (READ_SUFFIXES.has(suffix)) return "read";
+  if (WRITE_SUFFIXES.has(suffix)) return "write";
+  return "unknown";
+}
+
 const out = [];
 for (const e of resolved) {
   const pageFile = e.page ? resolveModule(e.page, path.join(SRC, "main.jsx")) : null;
@@ -180,8 +199,15 @@ for (const e of resolved) {
     if (!ms.length) hits.push({ call: c, path: null, methods: [], actions: [], note: "no mounted route" });
     for (const r of ms) hits.push({ call: c, path: r.path, methods: r.methods, actions: r.actions });
   }
+  const allActions = [...new Set(hits.flatMap((h) => h.actions))];
+  const byAction = {
+    read: allActions.filter((a) => actionKind(a) === "read"),
+    write: allActions.filter((a) => actionKind(a) === "write"),
+    unknown: allActions.filter((a) => actionKind(a) === "unknown"),
+  };
+
   out.push({
-    btn: e.btn, href: e.href, guard: e.guard,
+    btn: e.btn, href: e.href, guard: e.guard, byAction,
     pageFile: pageFile ? path.relative(SRC, pageFile) : null,
     roles: e.roles, capability: e.capability, capabilities: e.capabilities,
     models: pc.models, calls, unresolved: pc.unresolved, indirect: pc.indirect, hits,
