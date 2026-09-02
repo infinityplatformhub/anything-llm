@@ -151,3 +151,6 @@ Data-quality only: `Chroma` vs `chroma` split aggregate counts. None selects a p
 
 ## #90 O5a — counters read zero until O5a-wire lands
 All 5 counters are declared with an enforced vocabulary but no call site calls `observe()` yet. A dashboard wired now shows flat lines that look like "endpoint broken". `observe()` throws on vocabulary violation — fine while every call site passes literals; becomes a liveness question if a label is ever computed. `doctor.test.js` needs a pgvector-capable DB (1 red on stock postgres:16) — dependency not visible from the suite name.
+
+## flake: liveSyncWriteFailure (#97)
+Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering dependency unknown. Owner: Dev1 after #91.
