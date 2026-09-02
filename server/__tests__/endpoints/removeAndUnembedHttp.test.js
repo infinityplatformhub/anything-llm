@@ -87,10 +87,14 @@ beforeAll((done) => {
     done();
   });
 });
+// #143: explicit timeout. This hook was untimed for as long as the #142 guard has
+// existed — it scanned `afterAll(async () => {` only, so this callback form was
+// invisible to it. `t4aRouteIdor.test.js:86` is the same shape and already carried
+// `60_000`, which is where this number comes from.
 afterAll((done) => {
   server.closeAllConnections?.(); // fetch keep-alive would block close()
   server.close(done);
-});
+}, 60_000);
 
 beforeEach(() => {
   jest.clearAllMocks();
