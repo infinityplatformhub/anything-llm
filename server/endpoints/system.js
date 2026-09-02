@@ -741,7 +741,7 @@ function systemEndpoints(app) {
     // #52: flipping the instance into multi-user mode creates the first admin.
     // It carried session auth alone; settings.write is what every other route
     // that changes instance configuration asks for.
-    [validatedRequest, requirePermission("settings.write", orgResource)],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         if (response.locals.multiUserMode) {

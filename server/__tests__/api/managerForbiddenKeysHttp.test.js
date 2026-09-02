@@ -405,10 +405,41 @@ describe("issue 78 manager forbidden setting keys", () => {
     ).resolves.toMatchObject({ value: "disabled" });
   });
 
-  it("keeps unknown manager keys silent without writing a row", async () => {
-    const response = await update(manager, { not_a_real_key: "x" });
+  it("lets actor holding system.write write text splitter chunk size", async () => {
+    const response = await update(admin, { text_splitter_chunk_size: 512 });
 
     expect(response.status).toBe(200);
+    await expect(
+      prisma.system_settings.findUnique({
+        where: { label: "text_splitter_chunk_size" },
+      })
+    ).resolves.toMatchObject({ value: "512" });
+  });
+
+  it("refuses manager enable-multi-user before changing the database", async () => {
+    const before = await prisma.system_settings.findUnique({
+      where: { label: "multi_user_mode" },
+    });
+
+    const response = await post(manager, "/api/system/enable-multi-user", {
+      username: "escalated-admin",
+      password: "Pw123456!",
+    });
+
+    expect(response.status).toBe(403);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "multi_user_mode" } })
+    ).resolves.toEqual(before);
+  });
+
+  it("returns model unknown_keys response for manager unknown keys", async () => {
+    const response = await update(manager, { not_a_real_key: "x" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: "unknown_keys",
+      unknownKeys: ["not_a_real_key"],
+    });
     await expect(
       prisma.system_settings.findUnique({ where: { label: "not_a_real_key" } })
     ).resolves.toBeNull();

@@ -41,9 +41,8 @@ async function narrowManagerSystemPreferences(actor, updates) {
   }
 
   const narrowedUpdates = Object.create(null);
-  for (const [key, value] of Object.entries(updates)) {
-    if (managerAllowedFields.includes(key)) narrowedUpdates[key] = value;
-  }
+  for (const [key, value] of Object.entries(updates))
+    narrowedUpdates[key] = value;
   return { updates: narrowedUpdates };
 }
 
