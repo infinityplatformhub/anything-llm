@@ -124,6 +124,94 @@ const WORKSPACE_CAPABILITIES = [
   "chat.send",
 ];
 
+/**
+ * #40 task 2: the workspace half of /system/my-capabilities.
+ *
+ * Answers null for every workspace this caller cannot see — whether it does not
+ * exist or belongs to someone else. Those two are not separate branches here:
+ * `Workspace.getWithUser` filters on `workspace_users.some.user_id`, so both
+ * fall out of the SAME query as "no row". Existence therefore cannot leak ahead
+ * of membership by construction rather than by remembering to hide it (#41
+ * /v1/document has the same shape).
+ *
+ * Returns null rather than throwing, and never re-throws: the caller's org half
+ * is already computed by the time this runs, and losing it to a workspace-half
+ * failure is the exact bug this split exists to prevent.
+ */
+async function workspaceCapabilities({ actor, engine, user, workspaceId }) {
+  try {
+    // QA-1 F5: express parses `?workspaceId[]=1` into an array and
+    // `?workspaceId[x]=1` into an object, and `Number([1])` is 1 — so a
+    // non-string reaches the lookup carrying a value the caller never wrote as
+    // a scalar. Require a string before anything else looks at it.
+    if (typeof workspaceId !== "string") return null;
+
+    // A non-numeric id never reaches the database. `Number("")` is 0 and
+    // `Number("1.5")` is 1.5 — both would otherwise become a lookup for
+    // something the caller did not ask about.
+    const id = Number(workspaceId);
+    if (!Number.isInteger(id) || id <= 0) return null;
+
+    // TL-1 F2: `getWithUser` fails OPEN for a caller with no user id. Prisma
+    // drops undefined keys, so `some: {user_id: undefined}` becomes `some: {}`
+    // — "has at least one member" — which matches every populated workspace,
+    // including ones this caller has nothing to do with. Verified against
+    // postgres, not reasoned about: a non-member id matches nothing, undefined
+    // matches the workspace.
+    //
+    // So the guard is load-bearing, not defence in depth. It keys on the actor
+    // TYPE rather than on the presence of a user id, and runs before any
+    // lookup: resolveActor answers `service` (api key, single-user) and `embed`
+    // as well as `user`, and only `user` has an identity `workspace_users` can
+    // be filtered by.
+    //
+    // Deliberately NOT keyed on grantPrincipal: an api key carries its
+    // creator's principal, so a grantPrincipal check would answer with the
+    // CREATOR's memberships for a caller holding only the key. Answering
+    // properly for a key means grants(createdBy) ∩ scopes(key), which is the
+    // #29 scope ceiling — issue #103, not this one.
+    if (actor?.type !== "user" || !user?.id) return null;
+
+    const { Workspace } = require("../models/workspace");
+    const workspace = await Workspace.getWithUser(user, { id });
+    if (!workspace) return null;
+
+    // QA-1 F3: the org this is decided under comes from the ACTOR, not from a
+    // literal. `workspaces` carries no orgId column today (verified against
+    // prisma/schema.prisma), so the row cannot supply one, and the engine reads
+    // `actor.orgId` for the grant lookup either way (engine.js:176) — a literal
+    // here would disagree with the engine the moment a second org exists.
+    // Residual: with no orgId on the row, nothing ties THIS workspace to that
+    // org, so cross-tenant separation still rests on membership alone. Closing
+    // that needs the column, which is a schema change and not this issue.
+    const resource = {
+      type: "workspace",
+      id: String(workspace.id),
+      orgId: actor?.orgId ?? 1,
+      workspaceId: workspace.id,
+    };
+    const decisions = await Promise.all(
+      WORKSPACE_CAPABILITIES.map(async (action) => {
+        const result = await engine.authorizeMany({
+          actor,
+          action,
+          resources: [resource],
+        });
+        return [action, result.get(0)?.allowed === true];
+      })
+    );
+    return {
+      id: workspace.id,
+      capabilities: Object.fromEntries(decisions),
+    };
+  } catch (e) {
+    console.error(e.message, e);
+    // Fail closed, and identically to "cannot see it": a workspace whose
+    // capabilities we cannot compute offers nothing.
+    return null;
+  }
+}
+
 function systemEndpoints(app) {
   if (!app) return;
 
@@ -1505,9 +1593,24 @@ function systemEndpoints(app) {
           })
         );
 
-        response.status(200).json({
-          capabilities: Object.fromEntries(decisions),
-        });
+        const answer = { capabilities: Object.fromEntries(decisions) };
+
+        // #40 task 2: the two halves are separated by ORDER plus a private
+        // catch — the org batch is fully resolved and stored in `answer` before
+        // this runs, and workspaceCapabilities never re-throws. That is what
+        // keeps a workspace-half failure from erasing every org capability, the
+        // failure the #53 comment at the top of this file warns about.
+        // Sharing one try/catch is enough to reintroduce it.
+        if (request.query.workspaceId !== undefined) {
+          answer.workspace = await workspaceCapabilities({
+            actor,
+            engine,
+            user: response.locals?.user,
+            workspaceId: request.query.workspaceId,
+          });
+        }
+
+        response.status(200).json(answer);
       } catch (e) {
         console.error(e.message, e);
         // Fail closed: a capability we cannot confirm is one we do not offer.
@@ -1921,4 +2024,13 @@ function systemEndpoints(app) {
   );
 }
 
-module.exports = { systemEndpoints, ORG_CAPABILITIES, WORKSPACE_CAPABILITIES };
+module.exports = {
+  systemEndpoints,
+  ORG_CAPABILITIES,
+  WORKSPACE_CAPABILITIES,
+  // Exported for #40 task 2's tests: the catch below is the whole point of the
+  // split, and an HTTP test cannot make the engine throw without a seam. A test
+  // that cannot reach the failing path asserts the property without exercising
+  // it.
+  workspaceCapabilities,
+};

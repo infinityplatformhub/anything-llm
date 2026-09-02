@@ -170,3 +170,12 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - EMBED_REQUIRE_ALLOWLIST presence-flag has no test (boolean-parse "fix" would fail open on =false).
 - malformed vs expired both 401; equality not pinned (embedMiddleware.js:329).
 - Old tokens invalid at deploy; flag default off so impact = one missed rotation.
+
+## #40 task 2 residuals
+- Workspace half is membership-scoped, not grant-scoped (org-wide grant without membership → null, intended).
+- Non-numeric id answers without a query (0 vs 1 query timing) — non-goal.
+- workspaces has no orgId column; tenant isolation rests on membership; orgId from actor.
+
+## #102 residuals
+- safeObserve swallows in tests too; a call site passing a forbidden label goes silent, not red (NIT: spy console.warn).
+- chats_total source assert covers one wrapper (NIT: behavioural reject→+0 for both).

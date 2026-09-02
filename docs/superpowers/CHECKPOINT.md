@@ -347,3 +347,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #102 fbef8c6bf: QA-2 PASS 78/78 (M4 dev gap → Dev5 adds reject→+0 in O2b SHA). Waiting TL-2 W1–W11.
 - #104 ruling (TL-1 confirmed): (1) updateENV:1687 accumulate persistCredential error, no break, fix #80 comment; (2) enable-multi-user throw → rollback. RF-1..3. Tier auth, reviewers TL-1 + QA-3.
 - #112: preflight ceiling stands (unauth only while no user); backfill already exists (markOnboarded) → tests only; GET /setup-complete unauth full settings → separate auth issue.
+- #40 task 2 3e121b3b4 merged (issue open for task 3) + #102 fbef8c6bf merged, closed → main d631cc056. 77/113. wt-40t2/g40t2, wt-102/g102 reaped. Dev2 → task 3 (plain). Dev5 → O2b #112 (+ #102 NITs).
