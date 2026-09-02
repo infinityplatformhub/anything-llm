@@ -331,3 +331,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Post-merge after #94: 2731/2732, 1 red t4bResolvedWorkspaceGrant (green ×3 alone, #94 unrelated) → logged on #106, not chased (#97 ruling A). Main effectively green.
 - #40 task 2 3e121b3b4: TL-1 PASS no findings (M-A lookups run under mutation ×3 actors, M-B literal orgId red, F5 shape guard 0 lookups). Waiting QA-1 only → close (run-id gate-40-task2-3e121b3b4, issue stays open) → merge → Dev2 task 3.
 - PMO ERROR: merged b514727b7 (S11b recon) which sits on Dev4's #49 branch → unreviewed #49 code reached main at 4a4cd86b2 for ~2 min. Reverted at 35d3dbcb4 (revert -m 1); tree == ba48198e6. When #49 verdicts land: `git revert <this revert>` reapplies b514727b7 exactly (includes ledger 182970699 + recon). Rule: never merge a docs commit without checking its branch has no code delta vs main.
+- #102 fbef8c6bf: gate PASS at /tmp/wt-102 (g102) — check-local, contract 93/93 (metrics 18 + providerLabel 61 + wiring 14), sweeps 63/63, ledger 13 rulings normalized /tmp/ledger-102.norm.md. Waiting QA-2 (A–H) + TL-2 (W1–W11). Dev5 → O2b recon/issue.
+- #49: QA-1 PASS 2c9ae1f0f (evidence committed); Dev4 adding 2 cross-stamp tests (NIT-1) over 182970699 → regate contract → wait TL-2 → close/merge (re-applies reverted S11b recon b514727b7).
+- #40 task 2 3e121b3b4: TL-1 PASS; waiting QA-1 only.
+- User Q: §7.11 relaxation risk explained (dev misclassification: #94/#102 looked non-auth but had leaks/oracles) — recommend relax verdict step only, PMO classifies, TL pre-read stays. Awaiting เอา/ไม่เอา.
+- PMO note: `cd /tmp/wt-N && …` chains committed CHECKPOINT into the gate worktree twice; push rejected (non-ff) saved main. Docs commits use absolute main path only.
