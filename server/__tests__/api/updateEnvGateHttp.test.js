@@ -243,12 +243,17 @@ describe("issue 84 update environment authorization gate", () => {
       path.resolve(__dirname, "../../endpoints/system.js"),
       "utf8"
     );
+    // Bound the search to this route's own registration. Without the bound, deleting a
+    // route's middleware line entirely lets the regex run on into the NEXT app.<verb>
+    // block and read its permission -- the test then passes for a route that has no
+    // gate at all, which is the one failure it exists to prevent (QA-3 mutation).
     const actionFor = (route) => {
       const at = source.indexOf(`"${route}"`);
       expect(at).toBeGreaterThan(-1);
-      const match = source
-        .slice(at)
-        .match(/requirePermission\(\s*"([\w.]+)"/);
+      const rest = source.slice(at);
+      const nextRoute = rest.slice(1).search(/\n  app\.[a-z]+\(/);
+      const block = nextRoute === -1 ? rest : rest.slice(0, nextRoute + 1);
+      const match = block.match(/requirePermission\(\s*"([\w.]+)"/);
       expect(match).not.toBeNull();
       return match[1];
     };
