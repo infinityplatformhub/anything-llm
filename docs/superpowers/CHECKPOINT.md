@@ -265,3 +265,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #40 task 1 NOT on main (Dev2 misread own dirty checkout); resolved merge parked at approof/40-task1-merge-wip (pushed for Dev2); snapshot 309→315 needs inventory before re-pin. NIT-2 implementer stopped, restarts on new base.
 - #80 hotfix c6b56093: gate PASS (137/137 incl. sweep), TL-1 PASS; waiting QA-3 → merge (clears main's 1 red).
 - #84 8bcc62ce: gate PASS (7/7 + #72/#78); QA-2 + TL-1 reviewing.
+- #84 8bcc62ce: TL-1 PASS + FINDING-1 (DELETE /system/credential/:envKey still settings.write — same threat, destructive half). Ruling: fold into #84, one more commit + paired tests. QA-2 running. Residual: 214 keys = 92 secret / 92 non / 30 url.
