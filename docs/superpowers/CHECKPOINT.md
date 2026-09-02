@@ -184,3 +184,8 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #87 e6908fd54: gate PASS (contract vectorDbSelection 28 tests; related 1525/0). Removes O2a spelling gate (app now resolves). QA-3 + TL-2 verdicts requested. §7.6e (backup full path) added.
 - #30 slice 3: Dev4 pushed b9bce7fce + ledger f77433728 (19 files, cardinalityHttp.test.js present); worktree /tmp/wt-30s3 staged; early cardinalityHttp run to check the reported hang; QA-2/TL-2 pre-read sent. Awaiting Dev4 declaration + contract + hang cause.
 - wt-40 reaped (Dev2 has not declared a SHA).
+
+## 2026-09-02 — #87 merged (66/87)
+- #87 e6908fd54: gate PASS, QA-3 PASS (50 resolves, 4 sites agree, mutation 5/5), TL-2 PASS (mutation 10/10). Residual: provider connect() raw guards. #74 residual closed.
+- #78 370258c30: behaviour proven by function run (unknown passthrough, union 403, route 4 system.write); 1 red = #72 test asserting old manager-silent contract → being updated to 400 unknown_keys keeping no-rows half. Gate early-run in flight; final SHA pending 80/80.
+- #30 slice 3 f77433728 gating (full suite real-store); QA-1/QA-3/TL-1/TL-2/QA-2 dispatched.

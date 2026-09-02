@@ -139,3 +139,6 @@ Until then: any change to `utils/doctor/index.js` touching required extensions o
 
 ## O2a (#74) — getVectorDbClass switches on the raw string
 `utils/helpers/index.js:88` compares `VECTOR_DB` raw; `PGVECTOR`/` pgvector ` silently fall back to LanceDB. Doctor now blocks boot on such spellings (c0c6472b0), so the app never reaches that fallback under doctor — but any boot path that skips doctor still does. Fix = normalize in `getVectorDbClass` (separate issue). TL-2 notes: M3 (`ext.permitted` forced ok) survives because test harness is superuser — closing needs a low-privilege role in-test; M10 (backup notice) needs `toContain("BACK THESE UP")` on the happy path.
+
+## #87 — provider `connect()` guards still compare VECTOR_DB raw
+7 of 10 providers guard `connect()` with `process.env.VECTOR_DB !== "<name>"`; `CHROMA` now resolves to Chroma but throws "Invalid ENV settings" at connect, while `PGVECTOR` works. Fail-closed with a named error (better than the old silent LanceDB fallback) but inconsistent. Follow-up: route those guards through `normalizeVectorDbKey`. Option ค (throw on unknown) after one release of warnings. (TL-2 evidence techlead2-87-e6908fd54.md)
