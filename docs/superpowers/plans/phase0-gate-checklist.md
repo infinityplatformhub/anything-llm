@@ -19,7 +19,7 @@ not in the room.
 |---|---|---|---|
 | #15 | E2E | ~~12 scenarios green headed against a real stack~~ | **PASS** — 12/12 × 3 at `e77d0b78`, 1 headed + 2 headless, each preceded by `up.sh up`. Independent witness (QA-1, not Dev3): `docs/superpowers/evidence/qa1-e2e-witness.md`. See §4 for what this does *not* prove |
 | #26 | PR-4b | ~~Every route carries a named scope~~ | **closed** — counter 0 at `b66ebc5d` |
-| #27 | PR-4c | No key can be minted with `*` | started; three sites, see §2.1 |
+| #27 | PR-4c | ~~No key can be minted with `*`~~ | **closed** at `c74fa0ac` — all three sites gone, verified on a fresh database; see §2.1 |
 | #25 | T-4a | ~~Role literals gone from internal routes~~ | **closed** at `70283c1b` — §2.2 passes |
 | #29 | T-4b | ~~Jobs + embed + `/v1` wired to the engine~~ | **closed** at `800292ff` |
 | #30 | T-5 | Vector queries filter by ACL — **the one that matters most** | not started |
@@ -29,7 +29,7 @@ not in the room.
 | #38 | flake | ~~`modelPricing` etag~~ | **closed** at `0fce7589` — see §2.5 |
 | #31 | T-7 | Admin duties separable | not started |
 
-Merge order is fixed by file overlap, not by importance: ~~T-4a → T-4b~~ → **#39 → T-5 → T-7 → PR-4c**. PR-4c is last on purpose — it removes `*` from keys, and every route must already want a named scope before that is safe (see `.infi/recon/pr4c.md`).
+Merge order is fixed by file overlap, not by importance: ~~T-4a → T-4b → #39 → PR-4c~~ → **T-5 → T-7**. PR-4c went last on purpose — it removes `*` from keys, and every route had to already want a named scope before that was safe. What remains is T-5 and T-7, plus #32 (embed session token, on hold for the mint oracle) and #50 (delete simple-SSO, which waits on T-7).
 
 T-6 is off the critical path and can land any time after T-4b.
 
@@ -41,56 +41,54 @@ Run from the repo root on the merge candidate. Each row is pass/fail, no judgmen
 
 ### 2.1 API key scopes
 
+**PASS — both halves, at `c74fa0ac`** (#27). The route half closed at `b66ebc5d` (#26); the key half closed here.
+
+**Route half.** `apiKeyWildcardSweep.test.js` and its `EXPECTED_WILDCARD_ROUTES` counter are **deleted** — a counter that can only ever read 0 stopped being a gate once the wildcard could not be minted. `API_KEY_SCOPES.TEMPORARY_ALL` went with it. The standing command is now the grep that proves the concept is gone rather than counting instances of it:
+
 ```bash
-grep "EXPECTED_WILDCARD_ROUTES =" server/__tests__/utils/middleware/apiKeyWildcardSweep.test.js
+git grep -n 'TEMPORARY_ALL' -- server        # 1 line: the comment in scopes.js saying it is gone
+git grep -rn 'scopes.includes("\*")' -- server/utils/middleware
 ```
-**Reads 0 since `b66ebc5d`** (#26). The counter and the code check each other — the sweep test recounts the source rather than trusting the number.
+The second must return **nothing**. `validApiKey.js:117` now reads `context.scopes.includes(action)` with no short-circuit; the one surviving `includes("*")` is in `models/apiKeys.js:18`, which is `validateScopes` **refusing** it — the opposite construct, and it must stay.
 
-Zero here means no **route** still asks for the wildcard. It does not mean no **key** still holds one: `schema.prisma` defaults `scopes` to `["\*"]` and `apiKeys.js` falls back to the same, so every existing key still satisfies every scope #26 introduced. The sweep test says so in its own comment, which is the right place for it.
+**Key half.** Three things had to go together, and did:
 
-`API_KEY_SCOPES.TEMPORARY_ALL` stays in `scopes.js` until PR-4c; delete it and this whole test file together in that PR. A counter that can only ever read 0 is not a gate any more — but it is not zero-and-done until the key half lands.
+| what | where |
+|---|---|
+| schema default `["*"]` on `api_keys.scopes` | dropped by migration `045000` |
+| the model's fallback to the same value | `validateScopes` now throws on an absent, empty, or wildcard list (`models/apiKeys.js:15-24`) |
+| the `includes("*")` short-circuit in the middleware | gone (`validApiKey.js:117`) |
 
-This one needs a database with keys in it, so it has a setup. Run the whole
-block — the query alone against an empty table returns 0 and proves nothing.
+Verified on a real fresh database rather than on report:
 
 ```bash
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
-export DATABASE_URL="postgresql://approof:approof@localhost:5432/gate_$$"
-export API_KEY_PEPPER="local-dev-api-key-pepper-32-bytes-min"
-psql "postgresql://approof:approof@localhost:5432/postgres" -c "CREATE DATABASE gate_$$;"
-
-cd server
-# Use the repo's own binary. `npx prisma` resolves to whatever npm's cache has --
-# on this machine that is Prisma 8 against a Prisma 6 schema, and the failure reads
-# like a schema error rather than a version mismatch.
-./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
-
-# Mint through EVERY creation path. A key made one way proves one way.
-node -e '
-  const { ApiKey } = require("./models/apiKeys");
-  (async () => {
-    await ApiKey.create(null, "gate-admin",  { scopes: ["system.read"] });
-    await ApiKey.create(null, "gate-system", { scopes: ["system.read"] });
-    try { await ApiKey.create(null, "gate-bare"); console.log("REGRESSION: no-scope key was minted"); }
-    catch (e) { console.log("no-scope refused (correct):", e.message); }
-    process.exit(0);
-  })();
-'
-
-psql "$DATABASE_URL" -tAc "SELECT count(*) FROM api_keys WHERE scopes::jsonb @> '[\"*\"]'::jsonb;"
-psql "$DATABASE_URL" -tAc "SELECT count(*) FROM api_keys;"
-psql "postgresql://approof:approof@localhost:5432/postgres" -c "DROP DATABASE gate_$$;"
+DB="gate_$$"
+psql "postgresql://approof:approof@localhost:5432/postgres" -c "CREATE DATABASE $DB;"
+cd server && DATABASE_URL="postgresql://approof:approof@localhost:5432/$DB" \
+  ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+psql "postgresql://approof:approof@localhost:5432/$DB" -tAc \
+  "SELECT count(*) FROM api_keys WHERE scopes::jsonb @> '[\"*\"]'::jsonb;"
+psql "postgresql://approof:approof@localhost:5432/$DB" -tAc \
+  "SELECT column_default IS NULL FROM information_schema.columns
+     WHERE table_name='api_keys' AND column_name='scopes';"
 ```
+**Measured: `0` and `t`.** A raw `INSERT` omitting `scopes` fails with
+`null value in column "scopes" ... violates not-null constraint` — the column is NOT NULL
+with no default, so there is no path, supported or raw, that mints a key without a scope list.
 
-**First count must be 0; second must not be.** Without the second, an empty table
-passes the gate. The bare `ApiKey.create` must refuse — if it succeeds, PR-4c's
-model guard has regressed even while the first count still reads 0.
+A fresh database has no legacy rows, so the above exercises the new default but **never
+the backfill**. That half was verified separately by restoring the old default, seeding
+two legacy `["*"]` rows, and running `045000` against them:
 
-Seeding a pre-4c row (`scopes = '["*"]'`) before the query is the stronger form,
-and is how PR-4c's migration was actually verified: a fresh database has no
-legacy rows, so it exercises the new default but never the backfill.
+- wildcard rows **2 → 0**
+- `api_key_legacy_wildcard_grants` recorded **2** (so the boot report can name them)
+- `system.env.read` present on **0** rows — the migration deliberately withholds it, because a legacy key was never granted provider credentials and inheriting them through a migration is not a grant anyone made
+- replayed once more: still 0 and 2, nothing double-written
 
-**This is the half that is still open.** #27 (PR-4c) removes the schema default, the model fallback, and the `scopes.includes("\*")` short-circuit in `validApiKey.js:34`. Until all three go, the route-side zero above buys nothing against a key minted today.
+**Tests that carry this.** `server/__tests__/api/wildcardKeyDeniedHttp.test.js` — 3 `it` blocks, **5 cases**: `it.each` over three routes with three different required scopes (`/v1/auth`/`system.read`, `/v1/workspaces`/`workspace.read`, `/v1/admin/users`/`user.read`), so a pass cannot come from one route happening to be unguarded, plus two more. Its fixture inserts the `["*"]` row with **raw SQL on purpose** — `ApiKey.create` rejects it and the column has no default, so no supported path can produce the row the test needs. The two extra cases are what make it a real test: one asserts the row still stores `["*"]` verbatim (the refusal is the middleware's, not a silent rewrite), the other flips the same row to named scopes and gets 200 (positive control — without it, a middleware that refused everything would pass).
+
+`server/__tests__/prisma/apiKeyWildcardMigration.test.js` covers the migration itself in four tests: none left after, every rewrite recorded, no default, and re-running changes nothing.
 
 ### 2.2 Role literals
 
@@ -236,7 +234,7 @@ WHERE g.workspace_id IS NULL GROUP BY r.name;
 (after T-4b). T-4a's `044000` narrowed org `member` as intended, and #29 did not
 reintroduce an org-wide grant.
 
-This is a snapshot, not a standing pass. Re-run it on the merge candidate — #27, #29 and #30 all change the authorization path, and a suite that was stable before them says nothing about after.
+This is a snapshot, not a standing pass. Re-run it on the merge candidate — #30 and #31 still change the authorization path, and a suite that was stable before them says nothing about after.
 
 Two flakes are recorded as fixed; both were re-checked here rather than taken on report:
 - **DROP DATABASE race — fixed.** `engine.test.js:44`, `t1-authz-migration.test.js:99` and `documentFilter.test.js:43` each close `afterAll` with `}, 60_000);`.
