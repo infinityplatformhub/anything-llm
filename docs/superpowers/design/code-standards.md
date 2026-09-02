@@ -907,3 +907,6 @@ Removing an inner check (LDAP `authenticated !== true`) killed no test because t
 
 ### §7.1c a baseline run uses a fresh database
 A "pre-existing on main" claim is void if the baseline tree points at the same stale DB as the suspect tree (Dev5, #63: 20/22 migrations + unseeded → 5 apiKeys failures on both). Baseline = new DB + migrate deploy + seed.
+
+### §7.13 CREATE EXTENSION names its schema
+`CREATE EXTENSION IF NOT EXISTS x;` installs into the first schema on search_path and `IF NOT EXISTS` is schema-blind, so a test suite (or deployment) using `?schema=` leaves the operator class invisible from `public` and the migration fails mid-file. Always `CREATE EXTENSION IF NOT EXISTS x SCHEMA public;` and qualify operator classes (`public.gin_trgm_ops`). Found by Dev5 on #61.
