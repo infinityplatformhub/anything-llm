@@ -10,6 +10,9 @@ const crypto = require("crypto");
 const prisma = require("../prisma");
 const { publishOperationalEvent } = require("../events");
 const { AuthorizationContractError } = require("./errors");
+// Safe at module scope: `groupMembership` requires NOTHING (that is why #96 gave it
+// its own file rather than putting it in `principals.js` — hotfix #39's cycle).
+const { grantPrincipalPairs } = require("./groupMembership");
 
 const SCOPE_KEY = (orgId) => `org:${orgId}`;
 
@@ -118,12 +121,12 @@ async function permissionIdsForGroup(tx, groupId) {
  * adding them to one that allows does. Guarding only `add` leaves the same hole with
  * the sign flipped.
  *
- * KNOWN LIMIT (#128, queued): `heldPermissionIds` reads the actor's OWN grants and
- * does not expand their group memberships, though the engine has since #96. So a
- * delegated admin who holds their role only through a group is refused here. That is
- * fail-closed — it denies a legitimate write rather than allowing an escalation — and
- * #128 closes it in `heldPermissionIds` itself, which fixes `grantRole` and this
- * together rather than teaching one of them a private answer.
+ * #128 closed the limit this used to carry: `heldPermissionIds` now expands the
+ * actor's group memberships through the same helper the engine uses, so a delegated
+ * admin who holds their role only through a group is no longer refused here. The two
+ * had to land in this order — expanding groups there while membership writes were
+ * unguarded completes a chain (add yourself to a group, inherit, satisfy this guard,
+ * grant yourself directly), which is why #113 merged first.
  */
 async function refuseGroupEscalation(tx, actor, groupId, fn) {
   if (isExemptPrincipal(actor)) return;
@@ -214,21 +217,61 @@ async function permissionIdsForRole(tx, roleId) {
  * only be written by someone holding the permission org-wide; a workspace-scoped grant
  * may be written by someone holding it org-wide OR in that same workspace. Counting
  * every grant regardless of scope would let a workspace-A admin mint org-wide roles.
+ *
+ * #128: the principal filter comes from `grantPrincipalPairs`, the SAME helper the
+ * engine and `readableScope` use. Since #96 the engine expands `group_members` when
+ * it evaluates grants; this did not, so a delegated admin whose role reaches them
+ * through a group was authorized by the engine to act and then refused here — by
+ * `grantRole`, `canAssignLegacyRole` and `refuseGroupEscalation` alike. Fail-closed,
+ * so nothing alarmed; still wrong, and the shape that gets "fixed" under pressure by
+ * handing someone a direct grant they should not need.
+ *
+ * Sharing the helper rather than adding a second group query here is the point (#96
+ * built it for exactly this): three expansions free to drift apart is the defect that
+ * issue existed to remove, and a fourth private copy would reopen it.
+ *
+ * An api-key does NOT inherit its creator's groups, and that mirrors
+ * `engine.js:189-196` deliberately. A key's authority is what its creator holds
+ * DIRECTLY; inheriting their departments would widen the key whenever someone edits a
+ * group, against grants the key's scope list was never reviewed for. `grantPrincipalOf`
+ * returns the creator, who IS a user, so this has to be refused on purpose — the type
+ * check does not catch it, and the two layers would otherwise answer differently about
+ * who a key is.
+ *
+ * The scope clause applies to the group pairs too. Group grants can be
+ * workspace-scoped, so dropping it for them would let a workspace-A admin who reaches
+ * their role through a group mint roles in workspace B — the leak the clause exists
+ * to prevent, reintroduced through the new pairs.
  */
 async function heldPermissionIds(tx, actor, targetWorkspaceId) {
   const scope =
     targetWorkspaceId == null
       ? { workspace_id: null } // org-wide target: only org-wide grants count
       : { OR: [{ workspace_id: null }, { workspace_id: targetWorkspaceId }] };
+
+  const orgId = actor.orgId ?? 1;
+  const grantPrincipal =
+    "grantPrincipal" in actor ? actor.grantPrincipal : actor;
+  // A key whose creator has been deleted evaluates as nobody and holds nothing.
+  if (!grantPrincipal) return new Set();
+  const principalPairs =
+    "grantPrincipal" in actor
+      ? [
+          {
+            principal_type: grantPrincipal.type,
+            principal_id: String(grantPrincipal.id),
+          },
+        ]
+      : await grantPrincipalPairs(grantPrincipal, orgId, tx);
+
   const grants = await tx.principal_role_grants.findMany({
     where: {
       AND: [
         {
-          orgId: actor.orgId ?? 1,
-          principal_type: actor.type,
-          principal_id: String(actor.id),
+          orgId,
           OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
         },
+        { OR: principalPairs },
         scope,
       ],
     },

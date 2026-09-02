@@ -450,7 +450,13 @@ describe("S4a (#113) RF-8: membership writes carry grantRole's escalation guard"
       await repository.grantRole({
         actor: SYS, principalType: "user", principalId: String(actorUser.id),
         roleId: role.id,
-        workspaceId: role.scope === "workspace" ? null : null,
+        // ORG-WIDE deliberately, including for the workspace-scoped `owner` role,
+        // and that is what makes control A non-vacuous: `refuseGroupEscalation`
+        // reads `heldPermissionIds(tx, actor, null)`, which counts org-wide grants
+        // only. A workspace-scoped grant here would not be counted at all, so the
+        // refusal would prove the actor holds NOTHING rather than that
+        // `document.share` is the wrong bar — green for the wrong reason.
+        workspaceId: null,
         db: prisma,
       });
     }

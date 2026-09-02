@@ -422,6 +422,11 @@ guard that never ran.
    incomplete without #128 (group-held admins are refused), and #128 is unsafe without
    this guard (the escalation chain above). Neither is a reason to weaken either.
 
+   CLOSED: #128 landed after this merged at `1ac806cfc`, from main `166cd3865` — see
+   `ledger-128.md`. It also carries the two nits left open here: QA-1's NIT-1 (the
+   `actor?.type !== "user"` survivor, which showed the exemption tests could not tell
+   "named in the set" from "not a user") and TL-1's dead ternary in `aclGroupWorld`.
+
 1. **Q4 is unanswered**, so the driver's record shape is not frozen. Recon §7.4 covers
    both answers; (b) "Lark re-points every conflicting link" carries a shape
    structurally identical to the account takeover R1 exists to prevent, and TL-1 notes
