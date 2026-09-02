@@ -58,7 +58,7 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">9d783ae05</span> · 2026-09-02 23:30</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">cd1465986</span> · 2026-09-02 23:45</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
@@ -82,12 +82,13 @@ td.mono{white-space:nowrap}
 </section>
 
 <section>
-  <h2 style="margin-bottom:10px">รอคุณตัดสิน 5 เรื่อง</h2>
+  <h2 style="margin-bottom:10px">รอคุณตัดสิน 6 เรื่อง</h2>
   <div class="tbl"><table>
     <thead><tr><th>เรื่อง</th><th>ทางเลือก</th><th>ถ้าไม่ตอบ</th></tr></thead>
     <tbody>
       <tr><td class="mono">#121 mockup</td><td>อนุมัติ mockup ใหม่ (ORG_CAPS 7→11, blob 6fe76aa26) · TL-1 ยืนยัน: ไม่มีเมนูใหม่ แค่คืน 13 เมนูเดิมเข้า map · จุดเดียวที่พฤติกรรมเปลี่ยน: เมนู Users ถาม user.read แทน user.manage · ผลข้างเคียงที่ตั้งใจ: manager เสีย 8 เมนู (server 403 อยู่แล้ว), setup_admin เสีย 15 เมนู (seed ผิด → #137), content_moderator เห็น workspace-chats</td><td>#121 merge ค้าง · #126 s2 #130 #132 V8 ค้างตาม</td></tr>
       <tr><td class="mono">V8 mockup</td><td>อนุมัติ mockup docs/superpowers/mockups/v8-mobile-viewport-authority.html (เปิดในเบราว์เซอร์แล้ว): 4 preset กว้าง×device, toggle Today/After V8, chat container + settings sidebar สองต้นไม้เทียบกัน</td><td>V8 เริ่มโค้ดไม่ได้</td></tr>
+      <tr><td class="mono">O3 SIG_KEY</td><td>backup/restore: (A) SIG_KEY ส่งนอก bundle — bundle ไม่เป็น credential store แต่ recovery ต้องสองฝ่าย · (B) เก็บใน bundle เข้ารหัสด้วย passphrase (argon2id) — artifact เดียวจบ แต่ความปลอดภัยอยู่ที่ passphrase · contract .infi/recon/contract-o3.md</td><td>O3 เริ่มโค้ดไม่ได้</td></tr>
       <tr><td class="mono">#113 Q4</td><td>อีเมลเดียวกันมีทั้ง Lark และ LDAP: (a) ปฏิเสธ + รายงาน conflict ทุกรอบจนมีคนแก้ (Techlead แนะนำ) · (b) Lark ทับ link เดิมทุก full sync (เสี่ยง takeover เงียบ)</td><td>S4b slice 4 (identity matching) เริ่มไม่ได้ · slice 1–3 เดินต่อได้</td></tr>
       <tr><td class="mono">#107</td><td>สร้าง mail log ไหม · retention แนะนำ 30 วัน · เก็บ recipient เต็มหรือ mask</td><td>S11c ค้าง</td></tr>
       <tr><td class="mono">+1 Techlead</td><td>คอขวดคือคนตรวจ ไม่ใช่ dev — เพิ่ม Techlead 1 คนหรือไม่</td><td>คิว review ยาวตามเดิม</td></tr>
@@ -157,7 +158,7 @@ td.mono{white-space:nowrap}
 <tr><td class="mono">S1</td><td>OIDC generic (Google/Entra)</td><td class="mono">2</td><td><span class="chip ok">ปิด</span></td></tr>
 <tr><td class="mono">S2</td><td>SAML Entra</td><td class="mono">3</td><td><span class="chip ok">ปิด</span></td></tr>
 <tr><td class="mono">S3</td><td>LDAP/AD on-prem</td><td class="mono">3</td><td><span class="chip ok">ปิด</span></td></tr>
-<tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> S4a driver merged · S4b slice 1 ใน review · slice 4 รอ Q4</td></tr>
+<tr><td class="mono">S4</td><td>Lark org sync</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> S4a + S4b slice 1–2 merged · slice 3 (#138) contract แล้ว · slice 4 รอ Q4</td></tr>
 <tr><td class="mono">S5</td><td>Audit ครบ + export + retention</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span></td></tr>
 <tr><td class="mono">S6</td><td>Data governance PDPA redaction</td><td class="mono">3–4</td><td><span class="chip wait">บางส่วน</span> redaction hardened 3 รอบวันนี้ (#118 #120 #131)</td></tr>
 <tr><td class="mono">S7</td><td>LLM policy + model catalog</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
@@ -165,7 +166,7 @@ td.mono{white-space:nowrap}
 <tr><td class="mono">S9</td><td>Air-gap switch</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">S10</td><td>Analytics + token budget</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">S11</td><td>SMTP/mailer</td><td class="mono">3</td><td><span class="chip wait">กำลังทำ</span> S11a + S11b merged · S11c log รอ #107</td></tr>
-<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span> (จะใช้ addGroupMember guard ที่มีแล้ว)</td></tr>
+<tr><td class="mono">S12</td><td>Offboarding</td><td class="mono">4</td><td><span class="chip wait">กำลังทำ</span> slice 1 (#136) กำลังแก้ blocker</td></tr>
 <tr><td class="mono">S13</td><td>MFA + session</td><td class="mono">2–5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">V1</td><td>ภาษาไทยครบวงจร</td><td class="mono">2</td><td><span class="chip wait">บางส่วน</span> splitter + eval set · UI th / OCR ยังไม่เริ่ม</td></tr>
 <tr><td class="mono">V2</td><td>Lark bot</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
@@ -184,7 +185,7 @@ td.mono{white-space:nowrap}
 <tr><td class="mono">V15</td><td>Code interpreter sandbox</td><td class="mono">6</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">O1</td><td>License per-seat</td><td class="mono">5</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">O2</td><td>Installer/setup wizard</td><td class="mono">2–3</td><td><span class="chip ok">ปิด</span></td></tr>
-<tr><td class="mono">O3</td><td>Backup/restore</td><td class="mono">3</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
+<tr><td class="mono">O3</td><td>Backup/restore</td><td class="mono">3</td><td><span class="chip wait">contract แล้ว</span> รอคุณตัดสิน SIG_KEY</td></tr>
 <tr><td class="mono">O4</td><td>Model lifecycle</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
 <tr><td class="mono">O5</td><td>Diagnostic bundle + Prometheus</td><td class="mono">5</td><td><span class="chip wait">บางส่วน</span> bundle มีแล้ว</td></tr>
 <tr><td class="mono">O6</td><td>GPU queue</td><td class="mono">4</td><td><span class="chip dim">ยังไม่เริ่ม</span></td></tr>
