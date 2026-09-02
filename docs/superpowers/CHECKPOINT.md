@@ -291,3 +291,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Residual (QA-3): `nextRoute === -1` fallback still scans to EOF; `keeps a stored OpenAI key…` test credits filter but validator rejects — comment-only, not reopened.
 - 72/92 closed. Post-merge suite running (/tmp/postmerge-84.log). wt-84 + g84 reaped.
 - Dev1 → #91. Dev5 #94: found \b digit-pattern leak in utils/events/redaction.js (thai_national_id/phone_th/credit_card) → ruled separate hotfix issue.
+- Post-merge suite after #84: 13 red (apiKeys.postgres, openaiCompatible, scheduler.postgres) = main DB `approofworkspace` had 5 unapplied migrations (093000…110000), not code. `prisma migrate deploy` → 13/13 green → main 2597/2597. Rule: run `migrate deploy` on main DB before every post-merge suite.
+- QA-3 #40 8fdb067dc PASS (W1–W10; R-2 residual narrower: only routes mounted after test body escape). Evidence a5d969b89. Waiting TL-2 inventory diff only.
+- S4 recon (Dev3, approof/s4-recon d8e23aa06, docs-only): engine.evaluate ignores group grants (principal_role_grants type=group never authorize members; probe + control). Ruled: separate pre-S4 bug issue, reviewer TL-1, reuse group_members expansion from documentFilter/explainAccess, no schema. 3 BLOCKER questions for user (group grant / dept→role mapping / emailVerified of directory record).
