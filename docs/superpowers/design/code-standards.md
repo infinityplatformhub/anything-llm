@@ -889,3 +889,6 @@ Probing a developer's live worktree is void: uncommitted edits change results (Q
 
 ### §7.3b JS private members trip the commented-code gate
 `this.#method(` on a line ending in `{` is read as commented code by task.sh. Not a rule violation; add the file to `.infi/checkignore` (lance/index.js, #30 b35c73eb).
+
+### §7.1b API_KEY_PEPPER must be ≥32 bytes in every test env
+A shorter pepper makes 8 authorization suites fail at import with a pepper error, not a test error. Check this first when an authz group goes red (Dev3, #43 cd4fda5e).
