@@ -904,3 +904,6 @@ Never symlink to, or `yarn add` into, the main checkout's `server/node_modules`;
 
 ### §7.9c layered defences shadow each other under mutation
 Removing an inner check (LDAP `authenticated !== true`) killed no test because the outer guard (empty-password) rejected every fixture first. To prove an inner layer, feed an input the outer layer passes (`alwaysAnonymous` mock) or disable the outer layer in that test. An inner check no mutant can kill is dead code that looks tested. (Dev3, #60 f221df51; pairs with §7.9b.)
+
+### §7.1c a baseline run uses a fresh database
+A "pre-existing on main" claim is void if the baseline tree points at the same stale DB as the suspect tree (Dev5, #63: 20/22 migrations + unseeded → 5 apiKeys failures on both). Baseline = new DB + migrate deploy + seed.
