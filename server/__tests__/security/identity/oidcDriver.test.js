@@ -253,6 +253,25 @@ describe("completeLogin — every assertion the driver must refuse", () => {
     );
   });
 
+  test("case 3e: an HS256 token signed with the client secret is rejected (alg confusion)", async () => {
+    // The classic attack: a verifier that reads `alg` off the header can be
+    // told to verify symmetrically, so an attacker holding the CLIENT SECRET —
+    // a credential the app hands out, not a signing key — signs their own
+    // token and it passes. The allowlist is fixed, so the header's claim about
+    // its own algorithm never chooses the verification path.
+    const forged = JWT.sign(
+      {
+        sub: "attacker",
+        email: "attacker@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      "shhh",
+      { algorithm: "HS256", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+    await expect(call({ token: forged })).rejects.toThrow(IdentityAuthenticationError);
+  });
+
   test("case 4: email_verified false is rejected — an IdP may not assert an address it did not verify", async () => {
     await expect(
       call({ token: idToken({ email_verified: false }) })

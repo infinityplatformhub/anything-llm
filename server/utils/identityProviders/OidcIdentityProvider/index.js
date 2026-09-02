@@ -19,10 +19,13 @@ const {
 } = require("../errors");
 
 const DISCOVERY_PATH = "/.well-known/openid-configuration";
-// Only asymmetric algorithms. Allowing HS256 would let anyone holding the
-// client secret mint their own ID tokens — the secret is a client credential,
-// not a signing key.
-const ALLOWED_ALGORITHMS = ["RS256", "RS384", "RS512", "ES256", "ES384", "PS256"];
+// A FIXED allowlist, never the header's own `alg`. Asking the token which
+// algorithm to verify it with is how alg-confusion works: HS256 would let
+// anyone holding the client secret (a client credential, not a signing key)
+// mint their own ID tokens, and `none` skips verification entirely.
+// RS256 and ES256 are what OIDC providers actually sign with; widening this
+// list is a deliberate change, not a compatibility fix.
+const ALLOWED_ALGORITHMS = ["RS256", "ES256"];
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 class OidcIdentityProvider {
