@@ -51,6 +51,7 @@ const {
 } = require("./endpoints/utils/googleAgentSkillEndpoints");
 const { memoryEndpoints } = require("./endpoints/memory");
 const { auditEndpoints } = require("./endpoints/audit");
+const { identityEndpoints } = require("./endpoints/identity");
 const { httpLogger } = require("./middleware/httpLogger");
 const {
   apiIpRateLimit,
@@ -118,6 +119,9 @@ outlookAgentEndpoints(apiRouter);
 googleAgentSkillEndpoints(apiRouter);
 memoryEndpoints(apiRouter);
 auditEndpoints(apiRouter);
+// S1 (#36): SSO login/callback. Unauthenticated by design — this is the ingress
+// that produces a session, so it cannot sit behind one.
+identityEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 
