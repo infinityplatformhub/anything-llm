@@ -611,3 +611,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #128 6087af79c gate: check-local pass, authz+identity 1079/1115 (0 failed), sweeps 63/63, ledger 4 rulings; contract line rerunning alone. Awaiting TL-1 + QA-1.
 - #128 6087af79c TL-1 PASS (2011afd16): scope as AND sibling verified on real where; null guard before pairs; api-key never touches group_members; orgId not hardcoded. Contract 31/31. Awaiting QA-1 → close/merge (run-id gate-128-6087af79c).
 - #127 ledger-only SHA 610632d48 accepted (close target); residual → new issue (capability-direct route guard). Awaiting QA-3.
+- #127 QA-3 FAIL on 2ba5ca93a/610632d48: F1 slice unbounded (P-bleed passes with no guard), R2 toContain weak. Dev4 → new SHA (routeEnd>0 assert + count 2). TL-2 PASS superseded. §7.17 logged. Everything else (D1, P-ungated, G1, G2, F7 incl. 0-rows trap, R1, R3) dead.
+- #131 rulings issued to Dev5 (strip-then-match, Cf+list, keep-on-hit, no-flag, RF-2 value-gone); TL-2 pre-read queued after #119/#120. Code waits for #119+#120 merge.

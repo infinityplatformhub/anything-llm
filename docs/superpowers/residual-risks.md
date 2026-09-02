@@ -267,3 +267,6 @@ Call-site guard strips only `//` comments; a `/* */` block containing the condit
 
 ## #127 (TL-2)
 `setup_admin:org` holds `settings.write` (passes AdminRoute) but not `system.read` → renders mobile-connections page, 403 on both routes. Same defect narrowed from manager to setup_admin. No client guard maps 1:1 to `system.read`; closing needs a guard asking `system.read` directly (separate issue). Not reachable via legacy roles.
+
+## #127 (QA-3 G3)
+`AdminRoute` loading guard (`PrivateRoute/index.jsx:103`, from #40 t4) removed → #127 tests still green; outside #127's diff. Cover when #132 touches the guards.
