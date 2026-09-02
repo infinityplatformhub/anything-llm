@@ -25,9 +25,58 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+
+      # #73 — the vector engines the real-store ACL suites need.
+      #
+      # Without these, MILVUS_TEST_ADDRESS and friends are unset, every `describeIf*`
+      # guard resolves to `describe.skip`, and CI reports green having never executed the
+      # only tests that have ever caught a broken ACL predicate — five times, on five
+      # providers, each of which read correctly and passed review.
+      #
+      # No `--health-cmd` on these: qdrant, weaviate and the milvus images ship without
+      # curl or wget, so a container-level health check would either fail permanently or
+      # (worse) be written as something that always succeeds. The runner HAS curl, so the
+      # readiness wait is a real step below where its output is visible.
+      # 1.0.0+, NOT 0.5.x: server/package.json pins `chromadb ^2.0.1`, whose client speaks
+      # the v2 API. A 0.5.x server answers /api/v1/heartbeat with 200 and returns 404 for
+      # everything under /api/v2 — so the readiness wait below would go green and all 8
+      # tests would then fail on ChromaNotFoundError. Measured: 0.5.5 gives v1:200 v2:404,
+      # 1.0.0 gives v1:410 v2:200. Bumping the client without bumping this image is the
+      # drift to watch for.
+      chroma:
+        image: chromadb/chroma:1.0.0
+        ports:
+          - 8000:8000
+      qdrant:
+        image: qdrant/qdrant:v1.11.0
+        ports:
+          - 6333:6333
+      weaviate:
+        image: semitechnologies/weaviate:1.25.10
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          PERSISTENCE_DATA_PATH: /var/lib/weaviate
+          DEFAULT_VECTORIZER_MODULE: none
+          # The escape clause for unlabelled rows needs indexNullState, which can only be
+          # set at class creation — the suite creates its own classes, so this only has to
+          # not forbid it.
+          QUERY_DEFAULTS_LIMIT: "25"
+        ports:
+          - 8080:8080
+
+      # Milvus is NOT here — see the "Start Milvus" step below. `services:` has no
+      # `depends_on` and cannot pass a command, so Milvus would race ahead of etcd and
+      # MinIO and need `milvus run standalone` it has no way to receive. Compose expresses
+      # both. (TL-2 ruling on #73.)
     env:
       DATABASE_URL: postgresql://approof:approof@localhost:5432/approofworkspace_test
       API_KEY_PEPPER: ci-only-api-key-pepper-32-bytes-minimum
+      # These four are what turn `describe.skip` back into `describe`. The guard test
+      # realStoreSuitesRunInCi.test.js fails if any is removed from this file.
+      CHROMA_TEST_ADDRESS: http://localhost:8000
+      QDRANT_TEST_URL: http://localhost:6333
+      WEAVIATE_TEST_URL: localhost:8080
+      MILVUS_TEST_ADDRESS: localhost:19530
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,7 +99,58 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: "true"
           SHARP_IGNORE_GLOBAL_LIBVIPS: "true"
       - run: yarn lint:ci
+
+      # #73 — wait for the vector engines HERE rather than via --health-cmd, because most
+      # of these images have no curl or wget inside them. This step must FAIL if an engine
+      # never comes up: a silent continue would put us back where we started, with the
+      # suites skipping and CI green. That is the whole point of the issue.
+      - name: Start Milvus (etcd + MinIO + milvus, ordered by health)
+        run: |
+          set -euo pipefail
+          docker compose -f .github/milvus-compose.yml up -d --wait
+          docker compose -f .github/milvus-compose.yml ps
+
+      - name: Wait for vector engines
+        run: |
+          set -euo pipefail
+          wait_for() {
+            local name="$1" url="$2" tries="${3:-60}"
+            echo "waiting for $name at $url"
+            for i in $(seq 1 "$tries"); do
+              if curl -fsS -o /dev/null "$url"; then
+                echo "$name ready after ${i}s"
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::$name never became ready at $url — the real-store suites would" \
+                 "SKIP and CI would pass without running them (#73)"
+            return 1
+          }
+          # v2, matching the chromadb ^2.0.1 client. Probing v1 would answer 200 on a
+          # 0.5.x server that the client cannot talk to — a readiness check that passes
+          # while the thing it checks is unusable is worse than none.
+          wait_for chroma   http://localhost:8000/api/v2/heartbeat
+          wait_for qdrant   http://localhost:6333/readyz
+          wait_for weaviate http://localhost:8080/v1/.well-known/ready
+          # Milvus has no plain HTTP readiness endpoint on 19530 (it speaks gRPC), so this
+          # checks the port is accepting connections. It is weaker than the three above,
+          # and the suite's own connect() is what actually proves it works.
+          for i in $(seq 1 120); do
+            if (echo > /dev/tcp/localhost/19530) >/dev/null 2>&1; then
+              echo "milvus accepting connections after ${i}s"; break
+            fi
+            if [ "$i" -eq 120 ]; then
+              echo "::error::milvus never accepted a connection on 19530 (#73)"; exit 1
+            fi
+            sleep 1
+          done
+
       - run: yarn prisma migrate deploy --schema prisma/schema.prisma
         working-directory: server
+      # Do NOT add a path or -t pattern to this command. The #73 reporter deliberately
+      # stands down on a filtered run (a subset cannot prove a suite's absence), so a
+      # pattern here would silently disable the guard while CI still looked green — the
+      # very failure this issue closed. Run everything, or change the reporter first.
       - run: yarn test
         working-directory: server
