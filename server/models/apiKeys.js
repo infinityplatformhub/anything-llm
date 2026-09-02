@@ -5,6 +5,23 @@ const {
   matchesDigest,
   parseScopes,
 } = require("../utils/apiKeySecurity");
+const { KNOWN_SCOPES } = require("../utils/apiKeySecurity/scopes");
+
+/**
+ * @param {string[]} scopes the caller's requested scope list
+ * @returns {string[]} the same list, validated
+ * @throws when absent, empty, or naming a scope no route asks for
+ */
+function validateScopes(scopes) {
+  if (!Array.isArray(scopes) || scopes.length === 0)
+    throw new Error("An API key must be created with an explicit, non-empty scope list.");
+  if (scopes.includes("*"))
+    throw new Error("The wildcard scope no longer exists; name the scopes the key needs.");
+  const unknown = scopes.filter((scope) => !KNOWN_SCOPES.includes(scope));
+  if (unknown.length)
+    throw new Error(`Unknown scope(s): ${unknown.join(", ")}`);
+  return [...scopes];
+}
 
 const ApiKey = {
   tablename: "api_keys",
@@ -15,15 +32,19 @@ const ApiKey = {
     return `apw-key-${crypto.randomBytes(32).toString("base64url")}`;
   },
 
+  // PR-4c: scopes are required. The old fallback minted a wildcard key that
+  // satisfied every route no matter how precisely the routes were scoped, and the model
+  // always writes the column, so it won even after the schema default changed.
   create: async function (createdByUserId = null, name = null, options = {}) {
     try {
+      const scopes = validateScopes(options.scopes);
       const secret = this.makeSecret();
       const record = await prisma.api_keys.create({
         data: {
           name: typeof name === "string" && name.trim() ? name.trim() : null,
           secretDigest: digestSecret(secret),
           keyPrefix: keyPrefix(secret),
-          scopes: JSON.stringify(options.scopes || ["*"]),
+          scopes: JSON.stringify(scopes),
           workspaceId: options.workspaceId || null,
           expiresAt: options.expiresAt || null,
           createdBy: createdByUserId,

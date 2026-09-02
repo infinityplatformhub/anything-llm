@@ -112,7 +112,9 @@ function validApiKey(action, binding = null) {
       expiresAt: apiKey.expiresAt, revokedAt: apiKey.revokedAt,
     };
     response.locals.apiKeyContext = context;
-    const scopeAllowed = context.scopes.includes("*") || context.scopes.includes(action);
+    // PR-4c: no wildcard short-circuit. The scope list is exhaustive; a key that has
+    // not been granted this action does not hold it.
+    const scopeAllowed = context.scopes.includes(action);
     // Resolved once and shared: the scope half compares it to the key's binding, the grant
     // half authorizes against it (W-9).
     const addressed = await addressedWorkspaceId(request, binding);

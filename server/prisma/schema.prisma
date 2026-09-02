@@ -12,7 +12,7 @@ model api_keys {
   name          String?
   secretDigest  Bytes       @unique
   keyPrefix     String
-  scopes        String      @default("[\"*\"]")
+  scopes        String
   workspaceId   Int?
   expiresAt     DateTime?   @db.Timestamptz(3)
   lastUsedAt    DateTime?   @db.Timestamptz(3)
@@ -341,6 +341,17 @@ model credential_store {
   keyVersion    Int      @default(1)
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   lastUpdatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// PR-4c: which keys held the wildcard scope when it was retired, so the boot report can
+// name them and an operator can narrow each one deliberately. Rows are cleared as they
+// are acknowledged; an empty table means the migration's grants have all been reviewed.
+model api_key_legacy_wildcard_grants {
+  id           Int      @id @default(autoincrement())
+  api_key_id   Int      @unique
+  keyPrefix    String
+  grantedAt    DateTime @default(now()) @db.Timestamptz(3)
+  acknowledged Boolean  @default(false)
 }
 
 model browser_extension_api_keys {

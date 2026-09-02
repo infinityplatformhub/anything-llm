@@ -127,9 +127,15 @@ beforeAll(async () => {
   manager = await mkUser("p-manager", "manager");
   plain = await mkUser("p-plain", "default");
   const { digestSecret, keyPrefix } = require("../utils/apiKeySecurity");
+  const {
+    ADMIN_DEFAULT_SCOPES,
+  } = require("../utils/apiKeySecurity/scopes");
   const secret = "apw-key-a-valid-api-key";
+  // PR-4c: "*" is not a scope any more, and a key minted with it would not be
+  // resolvable. The widest list an admin can mint is the interesting fixture
+  // anyway: env-dump is session-only, so even that key is refused.
   await prisma.api_keys.create({
-    data: { name: "k", secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(["*"]) },
+    data: { name: "k", secretDigest: digestSecret(secret), keyPrefix: keyPrefix(secret), scopes: JSON.stringify(ADMIN_DEFAULT_SCOPES) },
   });
 });
 afterAll(async () => {

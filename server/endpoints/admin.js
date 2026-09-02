@@ -1,4 +1,5 @@
 const { ApiKey } = require("../models/apiKeys");
+const { ADMIN_DEFAULT_SCOPES } = require("../utils/apiKeySecurity/scopes");
 const { BrowserExtensionApiKey } = require("../models/browserExtensionApiKey");
 const { Document } = require("../models/documents");
 const { emitAuditEvent } = require("../utils/events");
@@ -547,8 +548,14 @@ function adminEndpoints(app) {
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
-        const { name = null } = reqBody(request);
-        const { apiKey, error } = await ApiKey.create(user.id, name);
+        const { name = null, scopes = null } = reqBody(request);
+        // PR-4c: a key is minted with an enumerated scope list, never a wildcard. A
+        // caller may name its scopes; omitting them takes the admin preset rather than
+        // everything, so an unmodified client keeps working without minting a god key.
+        const { apiKey, error } = await ApiKey.create(user.id, name, {
+          scopes: Array.isArray(scopes) && scopes.length ? scopes : [...ADMIN_DEFAULT_SCOPES],
+        });
+        if (error) return response.status(400).json({ apiKey: null, error });
         await emitAuditEvent(
           "api_key_created",
           { createdBy: user?.username, name: apiKey?.name },
