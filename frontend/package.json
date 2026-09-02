@@ -11,6 +11,7 @@
     "check:capabilities": "node scripts/capabilities-cache-check.mjs",
     "lint": "eslint --fix src",
     "preview": "vite preview",
+    "pretest": "node scripts/check-node-version.mjs",
     "test": "vitest --run",
     "test:watch": "vitest"
   },
