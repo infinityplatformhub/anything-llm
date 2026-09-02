@@ -195,6 +195,10 @@ export function ShortWidthNewWorkspaceButton({ user, showNewWsModal }) {
   // #40 task 4: the narrow-width twin of Sidebar's NewWorkspaceButton. Same
   // capability, and it must stay the same — two spellings of one affordance
   // that disagree is a worse bug than either being wrong alone.
+  // `loading ||` is redundant against can() as written today — an empty map
+  // already answers false — and is kept deliberately: the two are independent
+  // defences, and useCapabilities.test.jsx is what holds can()'s side of the
+  // contract, since no DOM test can distinguish them.
   if (!!user && (loading || !can("workspace.create"))) return null;
 
   return (

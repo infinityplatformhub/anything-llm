@@ -201,6 +201,10 @@ export function NewWorkspaceButton({ user, showNewWsModal }) {
   // asks only whether the caller may create. `!user` is single-user mode — no
   // principal, empty map — and short-circuits before `loading`, so a
   // single-user deployment never renders the loading state and cannot flash.
+  // `loading ||` is redundant against can() as written today — an empty map
+  // already answers false — and is kept deliberately: the two are independent
+  // defences, and useCapabilities.test.jsx is what holds can()'s side of the
+  // contract, since no DOM test can distinguish them.
   if (!!user && (loading || !can("workspace.create"))) return null;
 
   return (

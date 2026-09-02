@@ -18,6 +18,10 @@ export default function SettingsButton() {
   // `loading` is checked separately because can() answers false before the map
   // arrives, and rendering off can() alone would show the button popping in on
   // every mount rather than simply being absent until known.
+  // `loading ||` is redundant against can() as written today — an empty map
+  // already answers false — and is kept deliberately: the two are independent
+  // defences, and useCapabilities.test.jsx is what holds can()'s side of the
+  // contract, since no DOM test can distinguish them.
   if (user && (loading || !can("settings.write"))) return null;
 
   if (isInSettings)
