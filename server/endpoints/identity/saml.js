@@ -40,8 +40,7 @@ const PROVIDER = "saml";
  * end up in .env when it does.
  */
 async function providerConfig(request) {
-  const enabled = String(process.env.SSO_SAML_ENABLED ?? "").toLowerCase();
-  if (!["1", "true", "yes", "on"].includes(enabled)) return null;
+  if (!samlEnabled()) return null;
 
   // A list: an IdP publishes its next certificate before it signs with it, so a
   // single-certificate configuration forces a flag-day cutover.
@@ -83,8 +82,42 @@ function acsUrl(request) {
   return `${base.replace(/\/+$/, "")}/api/sso/saml/acs`;
 }
 
+/** Is SAML switched on? Read in two places, so it lives in one. */
+function samlEnabled() {
+  return ["1", "true", "yes", "on"].includes(
+    String(process.env.SSO_SAML_ENABLED ?? "").toLowerCase()
+  );
+}
+
+/**
+ * Say so, loudly, when the Recipient check has degraded to a no-op.
+ *
+ * A security check that quietly stopped checking is worse than one that was
+ * never added: the missing one is visible in review, while this one reads as
+ * present and passes its own tests. With no configured ACS URL the comparison is
+ * "the Host header matches the Host header", which is true for any caller.
+ *
+ * Only when SAML is actually enabled. Warning about a feature nobody turned on
+ * teaches operators to skip warnings, which costs more than it saves.
+ */
+function warnIfRecipientCheckDegraded() {
+  if (!samlEnabled()) return;
+  if (process.env.SSO_ACS_URL || process.env.SSO_CALLBACK_BASE_URL) return;
+  console.error(
+    "[identity:saml] SSO_ACS_URL is not set, so the ACS URL is taken from each " +
+      "request's Host header — a value the caller controls. The assertion " +
+      "Recipient check is therefore comparing that header against itself and " +
+      "verifies nothing. Set SSO_ACS_URL (or SSO_CALLBACK_BASE_URL) to the ACS " +
+      "URL configured at the identity provider."
+  );
+}
+
 function samlIdentityEndpoints(app) {
   if (!app) return;
+
+  // At mount, so it appears on every boot rather than on the first login —
+  // by which time whoever configured this has moved on.
+  warnIfRecipientCheckDegraded();
 
   // Rate limited: unauthenticated, and every call writes a row. Without this it
   // is a free way to fill identity_login_state.

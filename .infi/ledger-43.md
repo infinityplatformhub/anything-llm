@@ -204,6 +204,15 @@ This was found by the full-tree run, not by reading: adding the Recipient check 
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
 
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
+
 ### Mutation proof (round 3)
 
 | mutant | expected kill | result |
@@ -258,6 +267,15 @@ host this request claimed" — no worse than absent, and no better.
 This was found by the full-tree run, not by reading: adding the Recipient check turned 4
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
+
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
 
 ### Mutation proof (round 3)
 
@@ -336,6 +354,15 @@ This was found by the full-tree run, not by reading: adding the Recipient check 
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
 
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
+
 ### Mutation proof (round 3)
 
 | mutant | expected kill | result |
@@ -390,6 +417,15 @@ host this request claimed" — no worse than absent, and no better.
 This was found by the full-tree run, not by reading: adding the Recipient check turned 4
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
+
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
 
 ### Mutation proof (round 3)
 
@@ -502,6 +538,15 @@ This was found by the full-tree run, not by reading: adding the Recipient check 
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
 
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
+
 ### Mutation proof (round 3)
 
 | mutant | expected kill | result |
@@ -556,6 +601,15 @@ host this request claimed" — no worse than absent, and no better.
 This was found by the full-tree run, not by reading: adding the Recipient check turned 4
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
+
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
 
 ### Mutation proof (round 3)
 
@@ -634,6 +688,15 @@ This was found by the full-tree run, not by reading: adding the Recipient check 
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
 
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
+
 ### Mutation proof (round 3)
 
 | mutant | expected kill | result |
@@ -689,6 +752,15 @@ This was found by the full-tree run, not by reading: adding the Recipient check 
 route tests red, because the HTTP suite reached the ACS through supertest's own host.
 The tests were right and the route was wrong.
 
+
+Ruling: when SAML is enabled and neither `SSO_ACS_URL` nor `SSO_CALLBACK_BASE_URL` is
+set, the mount logs an error naming the Recipient check as degraded — a security check
+that quietly stopped checking is WORSE than one never added, because the missing one is
+visible in review while this one reads as present and passes its own tests. The warning
+fires at mount, not on first login (by then whoever configured it has moved on), and
+stays silent when SAML is off, since warnings about features nobody enabled teach
+operators to skip warnings. Removing the call kills exactly the one test.
+
 ### Mutation proof (round 3)
 
 | mutant | expected kill | result |
@@ -706,7 +778,7 @@ The tests were right and the route was wrong.
 
 ## Evidence
 
-`__tests__/security` (whole tree) — Tests: 361 passed, 361 total, 37 suites, against real
+`__tests__/security` (whole tree) — Tests: 365 passed, 365 total, 38 suites, against real
 Postgres via `prisma migrate deploy` (§7.1a, never `db push`).
 
 Two environment traps, both of which produce failures that look like broken code:
