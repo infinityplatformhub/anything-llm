@@ -60,8 +60,16 @@ describe("the disconnect hook is actually wired (TL-2 M2/M3)", () => {
   // failure #122 exists to prevent: a pool that silently stops being released,
   // noticed only when several worktrees exhaust a 100-connection server.
   //
-  // Nothing behavioural can catch it, because the symptom is the absence of a
-  // side effect in a LATER process. So the configuration is asserted directly.
+  // This block used to claim "nothing behavioural can catch it, because the
+  // symptom is the absence of a side effect in a LATER process", and asserted
+  // the file's TEXT instead. That claim was false and cost a round: the hook's
+  // callback can be captured at require time and invoked here, in this process,
+  // which catches a body that does not disconnect. #130.
+  //
+  // What genuinely is NOT testable from inside: that jest itself runs the
+  // registered afterAll. Everything up to and including "the callback we handed
+  // jest disconnects the client" is now behaviour, and only jest's promise to
+  // call it is taken on trust.
   const fs = require("fs");
   const path = require("path");
 
@@ -70,6 +78,53 @@ describe("the disconnect hook is actually wired (TL-2 M2/M3)", () => {
     expect(config.setupFilesAfterEnv ?? []).toEqual(
       expect.arrayContaining([expect.stringContaining("disconnectPrisma")])
     );
+  });
+
+  it("the registered callback actually disconnects when invoked", async () => {
+    // #130. The source-grep below answers "is the file still registered and
+    // still shaped like a hook" — a different question, kept. This one answers
+    // "does running it release the pool", which is the property that matters and
+    // the one a grep cannot see: `if (false) await prisma.$disconnect()` matches
+    // every pattern the grep looks for.
+    //
+    // The callback is captured by swapping `global.afterAll` for the duration of
+    // the require, because that is the only handle the module offers — it
+    // registers and returns nothing.
+    //
+    // `jest.isolateModules` rather than `delete require.cache[...]`: jest serves
+    // these tests from its own module registry, so deleting from Node's cache
+    // re-requires nothing and the swap captures NOTHING. Measured — the first
+    // version of this test failed on the guard below with `captured === null`,
+    // which is the whole reason that guard is here.
+    const prismaPath = require.resolve("../../../utils/prisma");
+    const disconnect = jest.fn().mockResolvedValue(undefined);
+
+    let captured = null;
+    const realAfterAll = global.afterAll;
+    global.afterAll = (fn) => {
+      captured = fn;
+    };
+    try {
+      jest.doMock(prismaPath, () => ({ $disconnect: disconnect }));
+      jest.isolateModules(() => {
+        require("../../support/disconnectPrisma.js");
+      });
+
+      // Registered at all. Without this an empty module leaves `captured` null
+      // and the assertions below would throw rather than pass — but the failure
+      // would read as a crash instead of "the hook registered nothing".
+      expect(typeof captured).toBe("function");
+
+      // Invoked while the mock is still installed. The hook requires
+      // `utils/prisma` LAZILY, inside the callback, so calling it after
+      // `dontMock` reaches the real client and the spy records nothing — which
+      // is how the second version of this test failed. Measured, not guessed.
+      await captured();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      global.afterAll = realAfterAll;
+      jest.dontMock(prismaPath);
+    }
   });
 
   it("the setup file exists and calls $disconnect in afterAll", () => {
