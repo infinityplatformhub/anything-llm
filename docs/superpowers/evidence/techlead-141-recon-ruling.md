@@ -71,3 +71,76 @@ One sequencing note the recon should carry: **#141 does not unblock a working La
 own.** It makes the driver resolvable; whether a real tenant then syncs depends on the schedule
 registration, which is #138's. Say so in the issue, or "Lark support" reads as done when it is
 half done — the same over-claim S4a made by merging a driver nobody could configure.
+
+---
+
+## Addendum — three rulings on Dev2's recon detail
+
+**Skills:** `superpowers:requesting-code-review`, `security-review`.
+
+### (1) `entityId` / `ssoUrl`: **keep them NOT NULL. Write empty strings. Do NOT drop NOT NULL.**
+
+The empty string is not a workaround here — it is the established encoding, documented in two
+places. `schema.prisma:469-472`: *"`entityId` and `ssoUrl` are NOT NULL, and an empty string is
+how a row says 'not a SAML provider'. The constraint reads it as absence. Making either optional
+here inverts every clause of that constraint, and Prisma will let you do it silently."* The LDAP
+branch of the CHECK already asserts `entityId = '' AND ssoUrl = ''`, and migration `092000` put a
+`COMMENT ON COLUMN` on both saying the same thing.
+
+So an LDAP row today **already** writes empty strings into those columns; a Lark row doing the
+same is following the precedent, not faking SAML values. Dropping NOT NULL would invert every
+clause of the constraint — the `= ''` tests would have to become `IS NULL OR = ''` in all three
+branches, and any row written before that migration keeps the old encoding. That is a schema-wide
+change to accommodate one new provider, and it loosens a guarantee every SAML row holds today, for
+nothing: **the constraint's third branch is what makes the Lark row legal, and it works with the
+existing encoding unchanged.**
+
+Add the `COMMENT ON COLUMN` for each new Lark column in the same style, so this rule is found by
+the next person where they are standing.
+
+### (2) Name it `baseUrl` — and only if the row needs to carry it
+
+Measured: the driver takes `baseUrl` (`index.js:86,93,114`, defaulted to `LARK_BASE_URL` and
+right-trimmed), and has no `tenant` parameter at all. So if "tenant" in the recon means *Lark vs
+Feishu*, the column is **`baseUrl`**, matching the constructor argument it feeds — a column whose
+name differs from the field it populates is a translation layer nobody asked for.
+
+If it means anything the driver does not model, **do not add the column.** A column no code reads
+is worse than absent: it looks configurable, an operator sets it, and nothing happens. The rule
+this program has applied twice already — a field that exists and does nothing is a defect, not a
+placeholder.
+
+Given the driver defaults `baseUrl`, the column is nullable and the resolver passes it only when
+present, so a row that omits it gets the default rather than `null`.
+
+### (3) Scope: **write the row in the test. Do not add a configuration endpoint to #141.**
+
+Dev2 is right that nothing in `server/` reads `identity_providers` today — all provider config is
+env, and the only reference is `samlSchema.test.js`. So "save a row → resolve" has no writer.
+
+Adding one is a **different issue**: a configuration endpoint is a new authenticated surface with
+its own permission question (which action gates writing an identity provider?), its own validation,
+and its own UI. Folding it into #141 turns a registry registration into a feature, and #141 is
+already `auth` tier with a migration and a credential path.
+
+So #141's RF inserts the row directly with the test's own client, and the issue records the
+residual plainly: **there is no way to configure a Lark provider through the product; the row must
+be written by hand.** That is honest and it is the same shape as #138's declared seam.
+
+**RF-1 must resolve THROUGH the registry** — agreed, and this is the sharpest point in the
+addendum. The existing Lark tests `require` the class directly, so every one of them is green with
+`lark` absent from `identityProviders`. That is precisely the gap #141 exists to close, and a test
+that constructs the class proves nothing about it.
+
+```
+RF-1 : resolveDriver("lark", configFromRow) returns a LarkIdentityProvider instance
+       and reaches the token endpoint — routed through utils/identityProviders/index.js,
+       never by requiring the class
+mut  : remove the `lark` key from the registry object
+why  : every existing Lark test survives that mutation, because they construct the
+       class directly. Only a registry-routed resolution goes red, and that is the
+       entire content of this issue.
+```
+
+Pair it with `isKnownProvider("lark") === true` and a negative (`isKnownProvider("larks")` false),
+so the null-prototype guard stays exercised.
