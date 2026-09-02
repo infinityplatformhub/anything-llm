@@ -125,3 +125,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #73 4646ef8be gate PASS 2123/2123 + TL-2 PASS; close waits ledger-73 from Dev4.
 - #73 merged 0657de64e (62/80). Slice 3: partial retracted → 500 over cap; batch namespaceCount → backlog issue.
 - #81 opened (batch namespaceCount, Dev4 after #30). 62/81.
+- post-merge suite on main c82cb8b4 (after #73, real-store env): 2127/2127, 0 skip, reporter active.
