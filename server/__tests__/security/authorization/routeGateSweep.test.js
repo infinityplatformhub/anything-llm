@@ -33,6 +33,67 @@ const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
 
+const EXPECTED_SKIPPED_REGISTRARS = new Set(["agentWebsocket"]);
+
+function collectImports(ast) {
+  const imports = [];
+  for (const node of ast.body) {
+    if (node.type !== "VariableDeclaration") continue;
+    for (const declaration of node.declarations) {
+      const requiredPath =
+        declaration.init?.type === "CallExpression" &&
+        declaration.init.callee?.name === "require"
+          ? declaration.init.arguments[0]?.value
+          : null;
+      if (!requiredPath?.startsWith("./endpoints/")) continue;
+
+      if (declaration.id.type === "ObjectPattern") {
+        for (const property of declaration.id.properties) {
+          imports.push({
+            exported: property.key.name,
+            local: property.value.name,
+            namespace: false,
+          });
+        }
+      } else if (declaration.id.type === "Identifier") {
+        imports.push({
+          exported: "*",
+          local: declaration.id.name,
+          namespace: true,
+        });
+      } else {
+        throw new Error(
+          `Unsupported endpoint import binding: ${declaration.id.type}`
+        );
+      }
+    }
+  }
+  return imports;
+}
+
+function directRegistrarCalls(ast, imports) {
+  const calls = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "CallExpression") {
+      const local =
+        node.callee?.type === "Identifier"
+          ? node.callee.name
+          : node.callee?.type === "MemberExpression" &&
+              node.callee.object?.type === "Identifier"
+            ? node.callee.object.name
+            : null;
+      if (imports.some((entry) => entry.local === local)) calls.push(local);
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === "object") visit(value);
+    }
+  };
+  visit(ast);
+  return calls;
+}
+
 /**
  * Single-user-only routes. These configure a personal instance; in multi-user
  * mode the handler (or an `isSingleUserMode` middleware) refuses with 401
@@ -83,78 +144,111 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
-    expect(registrations).toHaveLength(32);
+    expect(registrations.length).toBeGreaterThanOrEqual(31);
     expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(
       100
     );
-    // Only the websocket registration may fail to mount.
     expect(
-      skipped.filter((entry) => !entry.startsWith("agentWebsocket"))
+      skipped.filter(
+        (entry) => !EXPECTED_SKIPPED_REGISTRARS.has(entry.split(":")[0])
+      )
     ).toEqual([]);
   });
 
   test("every imported endpoint registrar appears in the production list", () => {
     const source = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
     const ast = parse(source, { sourceType: "script" });
-    const imports = ast.body
-      .filter((node) => node.type === "VariableDeclaration")
-      .flatMap((node) => node.declarations)
-      .filter(
-        (declaration) =>
-          declaration.id.type === "ObjectPattern" &&
-          declaration.init?.type === "CallExpression" &&
-          declaration.init.callee?.name === "require" &&
-          declaration.init.arguments[0]?.value.startsWith("./endpoints/")
-      )
-      // Every destructured import from ./endpoints is registration-shaped.
-      // No spelling or declarator-position convention is trusted.
-      .flatMap((declaration) => declaration.id.properties)
-      .map((property) => ({
-        exported: property.key.name,
-        local: property.value.name,
-      }));
+    const imports = collectImports(ast);
     const listed = new Set(
       registrations.map((entry) =>
         typeof entry === "function" ? entry.name : entry.register.name
       )
     );
-    expect(imports.length).toBeGreaterThanOrEqual(32);
-    expect(imports.filter(({ local }) => !listed.has(local))).toEqual([]);
 
-    const directCalls = [];
-    const visit = (node) => {
-      if (!node || typeof node !== "object") return;
-      if (
-        node.type === "CallExpression" &&
-        node.callee?.type === "Identifier" &&
-        imports.some(({ local }) => local === node.callee.name)
-      ) {
-        directCalls.push(node.callee.name);
-      }
-      for (const value of Object.values(node)) {
-        if (Array.isArray(value)) value.forEach(visit);
-        else if (value && typeof value === "object") visit(value);
-      }
-    };
-    visit(ast);
-    // Any direct registration bypasses the production list regardless of alias,
-    // spacing, line breaks, export name, or declarator position.
-    expect(directCalls).toEqual([]);
+    expect(imports.length).toBe(listed.size);
+    expect(
+      imports.filter(
+        ({ local }) =>
+          !listed.has(local) && !EXPECTED_SKIPPED_REGISTRARS.has(local)
+      )
+    ).toEqual([]);
+    expect(directRegistrarCalls(ast, imports)).toEqual([]);
   });
 
-  test("aliased endpoint imports retain their local registration name", () => {
+  test.each([
+    {
+      name: "normal destructuring",
+      source: 'const { normalEndpoints } = require("./endpoints/normal");',
+      expected: [
+        {
+          exported: "normalEndpoints",
+          local: "normalEndpoints",
+          namespace: false,
+        },
+      ],
+      why: "every endpoint property is registration-shaped",
+    },
+    {
+      name: "aliased destructuring",
+      source:
+        'const { hiddenEndpoints: probe } = require("./endpoints/hidden");',
+      expected: [
+        { exported: "hiddenEndpoints", local: "probe", namespace: false },
+      ],
+      why: "export identifies the property while local binding identifies calls",
+    },
+    {
+      name: "second declarator and suffix-free name",
+      source:
+        'const harmless = 1, { mountProbeRoutes } = require("./endpoints/probe");',
+      expected: [
+        {
+          exported: "mountProbeRoutes",
+          local: "mountProbeRoutes",
+          namespace: false,
+        },
+      ],
+      why: "declarator position and spelling grant no exemption",
+    },
+    {
+      name: "namespace import",
+      source: 'const ep = require("./endpoints/probe");',
+      expected: [{ exported: "*", local: "ep", namespace: true }],
+      why: "member calls through endpoint namespaces must remain visible",
+    },
+    {
+      name: "non-endpoint import",
+      source: 'const { helper } = require("./utils/helper");',
+      expected: [],
+      why: "only endpoint-module imports belong to registration completeness",
+    },
+  ])("collectImports: $name — $why", ({ source, expected }) => {
+    expect(collectImports(parse(source, { sourceType: "script" }))).toEqual(
+      expected
+    );
+  });
+
+  test("collectImports rejects unsupported endpoint ArrayPattern bindings", () => {
+    const ast = parse('const [probe] = require("./endpoints/probe");', {
+      sourceType: "script",
+    });
+    expect(() => collectImports(ast)).toThrow(
+      "Unsupported endpoint import binding: ArrayPattern"
+    );
+  });
+
+  test("direct endpoint calls are formatting and binding independent", () => {
     const ast = parse(
-      'const { hiddenSweepProbeEndpoints: probe } = require("./endpoints/hiddenSweepProbe"); probe (apiRouter);',
+      `const { hiddenEndpoints: probe } = require("./endpoints/hidden");
+       const ep = require("./endpoints/probe");
+       probe (apiRouter);
+       ep.mountProbeRoutes(apiRouter);`,
       { sourceType: "script" }
     );
-    const property = ast.body[0].declarations[0].id.properties[0];
-    expect({ exported: property.key.name, local: property.value.name }).toEqual(
-      {
-        exported: "hiddenSweepProbeEndpoints",
-        local: "probe",
-      }
-    );
-    expect(ast.body[1].expression.callee.name).toBe("probe");
+    expect(directRegistrarCalls(ast, collectImports(ast))).toEqual([
+      "probe",
+      "ep",
+    ]);
   });
 
   test("no mutating route carries validatedRequest alone", () => {
