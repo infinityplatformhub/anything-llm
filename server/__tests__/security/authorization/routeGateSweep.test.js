@@ -93,6 +93,8 @@ function buildRouter() {
   return { app, registrations, skipped };
 }
 
+module.exports = { SINGLE_USER_ONLY_ROUTES, SELF_SERVICE_ROUTES, buildRouter };
+
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
 

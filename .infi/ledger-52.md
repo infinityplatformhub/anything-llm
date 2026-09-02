@@ -78,3 +78,25 @@ Ruling (Techlead nit 2): `BASELINE_GRANTABLE` applying to workspace-scoped roles
 
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
 `Test Suites: 118 passed, 118 total` · `Tests: 1212 passed, 1212 total`
+
+## Addendum 7 (QA-2/QA-1): the two halves of "which mode is this" disagreed
+
+Ruling: `isSingleUserMode` (deploymentMode.js) now asks `isConfirmedSingleUser` instead of reading `SystemSettings.isMultiUserMode()` raw. In shape (b) — `multi_user_mode = false` WITH user rows, i.e. a partial restore or a dropped settings row — the raw setting said "single-user, let it through" while `validatedRequest` used the confirmed helper, said "multi-user", and accepted a session JWT. A route reachable only in single-user mode then executed for a multi-user session.
+
+Measured before the fix, on shape (b):
+```
+raw isMultiUserMode(): false   → isSingleUserMode middleware ALLOWS
+isConfirmedSingleUser(): false → validatedRequest treats as multi-user
+```
+and three routes returned 200 with real side effects: `POST /telegram/disconnect`, `DELETE /scheduled-jobs/:id`, `POST /admin/agent-skills/outlook/revoke` (the RED run shows `external_communication_connectors.delete` and `scheduled_jobs.delete` executing).
+
+This is QA-2's FINDING-1 class exactly: the danger is not which answer is right, it is that there are two answers, and one of them decides whether anything gets checked at all.
+
+Ruling (QA-1): the hole needed no impersonation. `telegram.js` and `scheduledJobs.js` carry no `requirePermission` anywhere, so in shape (b) an ORDINARY session reached them too. The dynamic test drives both token shapes; both were RED before the fix and both are green after.
+
+Note: **the static sweep could not have caught this, and that is the lesson.** `isSingleUserMode` was present on all seventeen routes — the allowlist assertion checking "does this route carry a mode guard" passed the whole time. What was wrong was what the guard SAID. A test that checks a guard exists is not a test that the guard works; this one mounts the real router and fires real requests at every route on the list.
+
+## Evidence (addendum 7)
+
+Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
+`Test Suites: 119 passed, 119 total` · `Tests: 1219 passed, 1219 total`
