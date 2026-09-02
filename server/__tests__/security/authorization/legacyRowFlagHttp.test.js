@@ -54,11 +54,14 @@ function filteringTable(rows) {
       return rows.filter((row) => {
         const unlabelled =
           row.orgId == null && row.workspaceId == null && row.docId == null;
-        if (predicate.startsWith("((orgId IS NULL")) {
-          if (unlabelled) return true;
-          return String(row.orgId) === "1" && String(row.workspaceId) === "3";
-        }
-        if (unlabelled) return false;
+        // Detected by MEANING ("does this predicate contain the unlabelled escape
+        // clause") rather than by matching its exact opening characters. An earlier
+        // version keyed on `startsWith("((orgId IS NULL")` and broke the moment the
+        // identifiers were backtick-quoted for DataFusion — the evaluator quietly
+        // stopped recognising the lenient predicate and the test failed for a reason
+        // that had nothing to do with the behaviour under test.
+        const lenient = /IS NULL.*IS NULL.*IS NULL/.test(predicate);
+        if (unlabelled) return lenient;
         return String(row.orgId) === "1" && String(row.workspaceId) === "3";
       });
     },

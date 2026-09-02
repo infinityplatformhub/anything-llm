@@ -32,6 +32,30 @@ const { allowUnprovableRows } = require("./retrievalEnforcement");
 const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
 
 /**
+ * Identifier quoting for LanceDB's DataFusion expression parser: BACKTICKS, never
+ * double quotes.
+ *
+ * Our ACL columns are camelCase (`orgId`, `workspaceId`, `docId`), and DataFusion
+ * case-folds an unquoted identifier to lowercase. Measured on lancedb 0.15 against a real
+ * table, the three spellings fail in three different ways:
+ *
+ *   orgId = '1'      -> THROWS: Schema error: No field named orgid
+ *   "orgId" = '1'    -> parses, returns 0 rows, ALWAYS
+ *   `orgId` = '1'    -> correct
+ *
+ * The double-quote form is the trap. It is standard SQL, it reads as obviously correct,
+ * and it fails closed and SILENT — no error, no rows, permanently. That is a retrieval
+ * outage that presents as an embedding or ranking problem and would be debugged as one.
+ * The bare form at least announces itself, which is how QA-2 found it: LanceDB is the
+ * default provider, so every stock deployment's context-backed chat was throwing.
+ *
+ * Only this renderer needs it. pgvector addresses the fields as JSONB keys
+ * (`metadata->>'orgId'`) and Milvus as JSON members (`metadata["orgId"]`); both are
+ * string keys inside a document, not identifiers, so neither is case-folded.
+ */
+const ident = (name) => `\`${name}\``;
+
+/**
  * A filter must be a filter. Null, `{}`, or a filter with no policy stamp are all refused
  * rather than treated as "no restriction" — an unfiltered read must never be reachable by
  * forgetting an argument.
@@ -72,7 +96,12 @@ class RetrievalConstraint {
   }
 
   /**
-   * For providers taking an SQL-ish expression string: lance, pgvector, milvus.
+   * For LanceDB, which takes an SQL-ish expression string parsed by DataFusion.
+   *
+   * Every identifier is BACKTICK-quoted (see `ident`): unquoted camelCase is case-folded
+   * to `orgid` and throws, and the standard-SQL double-quote form silently returns zero
+   * rows forever. pgvector and Milvus are unaffected — they address these fields as keys
+   * inside a JSON document, not as identifiers — and have their own renderers below.
    *
    * The strict predicate by default. When RETRIEVAL_FILTER_ALLOW_UNPROVABLE is set, the
    * whole thing is wrapped so that a fully unlabelled row also survives:
@@ -98,19 +127,28 @@ class RetrievalConstraint {
    */
   toSqlString() {
     if (this.matchNone) return null;
-    const clauses = [`orgId = ${quote(this.orgId)}`];
+    const clauses = [`${ident("orgId")} = ${quote(this.orgId)}`];
     if (this.workspaceIds.length > 0) {
-      clauses.push(`workspaceId IN (${this.workspaceIds.map(quote).join(", ")})`);
+      clauses.push(
+        `${ident("workspaceId")} IN (${this.workspaceIds.map(quote).join(", ")})`
+      );
     }
     if (this.deniedDocIds.length > 0) {
-      clauses.push(`docId NOT IN (${this.deniedDocIds.map(quote).join(", ")})`);
+      clauses.push(
+        `${ident("docId")} NOT IN (${this.deniedDocIds.map(quote).join(", ")})`
+      );
     }
     if (this.allowedDocIds !== null) {
-      clauses.push(`docId IN (${this.allowedDocIds.map(quote).join(", ")})`);
+      clauses.push(
+        `${ident("docId")} IN (${this.allowedDocIds.map(quote).join(", ")})`
+      );
     }
     const strict = clauses.join(" AND ");
     if (!allowUnprovableRows()) return strict;
-    return `((orgId IS NULL AND workspaceId IS NULL AND docId IS NULL) OR (${strict}))`;
+    const unlabelled = ["orgId", "workspaceId", "docId"]
+      .map((key) => `${ident(key)} IS NULL`)
+      .join(" AND ");
+    return `((${unlabelled}) OR (${strict}))`;
   }
 
   /**

@@ -67,3 +67,17 @@ Residual: slice 1b — qdrant, pinecone, chroma, weaviate, astra via `toStructur
 Residual: slice 2 (G17 context injection / S-21), slice 3 (S-22 rehydration, S-25 cardinality, canonicalize 4 sites + fix the `docVectorsCanonicalize.js:19-20` comment).
 
 SHA: 4e980681 (branch approof/t5-vector-filter, base approof/main 6104d911).
+
+## Slice 1a — QA-2 FAIL on aa437ade, corrected
+
+Ruling (Techlead QA-2, my bug): `toSqlString()` emits BACKTICK-quoted identifiers — `` `orgId` ``, `` `workspaceId` ``, `` `docId` ``, including inside the OR-unlabelled escape clause. Bare identifiers made `LanceDb.queryAuthorized()` throw on every call: DataFusion case-folds an unquoted identifier to `orgid`, no such field exists in the Arrow schema, and LanceDB is the DEFAULT provider — so context-backed chat was 500/empty on every stock deployment. Verified on a real table before and after.
+
+Ruling: double quotes are FORBIDDEN here, and that is the more dangerous half. Measured on lancedb 0.15 against a real table: bare `orgId = '1'` throws; `` `orgId` = '1' `` is correct; `"orgId" = '1'` parses and returns **0 rows, always**. The standard-SQL form is the one a reviewer would call correct and it fails closed and silent — a permanent retrieval outage presenting as an embedding or ranking problem. Pinned by a test so the backticks are never "corrected" into quotes.
+
+Ruling: pgvector (`metadata->>'orgId'`) and Milvus (`metadata["orgId"]`) are unaffected and unchanged — both address these fields as string keys inside a JSON document, not as identifiers, so neither is case-folded. The reason is recorded at `toSqlString` and at the `ident()` helper, because the asymmetry otherwise reads as an inconsistency somebody would "tidy up".
+
+Ruling: the regression test opens a REAL LanceDB table (rows written via `aclMetadataFor()`) and runs `queryAuthorized` through it — MINE/FOREIGN, expect MINE only. Every prior test missed this because they mocked the table: a mock records the predicate string and returns rows, so an unparseable predicate looks identical to a working one. RED proof is retained as two live mutation tests — bare identifiers must throw, double-quoted must return zero rows.
+
+Note (not a regression): `__tests__/jobs/providerDocIdCallSites.test.js` intermittently fails 3 tests with a 5s `beforeAll` timeout — its hook shells out to `prisma migrate deploy`. Reproduced identically on `aa437ade` with this fix stashed, and it passes when run alone. Environment timing, unrelated to this change; flagged so a recurrence is not read as new.
+
+SHA: 20988523 (branch approof/t5-vector-filter, base aa437ade)
