@@ -1033,3 +1033,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - gate-stack spawned: pre-gates 137-stacked a89c38ebf + 138-stacked c81ae7d73 with --base mainplus121 (/tmp/gate-137s.report, /tmp/gate-138s.report). Outstanding asks: TL-2 #143 pre-read; TL-1 #146 close + MR scope; Dev5 #149 SHA; QA-3 138-stacked; Dev1 MR recon; user #121.
 
 - #146 MERGED e66ccbebd (plain).
+- #146 MERGED 4e0fa2b01, closed (infi-run:146-e66ccbebd); PR #148 closed. #150 opened (Model Router gate, auth tier, code parked 0e9722774 unverified). Dev5 #149 at 2b714f8e6.
