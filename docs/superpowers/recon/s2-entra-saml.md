@@ -126,3 +126,75 @@ Evaluate the maintained Node SAML libraries against DoD 1–3 **as the selection
 ## 7. Estimate
 
 2 cw holds **if** §0 finds no S1 debt and §5's library choice lands early. The XSW fixtures are the long pole; budget them as work, not as a test-writing afterthought.
+
+---
+
+## §PMO addendum — what S2 needs S1 to leave behind (written for Dev3, before S1 starts)
+
+S1 is being implemented now (#36, slots `080000`/`081000`); S2 follows on `082000`.
+This section exists so S1's author can see, while building, which decisions S2 is
+about to depend on. Every item below is cheap to get right in S1 and expensive to
+retrofit once one driver has shipped.
+
+### The dependency is `identity_links`, and S2 never writes it directly
+
+S2 reads and writes identity links **only** through `linkPrincipal.js`. The
+`@@unique([provider, subject])` constraint is what makes "one external identity,
+one local user" true, and two writers to it is how a linking policy quietly forks
+— OIDC and SAML would each enforce their own idea of what may be linked, and the
+difference would only surface as a takeover.
+
+Concretely, S2 depends on S1 having put these in **core**, not in the OIDC driver:
+
+| What | Where it must live | Why S2 cares |
+|---|---|---|
+| Creating/updating the local `users` row | `linkPrincipal.js` | S2 adds no second user-creation path |
+| The `provider + subject` lookup and link write | `linkPrincipal.js` | SAML's `NameID` is the subject; identical policy |
+| Domain policy (which email domains may auto-provision) | `linkPrincipal.js` | Must not differ per protocol |
+| Role assignment on first login | `linkPrincipal.js` | Two role policies is a privilege bug, not a style issue |
+| Session/JWT issuance | the existing `TemporaryAuthToken`→`sessionToken` path | S2 issues sessions the same way or S13 MFA has two paths to patch |
+| The reject-auto-link ruling (R1) | `linkPrincipal.js` | S2's DoD #10 asserts S1's policy, not a copy of it |
+
+**The check that proves it:** grep the OIDC driver for `users.create`, `users.update`,
+JWT signing, and `grantRole`. Any hit is S1 debt, and S2's 2 cw estimate is wrong by
+however much of it there is. This is §0 of this recon; it is repeated here because it
+is far cheaper as a thing S1 avoids than as a thing S2 discovers.
+
+### Slot correction
+
+§3 above says S1 takes `060000` and S2 `061000`. **Superseded:** `060000` went to
+`credential_store` and the T-7 slots took `070000`/`071000`. S1 is now `080000`/`081000`
+and **S2 takes `082000`** — still one identity block, one decade later.
+
+### Files S2 will touch, so S1 knows what not to close over
+
+**S2 creates:** `utils/identityProviders/SamlIdentityProvider/{index,metadata}.js`,
+`endpoints/identity/saml.js`, `__tests__/security/identity/saml*.test.js`, and the
+`identity_providers` config table plus an assertion-ID replay store (§4.7 — S2's
+equivalent of S1's `identity_login_state.consumedAt`; S1 need not build it, but the
+two should look alike).
+
+**S2 modifies exactly two of S1's files:**
+- `utils/identityProviders/index.js` — one line registering the driver. S1 should make
+  the registry take a driver without editing anything else; if adding a provider means
+  touching a switch statement, say so now.
+- `prisma/schema.prisma` — additive only.
+
+**S2 must not touch, and will treat as a bug in itself if it does:**
+`linkPrincipal.js`, `identity_links`, and `actorResolver.js`. The resolver especially:
+SAML ends at `locals.user` like every other user ingress, and it is the single Actor
+construction site three tracks are queued behind.
+
+### One decision S1 can make cheaply and S2 cannot
+
+§1 above needs a ruling on the driver signatures, because SAML has no `code`, no
+`nonce`, and no refresh token. The recommendation is **(c)**: keep the shapes, rename
+the parameters generically (`credential`, `expectedCorrelation`), document both
+bindings. **If S1 names them `code` and `nonce`, option (c) becomes a rename across a
+shipped driver** rather than a naming choice in a new one — so S1 should either adopt
+the generic names now or record deliberately that S2 pays for the rename. S3 (LDAP,
+month 3) fits neither OAuth nor SAML shapes, so this is not a two-driver question.
+
+Likewise `refreshPrincipal`: S1 should establish that a driver lacking a capability
+throws `IdentityCapabilityError` rather than returning something empty. SAML will be
+the first driver to use it, but the pattern belongs to whoever writes the interface.
