@@ -574,3 +574,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #113 89f396381 pushed (aclCount allow+deny, role.grant bar, RF-9 6+2, D4/D5/D6/C dead; 20/20). Regating /tmp/wt-113; TL-1 3-line re-read + QA-1 6 cases dispatched.
 - #124 ab11d35a8 QA-3 FAIL: mutant "delete aria-label" survives 4/4 (null===null; matcher hits fallback visible text). TL-1 PASS superseded. Dev4 fixing tests → new SHA → regate. §7.17 logged. QA-3 → #126 s1.
 - #113 89f396381 TL-1 PASS (865da0cf6): aclCount both effects + orgId from group, role.grant bar fail-closed, guard first in both tx; control A real owner. Nit → residual. Gate: contract 43/43, dirs 1050/1086 green, sweeps pending. task-113.env written from contract paths. Awaiting QA-1 → close/merge. §7.17 delete-line-first logged.
+- #113 89f396381 regate: contract 43/43, authz+identity 1050/1086, sweeps running; ledger 19 rulings normalized; env written. Close on QA-1 PASS (run-id gate-113-89f396381).
+- Post-merge after hotfix (main 95340bfa4+): in progress, 1 red so far = boundKeyDocumentsHttp.test.js → rerun alone after run completes (same DB).
