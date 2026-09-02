@@ -226,3 +226,8 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Pre-user branch returns all keys (provider/model names visible) on fresh install — onboarding mounts 37 provider components that need them.
 - Tier-1 public fields have 3 value types (boolean / array / null).
 - One unreproduced 500 in TL-2 run (#122 class).
+
+## #122 residuals (test connection budget)
+- Regime-1 (shared-DB data collision) trigger never reproduced (48/63/93 backends all green); fix covers regime 2 only.
+- Per-suite schema (ก) not opened; 52/55 authz suites still share the public schema.
+- Suite needs a migrated public schema, not an empty DB.
