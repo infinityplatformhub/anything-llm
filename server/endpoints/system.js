@@ -88,16 +88,15 @@ const { isReservedCommand } = require("../utils/chats");
 const { AgentSkillWhitelist } = require("../models/agentSkillWhitelist");
 const { Memory } = require("../models/memory");
 
-// Org-level capabilities the UI gates on. Kept short and explicit — see the
-// endpoint comment for why this is not "every seeded action".
+// UI capability lists stay short and explicit rather than exposing every seeded
+// action. ACTION_SCOPES validates actions with a restricted resource scope; it is
+// not a catalog (today it contains only `org.member`), so these lists cannot be
+// generated from it.
 //
-// #53: `org.member` is deliberately ABSENT. Every principal of the org holds it,
-// so there is nothing for a UI to show or hide on it — a capability everyone has
-// gates nothing. Adding it would also break this endpoint outright: it is scoped
-// 'org', and `authorizeMany` re-throws a contract error for the WHOLE batch
-// rather than per resource (one bad question invalidates the batch, it does not
-// merely fail one entry), so a single org-scoped action asked here against a
-// workspace-bearing resource would take every other capability down with it.
+// #53: `org.member` is deliberately ABSENT from ORG_CAPABILITIES. Every
+// principal of the org holds it, so there is nothing for a UI to show or hide on
+// it — a capability everyone has gates nothing. Asking it outside the org scope
+// is also a contract error, not a false result.
 const ORG_CAPABILITIES = [
   "chat.read_others",
   "document.bulk_export",
@@ -105,22 +104,21 @@ const ORG_CAPABILITIES = [
   "settings.write",
   "key.manage",
   "access.diagnose",
+  // Creating a workspace has no existing workspace to authorize against. Both
+  // workspaces.js and admin.js therefore gate it against `orgResource`.
   "workspace.create",
 ];
 
+// Workspace capabilities are separate because the endpoint can ask these about
+// one workspace without mixing resource scopes into the org authorization batch.
 const WORKSPACE_CAPABILITIES = [
   "workspace.read",
   "workspace.write",
   "workspace.delete",
+  "workspace.members.manage",
   "document.create",
-  "document.read",
-  "document.update",
   "document.delete",
-  "document.search",
-  "document.pin",
-  "document.watch",
   "chat.send",
-  "chat.read",
 ];
 
 function systemEndpoints(app) {

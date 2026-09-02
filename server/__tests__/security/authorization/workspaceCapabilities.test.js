@@ -16,6 +16,10 @@ const {
 } = require("../../../prisma/seeds/permissions");
 
 const ENDPOINTS_DIR = path.join(__dirname, "../../../endpoints");
+const RESOLVERS_FILE = path.join(
+  __dirname,
+  "../../../utils/middleware/resourceResolvers.js"
+);
 
 function javascriptFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -25,12 +29,78 @@ function javascriptFiles(directory) {
   });
 }
 
-const endpointSources = javascriptFiles(ENDPOINTS_DIR)
-  .map((file) => fs.readFileSync(file, "utf8"))
-  .join("\n");
+// Ignore comments and unrelated strings so examples and dead text cannot count
+// as live gates. Only the first string argument of a real requirePermission call
+// is retained as the action being gated.
+function permissionGates(source) {
+  const gates = [];
+  let index = 0;
 
-const escapeRegExp = (value) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const whitespace = () => {
+    while (/\s/.test(source[index] || "")) index += 1;
+  };
+  const string = () => {
+    const quote = source[index++];
+    let value = "";
+    while (index < source.length && source[index] !== quote) {
+      if (source[index] === "\\") index += 1;
+      value += source[index++] || "";
+    }
+    index += 1;
+    return value;
+  };
+
+  while (index < source.length) {
+    if (source.startsWith("//", index)) {
+      index = source.indexOf("\n", index);
+      if (index < 0) break;
+    } else if (source.startsWith("/*", index)) {
+      index = source.indexOf("*/", index + 2);
+      if (index < 0) break;
+      index += 2;
+    } else if ("\"'`".includes(source[index])) {
+      string();
+    } else if (source.startsWith("requirePermission", index)) {
+      index += "requirePermission".length;
+      whitespace();
+      if (source[index++] !== "(") continue;
+      whitespace();
+      if (!"\"'".includes(source[index])) continue;
+      const action = string();
+      whitespace();
+      if (source[index++] !== ",") continue;
+      whitespace();
+      const resolver = /^[A-Za-z_$][\w$]*/.exec(source.slice(index))?.[0];
+      if (resolver) gates.push({ action, resolver });
+    } else {
+      index += 1;
+    }
+  }
+  return gates;
+}
+
+const endpointFiles = javascriptFiles(ENDPOINTS_DIR);
+const gatesByFile = new Map(
+  endpointFiles.map((file) => [
+    file,
+    permissionGates(fs.readFileSync(file, "utf8")),
+  ])
+);
+const allGates = [...gatesByFile.values()].flat();
+
+// Every exported resolver except orgResource and grantScopeFromBody always
+// resolves an existing workspace or an object contained by one and returns a
+// workspaceId. grantScopeFromBody is excluded because its no-workspace branch
+// intentionally resolves the org. Deriving exports keeps this aligned as the
+// centralized resolver module grows.
+const resolverExports = /module\.exports\s*=\s*{([^}]+)}/s.exec(
+  fs.readFileSync(RESOLVERS_FILE, "utf8")
+)?.[1];
+const workspaceResolvers = new Set(
+  (resolverExports?.match(/[A-Za-z_$][\w$]*/g) || []).filter(
+    (name) => !["orgResource", "grantScopeFromBody"].includes(name)
+  )
+);
 
 describe("capability vocabulary by resource scope", () => {
   test("workspace capabilities contain no org-scoped actions", () => {
@@ -41,9 +111,7 @@ describe("capability vocabulary by resource scope", () => {
 
   test("org capabilities contain no workspace-scoped actions", () => {
     expect(
-      ORG_CAPABILITIES.filter(
-        (action) => ACTION_SCOPES[action] === "workspace"
-      )
+      ORG_CAPABILITIES.filter((action) => ACTION_SCOPES[action] === "workspace")
     ).toEqual([]);
   });
 
@@ -59,11 +127,32 @@ describe("capability vocabulary by resource scope", () => {
   });
 
   test("every org capability backs a server gate at org scope", () => {
+    expect(endpointFiles.length).toBeGreaterThan(0);
     for (const action of ORG_CAPABILITIES) {
-      const gate = new RegExp(
-        `requirePermission\\(\\s*["']${escapeRegExp(action)}["']\\s*,\\s*orgResource`
-      );
-      expect(gate.test(endpointSources)).toBe(true);
+      expect(
+        allGates.some(
+          (gate) => gate.action === action && gate.resolver === "orgResource"
+        )
+      ).toBe(true);
+    }
+
+    for (const filename of ["workspaces.js", "admin.js"]) {
+      const file = path.join(ENDPOINTS_DIR, filename);
+      expect(gatesByFile.get(file)).toContainEqual({
+        action: "workspace.create",
+        resolver: "orgResource",
+      });
+    }
+  });
+
+  test("every workspace capability backs a workspace-scoped server gate", () => {
+    for (const action of WORKSPACE_CAPABILITIES) {
+      expect(
+        allGates.some(
+          (gate) =>
+            gate.action === action && workspaceResolvers.has(gate.resolver)
+        )
+      ).toBe(true);
     }
   });
 });
