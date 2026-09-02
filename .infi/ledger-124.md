@@ -65,6 +65,31 @@ this environment; matching the English string would pass only if some test happe
 initialise i18n and would fail for the wrong reason otherwise. The property under assertion —
 the name is constant and describes the control — is satisfied either way.
 
+## Correction 3 — QA-3 FAIL: the tests asserted text, not the label
+
+Reproduced before fixing: deleting the `aria-label` line entirely left **4/4 green**. The issue's
+own subject was unasserted.
+
+Cause: `getByRole("button", {name})` matches the ACCESSIBLE NAME, which falls back to text
+content. On this control the visible text during the fallback window is
+`chat_window.select_model` — the same string as the intended label — so the matcher found the
+button whether or not any label existed. Three knock-on effects: the head comment's "RED before
+the fix" claim was false (it passed pre-fix in that window); the constancy test compared
+`getAttribute("aria-label")` null to null; and the no-model test WAS the fallback path.
+
+Fixed by waiting for the resolved state before every lookup, asserting the attribute directly
+rather than inferring it from a name match, and requiring a non-empty string on both sides of
+the constancy comparison. Mutants now: (a) label=modelName → 2 failed, (b) label deleted →
+3 failed, (c) restored → 4 passed.
+
+**The rule I got half right.** Correction 1 above states: *asserting a value is STABLE requires
+observing it at a moment when it could have changed.* True, and I applied it only to the
+constancy test. The same reasoning governs the REACHABILITY tests — a lookup performed in a
+state where the label and the text are identical cannot distinguish them either. The general
+form: **an assertion must run in a state where the property it names is the only thing that
+could satisfy it.** Where a query has a fallback (accessible name → text content), assert the
+mechanism directly instead.
+
 ## Residual
 
 `LLMSelector/action.jsx:100`'s hardcoded English label (above). Not fixed here; worth folding
