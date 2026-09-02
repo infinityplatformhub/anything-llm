@@ -144,3 +144,30 @@ why  : no per-user fixture reaches this path; it needs its own.
 - **Identity confusion** — id recycling is the mechanism. Worth noting for the issue: cleanup removes the *consequence*, not the recycling. A future issue could make ids non-reusable, but that is a bigger change and cleanup is the correct fix for #135.
 - **Data exposure** — `document_acl` orphans mean a recycled id inherits document access, not just role permissions. RF-1 should cover an ACL row as well as a role grant, or the ACL half is untested.
 - **Audit integrity** — addressed by (3): keeping revocations and the nullable actor columns, and writing revocation rows rather than raw deletes.
+
+---
+
+## Addendum — QA-2's measurement: the ACL half is defence-in-depth, not live escalation
+
+**Skills:** `superpowers:requesting-code-review`, `security-review` checklist (authz bypass,
+data exposure).
+
+QA-2 measured that an allow-ACL row grants a **user** actor nothing: `documentFilter.js:96` reads
+`document_acl` with `effect: "deny"` only, and the engine returns `no_grants` for an ACL-only
+actor. Confirmed at source — the only `document_acl` read on the decision path is that deny query;
+the allow direction reaches a user actor through no code. The bounded allow list at `:104` is
+`embed`/`service` only and throws an `AuthorizationContractError` for anything else.
+
+**Ruling (3) stands unchanged: orphaned ACL rows are deleted on offboard.** What changes is the
+severity framing, and the correction should be recorded rather than quietly absorbed — my
+security-checklist line *"a recycled id inherits document access, not just role permissions"*
+overstated it. The recycled-id escalation is **role-grant only**. Two reasons the cleanup is still
+right at the same priority:
+
+1. **`explainAccess.js:64` reads ACL rows in both directions** (no `effect` filter) and reports them as who has access. An orphaned allow row therefore shows a recycled user as holding document access in the diagnostic surface an operator uses to answer exactly that question — wrong output from the tool people consult when they suspect this class of bug.
+2. **The deny-only read is a property of today's `documentFilter`, not of the schema.** `document_acl` carries `effect` precisely because both directions are representable, and a future allow path — the one `grantDocumentAcl` exists to write — turns a dormant row into a live grant with no migration and no review. Leaving rows whose safety depends on one query's `where` clause is the shape #113 already produced once.
+
+So: same fix, same slice, and RF-1 from the rulings above still covers an ACL row as well as a
+role grant — but the issue text should say **defence-in-depth plus a wrong diagnostic**, not
+"inherits document access". A finding stated stronger than it measures is the thing this program
+keeps correcting in others' work; it applies to mine.
