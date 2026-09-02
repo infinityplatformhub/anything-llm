@@ -111,3 +111,9 @@ Adds `workspaceId`, `orgId`, `hidden`, `aclKey[]` to vector payloads — **metad
 - Ruling D: LanceDB `table.add()` silently drops fields absent from the Arrow schema → not a 1a concern; residual → #56 (backfill must migrate schema).
 - Ruling C2: `retrievalSupport` count returns one of three explicit outcomes — real number / "provider cannot count" / "query failed: <message>"; never a silent null for a thrown error. Missing `orgId` column = 100% unlabelled, not an error. Test pair: "column absent" vs "column present but NULL" must agree per flag state.
 - Ruling (1b): `toStructured()` is deleted — no shared intermediate form exists across the 5 object-DSL dialects; each provider writes its own renderer with a render test and a real-store test.
+
+### PMO rulings — slice 2 (pinned docs + parsed files, 2026-09-02)
+- Q1 (ก): pinned rows filtered by the existing DocumentAclFilter in DocumentManager; no per-doc engine calls.
+- Q2: document_acl keys on canonical `document_id`; pinned rows with NULL documentId are unprovable — same flag semantics as unlabelled vectors, never "no match = allow".
+- Q3: `getContextFiles` requires `user` (throw); callers without a user pass an explicit system actor that yields [].
+- Q4: agent paths (agents/index.js, ephemeral.js) are in slice 2 scope.
