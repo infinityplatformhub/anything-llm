@@ -892,3 +892,6 @@ Probing a developer's live worktree is void: uncommitted edits change results (Q
 
 ### §7.1b API_KEY_PEPPER must be ≥32 bytes in every test env
 A shorter pepper makes 8 authorization suites fail at import with a pepper error, not a test error. Check this first when an authz group goes red (Dev3, #43 cd4fda5e).
+
+### §7.3c XML namespace URIs trip the URL gate
+`http://www.w3.org/...xmldsig#` and friends are identifiers, not endpoints. Add the file to `.infi/checkignore` (#43 4765dbae).

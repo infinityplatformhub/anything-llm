@@ -9,3 +9,6 @@ server/utils/middleware/embedSessionToken.js
 server/__tests__/utils/middleware/embedSessionToken.test.js
 server/index.js
 server/utils/vectorDbProviders/lance/index.js
+server/__testHelpers__/saml/assertions.js
+server/__tests__/security/identity/samlLibraryEvaluation.test.js
+server/utils/identityProviders/SamlIdentityProvider/index.js
