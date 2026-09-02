@@ -94,3 +94,27 @@ blocked, three PMO pings went unanswered and slice 2 was reassigned. The run mus
 the background logging to a file, with status reported from the log. The cost of a
 blocking run is not the wasted ten minutes; it is that the session goes silent and
 looks dead.
+
+---
+
+## Rulings
+
+Ruling: `offboardUser` writes through the existing primitives only, never raw prisma — because each primitive carries a guard (`refuseGroupEscalation`), a scope derivation (the group row's `orgId`) or an audit write (`grant_revocations` read-before-delete) that a raw `deleteMany` silently drops — if wrong, the removal succeeds while publishing no invalidation or one under the wrong `org:` key, and the only record the grant ever existed is destroyed.
+
+Ruling: accept N `policy_versions` rows, one per primitive call, rather than collapsing to one — because `inTransaction` inlines when handed a `tx` (TL-1 measured 1 tx, 3 bumps) and collapsing needs the barred `bumpVersion` export, while the intermediate versions are never observable outside the uncommitted transaction — if wrong, the alternative is exporting `bumpVersion` and reopening the write path TL-2 closed.
+
+Ruling: F2 asserts rollback scope, not a bump count — because a transaction buys all-or-nothing, not a tidy row count, and a count pins an implementation detail that changes the day the primitives batch — if wrong, the fixture goes red against correct code the first time anything is optimized, and gets deleted rather than understood.
+
+Ruling: my original "exactly one `policy_versions` row for N removals" fixture was wrong and is withdrawn — because it demanded a shape the existing composition cannot produce without extracting `revokeGrant`/`revokeDocumentAcl` internals — if wrong, I would have restructured two working functions to satisfy a test I wrote from an assumption instead of a measurement.
+
+Ruling: the exempt `SERVICE_PRINCIPALS.singleUser` principal builds fixture worlds but never runs the offboard; the offboard runs as a real `super_admin` user per TL-2's #135 ruling — because that principal skips BOTH `refuseGroupEscalation` and `revokeGrant`'s `role.revoke` check — if wrong, both guards ship untested and a raw-write regression passes the whole suite (measured: M1 survived 8/8 under the exempt actor).
+
+Ruling: F9 offboards a user holding no grants and no ACLs — because F8's `content_moderator` is refused by `revokeGrant` before the membership guard could matter, so the suite could not see `refuseGroupEscalation` stop running — if wrong, a raw `group_members.deleteMany` lets a moderator strip a super_admin group's membership with the suite green.
+
+Ruling: F9 also asserts the legitimate actor still succeeds — because a fixture that only proves "it throws" is satisfied by throwing always — if wrong, the guard could become a wall and nothing would notice.
+
+Ruling: F10 asserts the scope KEYS a bump is published under, not how many bumps — because TL-1's bump-count ruling stands, and WHICH key a bump carries is the difference between an invalidation and a row nobody reads (the RF-5 lesson) — if wrong, a raw ACL delete removes the rows while every document-scoped consumer keeps serving stale access.
+
+Ruling: F11 offboards a user that HAS rows rather than a bare id — because with `requireActor` deleted and a user holding nothing, the enumeration finds nothing, no primitive runs, and the function returns cleanly — if wrong, the actor refusal is proven only incidentally by whichever primitive happens to run first, and vanishes for exactly the user it matters least to catch.
+
+Ruling: run every full suite in the background logging to a file, never blocking inside the tool timeout — because a 10-minute timeout killed `yarn test` at 10:00 and produced no result at all, while three PMO pings went unanswered and slice 2 was reassigned — if wrong, the cost is not the wasted ten minutes but that the session goes silent and looks dead.
