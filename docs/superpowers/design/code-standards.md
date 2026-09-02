@@ -980,3 +980,6 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 ### 7.9l mutation harness ต้องพิสูจน์ว่า mutation ลงจริงและ suite รันจริง
 #40 TL-2: inject anchor ที่ไม่ตรง (`= [` vs `Object.freeze([`) = replace เงียบ; probe อ้าง symbol นอก scope = ReferenceError ตอน import → `Tests: 0 total` ซึ่งใต้ `grep ^Tests:` ดูเหมือน "จับได้" · กฎ: ทุก mutation row ต้อง (1) assert diff ไม่ว่าง (2) assert `Tests: N total` ของ run นั้น ≥ baseline − expected-failures (หรือ `Test Suites: 0 failed`) ก่อนนับว่า caught · `0 total` = harness พัง ไม่ใช่ finding (คู่กับ §7.9k)
+
+#### 7.14c partial gate ต้องรัน sweep suites เสมอ
+#80 gate รันเฉพาะ contract suites (§7.14 partial) → merge แล้ว `updateSettingsReturns` sweep (#65) แดงบน main (`endpoints/mailer.js:110/171` ทิ้ง return) · กฎ: partial gate ต้องเพิ่ม sweep ที่เดินทั้ง tree เสมอ — `updateSettingsReturns`, `routeGateSweep`, `apiRouteAuthSweep`, `managerAllowedFieldsDrift`, `providerDocIdCallSites` (ลิสต์ใน `.infi/sweeps.txt` ต่อไป)

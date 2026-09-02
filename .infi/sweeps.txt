@@ -1,0 +1,5 @@
+server/__tests__/models/updateSettingsReturns.test.js
+server/__tests__/security/authorization/routeGateSweep.test.js
+server/__tests__/security/authorization/apiRouteAuthSweep.test.js
+server/__tests__/endpoints/managerAllowedFieldsDrift.test.js
+server/__tests__/jobs/providerDocIdCallSites.test.js
