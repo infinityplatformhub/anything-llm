@@ -478,42 +478,58 @@ describe("V9 chat search: an edited chat is searched as it now reads", () => {
   // added later would pass the four tests above (they name the paths that exist
   // today) and still ship the bug, so this reads the model itself.
   test("no write path sets response without deriving response_text", async () => {
-    // The four tests above name the write paths that exist today; a fifth added
-    // later would pass all of them and still ship the bug. So read the model.
+    // The behaviour tests above name the write paths that exist today; a fifth
+    // added later would pass all of them and still ship the bug. So read the
+    // model itself.
+    //
+    // Split by the FUNCTION that wraps each write, not by a character window
+    // around the prisma call: upsert builds its payload a dozen lines above the
+    // call, so a fixed window starting at the call misses it entirely and a
+    // mutant that drops response_text from upsert survives (Techlead-1 NIT-1).
     const source = require("fs").readFileSync(
       require("path").join(__dirname, "../../../models/workspaceChats.js"),
       "utf8"
     );
 
-    // Split on the prisma write calls and look at what follows each one, rather
-    // than trying to balance braces with a regex -- a pattern that matches
-    // nothing would make this test vacuous, so the count is asserted below.
-    const writes = source
-      .split(/prisma\.workspace_chats\.(?=create|update|upsert)/)
-      .slice(1)
-      .map((chunk) => chunk.slice(0, 600));
-    expect(writes.length).toBeGreaterThan(0);
+    // Model methods are `name: async function (` / `name: function (` at one
+    // indent level; slicing between them gives each method's whole body.
+    const starts = [
+      ...source.matchAll(/^ {2}([A-Za-z_][A-Za-z0-9_]*): (?:async )?function/gm),
+    ];
+    expect(starts.length).toBeGreaterThan(5);
 
-    const offenders = writes
-      .filter((chunk) => /\bresponse:/.test(chunk))
+    const methods = starts.map((match, index) => ({
+      name: match[1],
+      body: source.slice(
+        match.index,
+        index + 1 < starts.length ? starts[index + 1].index : source.length
+      ),
+    }));
+
+    // Every method that performs a prisma write AND mentions `response` has to
+    // mention the derivation too, somewhere in that same method.
+    const writers = methods.filter(
+      ({ body }) =>
+        /prisma\.workspace_chats\.(create|update|upsert)/.test(body) &&
+        /\bresponse\b/.test(body)
+    );
+    // Guard the guard: a pattern that matches nothing would make this vacuous.
+    // new, _update, upsert, bulkCreate.
+    expect(writers.map(({ name }) => name).sort()).toEqual([
+      "_update",
+      "bulkCreate",
+      "new",
+      "upsert",
+    ]);
+
+    const offenders = writers
       .filter(
-        (chunk) =>
-          !/response_text|withResponseTextFrom|responseTextOf/.test(chunk)
-      );
+        ({ body }) =>
+          !/response_text|withResponseTextFrom|responseTextOf/.test(body)
+      )
+      .map(({ name }) => name);
 
     expect(offenders).toEqual([]);
-    // Guard the guard: if the model stops writing `response` anywhere, the
-    // filter above empties and this test would pass while checking nothing.
-    // Two write sites name `response` literally (new, upsert); the other two
-    // (_update, bulkCreate) hand their whole payload to withResponseTextFrom,
-    // so the literal never appears there.
-    const literalResponseWrites = writes.filter((chunk) =>
-      /\bresponse:/.test(chunk)
-    );
-    expect(literalResponseWrites.length).toBeGreaterThanOrEqual(2);
-    // And the derivation reaches the payload-shaped paths too.
-    expect(source).toMatch(/data: withResponseTextFrom\(data\)/);
-    expect(source).toMatch(/data: withResponseTextFrom\(chatData\)/);
   });
 
   test("an edit to a response whose text is not a string stores NULL, not a coerced value", async () => {
