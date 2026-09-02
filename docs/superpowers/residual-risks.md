@@ -164,3 +164,9 @@ Red once in full --runInBand run after #40 task 1 merge; green alone. Ordering d
 - Unquoted usernames rewritten by proxies/poolers are not covered; pg always quotes.
 - 14-digit ids (migration names) redacted as credit_card → #101.
 - collectDatabase strip vs URL_CREDENTIALS overlap; strip only load-bearing for non-parsable full-mask.
+
+## #49 residuals (embed session)
+- Rate-limit key is IP only; one caller's budget spans every embed it touches (self-inflicted, not cross-tenant).
+- EMBED_REQUIRE_ALLOWLIST presence-flag has no test (boolean-parse "fix" would fail open on =false).
+- malformed vs expired both 401; equality not pinned (embedMiddleware.js:329).
+- Old tokens invalid at deploy; flag default off so impact = one missed rotation.

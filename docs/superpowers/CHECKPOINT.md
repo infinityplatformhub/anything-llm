@@ -337,3 +337,5 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - User Q: §7.11 relaxation risk explained (dev misclassification: #94/#102 looked non-auth but had leaks/oracles) — recommend relax verdict step only, PMO classifies, TL pre-read stays. Awaiting เอา/ไม่เอา.
 - PMO note: `cd /tmp/wt-N && …` chains committed CHECKPOINT into the gate worktree twice; push rejected (non-ff) saved main. Docs commits use absolute main path only.
 - #49: TL-2 PASS 2c9ae1f0f (110/110, T2/T4c/T-abs/T-rot/T7/T8 red, route +1 only). All verdicts in; close/merge on Dev4's cross-stamp test SHA (regate contract only).
+- #49 4bb9dc97e merged 528bb3f99, closed (infi-run:gate-49-4bb9dc97e). QA-1 + TL-2 PASS; cross-stamp tests added. Residuals → residual-risks + #110. Carries S11b recon b514727b7 (earlier revert superseded). wt-49/g49 reaped. 76/110.
+- USER: §7.11 relaxed (เอา) — see code-standards §7.11a. PMO classifies risk; TL pre-read stays. Reject-lesson rule added to CLAUDE.md + §7.17.

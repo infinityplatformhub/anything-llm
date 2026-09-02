@@ -986,3 +986,14 @@ ruling "ลบ `Object.fromEntries` filter" → implementer เปลี่ย�
 
 #### 7.9f evidence — #84 f309f1247: source-scan comparison with unbounded search
 gate-equality test did `source.slice(at).match(/requirePermission/)` — deleting the DELETE route's middleware line made both routes resolve to the same `requirePermission` at line 764 (update-env's), so "equal" was trivially true. QA-3 proved it by running the extractor: `DELETE foundAtLine=764, POST foundAtLine=764`. Fixed by bounding the slice to the route's own registration block (c22939503). Rule: any source-scan that compares two sites must bound each search to its own block and assert a match exists inside that block.
+
+### §7.11a Risk tiers (2026-09-02, user ruling)
+PMO classifies at contract time. `auth` = touches auth/permission/schema/secrets or any unauthenticated surface (e.g. `/metrics`, CLI bundle): full §7.11. `plain` = gate PASS + Techlead pre-read, merge without waiting verdicts. Dev never self-classifies; #94 and #102 looked plain and were not.
+
+### §7.17 Reject-lesson log
+Every reviewer rejection names a class; PMO repeats it in the next dispatch to all devs. Log:
+- **Coincidental fixture** (#84 unbounded scan, #94 dotted host, #40 absent-id oracle, #49 both stamps move together): a test whose fixture happens to avoid the bug. Reviewer names the negative fixture in pre-read; dev proves red on it.
+- **Self-satisfying assertion** (#78, #94 F2, #40 F1): assertion true for a reason unrelated to the code under test. Every mutation must red a *named* test.
+- **Fail-open default** (#40 getWithUser(null)): missing id widens a filter. Guard before lookup, test that lookup is not called.
+- **Reuse ruling without reading** (#96): "reuse X" when X answers a different question. Techlead confirms structure before dispatch.
+- **Harness silence** (§7.9l, #40 `0 total`, TL-2 wrong path 76/76): a suite that never ran reports green. Always confirm the suite count moved.
