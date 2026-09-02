@@ -11,9 +11,7 @@
 // Every route using these still needs requirePermission for the access decision.
 
 const { SystemSettings } = require("../../models/systemSettings");
-const {
-  isConfirmedSingleUser,
-} = require("../authorization/actorResolver");
+const { isConfirmedSingleUser } = require("../authorization/actorResolver");
 
 /** Refuses unless the instance is in multi-user mode. */
 async function isMultiUserSetup(_request, response, next) {
@@ -49,7 +47,8 @@ async function isMultiUserSetup(_request, response, next) {
  * FINDING-1: the danger is not which answer is right, it is two answers.
  */
 async function isSingleUserMode(_request, response, next) {
-  if (!(await isConfirmedSingleUser())) return response.sendStatus(401).end();
+  if (!(await isConfirmedSingleUser()))
+    return response.status(401).json({ error: "Single-user mode required." });
   next();
 }
 

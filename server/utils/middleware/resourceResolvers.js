@@ -9,6 +9,31 @@
 const prisma = require("../prisma");
 
 const ORG_ID = 1;
+const REGISTRY_KEY = Symbol.for(
+  "anything-llm.authorization.resourceResolverRegistry"
+);
+// Symbol.for keeps identities consistent across jest.resetModules. This trades
+// isolation for module-instance consistency; it is test evidence, not a security
+// boundary. Freeze the binding so another module cannot replace the registry.
+if (!globalThis[REGISTRY_KEY]) {
+  Object.defineProperty(globalThis, REGISTRY_KEY, {
+    value: {
+      org: new WeakSet(),
+      workspace: new WeakSet(),
+      dynamic: new WeakSet(),
+    },
+    writable: false,
+    configurable: false,
+  });
+}
+const resolverRegistry = globalThis[REGISTRY_KEY];
+
+const isWorkspaceResolver = (resolver) =>
+  typeof resolver === "function" && resolverRegistry.workspace.has(resolver);
+const isOrgResolver = (resolver) =>
+  typeof resolver === "function" && resolverRegistry.org.has(resolver);
+const isDynamicResolver = (resolver) =>
+  typeof resolver === "function" && resolverRegistry.dynamic.has(resolver);
 
 /** The org itself — for actions with no narrower subject (user admin, settings). */
 const orgResource = async () => ({
@@ -53,20 +78,24 @@ const workspaceBySlug = async (request) => {
 };
 
 /** Workspace addressed by a numeric id parameter. */
-const workspaceByIdParam = (param) => async (request) => {
-  const id = Number(request.params?.[param]);
-  if (!Number.isInteger(id)) return null;
-  const workspace = await prisma.workspaces.findUnique({
-    where: { id },
-    select: { id: true },
-  });
-  if (!workspace) return null;
-  return {
-    type: "workspace",
-    id: String(workspace.id),
-    orgId: ORG_ID,
-    workspaceId: workspace.id,
+const workspaceByIdParam = (param) => {
+  const resolve = async (request) => {
+    const id = Number(request.params?.[param]);
+    if (!Number.isInteger(id)) return null;
+    const workspace = await prisma.workspaces.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!workspace) return null;
+    return {
+      type: "workspace",
+      id: String(workspace.id),
+      orgId: ORG_ID,
+      workspaceId: workspace.id,
+    };
   };
+  resolverRegistry.workspace.add(resolve);
+  return resolve;
 };
 
 /**
@@ -74,9 +103,8 @@ const workspaceByIdParam = (param) => async (request) => {
  * up by (id, user_id) alone, so a user kept write access to their own chats after
  * losing access to the workspace holding them (S-3).
  */
-const chatByIdParam =
-  (param = "id") =>
-  async (request) => {
+const chatByIdParam = (param = "id") => {
+  const resolve = async (request) => {
     const id = Number(request.params?.[param]);
     if (!Number.isInteger(id)) return null;
     const chat = await prisma.workspace_chats.findUnique({
@@ -91,6 +119,9 @@ const chatByIdParam =
       workspaceId: chat.workspaceId,
     };
   };
+  resolverRegistry.workspace.add(resolve);
+  return resolve;
+};
 
 /**
  * A document addressed by its docpath in the request body. The workspaceId comes
@@ -117,9 +148,8 @@ const documentInWorkspaceBySlug = async (request) => {
 };
 
 /** Prompt-history row addressed by :id; workspace scope comes from the stored row. */
-const promptHistoryByIdParam =
-  (param = "id") =>
-  async (request) => {
+const promptHistoryByIdParam = (param = "id") => {
+  const resolve = async (request) => {
     const id = Number(request.params?.[param]);
     if (!Number.isInteger(id)) return null;
     const history = await prisma.prompt_history.findUnique({
@@ -134,11 +164,13 @@ const promptHistoryByIdParam =
       workspaceId: history.workspaceId,
     };
   };
+  resolverRegistry.workspace.add(resolve);
+  return resolve;
+};
 
 /** Memory addressed by :memoryId; workspace scope comes from the stored row. */
-const memoryByIdParam =
-  (param = "memoryId") =>
-  async (request) => {
+const memoryByIdParam = (param = "memoryId") => {
+  const resolve = async (request) => {
     const id = Number(request.params?.[param]);
     if (!Number.isInteger(id)) return null;
     const memory = await prisma.memories.findUnique({
@@ -153,6 +185,9 @@ const memoryByIdParam =
       workspaceId: memory.workspaceId,
     };
   };
+  resolverRegistry.workspace.add(resolve);
+  return resolve;
+};
 
 /** Document addressed by docPath in the body and constrained to the stored workspace. */
 const watchedDocumentInWorkspaceBySlug = async (request) => {
@@ -202,6 +237,15 @@ const grantScopeFromBody = async (request) => {
   };
 };
 
+[
+  workspaceBySlug,
+  workspaceByBodySlug,
+  documentInWorkspaceBySlug,
+  watchedDocumentInWorkspaceBySlug,
+].forEach((resolver) => resolverRegistry.workspace.add(resolver));
+resolverRegistry.org.add(orgResource);
+resolverRegistry.dynamic.add(grantScopeFromBody);
+
 module.exports = {
   orgResource,
   workspaceBySlug,
@@ -213,4 +257,7 @@ module.exports = {
   memoryByIdParam,
   watchedDocumentInWorkspaceBySlug,
   grantScopeFromBody,
+  isWorkspaceResolver,
+  isOrgResolver,
+  isDynamicResolver,
 };

@@ -15,6 +15,21 @@ const {
 } = require("../authorization/errors");
 
 const engine = new DatabaseAuthorizationEngine();
+const PERMISSION_GATES_KEY = Symbol.for(
+  "anything-llm.authorization.permissionGates"
+);
+// Shared identity survives jest.resetModules; this is test evidence, not a
+// security boundary. Freeze the binding so it cannot be replaced wholesale.
+if (!globalThis[PERMISSION_GATES_KEY]) {
+  Object.defineProperty(globalThis, PERMISSION_GATES_KEY, {
+    value: new WeakSet(),
+    writable: false,
+    configurable: false,
+  });
+}
+const permissionGates = globalThis[PERMISSION_GATES_KEY];
+const isPermissionGate = (middleware) =>
+  typeof middleware === "function" && permissionGates.has(middleware);
 
 // Reasons that must not confirm a resource exists. A caller who may not read a
 // workspace must not learn the difference between "no such workspace" and
@@ -37,7 +52,11 @@ const PUBLICLY_EXISTENT = new Set(["org"]);
  *   MUST derive workspaceId from the stored row, never from the request body (B-3).
  */
 function requirePermission(action, resolveResource) {
-  const middleware = async function permissionRequired(request, response, next) {
+  const middleware = async function permissionRequired(
+    request,
+    response,
+    next
+  ) {
     try {
       const actor = await resolveActor(request, response);
       const resource = await resolveResource(request, response);
@@ -60,11 +79,15 @@ function requirePermission(action, resolveResource) {
         ? response.status(404).json({ error: "Not found." })
         : response.status(403).json({ error: "Forbidden." });
     } catch (error) {
-      if (error instanceof AuthorizationDeniedError) return response.sendStatus(403);
+      if (error instanceof AuthorizationDeniedError)
+        return response.sendStatus(403);
       // A policy-store outage must read as an outage, never as "no permissions" —
       // callers fail closed, but operators see a 503 they can act on.
       if (error instanceof AuthorizationUnavailableError) {
-        console.error("[authorization] policy store unavailable:", error.message);
+        console.error(
+          "[authorization] policy store unavailable:",
+          error.message
+        );
         return response.sendStatus(503);
       }
       if (error instanceof AuthorizationContractError) {
@@ -80,7 +103,13 @@ function requirePermission(action, resolveResource) {
   // caught at runtime by the engine; this lets a test catch it before shipping.
   middleware.action = action;
   middleware.resolveResource = resolveResource;
+  permissionGates.add(middleware);
   return middleware;
 }
 
-module.exports = { requirePermission, NON_DISCLOSING, PUBLICLY_EXISTENT };
+module.exports = {
+  requirePermission,
+  isPermissionGate,
+  NON_DISCLOSING,
+  PUBLICLY_EXISTENT,
+};

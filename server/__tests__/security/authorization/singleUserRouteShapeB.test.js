@@ -81,10 +81,18 @@ beforeAll(async () => {
   const { makeJWT } = require("../../../utils/http");
 
   const admin = await prisma.users.create({
-    data: { username: `sb-admin-${dbSuffix}`, password: "unused", role: "admin" },
+    data: {
+      username: `sb-admin-${dbSuffix}`,
+      password: "unused",
+      role: "admin",
+    },
   });
   const victim = await prisma.users.create({
-    data: { username: `sb-victim-${dbSuffix}`, password: "unused", role: "default" },
+    data: {
+      username: `sb-victim-${dbSuffix}`,
+      password: "unused",
+      role: "default",
+    },
   });
   // Shape (b): the setting says single-user, the user table disagrees.
   await prisma.system_settings.upsert({
@@ -106,7 +114,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   const built = buildRouter();
-  app._router = built.app._router;
+  app.use(built.app._router);
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -126,7 +134,9 @@ afterAll(async () => {
     const root = new PrismaClient({
       datasources: { db: { url: baseDatabaseUrl } },
     });
-    await root.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`);
+    await root.$executeRawUnsafe(
+      `DROP DATABASE IF EXISTS "${testDb}" WITH (FORCE)`
+    );
     await root.$disconnect();
   }
 }, 60_000);
@@ -153,7 +163,7 @@ describe("issue 52: single-user-only routes refuse an impersonated session in sh
       const [method, routePath] = signature.split(" ");
       // Params filled with a value that no row will match: a 404 is a fine
       // answer, a 2xx is not.
-      const url = routePath.replace(/:[A-Za-z]+/g, "999999");
+      const url = `/api${routePath.replace(/:[A-Za-z]+/g, "999999")}`;
       const response = await fetch(`${baseUrl}${url}`, {
         method,
         headers: {
@@ -162,6 +172,13 @@ describe("issue 52: single-user-only routes refuse an impersonated session in sh
         },
         ...(method === "GET" ? {} : { body: JSON.stringify({}) }),
       });
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        reached.push(
+          `${signature} → ${response.status} ${contentType || "no content-type"}`
+        );
+        continue;
+      }
       if (response.status >= 200 && response.status < 300)
         reached.push(`${signature} → ${response.status}`);
     }

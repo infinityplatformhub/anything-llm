@@ -6,7 +6,10 @@
 // Some endpoint modules resolve STORAGE_DIR at require time.
 process.env.STORAGE_DIR = process.env.STORAGE_DIR || require("os").tmpdir();
 
-const { validApiKey } = require("../../utils/middleware/validApiKey");
+const {
+  validApiKey,
+  isApiKeyGuard,
+} = require("../../utils/middleware/validApiKey");
 
 const ENDPOINT_MODULES = {
   "api/admin": require("../../endpoints/api/admin").apiAdminEndpoints,
@@ -79,9 +82,7 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
   it("every route carries validApiKey middleware", () => {
     const unguarded = routes.filter(
       (route) =>
-        !route.middlewares.some(
-          (middleware) => middleware.isApiKeyGuard === true
-        )
+        !route.middlewares.some((middleware) => isApiKeyGuard(middleware))
     );
     expect(
       unguarded.map((r) => `${r.method.toUpperCase()} ${r.path} (${r.module})`)
@@ -114,9 +115,7 @@ describe("developer API route auth sweep (P0-4 PR-0b)", () => {
     const envDump = routes.find((r) => r.path === "/v1/system/env-dump");
     expect(envDump).toBeDefined();
     expect(
-      envDump.middlewares.some(
-        (middleware) => middleware.isApiKeyGuard === true
-      )
+      envDump.middlewares.some((middleware) => isApiKeyGuard(middleware))
     ).toBe(true);
   });
 });
