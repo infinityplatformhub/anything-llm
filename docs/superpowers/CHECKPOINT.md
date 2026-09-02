@@ -343,3 +343,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #96 dadac7b3c gate running at /tmp/wt-96 (g96); QA-3 + TL-1 dispatched (auth). S4a = #113 (auth, depends #96); Dev3 Q3/Q4 (emailVerified exemption scope; "Lark wins" = re-point identity_links = takeover shape) → user.
 - #112 O2b recon merged; tier: preflight route = auth (unauth only while no user, else system.write; §7.1d both states), UI/backfill = plain.
 - #104: real defect updateENV.js:1687 drops persistCredential return (JWT rotate not persisted; sessions die on restart, 200). Option 1 reverses #80 → TL-1 blast-radius confirm pending. #97 closed (A), lesson #109.
+- #96 dadac7b3c: gate PASS at /tmp/wt-96 (g96) — check-local, engine 40/40, authz dir 647 passed, sweeps. Ledger normalized /tmp/ledger-96.norm.md. Waiting QA-3 + TL-1 (auth).
+- #102 fbef8c6bf: QA-2 PASS 78/78 (M4 dev gap → Dev5 adds reject→+0 in O2b SHA). Waiting TL-2 W1–W11.
+- #104 ruling (TL-1 confirmed): (1) updateENV:1687 accumulate persistCredential error, no break, fix #80 comment; (2) enable-multi-user throw → rollback. RF-1..3. Tier auth, reviewers TL-1 + QA-3.
+- #112: preflight ceiling stands (unauth only while no user); backfill already exists (markOnboarded) → tests only; GET /setup-complete unauth full settings → separate auth issue.
