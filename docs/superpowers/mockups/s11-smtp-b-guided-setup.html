@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>S11 mockup B — SMTP guided setup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-5xl mx-auto p-6 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-semibold">S11 mockup B — guided setup, then a status page</h1>
+    <p class="text-sm text-slate-600 mt-1">
+      Throwaway mockup for step 1.5. The difference from A: <b>you cannot save a
+      configuration that has never sent a message.</b> Step 2 has to pass before
+      step 3 unlocks, so “saved” and “working” are the same state.
+      Try it — the test fails until a host is filled in.
+    </p>
+  </header>
+
+  <!-- ─── stepper ────────────────────────────────────────────────────── -->
+  <ol id="steps" class="flex items-center gap-2 text-sm"></ol>
+
+  <!-- ─── step 1: connection ─────────────────────────────────────────── -->
+  <section id="s1" class="bg-white rounded-xl shadow-sm border border-slate-200">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold">1 · Connection</h2>
+    </div>
+    <div class="p-5 space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">SMTP host</label>
+          <input id="host" type="text" placeholder="smtp.example.com"
+            class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Port</label>
+          <input id="port" type="text" value="587"
+            class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Username</label>
+          <input id="user" type="text" placeholder="apikey"
+            class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Password</label>
+          <input id="pass" type="password" placeholder="••••••••••••"
+            class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+          <p class="text-xs text-slate-500 mt-1">Encrypted at rest; never shown again.</p>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Encryption</label>
+        <select id="tls"
+          class="w-full md:w-64 h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none">
+          <option value="starttls">STARTTLS (recommended)</option>
+          <option value="tls">Implicit TLS</option>
+          <option value="none">None — plaintext</option>
+        </select>
+        <div id="tls-warn"
+          class="hidden mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>Plaintext.</b> Password and invite links cross the network in the clear.
+          Refused unless <span class="font-mono text-xs">SMTP_ALLOW_INSECURE</span> is set.
+        </div>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-slate-200">
+      <button id="next1"
+        class="h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        Continue
+      </button>
+    </div>
+  </section>
+
+  <!-- ─── step 2: verify ─────────────────────────────────────────────── -->
+  <section id="s2" class="bg-white rounded-xl shadow-sm border border-slate-200 hidden">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold">2 · Send a real message</h2>
+      <p class="text-sm text-slate-600 mt-0.5">
+        This must succeed before the configuration can be saved. A mail server that
+        was never exercised is a broken invite discovered by whoever it was sent to.
+      </p>
+    </div>
+    <div class="p-5 space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Send a test to</label>
+        <input id="testto" type="text" placeholder="you@example.com"
+          class="w-full md:w-96 h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+      </div>
+      <div id="result"></div>
+    </div>
+    <div class="px-5 py-4 border-t border-slate-200 flex gap-3">
+      <button id="run"
+        class="h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        Send test
+      </button>
+      <button id="back2"
+        class="h-9 px-4 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50">
+        Back
+      </button>
+    </div>
+  </section>
+
+  <!-- ─── step 3: live ───────────────────────────────────────────────── -->
+  <section id="s3" class="bg-white rounded-xl shadow-sm border border-slate-200 hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold">Email delivery is on</h2>
+        <p class="text-sm text-slate-600 mt-0.5">
+          <span class="font-mono text-xs" id="summary"></span>
+        </p>
+      </div>
+      <button id="reconf"
+        class="h-9 px-4 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50">
+        Reconfigure
+      </button>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-left text-slate-500 border-b border-slate-200">
+        <tr>
+          <th class="px-5 py-2 font-medium">When</th>
+          <th class="px-5 py-2 font-medium">Recipient</th>
+          <th class="px-5 py-2 font-medium">Template</th>
+          <th class="px-5 py-2 font-medium">Status</th>
+        </tr>
+      </thead>
+      <tbody id="log" class="divide-y divide-slate-100"></tbody>
+    </table>
+    <div class="px-5 py-3 border-t border-slate-200 text-xs text-slate-500">
+      No subjects, bodies or invite links are stored — an invite link in a log is a
+      working credential. <b>queued</b> means the server accepted the message; SMTP
+      cannot confirm a mailbox received it, so nothing here says “delivered”.
+    </div>
+  </section>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let step = 1, verified = false;
+
+function drawSteps() {
+  const labels = ["Connection", "Verify", "Live"];
+  $("steps").innerHTML = labels.map((l, i) => {
+    const n = i + 1;
+    const done = n < step, now = n === step;
+    const cls = done ? "bg-green-100 text-green-800"
+              : now  ? "bg-slate-900 text-white"
+                     : "bg-slate-200 text-slate-500";
+    return `<li class="flex items-center gap-2">
+      <span class="px-2.5 py-1 rounded-full text-xs font-medium ${cls}">${done ? "✓" : n} ${l}</span>
+      ${n < 3 ? '<span class="text-slate-300">→</span>' : ""}
+    </li>`;
+  }).join("");
+  $("s1").classList.toggle("hidden", step !== 1);
+  $("s2").classList.toggle("hidden", step !== 2);
+  $("s3").classList.toggle("hidden", step !== 3);
+}
+
+$("tls").addEventListener("change", e =>
+  $("tls-warn").classList.toggle("hidden", e.target.value !== "none"));
+
+$("next1").addEventListener("click", () => { step = 2; verified = false; drawSteps(); });
+$("back2").addEventListener("click", () => { step = 1; drawSteps(); });
+$("reconf").addEventListener("click", () => { step = 1; drawSteps(); });
+
+$("run").addEventListener("click", () => {
+  $("result").innerHTML = '<p class="text-sm text-slate-500">Connecting…</p>';
+  setTimeout(() => {
+    if (!$("host").value.trim()) {
+      $("result").innerHTML = `
+        <div class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <b>Connection failed.</b> No host configured — nothing to connect to.
+          The configuration was not saved.
+        </div>`;
+      return;
+    }
+    verified = true;
+    $("result").innerHTML = `
+      <div class="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+        <b>Accepted by the server.</b> Check the inbox to confirm it arrived — SMTP
+        reports that the next hop took the message, not that a mailbox received it.
+      </div>
+      <button id="finish"
+        class="mt-3 h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        Save and turn on
+      </button>`;
+    $("finish").addEventListener("click", () => {
+      const host = $("host").value.trim(), port = $("port").value.trim();
+      $("summary").textContent = `${host}:${port} · ${$("tls").value}`;
+      step = 3; drawSteps();
+    });
+  }, 700);
+});
+
+const rows = [
+  { t: "just now",      to: "you@example.com",   tpl: "test",   s: "queued" },
+  { t: "2 minutes ago", to: "priya@example.com", tpl: "invite", s: "queued" },
+  { t: "3 hours ago",   to: "dev@bad-host.test", tpl: "invite", s: "retrying" },
+  { t: "yesterday",     to: "old@example.com",   tpl: "invite", s: "failed" },
+];
+const chip = {
+  queued:   "bg-sky-100 text-sky-800",
+  retrying: "bg-amber-100 text-amber-900",
+  failed:   "bg-red-100 text-red-800",
+};
+$("log").innerHTML = rows.map(r => `
+  <tr>
+    <td class="px-5 py-2.5 text-slate-500">${r.t}</td>
+    <td class="px-5 py-2.5 font-mono text-xs">${r.to}</td>
+    <td class="px-5 py-2.5">${r.tpl}</td>
+    <td class="px-5 py-2.5">
+      <span class="px-2 py-0.5 rounded-full text-xs font-medium ${chip[r.s]}">${r.s}</span>
+    </td>
+  </tr>`).join("");
+
+drawSteps();
+</script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>S11 mockup — invite by email</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="max-w-4xl mx-auto p-6 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-semibold">S11 mockup — invite by email</h1>
+    <p class="text-sm text-slate-600 mt-1">
+      Throwaway mockup for step 1.5. Goes with either settings mockup (A or B).
+      The rule it exists to show: <b>the copy-link flow is unchanged when no address
+      is given.</b> Try both — leave the address blank, then fill one in. Also try
+      turning email delivery off.
+    </p>
+  </header>
+
+  <div class="flex items-center gap-3 text-sm">
+    <label class="flex items-center gap-2">
+      <input id="smtp" type="checkbox" checked class="h-4 w-4 rounded border-slate-300" />
+      <span>Email delivery configured</span>
+    </label>
+    <span class="text-slate-400">·</span>
+    <span class="text-slate-500">toggle to see the modal when SMTP is off</span>
+  </div>
+
+  <!-- ─── modal ──────────────────────────────────────────────────────── -->
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200 max-w-lg">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold">Create new invite</h2>
+    </div>
+
+    <div id="body" class="p-5 space-y-5">
+      <div>
+        <label class="block text-sm font-medium mb-1">
+          Email address <span class="font-normal text-slate-500">— optional</span>
+        </label>
+        <input id="email" type="text" placeholder="new.person@example.com"
+          class="w-full h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none" />
+        <p id="hint" class="text-xs text-slate-500 mt-1"></p>
+        <p id="err" class="text-xs text-red-600 mt-1 hidden"></p>
+      </div>
+
+      <div id="expiry-wrap">
+        <label class="block text-sm font-medium mb-1">Link expires</label>
+        <select id="expiry"
+          class="w-full md:w-56 h-9 px-3 text-sm rounded-lg border border-slate-300 focus:border-sky-500 outline-none">
+          <option value="7">7 days</option>
+          <option value="1">24 hours</option>
+          <option value="30">30 days</option>
+        </select>
+        <p id="expiry-hint" class="text-xs text-slate-500 mt-1"></p>
+      </div>
+
+      <div>
+        <div class="text-sm font-medium mb-1">Auto-add to workspaces</div>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" class="h-4 w-4 rounded border-slate-300" checked />
+            <span>Engineering</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+            <span>Legal</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-5 py-4 border-t border-slate-200 flex justify-end gap-3">
+      <button id="cancel"
+        class="h-9 px-4 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50">
+        Cancel
+      </button>
+      <button id="create"
+        class="h-9 px-4 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        Create invite
+      </button>
+    </div>
+  </section>
+
+  <!-- ─── result ─────────────────────────────────────────────────────── -->
+  <section id="done" class="bg-white rounded-xl shadow-sm border border-slate-200 max-w-lg hidden">
+    <div class="px-5 py-4 border-b border-slate-200">
+      <h2 class="font-semibold" id="done-title"></h2>
+    </div>
+    <div class="p-5 space-y-4" id="done-body"></div>
+  </section>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function refresh() {
+  const on = $("smtp").checked;
+  $("email").disabled = !on;
+  $("email").className = "w-full h-9 px-3 text-sm rounded-lg border outline-none " +
+    (on ? "border-slate-300 focus:border-sky-500" : "border-slate-200 bg-slate-50 text-slate-400");
+  $("hint").textContent = on
+    ? "Leave blank to create a link you copy and send yourself."
+    : "Email delivery is not configured, so invites are copy-link only.";
+  updateExpiry();
+}
+
+function updateExpiry() {
+  const mailed = $("smtp").checked && $("email").value.trim() !== "";
+  $("expiry-wrap").className = mailed ? "" : "opacity-50";
+  $("expiry").disabled = !mailed;
+  $("expiry-hint").textContent = mailed
+    ? "A link sent to an inbox has to expire — it stays in mail history, and nobody can say where it ends up."
+    : "Copy-link invites do not expire, matching today's behaviour.";
+}
+
+$("smtp").addEventListener("change", refresh);
+$("email").addEventListener("input", updateExpiry);
+
+$("cancel").addEventListener("click", () => {
+  $("done").classList.add("hidden");
+  $("email").value = "";
+  refresh();
+});
+
+$("create").addEventListener("click", () => {
+  const raw = $("email").value.trim();
+  const mailed = $("smtp").checked && raw !== "";
+
+  if (raw !== "" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw)) {
+    $("err").textContent = "That does not look like an email address.";
+    $("err").classList.remove("hidden");
+    return;
+  }
+  $("err").classList.add("hidden");
+
+  const code = "apw-inv-" + Math.random().toString(36).slice(2, 10) + "…";
+  $("done").classList.remove("hidden");
+
+  if (mailed) {
+    const days = $("expiry").value;
+    $("done-title").textContent = "Invite sent";
+    $("done-body").innerHTML = `
+      <p class="text-sm">
+        Queued to <span class="font-mono text-xs">${raw}</span>. It expires in
+        ${days === "1" ? "24 hours" : days + " days"}.
+      </p>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        The link is not shown here. It was sent to that address and nowhere else —
+        displaying it again would put a working credential on this screen, in a
+        screenshot, and in whatever the browser caches.
+      </div>
+      <p class="text-xs text-slate-500">
+        Delivery status appears on the email settings page. “Queued” means the mail
+        server accepted it, not that it reached the inbox.
+      </p>`;
+  } else {
+    $("done-title").textContent = "Invite created";
+    $("done-body").innerHTML = `
+      <p class="text-sm">Copy this link and send it yourself.</p>
+      <div class="flex gap-2">
+        <input type="text" disabled value="https://workspace.example.com/accept-invite/${code}"
+          class="flex-1 h-9 px-3 text-sm rounded-lg border border-slate-300 bg-slate-50 font-mono text-xs" />
+        <button class="h-9 px-3 text-sm rounded-lg border border-slate-300 hover:bg-slate-50">Copy</button>
+      </div>
+      <p class="text-xs text-slate-500">
+        Unchanged from today: no address was given, so nothing was emailed and the
+        link does not expire.
+      </p>`;
+  }
+});
+
+refresh();
+</script>
+</body>
+</html>
