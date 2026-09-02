@@ -41,6 +41,13 @@ const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
 
+const {
+  InviteMailError,
+  requestedAddress,
+  assertChannelReady,
+  sendInvite,
+} = require("../utils/notifications/inviteMailer");
+
 const authorizationEngine = new DatabaseAuthorizationEngine();
 
 function adminEndpoints(app) {
@@ -274,15 +281,45 @@ function adminEndpoints(app) {
       try {
         const user = await userFromSession(request, response);
         const body = reqBody(request);
+
+        // S11a (#80), ruling D. Everything that can refuse happens BEFORE the
+        // invite exists: a created-but-unsent invite is a code an admin cannot
+        // see and did not ask for.
+        const address = requestedAddress(body);
+        if (address) {
+          // Minting a link the admin hands over themselves is one capability;
+          // sending mail from this deployment's domain to an address of the
+          // caller's choosing is another, and `invite.create` alone does not
+          // grant it.
+          const mayMail = await authorizationEngine.authorize({
+            actor: response.locals.actor,
+            action: "user.manage",
+            resource: await orgResource(),
+          });
+          if (!mayMail.allowed)
+            return response.status(403).json({
+              invite: null,
+              error:
+                "Sending an invitation by email requires user management permission. Create the invite without an address to share the link yourself.",
+            });
+          // Refuses when the channel is off or unverified, so the 4xx arrives
+          // instead of a 200 that invited nobody.
+          await assertChannelReady();
+        }
+
         const { invite, error } = await Invite.create({
           createdByUserId: user.id,
           workspaceIds: body?.workspaceIds || [],
+          email: address,
         });
 
         // #71: the invite's ID, never its CODE. The code redeems an account
         // through a public route and never expires, and audit rows are built to
         // be exported — so a code here is a live credential leaving the system.
         // The id says which invite without carrying anything redeemable.
+        // The audit row records THAT an invite was mailed, never to whom: an
+        // address is personal data, and #71's rule is that the allowlist does
+        // not grow to accommodate a new call site.
         await emitAuditEvent(
           "invite_created",
           {
@@ -291,8 +328,36 @@ function adminEndpoints(app) {
           },
           response.locals?.user?.id
         );
+
+        if (address && invite) {
+          try {
+            await sendInvite({
+              invite,
+              address,
+              appUrl: `${request.protocol}://${request.get("host")}`,
+            });
+          } catch (mailError) {
+            // The invite exists and its code is in the response, so the admin is
+            // not stranded — but they must be told the mail did not go, or they
+            // will wait for someone who was never contacted. Only the message,
+            // never the error object: a transport error can carry the
+            // credential.
+            console.error("[invite-mail] send failed:", mailError.message);
+            return response.status(200).json({
+              invite,
+              error:
+                "The invite was created but the email could not be sent. Share the link directly.",
+            });
+          }
+        }
+
         response.status(200).json({ invite, error });
       } catch (e) {
+        // A refusal the caller can act on — bad address, channel off, not
+        // verified — carries its own status. Anything else is ours, and stays a
+        // 500 with nothing echoed back.
+        if (e instanceof InviteMailError)
+          return response.status(e.status).json({ invite: null, error: e.message });
         console.error(e);
         response.sendStatus(500).end();
       }

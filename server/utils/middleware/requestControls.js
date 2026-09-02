@@ -160,6 +160,29 @@ const actorKey = (request) => {
   // an unauthenticated flood still meets a limit rather than sharing one global
   // bucket.
   if (!bearer) return digest(`actor:anon:${canonicalIp(request, true)}`);
+
+  // TL-1 OBS-2: for a SESSION token, bucket by the user it names rather than by
+  // the token string. Sessions are reissued — on login, on refresh — so keying
+  // on the token hands the same person a fresh budget every time they sign in,
+  // which is the one case a per-actor limit is supposed to cover.
+  //
+  // DECODED, NOT VERIFIED, and that is safe here precisely because this is a
+  // rate-limit bucket and nothing else: a forged `id` picks which bucket to
+  // spend from, never what the caller may do. `validatedRequest` verifies the
+  // signature further down the chain, so a forged token is rejected there —
+  // it just cannot dodge a limit by rewriting a claim, since spending someone
+  // else's bucket is a worse deal for the attacker than spending their own.
+  //
+  // API keys are opaque strings with no claims, so they keep hashing whole.
+  const [, payload] = bearer.split(".");
+  if (payload) {
+    try {
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+      if (claims?.id) return digest(`actor:user:${claims.id}`);
+    } catch {
+      // Not a JWT, or not one we can read. Fall through to the raw credential.
+    }
+  }
   return digest(`actor:${bearer}`);
 };
 

@@ -362,6 +362,23 @@ function apiAdminEndpoints(app) {
       }
 
       const body = reqBody(request);
+
+      // S11a (#80), ruling D: this route does NOT mail invites, and says so
+      // rather than ignoring the field.
+      //
+      // Mailing requires `user.manage`, and the API-key scope vocabulary has no
+      // such scope — it stops at `user.read` and `user.write`. So a key cannot
+      // demonstrate the permission the rule demands, and there is no honest way
+      // to gate it here. Silently dropping the address would be worse than
+      // refusing: the caller would get a 200 and reasonably believe someone was
+      // invited when nothing was sent and nobody is coming.
+      if (body?.email !== undefined && body?.email !== null && body?.email !== "")
+        return response.status(400).json({
+          invite: null,
+          error:
+            "This endpoint creates invite links only. Sending an invitation by email requires user management permission, which an API key cannot hold; use the admin UI.",
+        });
+
       const { invite, error } = await Invite.create({
         workspaceIds: body?.workspaceIds ?? [],
       });

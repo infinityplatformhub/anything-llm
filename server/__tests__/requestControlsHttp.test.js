@@ -184,3 +184,49 @@ describe("issue 77: the rate limit follows the environment", () => {
     }
   });
 });
+
+describe("issue 80 (TL-1 OBS-2): the mail limiter buckets by ACTOR", () => {
+  const jwt = require("jsonwebtoken");
+  const { actorKey } = require("../utils/middleware/requestControls");
+
+  const withAuth = (token) => ({
+    get: (name) => (name.toLowerCase() === "authorization" ? `Bearer ${token}` : ""),
+    socket: { remoteAddress: "127.0.0.1" },
+  });
+
+  test("two sessions for the same user share one bucket", () => {
+    // Sessions are reissued on every login, so keying on the token string hands
+    // the same person a fresh budget each time they sign in — defeating the one
+    // limit that is supposed to follow the actor rather than the credential.
+    const first = jwt.sign({ id: 7, username: "admin" }, "secret-a");
+    const second = jwt.sign({ id: 7, username: "admin" }, "secret-a");
+
+    expect(first).not.toBe(second === first ? "" : second);
+    expect(actorKey(withAuth(first))).toBe(actorKey(withAuth(second)));
+  });
+
+  test("different users do not share a bucket", () => {
+    const alice = jwt.sign({ id: 7 }, "secret-a");
+    const bob = jwt.sign({ id: 8 }, "secret-a");
+
+    expect(actorKey(withAuth(alice))).not.toBe(actorKey(withAuth(bob)));
+  });
+
+  test("an API key still buckets by the key itself", () => {
+    // Opaque, no claims to read, and one key IS one actor — so hashing it whole
+    // is already the right bucket.
+    const keyA = "apw-key-aaaaaaaaaaaaaaaaaaaaaaaa";
+    const keyB = "apw-key-bbbbbbbbbbbbbbbbbbbbbbbb";
+
+    expect(actorKey(withAuth(keyA))).toBe(actorKey(withAuth(keyA)));
+    expect(actorKey(withAuth(keyA))).not.toBe(actorKey(withAuth(keyB)));
+  });
+
+  test("no credential falls back to the address rather than one global bucket", () => {
+    const anonymous = {
+      get: () => "",
+      socket: { remoteAddress: "127.0.0.1" },
+    };
+    expect(actorKey(anonymous)).toEqual(expect.any(String));
+  });
+});

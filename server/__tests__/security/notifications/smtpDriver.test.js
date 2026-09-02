@@ -433,6 +433,24 @@ describe("issue 80 (TL-1 F1): plaintext and untrusted certs are separate consent
     expect(driver.transportOptions().tls?.rejectUnauthorized).toBe(false);
   });
 
+  test("TL-1 OBS-1: the plaintext setting alone leaves TLS options untouched", async () => {
+    // The mapping, asserted at the boundary the settings feed. If
+    // `smtp_allow_insecure` ever reached the TLS decision again, this is what
+    // catches it — the two consents are separate rows and separate fields.
+    const driver = new SmtpNotificationDriver({
+      host: "smtp",
+      port: 587,
+      secure: false,
+      allowInsecureTransport: true,
+      allowUntrustedCertificate: false,
+      username: "mailer",
+      password: SMTP_PASSWORD,
+      fromAddress: "no-reply@example.com",
+    });
+
+    expect(driver.transportOptions().tls).toBeUndefined();
+  });
+
   test("by default neither is accepted", async () => {
     const driver = new SmtpNotificationDriver({
       host: "smtp",

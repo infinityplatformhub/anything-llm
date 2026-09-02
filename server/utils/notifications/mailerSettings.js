@@ -20,6 +20,11 @@ const SETTING_KEYS = [
   "smtp_port",
   "smtp_secure",
   "smtp_allow_insecure",
+  // TL-1 OBS-1: a SEPARATE consent from `smtp_allow_insecure`, and in the hash
+  // like every other connection field — turning off certificate validation
+  // changes what the configuration means, so a proof taken before it was turned
+  // off no longer describes the configuration.
+  "smtp_allow_untrusted_cert",
   "smtp_username",
   "smtp_from_address",
   "smtp_from_name",
