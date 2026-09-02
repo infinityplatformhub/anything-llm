@@ -24,6 +24,9 @@ const {
   queryParams,
 } = require("../utils/http");
 const {
+  narrowManagerSystemPreferences,
+} = require("../utils/managerSystemPreferences");
+const {
   loginAccountRateLimit,
   loginIpRateLimit,
 } = require("../utils/middleware/requestControls");
@@ -738,7 +741,7 @@ function systemEndpoints(app) {
     // #52: flipping the instance into multi-user mode creates the first admin.
     // It carried session auth alone; settings.write is what every other route
     // that changes instance configuration asks for.
-    [validatedRequest, requirePermission("settings.write", orgResource)],
+    [validatedRequest, requirePermission("system.write", orgResource)],
     async (request, response) => {
       try {
         if (response.locals.multiUserMode) {
@@ -1008,9 +1011,15 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const { defaultSystemPrompt } = reqBody(request);
-        const result = await SystemSettings.updateSettings({
-          default_system_prompt: defaultSystemPrompt,
-        });
+        // #78 then #72: whether this actor may write the key at all is settled
+        // before the model is asked whether the key exists.
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { default_system_prompt: defaultSystemPrompt }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
+        const result = await SystemSettings.updateSettings(narrowed.updates);
         if (["unknown_keys", "protected_keys"].includes(result.code))
           return response.status(400).json(result);
         if (!result.success)
@@ -1086,6 +1095,12 @@ function systemEndpoints(app) {
       }
 
       try {
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { logo_filename: request.file.originalname }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
         const newFilename = await renameLogoFile(request.file.originalname);
         const existingLogoFilename = await SystemSettings.currentLogoFilename();
         await removeCustomLogo(existingLogoFilename);
@@ -1123,6 +1138,12 @@ function systemEndpoints(app) {
     [validatedRequest, requirePermission("settings.write", orgResource)],
     async (_request, response) => {
       try {
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { logo_filename: LOGO_FILENAME }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
         const currentLogoFilename = await SystemSettings.currentLogoFilename();
         await removeCustomLogo(currentLogoFilename);
         const { success, error } = await SystemSettings._updateSettings({

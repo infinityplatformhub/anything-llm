@@ -5,6 +5,9 @@ const { SystemSettings } = require("../../models/systemSettings");
 const { Telemetry } = require("../../models/telemetry");
 const { reqBody } = require("../../utils/http");
 const {
+  narrowManagerSystemPreferences,
+} = require("../../utils/managerSystemPreferences");
+const {
   featureFlagEnabled,
 } = require("../../utils/middleware/featureFlagEnabled");
 const {
@@ -26,6 +29,12 @@ function liveSyncEndpoints(app) {
     async (request, response) => {
       try {
         const { updatedStatus = false } = reqBody(request);
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { experimental_live_file_sync: updatedStatus }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
         const newStatus =
           SystemSettings.validations.experimental_live_file_sync(updatedStatus);
         const currentStatus =

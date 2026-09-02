@@ -43,6 +43,11 @@ const {
 
 const authorizationEngine = new DatabaseAuthorizationEngine();
 
+const {
+  managerAllowedFields,
+  narrowManagerSystemPreferences,
+} = require("../utils/managerSystemPreferences");
+
 function adminEndpoints(app) {
   if (!app) return;
 
@@ -464,16 +469,6 @@ function adminEndpoints(app) {
           "meta_page_favicon",
         ];
 
-        // Managers can only read a limited set of settings.
-        // These match the ManagerRoute pages in the frontend.
-        const managerAllowedFields = [
-          "custom_app_name",
-          "footer_data",
-          "support_email",
-          "meta_page_title",
-          "meta_page_favicon",
-        ];
-
         const unrestrictedSettings = await authorizationEngine.authorize({
           actor: response.locals.actor,
           action: "system.write",
@@ -588,30 +583,14 @@ function adminEndpoints(app) {
         const user = await userFromSession(request, response);
         let updates = reqBody(request);
 
-        // Callers without broad system write access can update manager fields only.
-        const unrestrictedSettings = await authorizationEngine.authorize({
-          actor: response.locals.actor,
-          action: "system.write",
-          resource: await orgResource(),
-        });
-        if (!unrestrictedSettings.allowed) {
-          // Unknown keys stay silent here to avoid exposing valid setting names to
-          // callers without broad system write access.
-          const managerAllowedFields = [
-            "custom_app_name",
-            "footer_data",
-            "support_email",
-            "meta_page_title",
-            "meta_page_favicon",
-          ];
-          const filteredUpdates = {};
-          for (const key of Object.keys(updates)) {
-            if (managerAllowedFields.includes(key)) {
-              filteredUpdates[key] = updates[key];
-            }
-          }
-          updates = filteredUpdates;
-        }
+        // Decide authority before updateSettings validates the setting vocabulary.
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          updates
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
+        updates = narrowed.updates;
 
         const result = await SystemSettings.updateSettings(updates);
         const status = result.success

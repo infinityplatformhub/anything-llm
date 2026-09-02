@@ -30,7 +30,10 @@ execFileSync(
 );
 
 jest.mock("../../utils/logger", () => () => {});
-jest.mock("../../utils/boot", () => ({ bootHTTP: jest.fn(), bootSSL: jest.fn() }));
+jest.mock("../../utils/boot", () => ({
+  bootHTTP: jest.fn(),
+  bootSSL: jest.fn(),
+}));
 jest.mock("../../utils/boot/patchSdkTimeouts", () => jest.fn());
 jest.mock("../../utils/AiProviders/modelMap", () => ({
   MODEL_MAP: { get: jest.fn(() => null) },
@@ -59,18 +62,36 @@ const { SystemSettings } = require("../../models/systemSettings");
 const { ApiKey } = require("../../models/apiKeys");
 const { makeJWT } = require("../../utils/http");
 const repository = require("../../utils/authorization/policyRepository");
-const { SERVICE_PRINCIPALS } = require("../../utils/authorization/actorResolver");
+const {
+  SERVICE_PRINCIPALS,
+} = require("../../utils/authorization/actorResolver");
 
 let admin;
 let manager;
 let apiSecret;
-const auth = () => `Bearer ${makeJWT({ id: admin.id, username: admin.username })}`;
+const auth = () =>
+  `Bearer ${makeJWT({ id: admin.id, username: admin.username })}`;
 const managerAuth = () =>
   `Bearer ${makeJWT({ id: manager.id, username: manager.username })}`;
 const routes = [
-  ["admin route", "/api/admin/system-preferences", () => auth(), (body) => body],
-  ["v1 route", "/api/v1/admin/preferences", () => `Bearer ${apiSecret}`, (body) => body],
-  ["community hub route", "/api/community-hub/settings", () => auth(), (body) => body],
+  [
+    "admin route",
+    "/api/admin/system-preferences",
+    () => auth(),
+    (body) => body,
+  ],
+  [
+    "v1 route",
+    "/api/v1/admin/preferences",
+    () => `Bearer ${apiSecret}`,
+    (body) => body,
+  ],
+  [
+    "community hub route",
+    "/api/community-hub/settings",
+    () => auth(),
+    (body) => body,
+  ],
   [
     "default system prompt route",
     "/api/system/default-system-prompt",
@@ -233,11 +254,9 @@ describe("unknown settings keys over HTTP", () => {
   });
 
   test("community hub writes its supported API key", async () => {
-    const response = await update(
-      "/api/community-hub/settings",
-      () => auth(),
-      { hub_api_key: "community-key" }
-    );
+    const response = await update("/api/community-hub/settings", () => auth(), {
+      hub_api_key: "community-key",
+    });
 
     expect(response.status).toBe(200);
     await expect(
@@ -245,7 +264,7 @@ describe("unknown settings keys over HTTP", () => {
     ).resolves.toMatchObject({ value: "community-key" });
   });
 
-  test("manager unknown keys stay silent and write no rows", async () => {
+  test("manager unknown keys are refused without changing rows", async () => {
     const before = await snapshotSettings();
 
     const response = await update(
@@ -254,7 +273,12 @@ describe("unknown settings keys over HTTP", () => {
       { not_a_real_key: "x" }
     );
 
-    expect(response.status).toBe(200);
+    // Issue 78 replaced the silent 200 with the model's explicit unknown-key refusal.
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: "unknown_keys",
+      unknownKeys: ["not_a_real_key"],
+    });
     expect(await snapshotSettings()).toBe(before);
   });
 

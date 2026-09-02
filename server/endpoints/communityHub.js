@@ -3,6 +3,9 @@ const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { requirePermission } = require("../utils/middleware/requirePermission");
 const { orgResource } = require("../utils/middleware/resourceResolvers");
 const { reqBody } = require("../utils/http");
+const {
+  narrowManagerSystemPreferences,
+} = require("../utils/managerSystemPreferences");
 const { CommunityHub } = require("../models/communityHub");
 const {
   communityHubDownloadsEnabled,
@@ -33,8 +36,16 @@ function communityHubEndpoints(app) {
     [validatedRequest, requirePermission("settings.write", orgResource)],
     async (request, response) => {
       try {
-        const data = reqBody(request);
-        const result = await SystemSettings.updateSettings(data);
+        // #78 then #72, in that order: authority before vocabulary. A manager may
+        // not write these keys at all, so that is settled before we ask whether the
+        // names are ones the model knows.
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          reqBody(request)
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
+        const result = await SystemSettings.updateSettings(narrowed.updates);
         if (["unknown_keys", "protected_keys"].includes(result.code))
           return response.status(400).json(result);
         if (!result.success) throw new Error(result.error);
