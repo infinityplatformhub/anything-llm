@@ -181,7 +181,7 @@ purpose; a doctor that reports twenty things trains the operator to skim it.
 | check | how | blocking? |
 |---|---|---|
 | PostgreSQL reachable | `pg.Client.connect()` on `DATABASE_URL` | yes |
-| server version ≥ 13 | `SHOW server_version_num` | yes — `pg_input_is_valid` (used by #61's migration) landed in 16, and the migration is not conditional |
+| server version ≥ 16 | `SHOW server_version_num` | yes — `pg_input_is_valid` (used by #61's migration, `20260902100000`) landed in PostgreSQL 16, and the migration is not conditional, so 15 fails at `migrate deploy` with a syntax-level error that names nothing about versions |
 | `CREATE EXTENSION` permitted | `SELECT rolsuper OR pg_has_role(current_user,'pg_create_extension','member')` is not reliable across versions; the honest probe is `CREATE EXTENSION IF NOT EXISTS <x>` inside a transaction that is **rolled back** | yes, for `vector` and `pg_trgm` |
 | extension available in the image | `SELECT 1 FROM pg_available_extensions WHERE name=$1` | yes — distinguishes "no permission" from "not installed on this server", which have completely different remedies |
 | `LC_CTYPE` produces Thai trigrams | `SELECT datctype FROM pg_database WHERE datname=current_database()` + `array_length(public.show_trgm('ประวัติ'),1)` | **no** — ruling Q4. Reuses `server/utils/chatSearch/localeSupport.js` from #61 rather than restating the probe |
