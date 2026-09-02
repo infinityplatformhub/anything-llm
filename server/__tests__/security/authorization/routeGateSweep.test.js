@@ -27,9 +27,115 @@ process.env.JWT_SECRET =
 
 const fs = require("fs");
 const path = require("path");
-const express = require("express");
+const { parse } = require("hermes-eslint");
+const { buildRouter } = require("../../../utils/test/routeGateSweepHelper");
+const { isApiKeyGuard } = require("../../../utils/middleware/validApiKey");
+const {
+  isPermissionGate,
+} = require("../../../utils/middleware/requirePermission");
+const {
+  isOrgResolver,
+  isWorkspaceResolver,
+  isDynamicResolver,
+} = require("../../../utils/middleware/resourceResolvers");
 
 const SERVER_DIR = path.join(__dirname, "../../..");
+
+function mountedRouteLayers(stack) {
+  return (stack || []).flatMap((layer) => [
+    ...(layer.route ? [layer] : []),
+    ...mountedRouteLayers(layer.handle?.stack),
+  ]);
+}
+
+const EXPECTED_SKIPPED_REGISTRARS = new Set(["agentWebsocket"]);
+
+function collectImports(ast) {
+  const imports = [];
+  const endpointLiterals = [];
+
+  const visit = (node, parent, grandparent, greatGrandparent) => {
+    if (!node || typeof node !== "object") return;
+    const literal =
+      node.type === "Literal" && typeof node.value === "string"
+        ? node.value
+        : node.type === "TemplateLiteral" && node.expressions.length === 0
+          ? node.quasis[0]?.value.cooked
+          : null;
+    if (literal?.startsWith("./endpoints/")) {
+      endpointLiterals.push({ node, parent, grandparent, greatGrandparent });
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value))
+        value.forEach((child) => visit(child, node, parent, grandparent));
+      else if (value && typeof value === "object")
+        visit(value, node, parent, grandparent);
+    }
+  };
+  visit(ast, null, null);
+
+  for (const {
+    node,
+    parent: call,
+    grandparent: declaration,
+    greatGrandparent: variableDeclaration,
+  } of endpointLiterals) {
+    const bareRequire =
+      call?.type === "CallExpression" &&
+      call.callee?.type === "Identifier" &&
+      call.callee.name === "require" &&
+      call.arguments[0] === node &&
+      node.type === "Literal";
+    const topLevel =
+      bareRequire &&
+      declaration?.type === "VariableDeclarator" &&
+      declaration.init === call &&
+      variableDeclaration?.type === "VariableDeclaration" &&
+      ast.body.includes(variableDeclaration);
+    const properties =
+      declaration?.id?.type === "ObjectPattern"
+        ? declaration.id.properties
+        : null;
+    const unaliased = properties?.every(
+      (property) =>
+        property.key.type === "Identifier" &&
+        property.value.type === "Identifier" &&
+        property.key.name === property.value.name
+    );
+    if (!topLevel || !unaliased) {
+      throw new Error(
+        `Unsupported endpoint import at line ${node.loc?.start.line ?? "unknown"}: use top-level unaliased destructuring, e.g. const { exampleEndpoints } = require("./endpoints/example"); if this string is not a module path, move it out of index.js or declare an exception`
+      );
+    }
+    imports.push(
+      ...properties.map((property) => ({ local: property.value.name }))
+    );
+  }
+  return imports;
+}
+
+function directRegistrarCalls(ast, imports) {
+  const calls = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "CallExpression") {
+      const local =
+        node.callee?.type === "Identifier"
+          ? node.callee.name
+          : node.callee?.type === "MemberExpression" &&
+              node.callee.object?.type === "Identifier"
+            ? node.callee.object.name
+            : null;
+      if (imports.some((entry) => entry.local === local)) calls.push(local);
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === "object") visit(value);
+    }
+  };
+  visit(ast);
+  return calls;
+}
 
 /**
  * Single-user-only routes. These configure a personal instance; in multi-user
@@ -68,49 +174,303 @@ const SELF_SERVICE_ROUTES = new Set([
   "POST /web-push/subscribe",
 ]);
 
-function buildRouter() {
-  const app = express();
-  const indexSource = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
-  const registrations = indexSource.match(/^[a-zA-Z]+\(apiRouter\);$/gm) ?? [];
-  const skipped = [];
+// Routes outside the org/workspace permission model. Every entry names why its
+// own authentication boundary is intentional; unknown mutating routes fail.
+const INTENTIONAL_NON_PERMISSION_MUTATIONS = new Map([
+  ...[...SINGLE_USER_ONLY_ROUTES].map((route) => [
+    route,
+    "single-user deployment only; isSingleUserMode or handler shape refuses multi-user requests",
+  ]),
+  ...[...SELF_SERVICE_ROUTES].map((route) => [
+    route,
+    "self-service on caller account; requireSelfSession constrains identity",
+  ]),
+  ["POST /request-token", "unauthenticated login ingress"],
+  ["POST /system/recover-account", "unauthenticated account-recovery ingress"],
+  ["POST /system/reset-password", "recovery-token completion ingress"],
+  ["POST /invite/:code", "invite-code acceptance ingress"],
+  ["POST /mobile/register", "mobile registration token authenticates request"],
+  [
+    "POST /mobile/send/:command",
+    "registered mobile-device token authenticates request",
+  ],
+  ["POST /sso/saml/acs", "SAML identity-provider callback ingress"],
+  [
+    "POST /embed/:embedId/stream-chat",
+    "public embed configuration authenticates embed access",
+  ],
+  [
+    "DELETE /embed/:embedId/:sessionId",
+    "embed session access middleware owns authorization",
+  ],
+  [
+    "DELETE /browser-extension/disconnect",
+    "browser extension key middleware authenticates request",
+  ],
+  [
+    "POST /browser-extension/embed-content",
+    "browser extension key middleware authenticates request",
+  ],
+  [
+    "POST /browser-extension/upload-content",
+    "browser extension key middleware authenticates request",
+  ],
+]);
 
-  for (const line of registrations) {
-    const fnName = line.replace("(apiRouter);", "");
-    const requireMatch = indexSource.match(
-      new RegExp(`\\{[^}]*\\b${fnName}\\b[^}]*\\}\\s*=\\s*require\\("([^"]+)"\\)`)
-    );
-    if (!requireMatch) {
-      skipped.push(fnName);
-      continue;
-    }
-    try {
-      require(path.join(SERVER_DIR, requireMatch[1]))[fnName](app);
-    } catch (error) {
-      // agentWebsocket needs express-ws; it registers no plain HTTP routes.
-      skipped.push(`${fnName}: ${error.message}`);
-    }
-  }
-  return { app, registrations, skipped };
-}
-
-module.exports = { SINGLE_USER_ONLY_ROUTES, SELF_SERVICE_ROUTES, buildRouter };
+module.exports = {
+  SINGLE_USER_ONLY_ROUTES,
+  SELF_SERVICE_ROUTES,
+  buildRouter,
+};
 
 describe("issue 52: every session-authenticated mutating route asks something", () => {
   const { app, registrations, skipped } = buildRouter();
+  const mountedRoutesAtTestLoad = mountedRouteLayers(app._router?.stack);
+  const { terminalNotFound } = require("../../../index");
+  const wildcardRoutes = mountedRoutesAtTestLoad.filter(
+    (layer) => layer.route.path === "*"
+  );
+  const terminalWildcard = wildcardRoutes.find((layer) =>
+    layer.route.stack.every(({ handle }) => handle === terminalNotFound)
+  );
 
   test("the sweep actually mounted the router (guards the guard)", () => {
     // Without this, a sweep that silently mounted nothing would report zero
     // ungated routes and pass forever — the failure mode the §7.9 rulings are
     // about, in the one test whose whole job is to catch omissions.
-    expect(registrations.length).toBeGreaterThan(20);
-    expect(app._router.stack.filter((l) => l.route).length).toBeGreaterThan(100);
-    // Only the websocket registration may fail to mount.
-    expect(skipped.length).toBeLessThanOrEqual(1);
+    expect(registrations.length).toBeGreaterThanOrEqual(31);
+    // 309 counts each route layer once. A 356-line dump expands app.all("*")
+    // into 35 method handlers; both measure the same mounted router tree.
+    expect(mountedRoutesAtTestLoad).toHaveLength(309);
+    const directRoutes = (app._router?.stack || []).filter(
+      (layer) => layer.route
+    );
+    const nestedRoutes = (app._router?.stack || []).flatMap((layer) =>
+      layer.handle?.stack ? mountedRouteLayers(layer.handle.stack) : []
+    );
+    expect(directRoutes.length).toBeGreaterThan(0);
+    expect(nestedRoutes.length).toBeGreaterThan(300);
+    expect(
+      skipped.filter(
+        (entry) => !EXPECTED_SKIPPED_REGISTRARS.has(entry.split(":")[0])
+      )
+    ).toEqual([]);
+  });
+
+  test("every imported endpoint registrar appears in the production list", () => {
+    const source = fs.readFileSync(path.join(SERVER_DIR, "index.js"), "utf8");
+    const ast = parse(source, { sourceType: "script" });
+    const imports = collectImports(ast);
+    const listed = new Set(
+      registrations.map((entry) =>
+        typeof entry === "function" ? entry.name : entry.register.name
+      )
+    );
+
+    expect(imports.length).toBe(listed.size);
+    expect(
+      imports.filter(
+        ({ local }) =>
+          !listed.has(local) && !EXPECTED_SKIPPED_REGISTRARS.has(local)
+      )
+    ).toEqual([]);
+    expect(directRegistrarCalls(ast, imports)).toEqual([]);
+  });
+
+  test.each([
+    {
+      name: "normal top-level destructuring",
+      source: 'const { normalEndpoints } = require("./endpoints/normal");',
+      expected: [{ local: "normalEndpoints" }],
+      reason: null,
+    },
+    {
+      name: "non-endpoint path",
+      source: 'const { helper } = require("./utils/helper");',
+      expected: [],
+      reason: null,
+    },
+    {
+      name: "alias",
+      source:
+        '\nconst { hiddenEndpoints: probe } = require("./endpoints/hidden");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "second declarator",
+      source:
+        'const harmless = 1, { probeEndpoints } = require("./endpoints/probe");',
+      expected: [{ local: "probeEndpoints" }],
+      reason: null,
+    },
+    {
+      name: "module.require",
+      source:
+        '\nconst { probeEndpoints } = module.require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "computed module require",
+      source:
+        '\nconst { probeEndpoints } = module["require"]("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "aliased require function",
+      source:
+        '\nconst req = require; const { probeEndpoints } = req("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "single-part template literal",
+      source: "\nconst { probeEndpoints } = require(`./endpoints/probe`);",
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "ESM import",
+      source: '\nimport { probeEndpoints } from "./endpoints/probe";',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "member access",
+      source: '\nconst probe = require("./endpoints/probe").mountProbeRoutes;',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "namespace/default binding",
+      source: '\nconst ep = require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "array binding",
+      source: '\nconst [probe] = require("./endpoints/probe");',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "nested block",
+      source:
+        '\nif (true) { const { probeEndpoints } = require("./endpoints/probe"); }',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "assignment outside a declaration",
+      source: '\n({ probeEndpoints } = require("./endpoints/probe"));',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "computed require",
+      source: '\nconst { probeEndpoints } = require("./endpoints/" + name);',
+      reason: "Unsupported endpoint import at line 2",
+    },
+    {
+      name: "indirect require",
+      source:
+        '\nconst path = "./endpoints/probe"; const { probeEndpoints } = require(path);',
+      reason: "Unsupported endpoint import at line 2",
+    },
+  ])("collectImports: $name", ({ source, expected, reason }) => {
+    const collect = () =>
+      collectImports(
+        parse(source, {
+          sourceType: "script",
+          enableExperimentalComponentSyntax: true,
+        })
+      );
+    if (reason) expect(collect).toThrow(reason);
+    else expect(collect()).toEqual(expected);
+  });
+
+  test("direct endpoint calls are formatting and binding independent", () => {
+    const ast = parse(
+      `const { hiddenEndpoints } = require("./endpoints/hidden");
+       hiddenEndpoints (apiRouter);`,
+      { sourceType: "script" }
+    );
+    expect(directRegistrarCalls(ast, collectImports(ast))).toEqual([
+      "hiddenEndpoints",
+    ]);
+  });
+
+  test("mutating means every method except GET/HEAD; catch-all 404 is excluded", () => {
+    expect(
+      ["post", "put", "patch", "delete", "options"].every(
+        (method) => method !== "get" && method !== "head"
+      )
+    ).toBe(true);
+    expect(
+      mountedRoutesAtTestLoad.some((layer) => layer.route.path === "*")
+    ).toBe(true);
+  });
+
+  test("the only wildcard is the final terminal 404 handler", () => {
+    expect(wildcardRoutes).toHaveLength(1);
+    expect(terminalWildcard).toBe(mountedRoutesAtTestLoad.at(-1));
+    expect(terminalWildcard.route.stack.length).toBeGreaterThan(1);
+    expect(
+      terminalWildcard.route.stack.every(
+        ({ handle }) => handle === terminalNotFound
+      )
+    ).toBe(true);
+  });
+
+  test("mounted route snapshot stays stable through immediate timers", async () => {
+    const before = mountedRouteLayers(app._router?.stack);
+    await new Promise(setImmediate);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const after = mountedRouteLayers(app._router?.stack);
+    expect(after).toEqual(before);
+  });
+
+  test("every mounted mutating route has identity-verified authorization", () => {
+    // Snapshot at assertion execution. Routes mounted asynchronously after this
+    // point are outside this synchronous startup contract and remain residual risk.
+    const routesAtAssertion = mountedRouteLayers(app._router?.stack);
+    const ungated = [];
+    for (const layer of routesAtAssertion) {
+      // Exempt only the one terminal 404 by mounted layer identity. Earlier
+      // wildcards pass through normal authorization checks.
+      if (layer === terminalWildcard) continue;
+      const methods = Object.keys(layer.route.methods).filter(
+        (method) => method !== "get" && method !== "head"
+      );
+      for (const method of methods) {
+        const signature = `${method.toUpperCase()} ${layer.route.path}`;
+        const gated = layer.route.stack.some(
+          ({ handle }) =>
+            isApiKeyGuard(handle) ||
+            (isPermissionGate(handle) &&
+              [isOrgResolver, isWorkspaceResolver, isDynamicResolver].some(
+                (classify) => classify(handle.resolveResource)
+              ))
+        );
+        if (!gated && !INTENTIONAL_NON_PERMISSION_MUTATIONS.has(signature)) {
+          ungated.push(signature);
+        }
+      }
+    }
+    expect(ungated).toEqual([]);
+    for (const [signature, reason] of INTENTIONAL_NON_PERMISSION_MUTATIONS) {
+      expect(reason.length).toBeGreaterThan(10);
+      const matches = routesAtAssertion.filter((layer) =>
+        Object.keys(layer.route.methods).some(
+          (method) =>
+            `${method.toUpperCase()} ${layer.route.path}` === signature
+        )
+      );
+      // One signature exempts exactly one mounted layer; collisions never inherit
+      // another route's reason.
+      expect(matches).toHaveLength(1);
+    }
+  });
+
+  test("production endpoint registration list is immutable", () => {
+    expect(Object.isFrozen(registrations)).toBe(true);
+    expect(() => registrations.push(() => {})).toThrow(TypeError);
   });
 
   test("no mutating route carries validatedRequest alone", () => {
     const ungated = [];
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       const methods = Object.keys(layer.route.methods).filter(
         (m) => m !== "get" && m !== "head"
@@ -132,11 +492,65 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     expect(ungated).toEqual([]);
   });
 
+  test("every mutating developer route carries validApiKey", () => {
+    const ungated = [];
+    for (const layer of mountedRoutesAtTestLoad) {
+      if (!layer.route || !String(layer.route.path).startsWith("/v1/"))
+        continue;
+      const methods = Object.keys(layer.route.methods).filter(
+        (method) => method !== "get" && method !== "head"
+      );
+      if (methods.length === 0) continue;
+
+      const guarded = layer.route.stack.some((handler) =>
+        isApiKeyGuard(handler.handle)
+      );
+      if (!guarded) {
+        ungated.push(`${methods[0].toUpperCase()} ${layer.route.path}`);
+      }
+    }
+    expect(ungated).toEqual([]);
+  });
+
+  test("permission gate metadata cannot impersonate requirePermission", () => {
+    const fakeGate = Object.assign((_request, _response, next) => next(), {
+      action: "settings.write",
+      resolveResource: () => null,
+    });
+    expect(isPermissionGate(fakeGate)).toBe(false);
+    for (const value of [undefined, null, "gate", 1]) {
+      expect(isPermissionGate(value)).toBe(false);
+    }
+    const key = Symbol.for("anything-llm.authorization.permissionGates");
+    const registry = globalThis[key];
+    Reflect.defineProperty(globalThis, key, { value: new WeakSet() });
+    expect(globalThis[key]).toBe(registry);
+  });
+
+  test("API guard metadata cannot impersonate validApiKey", () => {
+    const fakeGuard = Object.assign((_request, _response, next) => next(), {
+      isApiKeyGuard: true,
+    });
+    expect(isApiKeyGuard(fakeGuard)).toBe(false);
+  });
+
+  test("API guard registry rejects invalid input and replacement", () => {
+    for (const value of [undefined, null, "guard", 1]) {
+      expect(isApiKeyGuard(value)).toBe(false);
+    }
+    const key = Symbol.for("anything-llm.authorization.apiKeyGuards");
+    const registry = globalThis[key];
+    expect(() =>
+      Reflect.defineProperty(globalThis, key, { value: new WeakSet() })
+    ).not.toThrow();
+    expect(globalThis[key]).toBe(registry);
+  });
+
   test("the self-service routes really carry requireSelfSession", () => {
     // An allowlist entry alone would let someone remove the middleware and
     // stay green — the list would excuse the very route it names.
     const bySignature = new Map();
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const method of Object.keys(layer.route.methods)) {
         bySignature.set(
@@ -159,9 +573,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // The engine now refuses this at runtime (AuthorizationContractError), which
     // is the enforcement. This is the second layer: it names the offending route
     // at test time instead of leaving it to a 500 in production.
-    const {
-      ACTION_SCOPES,
-    } = require("../../../prisma/seeds/permissions");
+    const { ACTION_SCOPES } = require("../../../prisma/seeds/permissions");
     const orgScoped = Object.entries(ACTION_SCOPES)
       .filter(([, scope]) => scope === "org")
       .map(([action]) => action);
@@ -169,7 +581,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
 
     const violations = [];
     let checked = 0;
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         const action = handler.handle?.action;
@@ -216,7 +628,7 @@ describe("issue 52: every session-authenticated mutating route asks something", 
     // route under a /workspace prefix. A grep-built expectation would have
     // asserted routes that are not there.
     const chatSendRoutes = [];
-    for (const layer of app._router.stack) {
+    for (const layer of mountedRoutesAtTestLoad) {
       if (!layer.route) continue;
       for (const handler of layer.route.stack) {
         if (handler.handle?.action !== "chat.send") continue;
@@ -257,7 +669,9 @@ describe("issue 52: every session-authenticated mutating route asks something", 
       expect(index).toBeGreaterThan(-1);
       const body = sources.slice(index, index + 1200);
       expect(
-        /isSingleUserMode|multiUserMode\(response\)|locals\.multiUserMode/.test(body)
+        /isSingleUserMode|multiUserMode\(response\)|locals\.multiUserMode/.test(
+          body
+        )
       ).toBe(true);
     }
   });

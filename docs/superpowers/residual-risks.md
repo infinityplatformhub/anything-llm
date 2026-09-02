@@ -148,3 +148,6 @@ Until then: any change to `utils/doctor/index.js` touching required extensions o
 
 ## #88 — telemetry labels read VECTOR_DB raw (8 sites in endpoints/)
 Data-quality only: `Chroma` vs `chroma` split aggregate counts. None selects a provider or gates anything. `endpoints/utils.js:25` is a metrics response (operator sees own spelling — arguably preferable). No test drives `connect()` to success (needs live engines in CI).
+
+## #40 task 1 — route-gate sweep limits
+Async mounts beyond immediate/timer window are outside the contract (R-2 covers setImmediate + setTimeout 0 only); relies on Express `_router.stack` internals; allowlist entries carry reasons but are not in the identity registry; R-2 detects *change* not *gatelessness* on late mounts (NIT-2 follow-up). `sendStatus(401)` still at system.js:1159 + 7 sites in api/admin — non-mutating, outside SINGLE_USER_ONLY_ROUTES.

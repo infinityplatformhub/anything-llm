@@ -2,6 +2,7 @@
 
 Base: `8d25b3bb` (approof/main, after #53 merged) · mockup `cf7ed8ad`
 (`docs/superpowers/mockups/frontend-authz-capabilities.html`, blob `2a30aa21`) — user confirmed.
+Approved mockup blob SHA: `2a30aa217f4dee61f3bde67056ea0a720ca5f379`
 Contract: issue #40 comment `#issuecomment-5505480941`, state `.infi/task-40.env`.
 
 Out of scope, tracked as **#66 (#40b)**: workspace-scoped UI sites.
@@ -45,14 +46,14 @@ Tests, all five required — the first two are the ruling, the last three stop i
 3. both lists `length > 0`
 4. every member of both lists exists in the seed vocabulary (`ALL_ACTIONS`) — catches typos, which
    would otherwise surface as a silently-false capability rather than an error
-5. every member of `ORG_CAPABILITIES` has at least one `requirePermission(<action>, orgResource)`
-   gate in `server/endpoints/` — this is what makes `workspace.create`'s admission a rule rather
-   than an exception. Scan the endpoint tree; do not hardcode a list.
+5. every member of `ORG_CAPABILITIES` has at least one mounted route carrying that action at an
+   org resource — this is what makes `workspace.create`'s admission a rule rather than an exception
+6. every member of `WORKSPACE_CAPABILITIES` has at least one mounted route carrying that action at a
+   workspace-bearing resource — the counterpart to assertion 5
+7. both capability lists equal the approved mockup lists, whose blob SHA is pinned above
 
-6. **every member of `WORKSPACE_CAPABILITIES` has at least one `requirePermission` gate at a
-   workspace-bearing resolver** — the counterpart to assertion 5. Its absence in the first draft is
-   exactly how `document.update` and `document.search` got in unnoticed. Prove red by re-adding
-   `document.update`.
+Assertions 5 and 6 walk the mounted Express router and inspect `requirePermission` metadata. They do
+not scan endpoint source: comments, dead files, and call-like text are not authorization wiring.
 
 Tests 5 and 6 are the ones that rot into tautologies, and 5 already did once: a purely lexical scan
 went green when both live gates were deleted and replaced by a commented-out

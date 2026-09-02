@@ -259,3 +259,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #84: QA-2 probe RED-proven on main (4/14 red); counts on main 214 keys / 92 secret (declared flag). Waiting Dev1 SHA after rebase.
 - #40 task 1 final 6038e1179 (text-only over 30bd41698): gate PASS — check-local, contract 3 suites 82/82 exact, sweeps (updateSettingsReturns, drift, apiRouteAuthSweep) green; result bound. Verdicts: TL-1 PASS, TL-2 PASS, QA-2 PASS (stand — diff excludes router walk); waiting QA-3 blocker re-probe + TL-2 ก/ข/ค on 30bd41698 → close/merge → NIT-2 follow-up → task 2.
 - #49 rulings sent (no session table, flag kept, widget out of scope = upstream submodule → separate issue, old client-minted ids refused when flag on, unique (embed_id, session_id)).
+
+## 2026-09-02 — #40 task 1 merged (issue open for tasks 2/3)
+- 6038e1179: gate PASS (82/82 exact + sweeps), TL-1/TL-2/QA-2/QA-3 PASS (QA-3 on 30bd41698 after SPA-fallback fix). 14 bypasses found, all by running. Ledger from f40 (126 rulings). Residual recorded. Next: NIT-2 follow-up → task 2 capabilities endpoint.
+- #90 O5a /metrics 7fe628cd7 declared (18 tests RED-first, related 464, prom-client 15.1.3, label names+values frozen, doctor metrics_exposure warn). Gating; QA-3/TL-2 dispatched. Residual: counters not wired to call sites (→ O5b/next), no real Prometheus scrape test.
