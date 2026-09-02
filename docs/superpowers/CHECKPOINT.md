@@ -690,3 +690,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #134 Dev3: impl drafted, RF-1..7 not written, ETA 60-90 min, mutants before push. Two structural rulings (orgId INTEGER no widen; enumerateDirectory in directoryDiff.js) sent to TL-1 for confirmation.
 - #121 Dev1: pinged 21:15, no reply yet; local branch still e3fbcf775.
 - #134 TL-1: both Dev3 rulings accepted. Condition: docblock says enumerateDirectory calls driver; T7 widened to pin no concrete driver import (driver as argument only). Relayed to Dev3.
+- #121 Dev1 21:22: all fixes done (mock gap EXIT=0/107, F-A 4 caps + literal 11-entry test 23 passed, F-B, F-C, M7 mutation red, ledger). Confirming suite on fresh DB pr121b. ETA SHA 21:35. Lesson taken: log to file not `| tail`.
