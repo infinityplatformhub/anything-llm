@@ -368,3 +368,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #112 TL-1 accepted correction; residual: fresh install with DB down → preflight 403 by design (use CLI doctor); RF-1 split into DB-down fixture + in-process transition fixture. Forwarded to Dev5.
 - #111 rebased → 41109efd9: regate PASS (check-local, frontend 8/8, server guard 6/6, sweeps 63/63) at /tmp/wt-111 (g111); ledger-111 missing → Dev4 committing → close/merge (plain, TL-2 pre-read done). #115 opened (loadStoredCredentials inside listen(); 97 secret keys absent during boot window; auth tier).
 - #40 task 3 bbac19502 (plain): gate at /tmp/wt-40t3 (g40t3) — check-local, sweeps 63/63, ledger 138; contract rerun (find pattern miss). TL-1 pre-read requested → merge on PASS.
+- #40 task 3 bbac19502: contract 32/32 confirmed (earlier empty = cwd drift). Waiting TL-1 pre-read → merge (plain).
+- #114 TL-2 pre-read: 92 fields, 22 raw passthrough (12 internal host/path), frontend reads 20; tier-1 unauth 6 fields (MultiUserMode, RequiresAuth, SimpleSSO×3, SSOProviders), tier-2 auth 13, tier-3 drop 72 (dev verifies each). RF R1–R7 (sorted allowlist toEqual, real internal-host env fixture, drift, positive control). Queue → Dev1 after #104.
+- Post-merge after #96: log not created (background job likely still waiting on prior run); recheck.
