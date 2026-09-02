@@ -266,3 +266,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 hotfix c6b56093: gate PASS (137/137 incl. sweep), TL-1 PASS; waiting QA-3 → merge (clears main's 1 red).
 - #84 8bcc62ce: gate PASS (7/7 + #72/#78); QA-2 + TL-1 reviewing.
 - #84 8bcc62ce: TL-1 PASS + FINDING-1 (DELETE /system/credential/:envKey still settings.write — same threat, destructive half). Ruling: fold into #84, one more commit + paired tests. QA-2 running. Residual: 214 keys = 92 secret / 92 non / 30 url.
+
+## 2026-09-02 — #80 hotfix c6b56093 merged
+- gate PASS (137/137 incl. sweeps), TL-1 PASS (no NIT), QA-3 PASS. Clears main's sole red (updateSettingsReturns). Includes 5 follow-ups. Split-state residual (no cross-table transaction) stands.
