@@ -1198,3 +1198,4 @@ Every reviewer rejection names a class; PMO repeats it in the next dispatch to a
 - **#135 (TL-2): mutant runs need a fresh database each.** Reused DB across mutants reported 6/5 reds where the true discriminator is exactly 1; partial mutants leave rows behind.
 - **#138 (TL-2): report WHICH assertion failed, not how many.** Under M7C RF-7 went red at a setup line (pausedAfter 0), not its assertion; a fixture whose setup depends on the code under test reds for the wrong reason.
 - **#138 (TL-1/TL-2): a mutant's kill list is part of the record.** Attributing a kill to the wrong test overstates that test's power and misleads whoever later asks whether it can be removed.
+- **#138 (TL-2): fire mutants by behaviour, name after.** Labels carried from a prior review were reversed; the mismatch was then used to contradict a dev who was correct. Record the code change (`if (true)` / `if (false)`) beside the name in every kill list.
