@@ -72,3 +72,24 @@ Note: the mobile test also passed, by calling `MobileDevice.createTempToken` —
 
 Fresh database, `migrate deploy` from empty, `yarn test` on Node 22:
 `Test Suites: 124 passed, 124 total` · `Tests: 1250 passed, 1250 total`
+
+## Follow-up (branch `approof/58-followup`, after 953e108a merged)
+
+Ruling: `_updateSettings` returns `{success:false}` rather than throwing, so the repair
+must check `.success` — awaiting it proved nothing landed. Failed write now logs
+`repair FAILED` and returns `{repaired:false, reason:"write-failed"}`, never REPAIRED.
+If wrong: an operator reads "REPAIRED", believes the inconsistency is closed, and the
+instance keeps booting in exactly the state that message said was fixed.
+
+Ruling: the ruling A assertion is added against `validApiKey`, not only
+`validBrowserExtensionApiKey`. QA-1 M5 was right — every existing shape (b) assertion
+ran against the extension middleware, a different file with its own copy of the line,
+so reverting `validApiKey.js` alone left the suite green. If wrong: nothing, this is
+strictly more coverage; the cost of omitting it was a silent revert.
+
+RED proved by reverting both fixes: exactly 2 failed / 9 passed, each for its own
+reason (`repaired:true` on a failed write; `multiUserMode:false` in shape (b)).
+GREEN after restore: 11/11, full suite 1364/1364 across 133 suites on a fresh database.
+
+Not touched, per PMO: `system.js:748` `enable-multi-user` rollback `catch{}` — same
+root cause (`_updateSettings` never throws, so the catch cannot fire), separate issue.

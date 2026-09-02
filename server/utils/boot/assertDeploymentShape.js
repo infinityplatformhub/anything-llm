@@ -41,7 +41,20 @@ async function repairDeploymentShape({ db = prisma } = {}) {
   if (multiUserMode || userCount === 0)
     return { repaired: false, reason: "consistent" };
 
-  await SystemSettings._updateSettings({ multi_user_mode: true });
+  // NIT-1 / QA-2 NIT-2: _updateSettings SWALLOWS its errors — it catches, logs,
+  // and returns { success: false }. It never throws, so `await` alone proves
+  // nothing landed. Without this check a failed write still printed REPAIRED
+  // and returned repaired:true, telling the operator the inconsistency was
+  // fixed while the instance kept booting in exactly the state that message
+  // said was closed.
+  const write = await SystemSettings._updateSettings({ multi_user_mode: true });
+  if (!write?.success) {
+    console.error(
+      `[deployment-shape] repair FAILED: could not set multi_user_mode — ${write?.error ?? "unknown error"}. ` +
+        `This instance has ${userCount} user account(s) with multi_user_mode false; authorization guards will disagree until it is set by hand.`
+    );
+    return { repaired: false, reason: "write-failed" };
+  }
 
   if (process.env.MODE_REPAIR_ACKNOWLEDGED !== "1") {
     console.error(
