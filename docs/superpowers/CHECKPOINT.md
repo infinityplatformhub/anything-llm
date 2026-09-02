@@ -199,3 +199,7 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #80 22cd99c9: step 6 done — limiter mounted only when email present (flood 429@11), listing mask fixed-width (/v1 never unmasks), SETTING_KEYS explicit list, C5 comment, save/test route, 9 labels added to supportedFields, persistCredential exported. 122/122 requires --runInBand (parallel migrate deploy collides). Gate + QA-1/QA-3/TL-1/TL-2 dispatched. Contract update on issue pending.
 - #88 opened: 8 provider connect() guards raw compare (Dev5, keep+normalise).
 - #40 73585b9b2 still lacks freeze/router-walk in expected files; Dev2 asked where.
+- #78 86d2fe96: gate PASS (contract 47/47; #72 suites 39/39 on same SHA). Waiting QA-2 + TL-1 → close/merge.
+- #80 22cd99c9: gate PASS (check-local; 9 suites + #72 suites 115/115 --runInBand). Waiting QA-1/QA-3/TL-1/TL-2 + Dev3 `updated` contract/env → close/merge.
+- #30 slice 3 f77433728: TL-1 PASS (3 NIT → docs follow-up), QA-1 PASS. Waiting QA-2/QA-3/TL-2 + Dev4 contract/env.
+- #40: 73585b9b2 has freeze (array literal) + router walk in test; 6/7 attacks red, R-2 (deferred mount) open → ruling walk twice across event loop; >100 → exact relation. Waiting SHA.
