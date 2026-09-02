@@ -105,6 +105,22 @@ const ORG_CAPABILITIES = [
   "settings.write",
   "key.manage",
   "access.diagnose",
+  "workspace.create",
+];
+
+const WORKSPACE_CAPABILITIES = [
+  "workspace.read",
+  "workspace.write",
+  "workspace.delete",
+  "document.create",
+  "document.read",
+  "document.update",
+  "document.delete",
+  "document.search",
+  "document.pin",
+  "document.watch",
+  "chat.send",
+  "chat.read",
 ];
 
 function systemEndpoints(app) {
@@ -1788,4 +1804,4 @@ function systemEndpoints(app) {
   );
 }
 
-module.exports = { systemEndpoints };
+module.exports = { systemEndpoints, ORG_CAPABILITIES, WORKSPACE_CAPABILITIES };
