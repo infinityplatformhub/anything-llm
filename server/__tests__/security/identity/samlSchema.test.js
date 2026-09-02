@@ -160,8 +160,13 @@ describe("identity_providers — one provider, one configuration", () => {
     // secret column here is a secret in plaintext at rest. CredentialStore
     // (AES-256-GCM, bound to its key name) is where those go.
     const columns = await prisma.$queryRawUnsafe(
+      // Scoped to this suite's schema: information_schema spans the whole
+      // database, so without this the answer can come from a same-named table
+      // another suite left behind — and a secret column added to the table
+      // actually under test would go unnoticed.
       `SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'identity_providers'`
+       WHERE table_name = 'identity_providers'
+         AND table_schema = current_schema()`
     );
     const names = columns.map((row) => row.column_name.toLowerCase());
     // Without this the test passes on a table that does not exist: no columns,

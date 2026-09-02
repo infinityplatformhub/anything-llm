@@ -21,10 +21,15 @@ process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-at-least-12-chars";
 process.env.API_KEY_PEPPER = "s3-routes-test-pepper-32-bytes-long";
 process.env.STORAGE_DIR = path.join(tempDir, "storage");
-// A small limit so the rate-limit test proves the limiter is MOUNTED without
-// sending 30+ requests. The number is configuration; its presence is the
-// property under test.
-process.env.INVITE_RATE_LIMIT_MAX = "5";
+// Small limits so the rate-limit tests prove the limiters are MOUNTED without
+// sending hundreds of requests. The numbers are configuration; their presence,
+// and which key each one counts by, is the property under test.
+//
+// They are deliberately DIFFERENT from each other: with both set to the same
+// value, every test that trips one trips the other at the same request, and
+// nothing distinguishes a per-IP bucket from a per-account one.
+process.env.INVITE_RATE_LIMIT_MAX = "20";
+process.env.LOGIN_ACCOUNT_RATE_LIMIT_MAX = "3";
 const baseDatabaseUrl = process.env.DATABASE_URL;
 if (!baseDatabaseUrl?.startsWith(PG_SCHEME))
   throw new Error("DATABASE_URL must point to PostgreSQL for S3 route tests");
@@ -196,6 +201,43 @@ describe("POST /api/sso/ldap/login", () => {
         limited = true;
         break;
       }
+    }
+    expect(limited).toBe(true);
+  });
+
+  test("NIT-1: guessing ONE account is capped tighter than the IP budget", async () => {
+    // Two buckets, and this one is keyed on ip+username. Without it an attacker
+    // who stays inside the per-IP budget can spend the whole of it on a single
+    // account — which is the only budget that matters when the target is one
+    // person's password.
+    //
+    // The proof is the CONTRAST, not the 429: a fresh username from the same IP
+    // must still be served at the point where the guessed one is refused. A
+    // single per-IP limiter would have blocked both, and a test asserting only
+    // "429 eventually" cannot tell the two designs apart.
+    let refusedAt = null;
+    for (let attempt = 1; attempt <= 10 && refusedAt === null; attempt++) {
+      const response = await login({ username: "alice", password: "wrong" });
+      if (response.status === 429) refusedAt = attempt;
+    }
+    expect(refusedAt).not.toBeNull();
+    expect(refusedAt).toBeLessThan(Number(process.env.INVITE_RATE_LIMIT_MAX));
+
+    const other = await login({ username: "bystander", password: "wrong" });
+    expect(other.status).not.toBe(429);
+  });
+
+  test("the per-IP bucket still bounds an attacker who spreads across accounts", async () => {
+    // The other half. Rotating usernames evades the per-account bucket entirely
+    // — every request lands in a fresh one — so if the IP limiter were dropped,
+    // password spraying across many accounts would be unmetered.
+    let limited = false;
+    for (let attempt = 0; attempt < 40 && !limited; attempt++) {
+      const response = await login({
+        username: `sprayed-${attempt}`,
+        password: "wrong",
+      });
+      if (response.status === 429) limited = true;
     }
     expect(limited).toBe(true);
   });

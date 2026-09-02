@@ -449,6 +449,19 @@ model identity_assertion_ids {
 // own private key belongs in CredentialStore (AES-256-GCM, bound to its key
 // name); this table is read on every login and sits in every backup, so a secret
 // column here is a secret in plaintext at rest.
+//
+// S3b (#68): the `identity_providers_one_shape` CHECK constraint lives in
+// migration 092000 and CANNOT be expressed here — Prisma has no schema syntax
+// for a row-level CHECK, so the database enforces an invariant this file does
+// not mention. Two consequences, both load-bearing:
+//
+//   - `entityId` and `ssoUrl` are NOT NULL, and an empty string is how a row
+//     says "not a SAML provider". The constraint reads it as absence. Making
+//     either optional here inverts every clause of that constraint, and Prisma
+//     will let you do it silently.
+//   - A row must be ONE complete shape: SAML columns filled with the LDAP ones
+//     NULL, or LDAP columns filled with the SAML ones empty. A half-configured
+//     row is rejected by the database, not by this schema.
 model identity_providers {
   id          String   @id @default(uuid())
   provider    String   @unique
