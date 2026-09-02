@@ -5,12 +5,14 @@
 // change at every call site.
 
 const { OidcIdentityProvider } = require("./OidcIdentityProvider");
+const { SamlIdentityProvider } = require("./SamlIdentityProvider");
 const { IdentityConfigurationError } = require("./errors");
 
 // Null-prototype: `provider` arrives from the URL, and a plain object would
 // resolve "constructor" or "toString" to a function that is not a driver.
 const identityProviders = Object.assign(Object.create(null), {
   [OidcIdentityProvider.providerId()]: OidcIdentityProvider,
+  [SamlIdentityProvider.providerId()]: SamlIdentityProvider,
 });
 
 /** @param {string} providerId @returns {boolean} */

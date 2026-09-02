@@ -33,8 +33,12 @@ CREATE INDEX "identity_assertion_ids_expiresAt_idx"
 -- private key goes to the CredentialStore (AES-256-GCM). This table is read on
 -- every login and sits in every backup, so a secret column here is a secret in
 -- plaintext at rest.
+-- NOTE-A: an explicit DEFAULT. Prisma's `@default(uuid())` is generated in the
+-- CLIENT, so a row inserted by anything else — psql, a migration, a repair
+-- script — would fail on a NOT NULL with no default. Cheapest to fix now, while
+-- the table is empty.
 CREATE TABLE "identity_providers" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
     "provider" TEXT NOT NULL,
     "entityId" TEXT NOT NULL,
     "ssoUrl" TEXT NOT NULL,
@@ -61,4 +65,8 @@ CREATE UNIQUE INDEX "identity_providers_provider_key"
 -- address the same IdP now sends — the R1 email check would miss it and the
 -- person would get a second account. One statement, in this slot rather than a
 -- new one: the constraint and the data it depends on land together.
-UPDATE "identity_links" SET "email" = normalize("email", NFC);
+-- Requires PostgreSQL 13+ for normalize(); the deployed stack is PG16.
+-- The WHERE means an already-normalized table is a no-op rather than a full
+-- rewrite of every row.
+UPDATE "identity_links" SET "email" = normalize("email", NFC)
+ WHERE "email" <> normalize("email", NFC);

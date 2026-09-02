@@ -108,8 +108,12 @@ const fixtures = {
 
   /** The happy path: one assertion, signed by the IdP key we trust. */
   valid({ privateKeyPem, publicKeyPem, ...options } = {}) {
-    const assertionId = `_assert-${crypto.randomBytes(8).toString("hex")}`;
-    const assertion = assertionXml({ assertionId, ...options });
+    // An explicit assertionId is honoured, and the signature references the SAME
+    // one. Generating it locally while letting options override it in the XML
+    // would sign a reference to an ID the document does not contain.
+    const assertionId =
+      options.assertionId ?? `_assert-${crypto.randomBytes(8).toString("hex")}`;
+    const assertion = assertionXml({ ...options, assertionId });
     const signed = sign(assertion, privateKeyPem, {
       referenceId: assertionId,
       publicKeyPem,
@@ -241,6 +245,89 @@ const fixtures = {
       assertionId: realId,
       forgedNameId,
     };
+  },
+
+  /**
+   * DoD 3e — the `xswUnwrappedSubject` shape, generalized.
+   *
+   * Techlead ruling: NameID was never the only forgeable read. Every condition
+   * the driver checks can be planted as a bare element in `<samlp:Extensions>`,
+   * outside any assertion, and a document-wide read finds it first.
+   *
+   * `forged` is raw XML placed ahead of the genuine signed assertion. The
+   * assertion itself stays valid and untouched, so all three assertion-level
+   * guards still pass — the login must succeed on the REAL assertion's terms,
+   * never on the planted element's.
+   */
+  xswUnwrappedElement({ privateKeyPem, publicKeyPem, forged, ...options } = {}) {
+    const realId = `_assert-${crypto.randomBytes(8).toString("hex")}`;
+    const signedReal = sign(assertionXml({ assertionId: realId, ...options }), privateKeyPem, {
+      referenceId: realId,
+      publicKeyPem,
+    });
+    return {
+      xml: responseXml(`<samlp:Extensions>${forged}</samlp:Extensions>${signedReal}`),
+      assertionId: realId,
+    };
+  },
+
+  /**
+   * DoD 4b — a bare `<saml:Conditions>` that is still valid, planted ahead of a
+   * genuinely EXPIRED assertion.
+   *
+   * A driver reading `//saml:Conditions` would find the attacker's window and
+   * accept an assertion that expired hours ago.
+   */
+  xswUnwrappedConditions({ privateKeyPem, publicKeyPem } = {}) {
+    const forged = `<saml:Conditions xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" NotBefore="${iso(-60_000)}" NotOnOrAfter="${iso(60 * 60_000)}"><saml:AudienceRestriction><saml:Audience>${SP_ENTITY_ID}</saml:Audience></saml:AudienceRestriction></saml:Conditions>`;
+    return fixtures.xswUnwrappedElement({
+      privateKeyPem,
+      publicKeyPem,
+      forged,
+      notBefore: iso(-10 * 60_000),
+      notOnOrAfter: iso(-5 * 60_000),
+    });
+  },
+
+  /**
+   * DoD 6b — a bare `<saml:AudienceRestriction>` naming US, planted ahead of an
+   * assertion genuinely minted for somebody else.
+   *
+   * This is the cross-service attack: an assertion the IdP issued for another
+   * application, made to look like it was meant for this one.
+   */
+  xswUnwrappedAudience({ privateKeyPem, publicKeyPem } = {}) {
+    // A FULL Conditions element, so it sits on the same path shape the driver
+    // reads (`Conditions/AudienceRestriction/Audience`). A bare
+    // AudienceRestriction would be unreachable even by a document-wide read, and
+    // the fixture would pass against a driver that is not actually safe.
+    const forged = `<saml:Conditions xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" NotBefore="${iso(-60_000)}" NotOnOrAfter="${iso(5 * 60_000)}"><saml:AudienceRestriction><saml:Audience>${SP_ENTITY_ID}</saml:Audience></saml:AudienceRestriction></saml:Conditions>`;
+    return fixtures.xswUnwrappedElement({
+      privateKeyPem,
+      publicKeyPem,
+      forged,
+      audience: `${config.hostileOrigin}/saml`,
+    });
+  },
+
+  /**
+   * DoD 8b — a bare `<saml:SubjectConfirmationData>` echoing the request WE
+   * sent, planted ahead of an assertion answering a different request.
+   *
+   * Defeating InResponseTo this way turns any captured assertion into a valid
+   * answer to whatever login the victim happens to be attempting.
+   */
+  xswUnwrappedInResponseTo({ privateKeyPem, publicKeyPem } = {}) {
+    // A FULL Subject, for the same reason: the driver reads
+    // `Subject/SubjectConfirmation/SubjectConfirmationData/@InResponseTo`, so a
+    // bare SubjectConfirmationData would prove nothing.
+    const forged = `<saml:Subject xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">person@example.com</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="_req-1" NotOnOrAfter="${iso(5 * 60_000)}" Recipient="${ACS_URL}"/></saml:SubjectConfirmation></saml:Subject>`;
+    return fixtures.xswUnwrappedElement({
+      privateKeyPem,
+      publicKeyPem,
+      forged,
+      inResponseTo: "_someone-elses-request",
+    });
   },
 
   /**

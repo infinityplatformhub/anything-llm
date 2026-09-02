@@ -109,7 +109,58 @@ Ruling: the STORE side deliberately does not normalize, and the reason is writte
 `^[a-z][a-z0-9._@-]*$` plus Prisma's insensitive compare. Widen that regex and the store
 side must normalize too.
 
-### Mutation proof (FINDING-1 round)
+#
+## SamlIdentityProvider
+
+Ruling: the ACS/driver order is verify signature → ID-match → conditions/audience/
+InResponseTo → **claim** → (route) linkPrincipal, and `expiresAt` for the claim is the
+`NotOnOrAfter` read from the verified node — claiming any earlier turns a leaked
+assertion ID into a DoS primitive: an ID is not a secret (logs, proxies, browser
+history), so anyone who learns one could pre-register it with XML that never verified
+and the victim's genuine login is refused as a replay; if this is wrong we do slightly
+more parsing before the first write.
+
+Ruling: every read from a verified assertion goes through `readFromAssertion` /
+`readStringFromAssertion`, which close over no document — a document-wide read is not
+expressible by a caller rather than merely discouraged; if this is wrong it is one
+indirection with no runtime cost.
+
+Ruling: each of DoD 4/5/6/8 gets an `xswUnwrappedSubject`-shaped sibling — a planted
+`Conditions`, `AudienceRestriction` and `SubjectConfirmationData` — because NameID was
+never the only forgeable read and a guard proven on one field says nothing about the
+others; if this is wrong we carry three fixtures that never fire.
+
+Ruling: the driver tries EVERY configured certificate, not the first — an IdP publishes
+its next certificate before it signs with it, so first-only means every login fails
+between an Entra rotation and someone noticing; if this is wrong we do at most N
+signature checks on a failing login.
+
+Ruling: a driver built with an empty certificate list throws at construction — "no
+certificate configured" must never read as "accept anything"; if this is wrong an
+operator sees an error instead of a silently unsafe provider.
+
+Ruling (NOTE-A): `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
+SQL, because Prisma's `@default(uuid())` is generated CLIENT-side and any other writer
+(psql, a repair script, a later migration) would hit a NOT NULL with no default.
+
+Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack is PG16,
+verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
+re-run is a no-op rather than a full-table rewrite. No `DO` block.
+
+### Mutation proof (driver round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `claim` hoisted to the top of `completeLogin` | the three "records nothing" tests | killed exactly those three |
+| `readFromAssertion` reads document-wide instead of `./` | FINDING-1 + the three planted-element tests | killed exactly those four |
+
+The second mutant is why the planted-element fixtures were reshaped mid-flight: as first
+written, two of them planted a BARE `AudienceRestriction` / `SubjectConfirmationData`,
+which the driver's read path cannot reach even document-wide — so they passed against
+the unsafe mutant and proved nothing. They now plant a full `Conditions` / `Subject`,
+matching the path shape actually read, and all four die under the mutant.
+
+## Mutation proof (FINDING-1 round)
 
 | mutant | expected kill | result |
 |---|---|---|
@@ -117,6 +168,57 @@ side must normalize too.
 | drop the UNIQUE from the assertion-ID index | replay + schema tests | killed 4, all of them replay-related |
 | read-then-write claim | (survived — the DB constraint still holds) documented, not a gap |
 | NIT-2 back to `IdentityConflictError` | the NIT-2 test | killed exactly that one |
+
+
+## SamlIdentityProvider
+
+Ruling: the ACS/driver order is verify signature → ID-match → conditions/audience/
+InResponseTo → **claim** → (route) linkPrincipal, and `expiresAt` for the claim is the
+`NotOnOrAfter` read from the verified node — claiming any earlier turns a leaked
+assertion ID into a DoS primitive: an ID is not a secret (logs, proxies, browser
+history), so anyone who learns one could pre-register it with XML that never verified
+and the victim's genuine login is refused as a replay; if this is wrong we do slightly
+more parsing before the first write.
+
+Ruling: every read from a verified assertion goes through `readFromAssertion` /
+`readStringFromAssertion`, which close over no document — a document-wide read is not
+expressible by a caller rather than merely discouraged; if this is wrong it is one
+indirection with no runtime cost.
+
+Ruling: each of DoD 4/5/6/8 gets an `xswUnwrappedSubject`-shaped sibling — a planted
+`Conditions`, `AudienceRestriction` and `SubjectConfirmationData` — because NameID was
+never the only forgeable read and a guard proven on one field says nothing about the
+others; if this is wrong we carry three fixtures that never fire.
+
+Ruling: the driver tries EVERY configured certificate, not the first — an IdP publishes
+its next certificate before it signs with it, so first-only means every login fails
+between an Entra rotation and someone noticing; if this is wrong we do at most N
+signature checks on a failing login.
+
+Ruling: a driver built with an empty certificate list throws at construction — "no
+certificate configured" must never read as "accept anything"; if this is wrong an
+operator sees an error instead of a silently unsafe provider.
+
+Ruling (NOTE-A): `identity_providers.id` carries `DEFAULT gen_random_uuid()::text` in
+SQL, because Prisma's `@default(uuid())` is generated CLIENT-side and any other writer
+(psql, a repair script, a later migration) would hit a NOT NULL with no default.
+
+Ruling (NOTE-B/C): the NFC backfill states `requires PG13+` in a comment (stack is PG16,
+verified by querying it) and carries `WHERE email <> normalize(email, NFC)` so a
+re-run is a no-op rather than a full-table rewrite. No `DO` block.
+
+### Mutation proof (driver round)
+
+| mutant | expected kill | result |
+|---|---|---|
+| `claim` hoisted to the top of `completeLogin` | the three "records nothing" tests | killed exactly those three |
+| `readFromAssertion` reads document-wide instead of `./` | FINDING-1 + the three planted-element tests | killed exactly those four |
+
+The second mutant is why the planted-element fixtures were reshaped mid-flight: as first
+written, two of them planted a BARE `AudienceRestriction` / `SubjectConfirmationData`,
+which the driver's read path cannot reach even document-wide — so they passed against
+the unsafe mutant and proved nothing. They now plant a full `Conditions` / `Subject`,
+matching the path shape actually read, and all four die under the mutant.
 
 ## Mutation proof
 
@@ -128,7 +230,7 @@ side must normalize too.
 
 ## Evidence
 
-`__tests__/security/identity` — Tests: 123 passed, 123 total (13 suites), against real
+`__tests__/security/identity` + `__tests__/utils/retention` — Tests: 155 passed, 155 total (15 suites), against real
 Postgres via `prisma migrate deploy` (§7.1a, never `db push`).
 
 Note for anyone re-running these: jest must run under node@22. Under the default node 26
