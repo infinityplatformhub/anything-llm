@@ -99,6 +99,18 @@ Ruling: `requiredExtensions` compares case-insensitively and treats an unset `VE
 Ruling: (QA-3 nit) `ext.permitted` states the installed half and the probed half as two different claims — "already installed, so no permission was needed or tested" versus "permission verified by creating and rolling back". They are different facts: probing establishes that the role MAY create the extension; an extension already present establishes only that it is there.
 ถ้าผิด: the detail reports a verified privilege that was never verified — the same class of lie as `IF NOT EXISTS` returning success on a no-op, which is what ruling 6 already removed from the probe itself. Mutation-verified: wording the installed half as "verified", or merging the two lists into one claim, each turns 4 tests red.
 
+Ruling: (QA-3) a new blocking check, `config.vector_db`. When `VECTOR_DB` means pgvector but is not spelled exactly `pgvector`, the doctor FAILS and says the app will silently store vectors in LanceDB. `getVectorDbClass` switches on the raw string (`utils/helpers/index.js:88-89`), so `PGVECTOR` matches no case, falls to the default arm, and returns LanceDB after one `[ENV ERROR]` line.
+ถ้าผิด: a configuration that is plausible, starts cleanly, throws nothing, and puts the operator's vectors somewhere they did not choose — visible only later as documents that are not where they should be. This is the exact shape a preflight exists to catch, and the doctor is the only place it can be caught without touching `getVectorDbClass`.
+
+Ruling: the misspelling is BLOCKING, and `requiredExtensions` still returns `vector` for it. Intent decides which extensions to report on; exact spelling decides whether the app will honour it.
+ถ้าผิด: as a warning it would be skipped past; and reporting only the spelling would make fixing it reveal a second problem — a missing `vector` extension — that the same run could have named.
+
+Ruling: the spelling comparison trims. `VECTOR_DB=pgvector ` with a trailing space is invisible in a `.env` file and fails the same way.
+ถ้าผิด: the one form of this mistake nobody can see by reading the file is the one the check misses. Mutation-verified: dropping `.trim()` turns the whitespace test red.
+
+Ruling: `getVectorDbClass` is not touched. Widening it to accept other spellings is a change to how every provider is selected, well outside this issue.
+ถ้าผิด: an installer issue quietly alters provider resolution for ten vector stores.
+
 ## Residual
 
 - **QA-3 ruling 1, the half that is not testable here.** `POST /system/update-password` with `usePassword:false` blanks `AUTH_TOKEN` and `JWT_SECRET` in memory only (`endpoints/system.js:705-707`) — no `updateENV` call, nothing written. Three tests cover what O2a controls: a restart finds no `AUTH_TOKEN`, `JWT_SECRET` is not rotated, and ensure-secrets never writes `AUTH_TOKEN` back. The in-memory/on-disk divergence itself is pre-existing behaviour outside this issue's diff; flagged for O2b, where the React step meets it.

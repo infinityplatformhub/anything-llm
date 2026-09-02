@@ -62,9 +62,10 @@ const base = () => ({
 });
 
 describe("the check list itself", () => {
-  it("declares the eight checks the rulings name", () => {
+  it("declares the nine checks the rulings name", () => {
     expect(doctor.CHECK_IDS.sort()).toEqual(
       [
+        "config.vector_db",
         "db.locale",
         "db.reachable",
         "db.version",
@@ -305,6 +306,53 @@ withDb("locale: two different failures that must not be conflated", () => {
     expect(results.find((r) => r.id === "db.locale").detail).toMatch(
       /LC_CTYPE is /
     );
+  });
+});
+
+withDb("VECTOR_DB spelling (QA-3)", () => {
+  it("fails a spelling the app will not match", async () => {
+    // getVectorDbClass switches on the RAW string (helpers/index.js:88-89), so
+    // `PGVECTOR` matches no case, falls to the default arm, and returns
+    // LanceDB. One [ENV ERROR] line at boot, then an instance storing vectors
+    // somewhere the operator did not choose — a plausible configuration that
+    // starts cleanly and is wrong. Exactly what a preflight is for.
+    const results = await doctor.runChecks({ ...base(), vectorDb: "PGVECTOR" });
+    const check = results.find((r) => r.id === "config.vector_db");
+    expect(check.ok).toBe(false);
+    expect(check.level).toBe("block");
+    expect(check.detail).toMatch(/LanceDB/);
+    expect(check.remedy).toMatch(/VECTOR_DB=pgvector/);
+  });
+
+  it("still checks the vector extension for a misspelled pgvector", async () => {
+    // The operator's intent is clear even when the spelling is not, and the
+    // extension they will need once the spelling is fixed is the one to report
+    // on now — otherwise fixing the spelling reveals a second problem that the
+    // preflight could have named in the same run.
+    expect(doctor.requiredExtensions("PGVECTOR")).toEqual([
+      "pg_trgm",
+      "vector",
+    ]);
+  });
+
+  it("passes the exact lower-case spelling", async () => {
+    const results = await doctor.runChecks({ ...base(), vectorDb: "pgvector" });
+    expect(results.find((r) => r.id === "config.vector_db").ok).toBe(true);
+  });
+
+  it("passes any other provider, and an unset value", async () => {
+    for (const value of ["lancedb", "chroma", "", undefined]) {
+      const results = await doctor.runChecks({ ...base(), vectorDb: value });
+      expect(results.find((r) => r.id === "config.vector_db").ok).toBe(true);
+    }
+  });
+
+  it("catches surrounding whitespace, which is invisible in a .env file", async () => {
+    const results = await doctor.runChecks({
+      ...base(),
+      vectorDb: "pgvector ",
+    });
+    expect(results.find((r) => r.id === "config.vector_db").ok).toBe(false);
   });
 });
 
