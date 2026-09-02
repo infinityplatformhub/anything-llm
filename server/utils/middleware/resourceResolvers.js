@@ -9,10 +9,19 @@
 const prisma = require("../prisma");
 
 const ORG_ID = 1;
-const workspaceResolvers = new WeakSet();
+const REGISTRY_KEY = Symbol.for(
+  "anything-llm.authorization.resourceResolverRegistry"
+);
+const resolverRegistry = (globalThis[REGISTRY_KEY] ||= {
+  org: new WeakSet(),
+  workspace: new WeakSet(),
+  dynamic: new WeakSet(),
+});
 
-const isWorkspaceResolver = (resolver) => workspaceResolvers.has(resolver);
-const isOrgResolver = (resolver) => resolver === orgResource;
+const isWorkspaceResolver = (resolver) =>
+  resolverRegistry.workspace.has(resolver);
+const isOrgResolver = (resolver) => resolverRegistry.org.has(resolver);
+const isDynamicResolver = (resolver) => resolverRegistry.dynamic.has(resolver);
 
 /** The org itself — for actions with no narrower subject (user admin, settings). */
 const orgResource = async () => ({
@@ -73,8 +82,7 @@ const workspaceByIdParam = (param) => {
       workspaceId: workspace.id,
     };
   };
-  resolve.resolverName = "workspaceByIdParam";
-  workspaceResolvers.add(resolve);
+  resolverRegistry.workspace.add(resolve);
   return resolve;
 };
 
@@ -99,8 +107,7 @@ const chatByIdParam = (param = "id") => {
       workspaceId: chat.workspaceId,
     };
   };
-  resolve.resolverName = "chatByIdParam";
-  workspaceResolvers.add(resolve);
+  resolverRegistry.workspace.add(resolve);
   return resolve;
 };
 
@@ -145,8 +152,7 @@ const promptHistoryByIdParam = (param = "id") => {
       workspaceId: history.workspaceId,
     };
   };
-  resolve.resolverName = "promptHistoryByIdParam";
-  workspaceResolvers.add(resolve);
+  resolverRegistry.workspace.add(resolve);
   return resolve;
 };
 
@@ -167,8 +173,7 @@ const memoryByIdParam = (param = "memoryId") => {
       workspaceId: memory.workspaceId,
     };
   };
-  resolve.resolverName = "memoryByIdParam";
-  workspaceResolvers.add(resolve);
+  resolverRegistry.workspace.add(resolve);
   return resolve;
 };
 
@@ -225,7 +230,9 @@ const grantScopeFromBody = async (request) => {
   workspaceByBodySlug,
   documentInWorkspaceBySlug,
   watchedDocumentInWorkspaceBySlug,
-].forEach((resolver) => workspaceResolvers.add(resolver));
+].forEach((resolver) => resolverRegistry.workspace.add(resolver));
+resolverRegistry.org.add(orgResource);
+resolverRegistry.dynamic.add(grantScopeFromBody);
 
 module.exports = {
   orgResource,
@@ -240,4 +247,5 @@ module.exports = {
   grantScopeFromBody,
   isWorkspaceResolver,
   isOrgResolver,
+  isDynamicResolver,
 };

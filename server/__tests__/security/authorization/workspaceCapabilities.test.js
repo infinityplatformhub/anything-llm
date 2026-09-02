@@ -21,6 +21,7 @@ const {
 const {
   isWorkspaceResolver,
   isOrgResolver,
+  isDynamicResolver,
 } = require("../../../utils/middleware/resourceResolvers");
 
 const REPO_DIR = path.join(__dirname, "../../../..");
@@ -41,9 +42,13 @@ const mountedGates = mountedRoutes.flatMap((layer) =>
     .filter((handler) => handler?.action && handler.resolveResource)
 );
 
-function scopeOf(resolveResource) {
-  if (isOrgResolver(resolveResource)) return "org";
-  if (isWorkspaceResolver(resolveResource)) return "workspace";
+function scopeOf(resolveResource, classifiers = {}) {
+  const isOrg = classifiers.isOrgResolver || isOrgResolver;
+  const isWorkspace = classifiers.isWorkspaceResolver || isWorkspaceResolver;
+  const isDynamic = classifiers.isDynamicResolver || isDynamicResolver;
+  if (isOrg(resolveResource)) return "org";
+  if (isWorkspace(resolveResource)) return "workspace";
+  if (isDynamic(resolveResource)) return "dynamic";
   return null;
 }
 
@@ -60,6 +65,26 @@ describe("capability vocabulary by resource scope", () => {
     expect(
       skipped.filter((entry) => !entry.startsWith("agentWebsocket"))
     ).toEqual([]);
+  });
+
+  test("every mounted permission gate has a recognized resolver scope", () => {
+    const unclassified = mountedGates.filter(
+      (gate) => scopeOf(gate.resolveResource) === null
+    );
+    expect(unclassified).toEqual([]);
+  });
+
+  test("dynamic resolvers cannot back fixed-scope capabilities", () => {
+    const dynamicGate = mountedGates.find(
+      (gate) => scopeOf(gate.resolveResource) === "dynamic"
+    );
+    expect(dynamicGate).toBeDefined();
+    expect(hasGateAtScope([dynamicGate], dynamicGate.action, "org")).toBe(
+      false
+    );
+    expect(hasGateAtScope([dynamicGate], dynamicGate.action, "workspace")).toBe(
+      false
+    );
   });
 
   test("workspace capabilities contain no org-scoped actions", () => {
@@ -124,6 +149,7 @@ describe("capability vocabulary by resource scope", () => {
         return null;
       },
       Object.assign(async () => null, { resolverName: "workspaceByIdParam" }),
+      require("../../../utils/middleware/resourceResolvers").orgResource,
     ];
 
     for (const resolveResource of unknownResolvers) {
@@ -132,6 +158,17 @@ describe("capability vocabulary by resource scope", () => {
         hasGateAtScope([gate], "workspace.members.manage", "workspace")
       ).toBe(false);
     }
+  });
+
+  test("resolver identity registry survives jest.resetModules", () => {
+    const knownWorkspaceResolver = mountedGates.find((gate) =>
+      isWorkspaceResolver(gate.resolveResource)
+    )?.resolveResource;
+    expect(knownWorkspaceResolver).toBeDefined();
+
+    jest.resetModules();
+    const freshClassifiers = require("../../../utils/middleware/resourceResolvers");
+    expect(scopeOf(knownWorkspaceResolver, freshClassifiers)).toBe("workspace");
   });
 
   test("capability lists match the approved mockup", () => {
