@@ -37,7 +37,7 @@ const PUBLICLY_EXISTENT = new Set(["org"]);
  *   MUST derive workspaceId from the stored row, never from the request body (B-3).
  */
 function requirePermission(action, resolveResource) {
-  return async function permissionRequired(request, response, next) {
+  const middleware = async function permissionRequired(request, response, next) {
     try {
       const actor = await resolveActor(request, response);
       const resource = await resolveResource(request, response);
@@ -74,6 +74,13 @@ function requirePermission(action, resolveResource) {
       throw error;
     }
   };
+  // #53: what this gate asks, and what it asks it about. Exposed so a route
+  // sweep can check the pairing from the mounted router rather than by grepping
+  // source — the same reason validApiKey carries `.scope`. A scope violation is
+  // caught at runtime by the engine; this lets a test catch it before shipping.
+  middleware.action = action;
+  middleware.resolveResource = resolveResource;
+  return middleware;
 }
 
 module.exports = { requirePermission, NON_DISCLOSING, PUBLICLY_EXISTENT };

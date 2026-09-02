@@ -36,6 +36,11 @@ const READ_ACTIONS = new Set([
   "browser-extension.read",
   "model-router.read",
   "access.diagnose",
+  // #53: authority-free — it answers "is the caller a principal of this org",
+  // and every route asking it still filters by membership in the handler. It is
+  // read-shaped for the same reason, which is what restores view-as-user's
+  // ability to list workspaces, search, and fetch its own generated files.
+  "org.member",
 ]);
 
 // T-4a (W-6): batch ceiling for authorizeMany.
@@ -138,6 +143,29 @@ class DatabaseAuthorizationEngine {
     // keeps P0-4 scopes in the same namespace).
     const permission = await this.db.permissions.findUnique({ where: { action } });
     if (!permission) return asDenied("unknown_action");
+
+    // #53: an action may declare the resource shape it is answerable about, and
+    // a mismatch is a CONTRACT error — the caller asked a question this action
+    // cannot answer, which is a bug in the route, not a decision about the actor.
+    // Denying instead would let a miswired gate look like an ordinary refusal.
+    //
+    // Checked HERE rather than in authorize(): scope lives in the permissions
+    // row, and authorize()'s guards (R5 impersonation, key binding) are
+    // deliberately blanket and touch no database, so an already-denied actor
+    // cannot make the policy store do work. This runs the moment the row is in
+    // hand and before any grant is read, so no allow/deny is ever decided on a
+    // wrongly-shaped question.
+    const scope = permission.scope ?? "any";
+    if (scope === "org" && resource.workspaceId != null) {
+      throw new AuthorizationContractError(
+        `org_scoped_action_on_workspace_resource: ${action} may only be asked at org scope`
+      );
+    }
+    if (scope === "workspace" && resource.workspaceId == null) {
+      throw new AuthorizationContractError(
+        `workspace_scoped_action_on_org_resource: ${action} requires a workspace resource`
+      );
+    }
 
     const grantPrincipal = DatabaseAuthorizationEngine.grantPrincipalOf(actor);
     if (!grantPrincipal) return asDenied("no_grant_principal");

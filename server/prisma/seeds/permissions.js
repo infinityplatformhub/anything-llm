@@ -99,11 +99,26 @@ const API_ACTIONS = [
 // the instance, which is the same reason T-2 flagged chat export.
 const AUDIT_ACTIONS = ["audit.read"];
 
+// #53: "is the caller a real, unsuspended principal of this org" — and nothing
+// more. It carries NO authority: every route that asks it still filters by
+// membership in the handler. It exists because seven routes were asking
+// `chat.send` to mean this, which is both the wrong word and (since T-7's R5
+// blanket deny) a live bug: `chat.send` is not a read, so a view-as-user session
+// could not list its own workspaces.
+//
+// It is scoped 'org' in the permissions table, and the engine refuses to answer
+// it against a resource that names a workspace. That is not decoration: every
+// user holds an org-wide `member` grant, and the engine reads a NULL-workspace
+// grant as matching EVERY workspace, so a workspace-scoped question answered by
+// this action would be the migration-044000 vulnerability again.
+const ORG_MEMBERSHIP_ACTIONS = ["org.member"];
+
 const ALL_ACTIONS = [
   ...new Set([
     ...ENGINE_ACTIONS,
     ...API_ACTIONS,
     ...AUDIT_ACTIONS,
+    ...ORG_MEMBERSHIP_ACTIONS,
     "workspace.read",
     "workspace.write",
     "workspace.delete",
@@ -118,6 +133,7 @@ const SYSTEM_ROLES = [
     permissions: [
       "settings.write", "user.manage", "key.manage",
       "workspace.read", "access.diagnose", "role.grant", "role.revoke",
+      "org.member",
     ],
   },
   {
@@ -126,6 +142,7 @@ const SYSTEM_ROLES = [
     permissions: [
       "chat.read_others", "document.read", "document.search",
       "document.update", "document.delete", "document.bulk_export", "access.diagnose",
+      "org.member",
     ],
   },
   {
@@ -152,7 +169,14 @@ const SYSTEM_ROLES = [
     // never joined. Proven, not assumed — the first cut of that migration did
     // grant it here, and chatReadGrant.test.js caught an outsider reading a
     // workspace's history with a 200.
-    permissions: ["chat.send"],
+    //
+    // #53 adds `org.member` here, and it is the exception that shows the rule:
+    // it is safe on this org-wide role for the one reason chat.read and the
+    // workspace actions are not — it is never asked ABOUT a workspace. The
+    // permissions table scopes it 'org' and the engine throws rather than
+    // answering it against a workspace resource, so the org-wide grant every
+    // user holds cannot reach a workspace through it.
+    permissions: ["chat.send", "org.member"],
   },
   {
     name: "owner",
@@ -192,4 +216,16 @@ const SINGLE_USER_PRINCIPAL = {
   role: "super_admin",
 };
 
-module.exports = { DOCUMENT_ACTIONS, AUDIT_ACTIONS, ALL_ACTIONS, SYSTEM_ROLES, SINGLE_USER_PRINCIPAL };
+// #53: the scope an action may be asked at. Anything absent is 'any' — the
+// existing behaviour, and the default the column carries. Only actions that
+// would be UNSAFE at another scope belong here.
+const ACTION_SCOPES = Object.freeze({ "org.member": "org" });
+
+module.exports = {
+  DOCUMENT_ACTIONS,
+  AUDIT_ACTIONS,
+  ALL_ACTIONS,
+  ACTION_SCOPES,
+  SYSTEM_ROLES,
+  SINGLE_USER_PRINCIPAL,
+};

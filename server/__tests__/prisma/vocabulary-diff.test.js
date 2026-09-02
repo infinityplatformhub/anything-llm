@@ -67,8 +67,10 @@ describe("P0-4 scope strings and T-1 vocabulary are one namespace", () => {
       "system.env.read", "image.generate", "embedding.compute",
       // T-6 (#28)
       "audit.read",
+      // #53: membership, carrying no authority
+      "org.member",
     ];
     expect(approved.filter((a) => !ALL_ACTIONS.includes(a))).toEqual([]);
-    expect(ALL_ACTIONS.length).toBe(61);
+    expect(ALL_ACTIONS.length).toBe(62);
   });
 });
