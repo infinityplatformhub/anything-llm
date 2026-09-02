@@ -206,3 +206,6 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #30 slice 3 f77433728: QA-3 PASS (3rd verdict). Waiting QA-2 + TL-2 + Dev4 contract comment.
 - #80 e1bf4adb8 (ledger-only over 22cd99c9): env rewritten to issue contract (9 suites --runInBand, 122 passed exact, credentialPersistence suite added); task.sh check running (monitor armed). Waiting 4 verdicts.
 - #40 9d949199c "trust permission gate identities" — no R-2 walk-twice yet; Dev2 has not declared.
+- #78 86d2fe96: TL-1 PASS (2 NITs → post-merge docs commit with #72 NITs). Waiting QA-2 (~20 min) → close/merge.
+- #80 e1bf4adb8: task.sh check stalled a 3rd time (0-byte report, no child); logged on #62. Running check-local + exact contract directly (gate-80k). Waiting QA-1/QA-3/TL-1/TL-2.
+- #30 slice 3: QA-2 PASS (4/5 verdicts). Waiting TL-2 + Dev4 contract comment.
