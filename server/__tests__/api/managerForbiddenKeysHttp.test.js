@@ -158,6 +158,8 @@ beforeEach(async () => {
           "not_a_real_key",
           "hub_api_key",
           "default_system_prompt",
+          "logo_filename",
+          "experimental_live_file_sync",
         ],
       },
     },
@@ -298,6 +300,109 @@ describe("issue 78 manager forbidden setting keys", () => {
         where: { label: "default_system_prompt" },
       })
     ).resolves.toMatchObject({ value: "admin prompt" });
+  });
+
+  it.each(["multi_user_mode", "onboarding_complete"])(
+    "refuses manager write to protected key %s",
+    async (key) => {
+      const response = await update(manager, { [key]: "true" });
+
+      expect(response.status).toBe(403);
+      expect(response.body.forbiddenKeys).toEqual([key]);
+    }
+  );
+
+  it("keeps protected-key model response for actor holding system.write", async () => {
+    const response = await update(admin, { multi_user_mode: "false" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: "protected_keys",
+      protectedKeys: ["multi_user_mode"],
+    });
+  });
+
+  it("refuses manager multipart logo upload", async () => {
+    const response = await request(app)
+      .post("/api/system/upload-logo")
+      .set("Authorization", authFor(manager))
+      .attach("logo", Buffer.from("logo"), "manager-logo.png");
+
+    expect(response.status).toBe(403);
+    expect(response.body.forbiddenKeys).toEqual(["logo_filename"]);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "logo_filename" } })
+    ).resolves.toBeNull();
+  });
+
+  it("lets actor holding system.write upload logo", async () => {
+    const response = await request(app)
+      .post("/api/system/upload-logo")
+      .set("Authorization", authFor(admin))
+      .attach("logo", Buffer.from("logo"), "admin-logo.png");
+
+    expect(response.status).toBe(200);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "logo_filename" } })
+    ).resolves.toMatchObject({ value: expect.stringMatching(/\.png$/) });
+  });
+
+  it("refuses manager logo removal", async () => {
+    const response = await request(app)
+      .get("/api/system/remove-logo")
+      .set("Authorization", authFor(manager));
+
+    expect(response.status).toBe(403);
+    expect(response.body.forbiddenKeys).toEqual(["logo_filename"]);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "logo_filename" } })
+    ).resolves.toBeNull();
+  });
+
+  it("lets actor holding system.write remove logo", async () => {
+    const response = await request(app)
+      .get("/api/system/remove-logo")
+      .set("Authorization", authFor(admin));
+
+    expect(response.status).toBe(200);
+    await expect(
+      prisma.system_settings.findUnique({ where: { label: "logo_filename" } })
+    ).resolves.toMatchObject({ value: "approofworkspace.png" });
+  });
+
+  it("refuses manager live sync toggle", async () => {
+    await prisma.system_settings.create({
+      data: { label: "experimental_live_file_sync", value: "enabled" },
+    });
+    const response = await post(manager, "/api/experimental/toggle-live-sync", {
+      updatedStatus: false,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.forbiddenKeys).toEqual([
+      "experimental_live_file_sync",
+    ]);
+    await expect(
+      prisma.system_settings.findUnique({
+        where: { label: "experimental_live_file_sync" },
+      })
+    ).resolves.toMatchObject({ value: "enabled" });
+  });
+
+  it("lets actor holding system.write toggle live sync", async () => {
+    await prisma.system_settings.create({
+      data: { label: "experimental_live_file_sync", value: "enabled" },
+    });
+    const response = await post(admin, "/api/experimental/toggle-live-sync", {
+      updatedStatus: false,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(
+      prisma.system_settings.findUnique({
+        where: { label: "experimental_live_file_sync" },
+      })
+    ).resolves.toMatchObject({ value: "disabled" });
   });
 
   it("keeps unknown manager keys silent without writing a row", async () => {

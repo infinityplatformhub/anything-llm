@@ -1095,6 +1095,12 @@ function systemEndpoints(app) {
       }
 
       try {
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { logo_filename: request.file.originalname }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
         const newFilename = await renameLogoFile(request.file.originalname);
         const existingLogoFilename = await SystemSettings.currentLogoFilename();
         await removeCustomLogo(existingLogoFilename);
@@ -1132,6 +1138,12 @@ function systemEndpoints(app) {
     [validatedRequest, requirePermission("settings.write", orgResource)],
     async (_request, response) => {
       try {
+        const narrowed = await narrowManagerSystemPreferences(
+          response.locals.actor,
+          { logo_filename: LOGO_FILENAME }
+        );
+        if (narrowed.refusal)
+          return response.status(403).json(narrowed.refusal);
         const currentLogoFilename = await SystemSettings.currentLogoFilename();
         await removeCustomLogo(currentLogoFilename);
         const { success, error } = await SystemSettings._updateSettings({

@@ -40,6 +40,11 @@ jest.mock("../../models/telemetry", () => ({
   Telemetry: { sendTelemetry: jest.fn() },
 }));
 jest.mock("../../utils/events", () => ({ emitAuditEvent: jest.fn() }));
+jest.mock("../../utils/managerSystemPreferences", () => ({
+  narrowManagerSystemPreferences: jest.fn(async (_actor, updates) => ({
+    updates,
+  })),
+}));
 // The two guards are not the subject; a real session and a real flag would only make
 // this a test of those.
 jest.mock("../../utils/middleware/validatedRequest", () => ({
@@ -112,7 +117,10 @@ describe("a failed settings write", () => {
 
 describe("a successful settings write (positive control)", () => {
   beforeEach(() => {
-    SystemSettings._updateSettings.mockResolvedValue({ success: true, error: null });
+    SystemSettings._updateSettings.mockResolvedValue({
+      success: true,
+      error: null,
+    });
   });
 
   it("answers 200 and starts the workers", async () => {

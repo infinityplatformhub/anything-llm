@@ -21,10 +21,12 @@ async function narrowManagerSystemPreferences(actor, updates) {
   });
   if (unrestricted.allowed) return { updates };
 
+  const recognizedFields = new Set([
+    ...SystemSettings.protectedFields,
+    ...SystemSettings.supportedFields,
+  ]);
   const forbiddenKeys = Object.keys(updates).filter(
-    (key) =>
-      SystemSettings.supportedFields.includes(key) &&
-      !managerAllowedFields.includes(key)
+    (key) => recognizedFields.has(key) && !managerAllowedFields.includes(key)
   );
   if (forbiddenKeys.length > 0) {
     return {
@@ -38,13 +40,11 @@ async function narrowManagerSystemPreferences(actor, updates) {
     };
   }
 
-  return {
-    updates: Object.fromEntries(
-      Object.entries(updates).filter(([key]) =>
-        managerAllowedFields.includes(key)
-      )
-    ),
-  };
+  const narrowedUpdates = Object.create(null);
+  for (const [key, value] of Object.entries(updates)) {
+    if (managerAllowedFields.includes(key)) narrowedUpdates[key] = value;
+  }
+  return { updates: narrowedUpdates };
 }
 
 module.exports = { managerAllowedFields, narrowManagerSystemPreferences };
