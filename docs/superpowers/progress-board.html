@@ -58,12 +58,12 @@ td.mono{white-space:nowrap}
 
 <main>
 <header>
-  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">bc1d764f3</span> · 2026-09-03 04:05</div>
+  <div class="eyebrow">ApproofWorkspace · approof/main @ <span class="mono">447739bc0</span> · 2026-09-03 05:00</div>
   <h1>ApproofWorkspace — งานถึงไหน</h1>
 </header>
 
 <section class="overall">
-  <div class="big">103<small>/ 138 issues ปิด</small></div>
+  <div class="big">103<small>/ 140 issues ปิด</small></div>
   <div>
     <div class="bar" aria-label="99 closed, 3 in review, 3 in dev, 5 queued of 133">
       <span style="width:74.4%;background:var(--done)"></span>
@@ -126,6 +126,9 @@ td.mono{white-space:nowrap}
     <div class="card"><div class="top"><span class="id">#130 connectionBudget</span><span class="who">Dev1 · กำลังทำ</span></div><p>TL-2 ruling: เทส capture-and-invoke จับ M4 ใน process เดียว 0.3 วิ · timeout item ปิด stale</p></div>
     <div class="card"><div class="top"><span class="id">S4b slice 2–3</span><span class="who">Dev3 · หลัง #133</span></div><p>apply + checkpoint · job + lock (session lock vs row+heartbeat = ruling) · slice 4 รอ Q4</p></div>
     <div class="card"><div class="top"><span class="id">#137 setup_admin seed</span><span class="who">Dev1 · edd8db6b7 ✓ gate ✓ TL-1 ✓ QA-3</span></div><p>migration: grant 3 action ให้ setup_admin + แยก audit.purge (super_admin เท่านั้น) · Model Router: re-gate เมนูบน model-router.read (ไม่ให้สิทธิ์ เพราะ write = เปลี่ยนเส้นทางแชท) เป็น commit ที่สองหลัง #121 merge</p></div> <div class="card"><div class="top"><span class="id">#107 S11c</span><span class="who">รอคุณ</span></div><p>mail log</p></div>
+    <div class="card"><div class="top"><span class="id">#139 node guard</span><span class="who">Dev2</span></div><p>yarn test ปฏิเสธ node ≠ 22 (node 26 ทำเทส frontend แดง 26 ตัวโดยไม่มีอะไรพัง)</p></div>
+    <div class="card"><div class="top"><span class="id">#140 /utils/metrics</span><span class="who">Dev1 · หลัง #121</span></div><p>route ไม่มี auth คืน commit SHA เต็ม + disk free/total · ใส่ validatedRequest ทั้ง route</p></div>
+    <div class="card"><div class="top"><span class="id">Sidebar audit</span><span class="who">Dev4 · contract พร้อม รอ #121</span></div><p>20 เมนู guard ไม่ตรง route action · route guard ยังเป็น role string · TL-2: entry + route ใช้ read action เดียวกัน, ปุ่มเขียน gate ด้วย write · interface/chat ไม่มี server state ถอด gate</p></div>
   </div>
 </section>
 
