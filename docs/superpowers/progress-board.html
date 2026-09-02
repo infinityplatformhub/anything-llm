@@ -73,7 +73,7 @@ td.mono{white-space:nowrap}
     </div>
     <div class="legend">
       <span><i style="background:var(--done)"></i>ปิดแล้ว 101</span>
-      <span><i style="background:var(--gate)"></i>รอ review 2</span>
+      <span><i style="background:var(--gate)"></i>รอ review 1</span>
       <span><i style="background:var(--dev)"></i>กำลังแก้ 3</span>
       <span><i style="background:var(--queue)"></i>คิว 5</span>
       <span>· merge วันนี้ 30 issue · เทสบน main <span class="mono">server 3268 · frontend 107</span> เขียวหมด</span>
@@ -96,12 +96,7 @@ td.mono{white-space:nowrap}
 <h2 style="margin-bottom:-14px">งานที่ยังเปิดอยู่</h2>
 <section class="lanes">
   <div class="lane" style="--c:var(--gate)">
-    <h2>รอ review / merge <span class="mono">2</span></h2>
-    <div class="card">
-      <div class="top"><span class="id">#131 zero-width redaction</span><span class="who">Dev5 · aa6d7de6d</span></div>
-      <p>อักขระล่องหน 19 ตัวทำให้ทุก pattern PDPA/credential มองไม่เห็นค่า ทั้ง audit และ diagnostic bundle. class = Cf ∪ Default_Ignorable ไม่มี hand-list. TL-2 + QA-2 ผ่านแล้ว · ruling สุดท้าย: strip เฉพาะช่วง match (กัน emoji เปลี่ยนรูป) → Dev5 กำลัง commit delta</p>
-      <div class="chips"><span class="chip ok">gate 347/347</span><span class="chip ok">TL-2 PASS</span><span class="chip ok">QA-2 PASS</span><span class="chip ok">merged</span></div>
-    </div>
+    <h2>รอ review / merge <span class="mono">1</span></h2>
     <div class="card">
       <div class="top"><span class="id">#134 S4b slice 2 apply + checkpoint</span><span class="who">Dev3 · ETA 60–90 นาที</span></div>
       <p>migration checkpoint + CHECK ทั้งสองทิศพิสูจน์แล้ว · RF-1..RF-7 ยังไม่เขียน · 2 ruling โครงสร้างส่ง TL-1 ยืนยัน · mutants ก่อน push</p>
@@ -117,12 +112,12 @@ td.mono{white-space:nowrap}
       <div class="chips"><span class="chip no">gate RED</span><span class="chip wait">SHA ใหม่</span></div>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#133 fix</span><span class="who">Dev3</span></div>
-      <p>guard ตัวที่สองบน membership removal + quarantined คง membership + RF-6/RF-7</p>
+      <div class="top"><span class="id">#136 S12 slice 1</span><span class="who">Dev5</span></div>
+      <p>TL-2 ruling (ข): offboardUser ใน policyRepository ไม่ export bumpVersion · Dev5 ทำ removeGroupMember endpoint + audit + revokedAt ก่อน รอ #134 ปิดค่อยแตะ policyRepository</p>
     </div>
     <div class="card">
-      <div class="top"><span class="id">#131 delta</span><span class="who">Dev5</span></div>
-      <p>per-match strip ด้วย origin[] map · fixture non-BMP U+13430 · emoji ข้าง PII รอด</p>
+      <div class="top"><span class="id">V8 mobile</span><span class="who">Dev4 · หลัง #132</span></div>
+      <p>TL-2 ยอมรับนับ 78 ของ Dev4 · 52 site คือ expression เดียวคัดลอก 40 ไฟล์ → แปลงเป็น Tailwind class เดียว residual ~19</p>
     </div>
   </div>
 
