@@ -26,7 +26,13 @@ The wizard itself is the smaller half of this issue: `frontend/src/pages/Onboard
 
 ## 2. The five secrets, and a wrinkle worth knowing before writing code
 
-`INSTANCE_AUTH_KEYS` (`updateENV.js:1834-1840`) already names exactly the set O2 must generate: `AUTH_TOKEN`, `JWT_SECRET`, `SIG_KEY`, `SIG_SALT`, `API_KEY_PEPPER`.
+**updated (2026-09-02, after reading the consumers): this section was wrong about `AUTH_TOKEN`, and the correction is below the original text rather than replacing it, so the diff shows what changed.**
+
+`INSTANCE_AUTH_KEYS` (`updateENV.js:1834-1840`) names five keys: `AUTH_TOKEN`, `JWT_SECRET`, `SIG_KEY`, `SIG_SALT`, `API_KEY_PEPPER`. This section originally read that set as "exactly the set O2 must generate". That is true of four of them.
+
+**`AUTH_TOKEN` must NOT be generated** (PMO ruling, 2026-09-02). It is not a machine secret: it is the single-user password the operator chooses, set through `POST /system/update-password` from the onboarding UserSetup step (`frontend/src/pages/OnboardingFlow/Steps/UserSetup/index.jsx:137`), and `docker/.env.example:405` says so outright — `AUTH_TOKEN="hunter2" # This is the password to your application`. Generating it breaks the install three ways: `validatedRequest` leaves its no-auth passthrough branch as soon as the variable is set (`utils/middleware/validatedRequest.js:29-36`); `POST /system/request-token` then compares the submitted password against 32 random bytes nobody has seen (`endpoints/system.js:400-405`), so no password can ever succeed; and the "just me, no password" path works precisely by leaving the variable empty (`endpoints/system.js:706`).
+
+The set O2 generates is therefore **four**: `JWT_SECRET`, `SIG_KEY`, `SIG_SALT`, `API_KEY_PEPPER`. `JWT_SECRET` belongs there — it is a signing key with no human meaning, read only by `utils/http/index.js:26-28,62`, and UserSetup rotates it anyway.
 
 But `dumpENV`'s `protectedKeys` allowlist does not treat them alike — measured, not assumed:
 
@@ -34,11 +40,11 @@ But `dumpENV`'s `protectedKeys` allowlist does not treat them alike — measured
 |---|---|
 | `SIG_KEY` | yes — `dumpENV` writes it |
 | `SIG_SALT` | yes — `dumpENV` writes it |
-| `AUTH_TOKEN` | **no** |
+| `AUTH_TOKEN` | **no** — and it is not generated at all; see the update above |
 | `JWT_SECRET` | **no** |
 | `API_KEY_PEPPER` | **no** |
 
-So `dumpENV` cannot be the mechanism for all five: three of them would be silently dropped. That is not a defect to fix here — `AUTH_TOKEN` and `JWT_SECRET` are excluded on purpose (they are `secret: true` in `KEY_MAPPING`, and #48 moved credential-valued settings into the encrypted store rather than back onto disk). It means **generation must write the file directly through `writeEnvFileAtomic`, not through `dumpENV`**, and the plan must say so or it will produce an installer that appears to work and persists two keys out of five.
+So `dumpENV` cannot be the mechanism for the generated set: two of the four (`JWT_SECRET`, `API_KEY_PEPPER`) would be silently dropped. That is not a defect to fix here — `AUTH_TOKEN` and `JWT_SECRET` are excluded on purpose (they are `secret: true` in `KEY_MAPPING`, and #48 moved credential-valued settings into the encrypted store rather than back onto disk). It means **generation must write the file directly through `writeEnvFileAtomic`, not through `dumpENV`**, and the plan must say so or it will produce an installer that appears to work and persists two keys out of five.
 
 PMO ruling Q2 sends these to the mounted `.env` rather than CredentialStore, and the reason holds up in the code: `SIG_KEY`/`SIG_SALT` are the store's own encryption inputs (`updateENV.js:1830-1831` says so outright), so a store that needs them cannot also hold them.
 
@@ -350,3 +356,12 @@ If wrong: the installer prints "secrets generated" and boots with a pepper that 
 
 Ruling: (4b) a `.env` owned by a uid other than the container user is a **blocking** doctor check, reported separately from "secret missing", with the remedy named (`chown`, or `UID`/`GID` in `docker/.env`).
 If wrong: the ordinary macOS bind-mount case surfaces as a refusal message during first boot instead of a checked precondition with a fix.
+
+Ruling: (5) O2 generates four secrets — `JWT_SECRET`, `SIG_KEY`, `SIG_SALT`, `API_KEY_PEPPER`. `AUTH_TOKEN` is never generated; it stays absent so the operator sets it as their password during onboarding. One test asserts `ensure-secrets` leaves `AUTH_TOKEN` unwritten even when it is absent.
+If wrong: the installer boots, prints "secrets generated", and hands the operator an instance nobody can ever log into, with no reset path short of editing the `.env` the installer just wrote.
+
+Ruling: (6) the onboarding backfill is a boot-time one-shot guarded by a settings row, not a SQL migration — the old predicate reads three environment variables that SQL cannot see. Belongs to O2b.
+If wrong: a migration is written against a predicate the schema cannot evaluate, and it silently backfills on the one signal it can read.
+
+Ruling: (7) O2 splits into **O2a** (doctor CLI, ENTRYPOINT dispatch, ensure-secrets — no UI, starts immediately) and **O2b** (React warn step, onboarding backfill, moving `AUTH_TOKEN` out of the mockups' secret list — waits on the user's A/B answer).
+If wrong: work with no UI in it sits blocked behind a mockup decision it does not depend on.

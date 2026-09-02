@@ -6,7 +6,10 @@ Base: `approof/main` after `598c2e88` (recon part 2 merged). Recon:
 A/B answer; `task.sh start` does not run until it arrives.**
 
 Rulings this plan implements: Q1–Q5 and (1)–(3) from the recon's first ruling block, (2a)–(4b)
-from the part-2 block.
+from the part-2 block, and (5)–(7).
+
+**Split (ruling 7):** Tasks 1–3 are **O2a** — no UI, started immediately. Tasks 4–5 are **O2b**,
+held for the A/B answer.
 
 ---
 
@@ -36,10 +39,13 @@ only by `utils/http/index.js:26-28,62`, and the same UserSetup call rotates it a
 **So the generated set is four, not five:** `JWT_SECRET`, `SIG_KEY`, `SIG_SALT`, `API_KEY_PEPPER`.
 `AUTH_TOKEN` stays absent and is set by the operator in onboarding.
 
-This is a ruling amendment, not a plan decision — recorded here and sent to PMO before Task 1
-starts. It also changes the mockups: both list five keys under "ความลับของระบบ". The row for
-`AUTH_TOKEN` moves to the admin-account block that QA-3 already split out, which is where a
-password belongs.
+**PMO ruling (5), 2026-09-02: accepted.** Four generated, `AUTH_TOKEN` never written, plus a test
+asserting `ensure-secrets` leaves it alone even when absent. Recon §2 amended in place with an
+`updated` note rather than a silent rewrite.
+
+It also changes the mockups: both list five keys under "ความลับของระบบ". The row for `AUTH_TOKEN`
+moves to the admin-account block that QA-3 already split out, which is where a password belongs.
+That edit is **O2b** — it is UI, and it waits on the A/B answer.
 
 Cost of getting this wrong, stated plainly because it is the whole reason for the finding: the
 installer boots, prints "secrets generated", and hands the operator an instance they can never
@@ -166,10 +172,9 @@ that guard is unset. The migration's job is to create the guard row as `false` f
 installs and `true` for fresh ones — the latter distinguished by `system_settings` being empty of
 every other signal at migration time.
 
-If that distinction cannot be made cleanly, the fallback is the conservative one: leave the branch
-in place and gate it on `process.env.AUTH_TOKEN` being *operator-set* rather than *present*, which
-Task 1 makes possible because O2 no longer generates it. **Ask PMO before choosing** — this is
-authorization-adjacent state and the ruling assumed a migration that the schema cannot support.
+**PMO ruling (6): the boot-time one-shot with a guard row is the chosen shape.** The migration's
+only job is to create the guard row; the predicate itself stays in JavaScript, where it can read
+the environment.
 
 Tests (ruling 3b plus the fourth from recon §8.4):
 
