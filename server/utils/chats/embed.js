@@ -7,7 +7,9 @@ const {
   convertToPromptHistory,
   writeResponseChunk,
 } = require("../helpers/chat/responses");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { abortConnectorOnClientDisconnect } = require("../helpers/abortSignals");
 const {
   authorizedSimilaritySearch,
@@ -99,10 +101,17 @@ async function streamChatWithForEmbed(
 
   const pinnedDocs =
     prefetchedPinnedDocs ??
-    (await new DocumentManager({
+    (await authorizedPinnedDocs({
       workspace: embed.workspace,
       maxTokens: LLMConnector.promptWindowLimit(),
-    }).pinnedDocs());
+      // The same principal REFERENCE the search path uses below — an embed visitor must
+      // not read pinned documents its own embed cannot (S-12).
+      actorRef: {
+        type: "embed",
+        id: String(embed.uuid),
+        workspaceIds: [String(embed.workspace_id)],
+      },
+    }));
   pinnedDocs.forEach((doc) => {
     const { pageContent, ...metadata } = doc;
     pinnedDocIdentifiers.push(sourceIdentifier(doc));

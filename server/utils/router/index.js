@@ -334,7 +334,9 @@ class ModelRouterService {
     apiSessionId = null,
   }) {
     const { chatPrompt, recentChatHistory } = require("../chats");
-    const { DocumentManager } = require("../DocumentManager");
+    const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
     const {
       WorkspaceParsedFiles,
     } = require("../../models/workspaceParsedFiles");
@@ -357,11 +359,12 @@ class ModelRouterService {
       rawHistory,
     });
 
-    const pinnedDocs = await new DocumentManager({ workspace }).pinnedDocs();
+    const pinnedDocs = await authorizedPinnedDocs({ workspace, user });
     const parsedFiles = await WorkspaceParsedFiles.getContextFiles(
       workspace,
       thread || null,
-      user || null
+      // Required now: an absent user used to mean "every user's files".
+      user ?? { systemActor: true }
     );
 
     const contextTexts = [

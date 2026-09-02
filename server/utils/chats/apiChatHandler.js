@@ -1,5 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { WorkspaceChats } = require("../../models/workspaceChats");
 const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
 const { addChatCostToMetrics } = require("../helpers/modelPricing");
@@ -297,11 +299,12 @@ async function chatSync({
     apiSessionId: sessionId,
   });
 
-  await new DocumentManager({
+  await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
+    // The API key's actor, same as the search path below.
+    actor,
   })
-    .pinnedDocs()
     .then((pinnedDocs) => {
       pinnedDocs.forEach((doc) => {
         const { pageContent, ...metadata } = doc;
@@ -696,11 +699,12 @@ async function streamChat({
   // it will undergo prompt compression anyway to make it work. If there is so much pinned that the context here is bigger than
   // what the model can support - it would get compressed anyway and that really is not the point of pinning. It is really best
   // suited for high-context models.
-  await new DocumentManager({
+  await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
+    // The API key's actor, same as the search path below.
+    actor,
   })
-    .pinnedDocs()
     .then((pinnedDocs) => {
       pinnedDocs.forEach((doc) => {
         const { pageContent, ...metadata } = doc;

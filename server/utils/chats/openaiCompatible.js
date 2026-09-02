@@ -1,5 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
-const { DocumentManager } = require("../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../authorization/pinnedContext");
 const { WorkspaceChats } = require("../../models/workspaceChats");
 const { getVectorDbClass, resolveProviderConnector } = require("../helpers");
 const { addChatCostToMetrics } = require("../helpers/modelPricing");
@@ -83,11 +85,12 @@ async function chatSync({
   let contextTexts = [];
   let sources = [];
   let pinnedDocIdentifiers = [];
-  await new DocumentManager({
+  await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
+    // The API key's actor, same as the search path below.
+    actor,
   })
-    .pinnedDocs()
     .then((pinnedDocs) => {
       pinnedDocs.forEach((doc) => {
         const { pageContent, ...metadata } = doc;
@@ -336,11 +339,12 @@ async function streamChat({
   let contextTexts = [];
   let sources = [];
   let pinnedDocIdentifiers = [];
-  await new DocumentManager({
+  await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
+    // The API key's actor, same as the search path below.
+    actor,
   })
-    .pinnedDocs()
     .then((pinnedDocs) => {
       pinnedDocs.forEach((doc) => {
         const { pageContent, ...metadata } = doc;

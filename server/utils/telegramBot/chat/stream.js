@@ -1,7 +1,9 @@
 const { WorkspaceChats } = require("../../../models/workspaceChats");
 const { getVectorDbClass, resolveProviderConnector } = require("../../helpers");
 const { addChatCostToMetrics } = require("../../helpers/modelPricing");
-const { DocumentManager } = require("../../DocumentManager");
+const {
+  authorizedPinnedDocs,
+} = require("../../authorization/pinnedContext");
 const {
   sourceIdentifier,
   recentChatHistory,
@@ -199,10 +201,12 @@ async function collectPinnedDocs(workspace, LLMConnector) {
   const sources = [];
   const pinnedDocIdentifiers = [];
 
-  const pinnedDocs = await new DocumentManager({
+  const pinnedDocs = await authorizedPinnedDocs({
     workspace,
     maxTokens: LLMConnector.promptWindowLimit(),
-  }).pinnedDocs();
+    // The resolved actor W-11 already threads here, the same one the search path uses.
+    actor,
+  });
 
   for (const doc of pinnedDocs) {
     const { pageContent, ...metadata } = doc;

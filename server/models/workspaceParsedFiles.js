@@ -220,12 +220,39 @@ const WorkspaceParsedFiles = {
     }
   },
 
+  /**
+   * The parsed files that belong in this actor's context.
+   *
+   * T-5 slice 2 (G17/S-21): `user` is REQUIRED. It used to be optional —
+   * `...(user ? { userId: user.id } : {})` — so a caller that omitted it received every
+   * user's files for the workspace. An optional security filter is not a filter, it is a
+   * filter plus a way to skip it, and it fails in the direction that returns MORE data.
+   * That is the same shape as #45's optional keyKind: correct at every call site that
+   * remembers it, silently absent at the one that does not.
+   *
+   * A caller with genuinely no user passes `{ systemActor: true }` explicitly and gets []
+   * — nothing, rather than everything. The safe answer has to be the one you can ask for
+   * by name.
+   *
+   * @param {Object} workspace
+   * @param {Object|null} thread
+   * @param {Object} user the requesting user, or `{ systemActor: true }`
+   */
   getContextFiles: async function (workspace, thread = null, user = null) {
+    if (!user) {
+      throw new Error(
+        "getContextFiles requires a user — pass { systemActor: true } for a caller that genuinely has none, which returns no files rather than everyone's"
+      );
+    }
+    // A system actor owns no parsed files, so there is nothing it may read. Returning []
+    // rather than skipping the filter is the whole point of making it explicit.
+    if (user.systemActor === true) return [];
+
     try {
       const files = await this.where({
         workspaceId: workspace.id,
         threadId: thread?.id || null,
-        ...(user ? { userId: user.id } : {}),
+        userId: user.id,
       });
 
       const results = [];
