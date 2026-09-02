@@ -74,7 +74,7 @@ Per ruling Q4: warn loudly, never block. English search is unaffected, and refus
 
 - Where does generation run? The entrypoint (before Node boots, so `API_KEY_PEPPER` exists by import time) or a `prestart` script? The pepper throws at *import*, so anything running inside the server process is already too late.
 - Does the preflight run as a container command an operator can invoke on demand (`docker compose run --rm app doctor`), or only during boot? A doctor that only runs at boot cannot be used to diagnose a failed boot.
-- `markOnboarded` infers onboarding from `AUTH_TOKEN`/`JWT_SECRET` being set. Generating those unconditionally would mark a fresh install as already onboarded and skip the wizard entirely. This needs settling before step 1 is written.
+- ~~`markOnboarded` infers onboarding from `AUTH_TOKEN`/`JWT_SECRET`.~~ Settled below; the shape is narrower than it first looked — see the ruling and the note under it.
 
 ## 6. Mockup
 
@@ -100,3 +100,19 @@ Ruling: (Q5) O2 must not *obstruct* air-gap — no network calls during setup �
 Ruling: `.env.example` is not replaced; a new `.env.required.example` (~15 keys) sits beside it.
 
 Ruling: mockup is two directions (full-page wizard vs single-page checklist), preflight page clickable in four states, committed under `docs/superpowers/mockups/` and SHA-pinned before `task.sh start`.
+
+
+Ruling: (1) secret generation runs in `docker-entrypoint.sh` **before node**, as a standalone script (`server/scripts/ensure-secrets.js`) that must not import `apiKeySecurity` — the pepper throws at import, so anything inside the server process is already too late. It calls `writeEnvFileAtomic` directly rather than `dumpENV`, because `dumpENV`'s allowlist carries only `SIG_KEY` and `SIG_SALT` of the five (measured, §2), and writes a key only when that key is absent.
+If wrong: an installer that looks like it worked and persisted two secrets out of five, with the failure appearing later as "every API key is invalid after restart".
+
+Ruling: (2) the preflight is a subcommand an operator can run on demand (`docker compose run --rm app doctor`) AND runs automatically in the entrypoint before boot, exiting non-zero with the checklist when it fails. A doctor that only runs at boot cannot diagnose a boot that fails.
+If wrong: the operator's only diagnostic is the crash they are trying to explain.
+
+Ruling: (3) the "onboarded" signal is separated from the presence of secrets: `markOnboarded` must read the explicit flag, not infer from `AUTH_TOKEN`/`JWT_SECRET`. A legacy deployment holding secrets but no flag gets the flag set once by a backfill so the wizard does not appear on an instance that has been in use for months. Three tests: fresh install with auto-generated secrets → wizard appears; legacy install with secrets and no flag → wizard does not appear; flag already true → wizard does not appear.
+If wrong: O2 ships a wizard that no fresh install ever reaches — the auto-generated `AUTH_TOKEN` marks every new instance as already onboarded.
+
+**Note on ruling (3), measured after it was issued.** The flag and the reader already exist: `SystemSettings.markOnboardingComplete()` writes `onboarding_complete` (`systemSettings.js:806`), it is in `protectedFields` (`:40`), and `markOnboarded()` already checks `isOnboardingComplete()` first and returns early. The legacy backfill is also already there, with the log line and the one-shot semantics the ruling asks for.
+
+What actually needs changing is one branch: `isLegacyOnboarded()` (`markOnboarded.js:45`) treating `AUTH_TOKEN || JWT_SECRET` as proof of prior use. With generation moved into the entrypoint, that variable is always set by the time Node boots, so **every** fresh install takes the legacy path, gets the flag written, and never sees the wizard. The other three signals in that function (`LLM_PROVIDER`, `VECTOR_DB`, multi-user mode) are genuine evidence of prior use and stay.
+
+Removing that branch has a cost worth stating rather than discovering: a legacy instance whose ONLY signal is `AUTH_TOKEN`/`JWT_SECRET` — no LLM provider, no vector DB, single-user — would start seeing the wizard. That is a real population (a single-user instance configured entirely through the UI), so the backfill must run **before** the branch is removed, in the same release, not after.
