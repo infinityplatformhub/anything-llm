@@ -110,3 +110,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - Opened: #71 invite-code leak (Dev3, spec = TL-2 5 holes), #72 unknown-key drop (Dev1, QA-3 5 amendments), #73 CI real-store services (Dev4). Slice 2 waits QA-2 only. #40 task1 waits FINDING-2 fix.
 - #70 65dc3890: gate PASS 12/12 (/tmp/wt-70 kept). Waiting QA-1 + TL-1 verdict → close/merge. Then #72 (Dev1).
 - #70 merged f6d3c851 (57/74 closed). #71 9119fcbd gating (/tmp/wt-71, full suite) — waits QA-3 + TL-1. Dev1 → #72 (typed unknown_keys, route-level 400).
+- slice 2 merged a325e180 + pushed (origin was 51 behind → §7.16). #71 59e978b0 waits title fix (§7.3a) → regate 2-suite → close (QA-3 PASS, TL-1 PASS). #40 3d29de9 withdrawn (bypass 5) → WeakSet identity + dynamic bucket. #73 a42b3f0 needs rebase. #76 opened (sweep unsound, after #72). main suite: 1 fail ldapRoutesHttp → QA-3 triage. 58/76 closed.
