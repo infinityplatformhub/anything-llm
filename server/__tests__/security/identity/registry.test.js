@@ -14,6 +14,7 @@ const {
 const {
   IdentityConfigurationError,
 } = require("../../../utils/identityProviders/errors");
+const { IDP_ORIGIN } = require("../../../__testHelpers__/identity/urls");
 
 describe("identity provider registry", () => {
   test("oidc is registered under its own providerId", () => {
@@ -33,7 +34,7 @@ describe("identity provider registry", () => {
 
   test("getIdentityProvider builds a configured driver instance", () => {
     const driver = getIdentityProvider("oidc", {
-      issuer: "https://idp.example.com",
+      issuer: IDP_ORIGIN,
       clientId: "client",
       clientSecret: "secret",
     });

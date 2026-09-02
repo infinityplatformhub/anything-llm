@@ -24,6 +24,7 @@ const testUrl = baseDatabaseUrl?.replace(/\/[^/?]+(\?|$)/, `/${testDb}$1`);
 
 let prisma;
 let linkPrincipal;
+const { RESERVED_APEX } = require("../../../__testHelpers__/identity/urls");
 const {
   IdentityConflictError,
   IdentityAuthenticationError,
@@ -171,6 +172,30 @@ describe("R1 — email collision with an existing local account", () => {
     // The user has to be told what to do next; "conflict" alone leaves them
     // stuck with no path forward.
     expect(error.message).toMatch(/settings/i);
+  });
+
+  test("QA-2.6: the collision check is case-insensitive in BOTH directions", async () => {
+    // Email addresses are not case-sensitive in practice, so a case-sensitive
+    // check is an auto-link waiting to happen — and the whole point of R1 is
+    // that owning the mailbox must not be enough to inherit the account.
+    //
+    // The stored username carries the uppercase here, and the incoming
+    // assertion is lowercase. That ordering matters: linkPrincipal lowercases
+    // the INCOMING address, so a test that also stored a lowercase username
+    // would pass against a plain equality check and prove nothing.
+    const local = `Collide-${crypto.randomBytes(4).toString("hex")}`;
+    await prisma.users.create({
+      data: {
+        username: `${local.toUpperCase()}@${RESERVED_APEX.toUpperCase()}`,
+        password: "local-hash",
+        role: "default",
+      },
+    });
+    await expect(
+      linkPrincipal(principal({ email: `${local.toLowerCase()}@${RESERVED_APEX}` }), {
+        db: prisma,
+      })
+    ).rejects.toThrow(IdentityConflictError);
   });
 
   test("the refusal writes nothing — no user, no link", async () => {

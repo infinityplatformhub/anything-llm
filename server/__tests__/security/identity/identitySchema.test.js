@@ -12,6 +12,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { PrismaClient } = require("@prisma/client");
 const { PG_SCHEME } = require("../../../utils/test/postgresUrl");
+const { REDIRECT_URI } = require("../../../__testHelpers__/identity/urls");
 
 const baseDatabaseUrl = process.env.DATABASE_URL;
 const SERVER_DIR = path.join(__dirname, "../../..");
@@ -112,7 +113,7 @@ describe("identity_login_state", () => {
       state,
       nonce: crypto.randomBytes(16).toString("base64url"),
       provider: "oidc",
-      redirectUri: "https://app.example.com/sso/oidc/callback",
+      redirectUri: REDIRECT_URI,
       codeVerifier: crypto.randomBytes(32).toString("base64url"),
       expiresAt: new Date(Date.now() + 900_000),
     };
@@ -127,7 +128,7 @@ describe("identity_login_state", () => {
         state,
         nonce: crypto.randomBytes(16).toString("base64url"),
         provider: "oidc",
-        redirectUri: "https://app.example.com/sso/oidc/callback",
+        redirectUri: REDIRECT_URI,
         codeVerifier: crypto.randomBytes(32).toString("base64url"),
         expiresAt: new Date(Date.now() + 900_000),
       },

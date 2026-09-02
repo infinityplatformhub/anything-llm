@@ -32,7 +32,8 @@ fs.mkdirSync(path.resolve(__dirname, "../../../../collector/hotdir"), {
 // SSO configuration the routes read. The client secret goes through
 // CredentialStore in production; here the env fallback keeps the test hermetic.
 process.env.SSO_OIDC_ENABLED = "true";
-process.env.SSO_OIDC_ISSUER = "https://idp.example.com";
+const { IDP_ORIGIN } = require("../../../__testHelpers__/identity/urls");
+process.env.SSO_OIDC_ISSUER = IDP_ORIGIN;
 process.env.SSO_OIDC_CLIENT_ID = "approof-workspace";
 process.env.SSO_OIDC_CLIENT_SECRET = "test-client-secret";
 
@@ -60,7 +61,7 @@ jest.mock("../../../utils/boot/MetaGenerator", () => ({
 }));
 
 const JWT = require("jsonwebtoken");
-const ISSUER = "https://idp.example.com";
+const ISSUER = IDP_ORIGIN;
 const CLIENT_ID = "approof-workspace";
 
 // The IdP, stubbed at the network boundary: the routes use global fetch, so

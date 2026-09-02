@@ -47,7 +47,7 @@ afterAll(async () => {
   }
 }, 60_000);
 
-const REDIRECT = "https://app.example.com/sso/oidc/callback";
+const { REDIRECT_URI: REDIRECT } = require("../../../__testHelpers__/identity/urls");
 
 describe("IdentityLoginState.issue", () => {
   test("mints unguessable state, nonce and PKCE verifier", async () => {
@@ -141,6 +141,30 @@ describe("IdentityLoginState.consume", () => {
     ]);
     const fulfilled = results.filter((r) => r.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
+  });
+
+  test("QA-2.5: twenty concurrent consumes — exactly one wins, nineteen see a replay", async () => {
+    // Two racers can pass by luck; twenty cannot. Every loser must also report
+    // a REPLAY rather than an expiry, which proves the winner's write is what
+    // they lost to and not a clock.
+    const issued = await IdentityLoginState.issue({
+      provider: "oidc",
+      redirectUri: REDIRECT,
+      db: prisma,
+    });
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, () =>
+        IdentityLoginState.consume(issued.state, { db: prisma })
+      )
+    );
+    const won = results.filter((r) => r.status === "fulfilled");
+    const lost = results.filter((r) => r.status === "rejected");
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(19);
+    for (const loser of lost) {
+      expect(loser.reason).toBeInstanceOf(IdentityAuthenticationError);
+      expect(loser.reason.message).toMatch(/replay/i);
+    }
   });
 
   test("an unknown state is rejected without revealing whether it ever existed", async () => {

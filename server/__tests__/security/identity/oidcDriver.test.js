@@ -19,9 +19,15 @@ const {
   IdentityConfigurationError,
 } = require("../../../utils/identityProviders/errors");
 
-const ISSUER = "https://idp.example.com";
+const {
+  IDP_ORIGIN,
+  HOSTILE_ORIGIN,
+  REDIRECT_URI,
+  RESERVED_APEX,
+} = require("../../../__testHelpers__/identity/urls");
+
+const ISSUER = IDP_ORIGIN;
 const CLIENT_ID = "approof-workspace";
-const REDIRECT_URI = "https://app.example.com/sso/oidc/callback";
 
 let privateKey;
 let publicJwk;
@@ -217,7 +223,7 @@ describe("completeLogin — every assertion the driver must refuse", () => {
 
   test("case 3a: a token from the wrong issuer is rejected", async () => {
     await expect(
-      call({ token: idToken({ iss: "https://evil.example.com" }) })
+      call({ token: idToken({ iss: HOSTILE_ORIGIN }) })
     ).rejects.toThrow(IdentityAuthenticationError);
   });
 
@@ -529,5 +535,175 @@ describe("JWKS handling (Techlead F1/F2)", () => {
     // One fetch to populate, at most one refetch for the unknown kid. A token
     // with a random kid must not be a free DoS lever against the IdP.
     expect(counter.jwks).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("QA-2 regression probes", () => {
+  const call = (token, keys = null) =>
+    new OidcIdentityProvider({
+      issuer: ISSUER,
+      clientId: CLIENT_ID,
+      clientSecret: "shhh",
+      fetchImpl: fakeFetch({ token, keys }),
+    }).completeLogin({
+      redirectUri: REDIRECT_URI,
+      callbackParams: { code: "auth-code" },
+      codeVerifier: "verifier-abc",
+      expectedNonce: "the-expected-nonce",
+    });
+
+  test("QA-2.1: an EXPIRED token is rejected", async () => {
+    // Everything else about it is valid — signature, issuer, audience, nonce.
+    // Only `exp` has passed, and that alone must be disqualifying, or a
+    // captured token works forever.
+    const expired = JWT.sign(
+      {
+        sub: "s",
+        email: "e@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      privateKey,
+      {
+        algorithm: "RS256",
+        keyid: kid,
+        issuer: ISSUER,
+        audience: CLIENT_ID,
+        expiresIn: "-10s",
+      }
+    );
+    await expect(call(expired)).rejects.toThrow(IdentityAuthenticationError);
+  });
+
+  test("QA-2.2: HS256 signed with the RSA PUBLIC KEY as the HMAC secret is rejected", async () => {
+    // The sharpest form of alg confusion: the attacker needs no secret at all,
+    // only the public key everyone can fetch from the JWKS. A verifier that
+    // honours the header's `alg` treats that public key as an HMAC password.
+    const publicPem = crypto
+      .createPublicKey(privateKey)
+      .export({ type: "spki", format: "pem" })
+      .toString();
+    const forged = JWT.sign(
+      {
+        sub: "attacker",
+        email: "attacker@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      publicPem,
+      { algorithm: "HS256", issuer: ISSUER, audience: CLIENT_ID, expiresIn: "5m" }
+    );
+    await expect(call(forged)).rejects.toThrow(IdentityAuthenticationError);
+  });
+
+  test("QA-2.3: case-variant algorithm names are rejected, not normalized", async () => {
+    // The allowlist is an exact-match check. A case-insensitive comparison
+    // would reopen every algorithm the list exists to exclude, so each variant
+    // here is signed the way an attacker would actually sign it — an unsigned
+    // token would fail on its signature and prove nothing about the allowlist.
+    const claims = {
+      sub: "s",
+      email: `attacker@${RESERVED_APEX}`,
+      email_verified: true,
+      nonce: "the-expected-nonce",
+      iss: ISSUER,
+      aud: CLIENT_ID,
+      exp: Math.floor(Date.now() / 1000) + 300,
+    };
+    const body = Buffer.from(JSON.stringify(claims)).toString("base64url");
+
+    // Symmetric variants: really HMAC-signed, with the public key as the secret
+    // (the attacker's view — it is published in the JWKS).
+    const publicPem = crypto
+      .createPublicKey(privateKey)
+      .export({ type: "spki", format: "pem" })
+      .toString();
+    for (const [alg, digest] of [
+      ["hs256", "sha256"],
+      ["HS512", "sha512"],
+    ]) {
+      const header = Buffer.from(JSON.stringify({ alg, typ: "JWT" })).toString(
+        "base64url"
+      );
+      const signature = crypto
+        .createHmac(digest, publicPem)
+        .update(`${header}.${body}`)
+        .digest("base64url");
+      await expect(call({ token: `${header}.${body}.${signature}` })).rejects.toThrow(
+        IdentityAuthenticationError
+      );
+    }
+
+    // Lowercase RS256: a genuinely valid RSA signature from the real key, with
+    // only the algorithm name's case changed.
+    //
+    // NOTE this one is defended twice — jsonwebtoken itself refuses a lowercase
+    // alg at the key layer ("alg parameter for rsa key type must be one of:
+    // RS256, ..."), so loosening OUR allowlist to a case-insensitive compare
+    // does not make this test fail. It is kept because the second layer is not
+    // ours to rely on: a library swap, or a move to a verifier that normalizes
+    // case, would leave the allowlist as the only guard.
+    const rsHeader = Buffer.from(
+      JSON.stringify({ alg: "rs256", typ: "JWT", kid })
+    ).toString("base64url");
+    const rsSignature = crypto
+      .createSign("RSA-SHA256")
+      .update(`${rsHeader}.${body}`)
+      .sign(privateKey, "base64url");
+    await expect(
+      call({ token: `${rsHeader}.${body}.${rsSignature}` })
+    ).rejects.toThrow(IdentityAuthenticationError);
+
+    // And the unsigned variants, which must fail on the algorithm name rather
+    // than on the missing signature.
+    for (const alg of ["None", "NONE", "none"]) {
+      const header = Buffer.from(JSON.stringify({ alg, typ: "JWT" })).toString(
+        "base64url"
+      );
+      await expect(call({ token: `${header}.${body}.` })).rejects.toThrow(
+        IdentityAuthenticationError
+      );
+    }
+  });
+
+  test("QA-2.4: a key that IS in the JWKS cannot vouch for another issuer's token", async () => {
+    // Trying every published key must not weaken the issuer and audience
+    // checks: a token signed by a legitimately published key, but minted for a
+    // different issuer, is still someone else's token.
+    const wrongIssuer = JWT.sign(
+      {
+        sub: "s",
+        email: "e@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      privateKey,
+      {
+        algorithm: "RS256",
+        keyid: kid,
+        issuer: HOSTILE_ORIGIN,
+        audience: CLIENT_ID,
+        expiresIn: "5m",
+      }
+    );
+    await expect(call(wrongIssuer)).rejects.toThrow(IdentityAuthenticationError);
+
+    const wrongAudience = JWT.sign(
+      {
+        sub: "s",
+        email: "e@example.com",
+        email_verified: true,
+        nonce: "the-expected-nonce",
+      },
+      privateKey,
+      {
+        algorithm: "RS256",
+        keyid: kid,
+        issuer: ISSUER,
+        audience: "someone-elses-client",
+        expiresIn: "5m",
+      }
+    );
+    await expect(call(wrongAudience)).rejects.toThrow(IdentityAuthenticationError);
   });
 });
