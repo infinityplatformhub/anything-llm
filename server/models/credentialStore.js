@@ -47,13 +47,55 @@ function credentialAAD(envKey, keyVersion) {
   return Buffer.from(`${envKey}:v${keyVersion}`, "utf8");
 }
 
+/**
+ * #125: the derivation is memoised for the life of the process, keyed by the
+ * MATERIAL it came from.
+ *
+ * scrypt is deliberately expensive — measured at ~28 ms a call on darwin arm64,
+ * node v22.23.1 — and this ran on every `set` and every `get`. Reading 97
+ * credentials at boot cost ~2.5 s deriving one key 97 times from material that
+ * never changed.
+ *
+ * It also closed a SIDE CHANNEL, which is the part that is easy to miss.
+ * `get()` derives only after `if (!row) return null`, so a configured
+ * credential cost a full derivation and an absent one cost a database round
+ * trip: measured 29.5 ms against 0.9 ms. That 28 ms answers "is this provider
+ * configured on this instance" to anyone who can reach a path that reads a
+ * credential. Once the key is memoised both branches cost the same.
+ *
+ * Module scope, not a property on `CredentialStore`, so the derived key cannot
+ * be reached by enumerating the exported object.
+ */
+let keyCache = null; // { material, key }
+
+/** Test seam — the cache would otherwise outlive the assertion that set it up. */
+function __resetKeyCache() {
+  keyCache = null;
+}
+
 function encryptionKey() {
   const material = process.env.SIG_KEY;
+
+  // BEFORE the cache is consulted, deliberately. A cache that outlives its
+  // material is a credential store that keeps working after its key has been
+  // taken away, which is the opposite of the fail-closed behaviour this
+  // function promises. Both legs of the guard matter: absent, and present but
+  // too short.
   if (!material || material.trim().length < 32)
     throw new Error(
       "SIG_KEY must be set and at least 32 characters before credentials can be stored."
     );
-  return crypto.scryptSync(material, `credential-store-v${KEY_VERSION}`, 32);
+
+  // Plain `===`, NOT timingSafeEqual. This compares the configured material
+  // against the copy we derived from, to decide whether a cached derivation is
+  // still valid — both sides are the same local value and neither is
+  // attacker-supplied. A constant-time primitive here would tell the next
+  // reader that one side can be chosen by someone else, which is not true.
+  if (keyCache && keyCache.material === material) return keyCache.key;
+
+  const key = crypto.scryptSync(material, `credential-store-v${KEY_VERSION}`, 32);
+  keyCache = { material, key };
+  return key;
 }
 
 const CredentialStore = {
@@ -134,4 +176,11 @@ const CredentialStore = {
   },
 };
 
-module.exports = { CredentialStore, ALGORITHM, KEY_VERSION };
+module.exports = {
+  CredentialStore,
+  ALGORITHM,
+  KEY_VERSION,
+  // Exported for the tests that must start from a cold cache. Not reachable
+  // through CredentialStore, so enumerating the store still exposes nothing.
+  __resetKeyCache,
+};
