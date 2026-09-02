@@ -874,3 +874,4 @@ cd server && npx prisma generate && yarn test          # generate หลัง r
 - #141 opened (Lark provider registry, auth, after #138).
 - TL-2 (a4d011377): #126 s2 RED PASS (6/3 correct for an extraction; all 9 mutants incl. P8 proven; PrivacyLinkGate is the right cut; GREEN note: component reads hooks itself, no `hidden` prop; residual: mirrors depend on :294 user.read / :432 key.manage). #139 PASS on the guard; GAP collector/.nvmrc still v18 vs engines 22 → Dev2 fold; suggest .nvmrc==engines check + CI node-version-file. #140 ruling: storage behind system.read on the same route (validatedRequest whole route).
 - Dev2 #139 third commit 1e717b980 (ledger).
+- 05:45 prep: wt-139 → 1e717b980 (norm ledger ready; waiting collector/.nvmrc commit); wt-136s2 + DB g136s2 staged for slice 2 (waiting Dev5 commit). All other items requested and pending.
